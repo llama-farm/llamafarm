@@ -13,10 +13,31 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 
 import httpx
 import websockets
 from fastapi import WebSocket
+
+
+@dataclass
+class LLMToolCall:
+    """Represents a tool call from the LLM stream."""
+
+    id: str
+    name: str
+    arguments: str  # JSON string of arguments
+
+
+@dataclass
+class LLMContent:
+    """Represents regular text content from the LLM stream."""
+
+    text: str
+
+
+# Type alias for stream output
+LLMStreamOutput = LLMContent | LLMToolCall
 
 from config.datamodel import Model
 from core.settings import settings
@@ -28,6 +49,7 @@ from .types import (
     ErrorMessage,
     LLMTextMessage,
     StatusMessage,
+    ToolCallMessage,
     TranscriptionMessage,
     TTSDoneMessage,
     TTSStartMessage,
@@ -108,6 +130,182 @@ class StreamingThinkingFilter:
         result = self._buffer
         self._buffer = ""
         return result
+
+
+class StreamingToolCallFilter:
+    """Filters JSON-like tool call content from a token stream.
+
+    Detects JSON objects that look like tool calls (containing keys like
+    'name', 'function', 'arguments', 'tool_call', etc.) and filters them
+    out so they don't get sent to TTS.
+    """
+
+    # Keys that indicate a JSON object is a tool call
+    TOOL_CALL_KEYS = {
+        "name", "function", "arguments", "tool_call", "tool_calls",
+        "function_call", "type", "id", "parameters",
+    }
+
+    def __init__(self):
+        self._buffer = ""
+        self._in_json = False
+        self._brace_depth = 0
+        self._bracket_depth = 0
+        self._in_string = False
+        self._escape_next = False
+        self._detected_tool_calls: list[str] = []
+
+    def _is_tool_call_json(self, json_str: str) -> bool:
+        """Check if a JSON string looks like a tool call."""
+        try:
+            data = json.loads(json_str)
+            if isinstance(data, dict):
+                keys = set(data.keys())
+                logger.debug(f"🔍 JSON object keys: {keys}")
+                # Check if any tool call keys are present
+                if keys & self.TOOL_CALL_KEYS:
+                    logger.info(f"✅ Detected tool call JSON with keys: {keys & self.TOOL_CALL_KEYS}")
+                    return True
+                else:
+                    logger.debug(f"❌ JSON object not a tool call, keys: {keys}")
+            elif isinstance(data, list) and data:
+                # Check first element if it's an array
+                if isinstance(data[0], dict):
+                    keys = set(data[0].keys())
+                    logger.debug(f"🔍 JSON array[0] keys: {keys}")
+                    if keys & self.TOOL_CALL_KEYS:
+                        logger.info(f"✅ Detected tool call JSON array with keys: {keys & self.TOOL_CALL_KEYS}")
+                        return True
+        except (json.JSONDecodeError, TypeError, IndexError) as e:
+            logger.debug(f"❌ JSON parse failed for: {json_str[:100]}... error: {e}")
+        return False
+
+    def filter_token(self, token: str) -> str:
+        """Filter a token, removing tool call JSON content.
+
+        Args:
+            token: Incoming token from LLM stream.
+
+        Returns:
+            Filtered token (may be empty if inside tool call JSON).
+        """
+        result = ""
+
+        for char in token:
+            # Handle escape sequences in strings
+            if self._escape_next:
+                self._escape_next = False
+                if self._in_json:
+                    self._buffer += char
+                else:
+                    result += char
+                continue
+
+            if char == "\\" and self._in_string:
+                self._escape_next = True
+                if self._in_json:
+                    self._buffer += char
+                else:
+                    result += char
+                continue
+
+            # Track string boundaries
+            if char == '"' and not self._escape_next:
+                self._in_string = not self._in_string
+                if self._in_json:
+                    self._buffer += char
+                else:
+                    result += char
+                continue
+
+            # Don't process braces inside strings
+            if self._in_string:
+                if self._in_json:
+                    self._buffer += char
+                else:
+                    result += char
+                continue
+
+            # Track JSON object/array boundaries
+            if char == "{":
+                if not self._in_json and self._brace_depth == 0 and self._bracket_depth == 0:
+                    # Starting a new potential JSON object
+                    self._in_json = True
+                    self._buffer = char
+                    self._brace_depth = 1
+                elif self._in_json:
+                    self._buffer += char
+                    self._brace_depth += 1
+                else:
+                    result += char
+            elif char == "}":
+                if self._in_json:
+                    self._buffer += char
+                    self._brace_depth -= 1
+                    if self._brace_depth == 0 and self._bracket_depth == 0:
+                        # Completed a JSON object - check if it's a tool call
+                        logger.info(f"🔶 Complete JSON object detected: {self._buffer[:150]}...")
+                        if self._is_tool_call_json(self._buffer):
+                            logger.info(f"🚫 Filtered tool call JSON: {self._buffer[:100]}...")
+                            self._detected_tool_calls.append(self._buffer)
+                            # Don't emit the tool call content
+                        else:
+                            # Not a tool call, emit the buffered content
+                            logger.debug(f"✓ JSON not a tool call, emitting: {self._buffer[:100]}...")
+                            result += self._buffer
+                        self._buffer = ""
+                        self._in_json = False
+                else:
+                    result += char
+            elif char == "[":
+                if not self._in_json and self._brace_depth == 0 and self._bracket_depth == 0:
+                    # Starting a new potential JSON array
+                    self._in_json = True
+                    self._buffer = char
+                    self._bracket_depth = 1
+                elif self._in_json:
+                    self._buffer += char
+                    self._bracket_depth += 1
+                else:
+                    result += char
+            elif char == "]":
+                if self._in_json:
+                    self._buffer += char
+                    self._bracket_depth -= 1
+                    if self._brace_depth == 0 and self._bracket_depth == 0:
+                        # Completed a JSON array - check if it's a tool call
+                        if self._is_tool_call_json(self._buffer):
+                            logger.debug(f"Filtered tool call JSON array: {self._buffer[:100]}...")
+                            self._detected_tool_calls.append(self._buffer)
+                        else:
+                            result += self._buffer
+                        self._buffer = ""
+                        self._in_json = False
+                else:
+                    result += char
+            else:
+                if self._in_json:
+                    self._buffer += char
+                else:
+                    result += char
+
+        return result
+
+    def flush(self) -> str:
+        """Flush remaining buffer content.
+
+        If we have incomplete JSON, emit it (it's probably not a tool call).
+        """
+        result = self._buffer
+        self._buffer = ""
+        self._in_json = False
+        self._brace_depth = 0
+        self._bracket_depth = 0
+        return result
+
+    def get_detected_tool_calls(self) -> list[str]:
+        """Return list of detected tool call JSON strings."""
+        return self._detected_tool_calls
 
 
 class VoiceChatService:
@@ -359,14 +557,15 @@ class VoiceChatService:
 
     async def stream_llm_response(
         self, user_text: str
-    ) -> AsyncGenerator[str, None]:
-        """Stream LLM response tokens.
+    ) -> AsyncGenerator[LLMStreamOutput, None]:
+        """Stream LLM response tokens and tool calls.
 
         Args:
             user_text: User's transcribed text.
 
         Yields:
-            LLM response tokens (with thinking tags filtered out).
+            LLMContent for regular text tokens, LLMToolCall for tool calls.
+            Tool calls are yielded complete (not streamed token-by-token).
         """
         # === TIMING INSTRUMENTATION ===
         t_start = time.perf_counter()
@@ -401,6 +600,10 @@ class VoiceChatService:
         accumulated_response = ""
         token_count = 0
 
+        # Tool call tracking - tool calls can be spread across multiple chunks
+        # Structure: {index: {"id": str, "name": str, "arguments": str}}
+        pending_tool_calls: dict[int, dict] = {}
+
         try:
             # Use shared HTTP client with connection pooling for lower latency
             client = self.get_http_client()
@@ -419,7 +622,10 @@ class VoiceChatService:
 
                     try:
                         chunk = json.loads(data)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        choice = chunk.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
+
+                        # Handle regular content tokens
                         content = delta.get("content", "")
                         if content:
                             if not first_token_logged:
@@ -428,9 +634,61 @@ class VoiceChatService:
                                 logger.info(f"⏱️ LLM: First token in {(t_first_token - t_start)*1000:.1f}ms total, {(t_first_token - t_connected)*1000:.1f}ms after connect")
                             token_count += 1
                             accumulated_response += content
-                            yield content
+                            yield LLMContent(text=content)
+
+                        # Handle tool calls (accumulate across chunks)
+                        tool_calls = delta.get("tool_calls", [])
+                        for tc in tool_calls:
+                            idx = tc.get("index", 0)
+
+                            # Initialize tracking for new tool call
+                            if idx not in pending_tool_calls:
+                                pending_tool_calls[idx] = {
+                                    "id": "",
+                                    "name": "",
+                                    "arguments": "",
+                                }
+
+                            # Accumulate tool call data
+                            if tc.get("id"):
+                                pending_tool_calls[idx]["id"] = tc["id"]
+                            if tc.get("function", {}).get("name"):
+                                pending_tool_calls[idx]["name"] = tc["function"]["name"]
+                            if tc.get("function", {}).get("arguments"):
+                                pending_tool_calls[idx]["arguments"] += tc["function"]["arguments"]
+
+                        # Check if stream indicates finish_reason for tool_calls
+                        finish_reason = choice.get("finish_reason")
+                        if finish_reason == "tool_calls" and pending_tool_calls:
+                            # Yield all completed tool calls
+                            for idx in sorted(pending_tool_calls.keys()):
+                                tc_data = pending_tool_calls[idx]
+                                if tc_data["id"] and tc_data["name"]:
+                                    logger.info(
+                                        f"Tool call detected: {tc_data['name']}({tc_data['arguments'][:100]}...)"
+                                    )
+                                    yield LLMToolCall(
+                                        id=tc_data["id"],
+                                        name=tc_data["name"],
+                                        arguments=tc_data["arguments"],
+                                    )
+                            pending_tool_calls.clear()
+
                     except json.JSONDecodeError:
                         continue
+
+            # Yield any remaining tool calls that weren't finalized with finish_reason
+            for idx in sorted(pending_tool_calls.keys()):
+                tc_data = pending_tool_calls[idx]
+                if tc_data["id"] and tc_data["name"]:
+                    logger.info(
+                        f"Tool call (end of stream): {tc_data['name']}({tc_data['arguments'][:100]}...)"
+                    )
+                    yield LLMToolCall(
+                        id=tc_data["id"],
+                        name=tc_data["name"],
+                        arguments=tc_data["arguments"],
+                    )
 
             # Log final stats
             t_done = time.perf_counter()
@@ -455,14 +713,21 @@ class VoiceChatService:
         Reuses existing connection to avoid handshake overhead (~50-100ms per connection).
         """
         from websockets import State
-        if self._tts_ws is None or self._tts_ws.state != State.OPEN:
-            ws_url = (
-                f"{self._runtime_ws_url}/v1/audio/speech/stream"
-                f"?model={self.session.config.tts_model}"
-                f"&voice={self.session.config.tts_voice}"
-                f"&response_format=pcm"
-            )
-            self._tts_ws = await websockets.connect(ws_url)
+        if self._tts_ws is None:
+            logger.info("TTS WebSocket: creating new connection (was None)")
+        elif self._tts_ws.state != State.OPEN:
+            logger.info(f"TTS WebSocket: creating new connection (state={self._tts_ws.state})")
+        else:
+            logger.info("TTS WebSocket: reusing existing connection")
+            return self._tts_ws
+
+        ws_url = (
+            f"{self._runtime_ws_url}/v1/audio/speech/stream"
+            f"?model={self.session.config.tts_model}"
+            f"&voice={self.session.config.tts_voice}"
+            f"&response_format=pcm"
+        )
+        self._tts_ws = await websockets.connect(ws_url)
         return self._tts_ws
 
     async def _close_tts_websocket(self) -> None:
@@ -490,10 +755,12 @@ class VoiceChatService:
             ws = await self._get_tts_websocket()
 
             # Send synthesis request
+            # Use final=False to keep WebSocket connection open for reuse
+            # across multiple phrases (reduces ~50-100ms overhead per phrase)
             await ws.send(json.dumps({
                 "text": phrase,
                 "speed": self.session.config.speed,
-                "final": True,
+                "final": False,
             }))
 
             # Receive audio chunks
@@ -509,6 +776,7 @@ class VoiceChatService:
                     msg_type = data.get("type")
 
                     if msg_type == "done":
+                        logger.info(f"TTS phrase {phrase_index}: received 'done', keeping connection open")
                         break
                     elif msg_type == "error":
                         logger.error(f"TTS error: {data.get('message')}")
@@ -516,10 +784,11 @@ class VoiceChatService:
                         self._tts_ws = None
                         break
                     elif msg_type == "closed":
+                        logger.info(f"TTS phrase {phrase_index}: server sent 'closed'")
                         self._tts_ws = None
                         break
 
-        except websockets.exceptions.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"TTS WebSocket closed for phrase {phrase_index}")
             self._tts_ws = None
         except Exception as e:
@@ -639,6 +908,8 @@ class VoiceChatService:
             )
             # Filter out <think>...</think> blocks at the token level
             thinking_filter = StreamingThinkingFilter()
+            # Filter out JSON-like tool call content from text stream
+            tool_call_filter = StreamingToolCallFilter()
             full_response = ""
             first_token_logged = False
             first_phrase_logged = False
@@ -646,7 +917,10 @@ class VoiceChatService:
             t_llm_start = time.perf_counter()
             logger.info(f"⏱️ TIMING: Starting LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
 
-            async for token in self.stream_llm_response(transcription_for_llm):
+            # Track if we've already spoken a tool call placeholder this turn
+            tool_call_placeholder_spoken = False
+
+            async for output in self.stream_llm_response(transcription_for_llm):
                 if not first_token_logged:
                     t_llm_first_token = time.perf_counter()
                     first_token_logged = True
@@ -657,45 +931,120 @@ class VoiceChatService:
                     logger.info("Turn interrupted by user")
                     break
 
-                # Filter thinking content at token level (before phrase detection)
-                filtered_token = thinking_filter.filter_token(token)
-                full_response += token  # Keep full response for history
+                # Handle tool calls - send via JSON only, never TTS
+                if isinstance(output, LLMToolCall):
+                    logger.info(f"Tool call received: {output.name} - sending via JSON only")
 
-                # Skip empty tokens (thinking content filtered out)
-                if not filtered_token:
+                    # Send tool call as JSON for the client
+                    await websocket.send_json(
+                        ToolCallMessage(
+                            tool_call_id=output.id,
+                            function_name=output.name,
+                            arguments=output.arguments,
+                        ).model_dump()
+                    )
+
+                    # Speak a brief placeholder if we haven't already this turn
+                    if not tool_call_placeholder_spoken:
+                        placeholder = "One moment."
+                        await websocket.send_json(
+                            LLMTextMessage(text=placeholder, is_final=False).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(
+                            websocket, placeholder,
+                            track_first_audio=(t_first_tts_audio is None),
+                            turn_start_time=t_start
+                        )
+                        tool_call_placeholder_spoken = True
+
                     continue
 
-                # Detect phrase boundaries on filtered content
-                phrase = phrase_detector.add_token(filtered_token)
-                if phrase:
-                    if not first_phrase_logged:
-                        t_first_phrase = time.perf_counter()
-                        first_phrase_logged = True
-                        logger.info(f"⏱️ TIMING: First phrase detected: {(t_first_phrase - t_start)*1000:.1f}ms total, phrase='{phrase[:50]}...'")
+                # Handle regular content tokens
+                if isinstance(output, LLMContent):
+                    token = output.text
 
-                    # Send LLM text to client for display
-                    await websocket.send_json(
-                        LLMTextMessage(text=phrase, is_final=False).model_dump()
-                    )
+                    # DEBUG: Log raw token content
+                    if token.strip():
+                        logger.debug(f"🔤 RAW TOKEN: {repr(token)}")
 
-                    # Synthesize and stream audio for this phrase
-                    # Pass timing context for first TTS audio tracking
-                    tts_timing = await self._synthesize_and_stream_phrase(
-                        websocket, phrase,
-                        track_first_audio=(t_first_tts_audio is None),
-                        turn_start_time=t_start
-                    )
-                    if t_first_tts_audio is None and tts_timing:
-                        t_first_tts_audio = tts_timing
+                    # Filter thinking content at token level (before phrase detection)
+                    filtered_token = thinking_filter.filter_token(token)
+                    full_response += token  # Keep full response for history
 
-                    # Check interrupt again after TTS
-                    if self.session.is_interrupted():
-                        break
+                    # Skip empty tokens (thinking content filtered out)
+                    if not filtered_token:
+                        continue
+
+                    # DEBUG: Log after thinking filter
+                    if filtered_token != token:
+                        logger.debug(f"🧠 AFTER THINKING FILTER: {repr(filtered_token)}")
+
+                    # Filter out JSON-like tool call content from text
+                    # (some models output tool calls as text, not structured)
+                    before_tool_filter = filtered_token
+                    filtered_token = tool_call_filter.filter_token(filtered_token)
+
+                    # DEBUG: Log if tool call filter changed anything
+                    if filtered_token != before_tool_filter:
+                        logger.debug(f"🔧 TOOL FILTER removed: {repr(before_tool_filter)} -> {repr(filtered_token)}")
+
+                    # Check if tool call filter detected any tool calls - speak placeholder
+                    if tool_call_filter.get_detected_tool_calls() and not tool_call_placeholder_spoken:
+                        placeholder = "One moment."
+                        await websocket.send_json(
+                            LLMTextMessage(text=placeholder, is_final=False).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(
+                            websocket, placeholder,
+                            track_first_audio=(t_first_tts_audio is None),
+                            turn_start_time=t_start
+                        )
+                        tool_call_placeholder_spoken = True
+
+                    # Skip empty tokens (tool call content filtered out)
+                    if not filtered_token:
+                        continue
+
+                    # Detect phrase boundaries on filtered content
+                    phrase = phrase_detector.add_token(filtered_token)
+                    if phrase:
+                        if not first_phrase_logged:
+                            t_first_phrase = time.perf_counter()
+                            first_phrase_logged = True
+                            logger.info(f"⏱️ TIMING: First phrase detected: {(t_first_phrase - t_start)*1000:.1f}ms total, phrase='{phrase[:50]}...'")
+
+                        # Send LLM text to client for display
+                        await websocket.send_json(
+                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                        )
+
+                        # Synthesize and stream audio for this phrase
+                        # Pass timing context for first TTS audio tracking
+                        tts_timing = await self._synthesize_and_stream_phrase(
+                            websocket, phrase,
+                            track_first_audio=(t_first_tts_audio is None),
+                            turn_start_time=t_start
+                        )
+                        if t_first_tts_audio is None and tts_timing:
+                            t_first_tts_audio = tts_timing
+
+                        # Check interrupt again after TTS
+                        if self.session.is_interrupted():
+                            break
 
             # Flush remaining text
             if not self.session.is_interrupted():
                 # First flush any remaining content from thinking filter
                 remaining_filtered = thinking_filter.flush()
+                if remaining_filtered:
+                    # Also filter through tool call filter
+                    remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
+
+                # Flush tool call filter as well
+                tool_call_remaining = tool_call_filter.flush()
+                if tool_call_remaining:
+                    remaining_filtered = (remaining_filtered or "") + tool_call_remaining
+
                 if remaining_filtered:
                     # Add filtered content to phrase detector
                     phrase = phrase_detector.add_token(remaining_filtered)
@@ -758,11 +1107,17 @@ class VoiceChatService:
             Time of first audio chunk if track_first_audio is True, None otherwise.
         """
         # Filter thinking tags and preprocess for natural speech
+        original_phrase = phrase
         phrase = self._filter_thinking_tags(phrase)
         phrase = self._preprocess_for_speech(phrase)
         if not phrase:
             # Skip empty phrases (e.g., if it was all thinking/markdown content)
             return None
+
+        # DEBUG: Log what's being sent to TTS
+        logger.info(f"🔊 TTS INPUT: {repr(phrase[:200])}{'...' if len(phrase) > 200 else ''}")
+        if phrase != original_phrase:
+            logger.debug(f"🔊 TTS (original was): {repr(original_phrase[:200])}")
 
         phrase_index = self.session.next_phrase_index()
         t_first_audio = None
@@ -821,6 +1176,7 @@ class VoiceChatService:
             websocket: Client WebSocket connection.
         """
         self.session.request_interrupt()
+        self.session.reset_barge_in_state()
         self.session.set_state(VoiceState.INTERRUPTED)
         await websocket.send_json(
             StatusMessage(state=VoiceState.INTERRUPTED).model_dump()
@@ -831,3 +1187,11 @@ class VoiceChatService:
         await websocket.send_json(
             StatusMessage(state=VoiceState.LISTENING).model_dump()
         )
+
+    async def cleanup(self) -> None:
+        """Clean up service resources.
+
+        Call this when the voice session ends to properly close
+        the TTS WebSocket connection.
+        """
+        await self._close_tts_websocket()

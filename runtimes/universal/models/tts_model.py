@@ -426,6 +426,191 @@ class KokoroBackend(TTSBackend):
         ]
 
 
+def _is_mlx_available() -> bool:
+    """Check if MLX audio is available (macOS with Apple Silicon)."""
+    import platform
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+
+    # Check for Apple Silicon
+    if platform.machine() not in ("arm64", "aarch64"):
+        return False
+
+    try:
+        import mlx_audio.tts  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+class KokoroMLXBackend(TTSBackend):
+    """Kokoro TTS backend using MLX for Apple Silicon.
+
+    This backend uses the mlx-audio library which provides native MLX
+    implementations optimized for Apple Silicon's unified memory and
+    Neural Engine.
+
+    Performance benefits over PyTorch/MPS:
+    - Native MLX operations avoid CPU<->GPU memory copies
+    - Better utilization of Apple Silicon's unified memory
+    - Optimized for M-series chip architecture
+    """
+
+    def __init__(self, default_voice: str = DEFAULT_VOICE):
+        super().__init__(default_voice)
+        self._model = None
+
+    @property
+    def supports_streaming(self) -> bool:
+        return True
+
+    @property
+    def sample_rate(self) -> int:
+        return DEFAULT_SAMPLE_RATE
+
+    async def load(self, device: str) -> None:
+        """Load Kokoro TTS model using MLX."""
+        del device  # MLX handles device placement automatically
+
+        try:
+            from mlx_audio.tts.utils import load_model
+        except ImportError as e:
+            raise ImportError(
+                "mlx-audio is not installed. "
+                "Install it with: uv pip install 'universal-runtime[tts-mlx]'"
+            ) from e
+
+        logger.info("Loading Kokoro TTS model with MLX backend")
+
+        def _load_model():
+            return load_model("mlx-community/Kokoro-82M-bf16")
+
+        loop = asyncio.get_running_loop()
+        self._model = await loop.run_in_executor(self._executor, _load_model)
+
+        # Warmup to trigger JIT compilation
+        logger.info("Warming up Kokoro MLX model...")
+
+        def _warmup():
+            for _ in self._model.generate(
+                text="Hello.",
+                voice=self.default_voice,
+                speed=1.0,
+            ):
+                pass
+
+        await loop.run_in_executor(self._executor, _warmup)
+        logger.info("Kokoro TTS model loaded with MLX backend")
+
+    async def unload(self) -> None:
+        """Unload Kokoro MLX model."""
+        if self._model is not None:
+            del self._model
+            self._model = None
+        self.shutdown()
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: str,
+        speed: float = 1.0,
+        **kwargs: Any,
+    ) -> SynthesisResult:
+        """Synthesize speech from text."""
+        del kwargs  # Unused
+        if self._model is None:
+            raise RuntimeError("Kokoro MLX model not loaded. Call load() first.")
+
+        def _sync_synthesize():
+            import numpy as np
+
+            audio_chunks = []
+            for result in self._model.generate(text=text, voice=voice, speed=speed):
+                if result.audio is not None:
+                    # Convert MLX array to numpy
+                    audio = np.array(result.audio)
+                    audio_chunks.append(audio)
+
+            if not audio_chunks:
+                return np.array([], dtype=np.float32)
+            return np.concatenate(audio_chunks)
+
+        loop = asyncio.get_running_loop()
+        audio_array = await loop.run_in_executor(self._executor, _sync_synthesize)
+
+        import numpy as np
+
+        audio_clamped = np.clip(audio_array, -1.0, 1.0)
+        pcm_bytes = (audio_clamped * 32767).astype(np.int16).tobytes()
+        duration = len(audio_array) / self.sample_rate if len(audio_array) > 0 else 0
+
+        return SynthesisResult(
+            audio=pcm_bytes,
+            sample_rate=self.sample_rate,
+            duration=duration,
+            format="pcm",
+        )
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        voice: str,
+        speed: float = 1.0,
+        **kwargs: Any,
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream audio chunks as they're generated."""
+        del kwargs  # Unused
+        if self._model is None:
+            raise RuntimeError("Kokoro MLX model not loaded. Call load() first.")
+
+        audio_queue: Queue[bytes | None] = Queue()
+
+        def _sync_generator():
+            import numpy as np
+
+            try:
+                for result in self._model.generate(text=text, voice=voice, speed=speed):
+                    if result.audio is not None and len(result.audio) > 0:
+                        # Convert MLX array to numpy then to PCM
+                        audio = np.array(result.audio)
+                        audio_clamped = np.clip(audio, -1.0, 1.0)
+                        pcm_bytes = (audio_clamped * 32767).astype(np.int16).tobytes()
+                        audio_queue.put(pcm_bytes)
+            except Exception as e:
+                logger.error(f"Kokoro MLX TTS synthesis error: {e}")
+            finally:
+                audio_queue.put(None)
+
+        thread = Thread(target=_sync_generator, daemon=True)
+        thread.start()
+
+        while True:
+            try:
+                chunk = audio_queue.get(timeout=0.005)
+                if chunk is None:
+                    break
+                yield chunk
+            except Empty:
+                await asyncio.sleep(0)
+
+        thread.join(timeout=1.0)
+
+    def get_voices(self) -> list[VoiceInfo]:
+        """Get list of available Kokoro voices."""
+        return [
+            VoiceInfo(
+                id=voice_id,
+                name=name,
+                language="en-US" if lang_code == "a" else "en-GB",
+                model="kokoro-mlx",
+            )
+            for voice_id, (name, lang_code) in KOKORO_VOICES.items()
+        ]
+
+
 class ChatterboxTurboBackend(TTSBackend):
     """Chatterbox Turbo TTS backend with voice cloning.
 
@@ -889,12 +1074,14 @@ class TTSModel(BaseModel):
     """Unified TTS model wrapper supporting multiple backends.
 
     Supported backends:
-    - kokoro: High-quality neural TTS with built-in voices (82M params, GPU)
+    - kokoro: High-quality neural TTS with built-in voices (82M params).
+              Automatically uses MLX on Apple Silicon for faster inference.
+    - kokoro-mlx: Explicit MLX backend for Kokoro (Apple Silicon only)
     - chatterbox-turbo: Fast voice cloning TTS (350M params, GPU)
     - pocket-tts: Lightweight CPU TTS from Kyutai (100M params, ~6x realtime)
 
     Example usage:
-        # Kokoro (default)
+        # Kokoro (default) - auto-selects MLX on Apple Silicon
         model = TTSModel(model_id="kokoro", voice="af_heart")
         await model.load()
         result = await model.synthesize("Hello world")
@@ -927,9 +1114,13 @@ class TTSModel(BaseModel):
         """Initialize TTS model.
 
         Args:
-            model_id: Backend identifier ("kokoro", "chatterbox-turbo", or "pocket-tts").
+            model_id: Backend identifier. Options:
+                - "kokoro": Auto-selects MLX on Apple Silicon, PyTorch elsewhere
+                - "kokoro-mlx": Force MLX backend (Apple Silicon only)
+                - "chatterbox-turbo": Voice cloning TTS
+                - "pocket-tts": Lightweight CPU TTS
             device: Device to run on ("cuda", "cpu", "mps", "auto").
-                    Note: pocket-tts is CPU-only and ignores this parameter.
+                    Note: pocket-tts and kokoro-mlx ignore this parameter.
             voice: Default voice ID (Kokoro/Pocket) or profile name (Chatterbox).
             voice_profiles: Voice profiles for Chatterbox voice cloning.
             chatterbox_config: Chatterbox-specific parameters.
@@ -947,7 +1138,19 @@ class TTSModel(BaseModel):
     def _create_backend(self) -> TTSBackend:
         """Factory method to create appropriate backend."""
         if self.model_id == "kokoro":
+            # Prefer MLX backend on Apple Silicon for better performance
+            if _is_mlx_available():
+                logger.info("Using MLX backend for Kokoro TTS (Apple Silicon detected)")
+                return KokoroMLXBackend(default_voice=self.voice)
             return KokoroBackend(default_voice=self.voice)
+        elif self.model_id == "kokoro-mlx":
+            # Explicit MLX backend request
+            if not _is_mlx_available():
+                raise RuntimeError(
+                    "kokoro-mlx requires Apple Silicon and mlx-audio package. "
+                    "Install with: uv pip install 'universal-runtime[tts-mlx]'"
+                )
+            return KokoroMLXBackend(default_voice=self.voice)
         elif self.model_id == "chatterbox-turbo":
             return ChatterboxTurboBackend(
                 default_voice=self.voice,
@@ -959,7 +1162,7 @@ class TTSModel(BaseModel):
         else:
             raise ValueError(
                 f"Unknown TTS model: {self.model_id}. "
-                "Supported models: kokoro, chatterbox-turbo, pocket-tts"
+                "Supported models: kokoro, kokoro-mlx, chatterbox-turbo, pocket-tts"
             )
 
     async def load(self) -> None:

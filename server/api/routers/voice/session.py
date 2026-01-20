@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from .turn_detector import EndOfTurnDetector, TurnDetectorConfig
 from .types import VoiceSessionConfig, VoiceState
 from .vad import VADConfig, VoiceActivityDetector
 
@@ -226,6 +227,15 @@ class VoiceSession:
     # Current phrase index for TTS coordination
     _phrase_index: int = 0
 
+    # Barge-in noise filter: consecutive speech chunk counter
+    _barge_in_speech_chunks: int = 0
+
+    # End-of-turn detector for linguistic analysis
+    _turn_detector: EndOfTurnDetector | None = None
+
+    # Partial transcription for turn detection (updated during silence window)
+    _partial_transcript: str = ""
+
     def __post_init__(self):
         """Initialize session with system prompt if provided."""
         if self.config.system_prompt and not self.messages:
@@ -233,6 +243,16 @@ class VoiceSession:
                 "role": "system",
                 "content": self.config.system_prompt,
             })
+
+        # Initialize turn detector with config
+        self._turn_detector = EndOfTurnDetector(
+            config=TurnDetectorConfig(
+                base_silence_duration=self.config.base_silence_duration,
+                thinking_silence_duration=self.config.thinking_silence_duration,
+                max_silence_duration=self.config.max_silence_duration,
+                enable_linguistic_analysis=self.config.turn_detection_enabled,
+            )
+        )
 
     def add_user_message(self, text: str) -> None:
         """Add a user message to conversation history."""
@@ -341,6 +361,11 @@ class VoiceSession:
         self._audio_buffer.clear()
         self._vad.reset()
 
+        # Reset turn detector and partial transcript for new utterance
+        if self._turn_detector is not None:
+            self._turn_detector.reset()
+        self._partial_transcript = ""
+
         # DO NOT reset decoder for continuous streams (WebM/Opus)
         # The decoder needs accumulated data including headers to decode
         # new chunks. It tracks _total_pcm_decoded internally to return
@@ -377,6 +402,133 @@ class VoiceSession:
         """Check if VAD detected active speech."""
         return self._vad.is_speech_active()
 
+    def is_in_silence_window(self) -> bool:
+        """Check if we're in the silence window after speech."""
+        return self._vad.is_in_silence_window()
+
+    def get_speech_duration(self) -> float:
+        """Get duration of current speech in seconds."""
+        return self._vad.get_speech_duration()
+
+    def get_silence_duration(self) -> float:
+        """Get duration of current silence in seconds."""
+        return self._vad.get_silence_duration()
+
+    def set_partial_transcript(self, text: str) -> None:
+        """Set the partial transcription for turn detection analysis.
+
+        Call this during the silence window with streaming STT results
+        to enable linguistic analysis for end-of-turn detection.
+        """
+        self._partial_transcript = text
+
+    def get_partial_transcript(self) -> str:
+        """Get the current partial transcription."""
+        return self._partial_transcript
+
+    def check_end_of_turn_with_analysis(self) -> bool:
+        """Check if end-of-turn should trigger using linguistic analysis.
+
+        Uses the partial transcription to determine appropriate silence
+        threshold, then checks if that threshold has been exceeded.
+
+        Returns:
+            True if turn should end and processing should begin.
+        """
+        if self._turn_detector is None:
+            # Fall back to default VAD behavior
+            return self._vad.check_end_of_turn(self._vad.config.silence_duration)
+
+        speech_duration = self._vad.get_speech_duration()
+        silence_duration = self._vad.get_silence_duration()
+
+        return self._turn_detector.should_end_turn(
+            silence_duration=silence_duration,
+            speech_duration=speech_duration,
+            partial_transcript=self._partial_transcript,
+        )
+
+    def get_required_silence_duration(self) -> float:
+        """Get the required silence duration based on current context.
+
+        Returns the dynamically calculated silence threshold based on
+        speech duration and linguistic analysis of partial transcription.
+        """
+        if self._turn_detector is None:
+            return self._vad.config.silence_duration
+
+        return self._turn_detector.get_required_silence(
+            partial_transcript=self._partial_transcript,
+            speech_duration=self._vad.get_speech_duration(),
+        )
+
+    def detect_barge_in(self, chunk: bytes) -> bool:
+        """Check if audio chunk contains speech (for barge-in detection).
+
+        Used during SPEAKING state to detect if the user has started talking.
+        Assumes client handles echo cancellation, so any detected speech
+        is genuine user input.
+
+        Args:
+            chunk: Audio chunk (PCM or encoded WebM/Opus).
+
+        Returns:
+            True if speech detected (should trigger interrupt).
+        """
+        # Check if barge-in is enabled
+        if not self.config.barge_in_enabled:
+            return False
+
+        # Get PCM for energy analysis
+        pcm_chunk: bytes
+        if self._decoder is not None:
+            # Decode to PCM (decoder preserves state across calls)
+            pcm_chunk = self._decoder.feed(chunk)
+            if not pcm_chunk:
+                return False
+        elif self._audio_format == AudioFormat.PCM or self._audio_format is None:
+            # Raw PCM or format not yet detected (assume PCM)
+            pcm_chunk = chunk
+        else:
+            # Unknown encoded format without decoder - can't analyze
+            return False
+
+        # Calculate energy and check against speech threshold
+        energy = self._vad._calculate_energy(pcm_chunk)
+        is_speech = energy > self._vad.config.speech_threshold
+
+        # Apply noise filter if enabled
+        if self.config.barge_in_noise_filter:
+            if is_speech:
+                self._barge_in_speech_chunks += 1
+                if self._barge_in_speech_chunks >= self.config.barge_in_min_chunks:
+                    logger.info(
+                        f"Barge-in triggered: {self._barge_in_speech_chunks} consecutive "
+                        f"chunks above threshold (energy={energy:.4f})"
+                    )
+                    return True
+                else:
+                    logger.debug(
+                        f"Barge-in pending: {self._barge_in_speech_chunks}/{self.config.barge_in_min_chunks} "
+                        f"chunks (energy={energy:.4f})"
+                    )
+                    return False
+            else:
+                # Reset counter on silence
+                if self._barge_in_speech_chunks > 0:
+                    logger.debug(f"Barge-in reset: silence detected after {self._barge_in_speech_chunks} chunks")
+                self._barge_in_speech_chunks = 0
+                return False
+        else:
+            # No noise filter - trigger immediately on speech
+            if is_speech:
+                logger.info(f"Barge-in detected: energy={energy:.4f} > threshold={self._vad.config.speech_threshold}")
+            return is_speech
+
+    def reset_barge_in_state(self) -> None:
+        """Reset barge-in detection state (call when transitioning out of SPEAKING)."""
+        self._barge_in_speech_chunks = 0
+
     def next_phrase_index(self) -> int:
         """Get next phrase index and increment counter."""
         idx = self._phrase_index
@@ -396,6 +548,13 @@ class VoiceSession:
         language: str | None = None,
         speed: float | None = None,
         sentence_boundary_only: bool | None = None,
+        barge_in_enabled: bool | None = None,
+        barge_in_noise_filter: bool | None = None,
+        barge_in_min_chunks: int | None = None,
+        turn_detection_enabled: bool | None = None,
+        base_silence_duration: float | None = None,
+        thinking_silence_duration: float | None = None,
+        max_silence_duration: float | None = None,
     ) -> None:
         """Update session configuration."""
         if stt_model is not None:
@@ -412,6 +571,38 @@ class VoiceSession:
             self.config.speed = speed
         if sentence_boundary_only is not None:
             self.config.sentence_boundary_only = sentence_boundary_only
+        if barge_in_enabled is not None:
+            self.config.barge_in_enabled = barge_in_enabled
+        if barge_in_noise_filter is not None:
+            self.config.barge_in_noise_filter = barge_in_noise_filter
+        if barge_in_min_chunks is not None:
+            self.config.barge_in_min_chunks = barge_in_min_chunks
+
+        # Update turn detection config
+        turn_detector_updated = False
+        if turn_detection_enabled is not None:
+            self.config.turn_detection_enabled = turn_detection_enabled
+            turn_detector_updated = True
+        if base_silence_duration is not None:
+            self.config.base_silence_duration = base_silence_duration
+            turn_detector_updated = True
+        if thinking_silence_duration is not None:
+            self.config.thinking_silence_duration = thinking_silence_duration
+            turn_detector_updated = True
+        if max_silence_duration is not None:
+            self.config.max_silence_duration = max_silence_duration
+            turn_detector_updated = True
+
+        # Recreate turn detector if config changed
+        if turn_detector_updated and self._turn_detector is not None:
+            self._turn_detector = EndOfTurnDetector(
+                config=TurnDetectorConfig(
+                    base_silence_duration=self.config.base_silence_duration,
+                    thinking_silence_duration=self.config.thinking_silence_duration,
+                    max_silence_duration=self.config.max_silence_duration,
+                    enable_linguistic_analysis=self.config.turn_detection_enabled,
+                )
+            )
 
 
 class SessionManager:
@@ -461,6 +652,13 @@ class SessionManager:
                         language=config.language,
                         speed=config.speed,
                         sentence_boundary_only=config.sentence_boundary_only,
+                        barge_in_enabled=config.barge_in_enabled,
+                        barge_in_noise_filter=config.barge_in_noise_filter,
+                        barge_in_min_chunks=config.barge_in_min_chunks,
+                        turn_detection_enabled=config.turn_detection_enabled,
+                        base_silence_duration=config.base_silence_duration,
+                        thinking_silence_duration=config.thinking_silence_duration,
+                        max_silence_duration=config.max_silence_duration,
                     )
                 return session
 

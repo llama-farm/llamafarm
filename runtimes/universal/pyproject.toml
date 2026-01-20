@@ -126,6 +126,13 @@ tts-pocket = [
   "pocket-tts>=0.1.0",
 ]
 
+# Text-to-speech with Kokoro MLX (Apple Silicon optimized)
+# Native MLX implementation for faster inference on M-series chips
+# Usage: uv pip install "universal-runtime[tts-mlx]"
+tts-mlx = [
+  "mlx-audio>=0.1.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
