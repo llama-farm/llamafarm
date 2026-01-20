@@ -18,8 +18,7 @@ properties:
       $ref: "#/definitions/databaseDefinition"
   data_processing_strategies:
     type: array
-    description: Processing pipelines for parsers and extractors
-    minItems: 1
+    description: Processing pipelines for parsers and extractors. If empty or not specified, the built-in 'universal_rag' strategy is used automatically.
     items:
       $ref: "#/definitions/dataProcessingStrategyDefinition"
 
