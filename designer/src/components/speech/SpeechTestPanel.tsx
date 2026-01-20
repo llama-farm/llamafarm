@@ -196,8 +196,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Sync voiceChat messages with local messages state
   useEffect(() => {
-    if (mode === 'conversation' && llmAvailable && voiceChat.messages.length > 0) {
+    if (mode === 'conversation' && llmAvailable) {
       // Convert VoiceMessage to SpeechMessage format
+      // This also handles clearing when voiceChat.messages becomes empty
       const convertedMessages: SpeechMessage[] = voiceChat.messages.map((vm: VoiceMessage) => ({
         id: vm.id,
         role: vm.role,
@@ -760,6 +761,14 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
   }, [playingMessageId])
 
+  // Clear conversation
+  const handleClearConversation = useCallback(() => {
+    setMessages([])
+    voiceChat.clearMessages()
+    setPlayingMessageId(null)
+    setTranscriptionError(null)
+  }, [voiceChat])
+
   // Play audio when playingMessageId changes
   useEffect(() => {
     if (!playingMessageId) {
@@ -896,8 +905,14 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={llmEnabled}
-                        onCheckedChange={setLlmEnabled}
-                        disabled={!activeProject || availableLLMModels.length === 0 || voiceChat.isConnected}
+                        onCheckedChange={(enabled) => {
+                          setLlmEnabled(enabled)
+                          // Disconnect when turning off LLM while connected
+                          if (!enabled && voiceChat.isConnected) {
+                            voiceChat.disconnect()
+                          }
+                        }}
+                        disabled={!activeProject || availableLLMModels.length === 0}
                         aria-label="Enable LLM responses"
                       />
                       <span className="text-xs text-muted-foreground">
@@ -995,6 +1010,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 streamingAssistantText={llmAvailable ? voiceChat.currentLLMText : undefined}
                 isSpeaking={llmAvailable && (voiceChat.voiceState === 'speaking' || voiceChat.isPlayingAudio)}
                 onStopSpeaking={() => voiceChat.interrupt()}
+                onClear={handleClearConversation}
                 className="flex-1"
               />
             </div>

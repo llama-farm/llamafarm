@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Volume2, StopCircle } from 'lucide-react'
+import { Volume2, StopCircle, Trash2 } from 'lucide-react'
 import type { SpeechMessage } from '../../types/ml'
 
 interface ConversationViewProps {
@@ -14,6 +14,8 @@ interface ConversationViewProps {
   isSpeaking?: boolean
   /** Callback to stop speaking */
   onStopSpeaking?: () => void
+  /** Callback to clear conversation */
+  onClear?: () => void
   className?: string
 }
 
@@ -25,6 +27,7 @@ export function ConversationView({
   streamingAssistantText,
   isSpeaking,
   onStopSpeaking,
+  onClear,
   className = '',
 }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -58,15 +61,27 @@ export function ConversationView({
   }
 
   return (
-    <div ref={scrollRef} className={`flex-1 overflow-y-auto p-4 space-y-5 ${className}`}>
-      {messages.map((message) => (
-        <MessageBubble
-          key={message.id}
-          message={message}
-          isPlaying={playingMessageId === message.id}
-          onPlayAudio={() => onPlayAudio?.(message.id)}
-        />
-      ))}
+    <div className={`relative flex-1 overflow-hidden ${className}`}>
+      {/* Clear button in top-right corner */}
+      {messages.length > 0 && onClear && (
+        <button
+          onClick={onClear}
+          className="absolute top-2 right-2 z-10 p-2 rounded-lg bg-background/80 backdrop-blur-sm border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label="Clear conversation"
+          title="Clear conversation"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+      <div ref={scrollRef} className="h-full overflow-y-auto p-4 space-y-5">
+        {messages.map((message) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            isPlaying={playingMessageId === message.id}
+            onPlayAudio={() => onPlayAudio?.(message.id)}
+          />
+        ))}
 
       {/* Streaming user transcription */}
       {streamingUserText && (
@@ -115,6 +130,7 @@ export function ConversationView({
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
