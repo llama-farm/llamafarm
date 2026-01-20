@@ -26,10 +26,9 @@ def pytest_collection_modifyitems(config, items):
         reason="Skipping LLM tests (set RUN_LLM_TESTS=1 to enable)"
     )
     for item in items:
-        if "requires_llm" in item.keywords:
-            # Skip unless RUN_LLM_TESTS=1 is set
-            if not os.environ.get("RUN_LLM_TESTS", "").strip() == "1":
-                item.add_marker(skip_llm)
+        # Skip unless RUN_LLM_TESTS=1 is set
+        if "requires_llm" in item.keywords and os.environ.get("RUN_LLM_TESTS", "").strip() != "1":
+            item.add_marker(skip_llm)
 
 
 @pytest.fixture(scope="session")

@@ -11,6 +11,7 @@ instead of implementing their own _load_image method.
 """
 
 import base64
+import contextlib
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -104,10 +105,8 @@ def _load_base64_image(data: str, convert_mode: str = "RGB") -> "PILImage.Image"
 
     # Handle data URI format (e.g., "data:image/png;base64,...")
     if data.startswith("data:"):
-        try:
+        with contextlib.suppress(IndexError):
             data = data.split(",", 1)[1]
-        except IndexError:
-            pass
 
     try:
         img_bytes = base64.b64decode(data)

@@ -28,7 +28,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-
 from fastapi import (
     BackgroundTasks,
     FastAPI,

@@ -26,7 +26,7 @@ from models.base import BaseModel
 from utils.image_utils import load_image
 
 if TYPE_CHECKING:
-    from PIL import Image
+    pass
 
 logger = logging.getLogger(__name__)
 
