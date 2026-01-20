@@ -11,7 +11,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   createVoiceChatConnection,
-  sendAudioData,
   sendInterrupt,
   sendEndSignal,
   sendConfigUpdate,
@@ -59,6 +58,9 @@ export interface UseVoiceChatReturn {
   isRecording: boolean
   activeStream: MediaStream | null
 
+  // Audio playback state
+  isPlayingAudio: boolean
+
   // Actions
   connect: () => void
   disconnect: () => void
@@ -66,6 +68,7 @@ export interface UseVoiceChatReturn {
   stopRecording: () => void
   sendTextMessage: (text: string) => void
   interrupt: () => void
+  stopAudio: () => void
   clearMessages: () => void
   updateConfig: (config: Partial<VoiceChatConfig>) => void
 }
@@ -98,15 +101,20 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   const [currentTranscription, setCurrentTranscription] = useState('')
   const [currentLLMText, setCurrentLLMText] = useState('')
 
-  // Recording
+  // Recording - using AudioWorklet for raw PCM capture
   const [isRecording, setIsRecording] = useState(false)
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingContextRef = useRef<AudioContext | null>(null)
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null)
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
 
   // Audio playback
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioQueueRef = useRef<ArrayBuffer[]>([])
   const isPlayingRef = useRef(false)
+  const audioInterruptedRef = useRef(false) // Flag to stop audio queue processing
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false) // Exposed state for UI
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null) // Track current audio source for stopping
   const currentUserTextRef = useRef('')
   const currentAssistantTextRef = useRef('')
   const currentAssistantAudioRef = useRef<ArrayBuffer[]>([])
@@ -143,10 +151,18 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       const source = audioContext.createBufferSource()
       source.buffer = audioBuffer
       source.connect(audioContext.destination)
+
+      // Track current source so we can stop it on interrupt
+      currentSourceRef.current = source
       source.start()
 
       return new Promise<void>((resolve) => {
-        source.onended = () => resolve()
+        source.onended = () => {
+          if (currentSourceRef.current === source) {
+            currentSourceRef.current = null
+          }
+          resolve()
+        }
       })
     } catch (err) {
       console.error('Failed to play audio:', err)
@@ -160,15 +176,25 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     }
 
     isPlayingRef.current = true
+    audioInterruptedRef.current = false // Reset interrupt flag
+    setIsPlayingAudio(true)
 
-    while (audioQueueRef.current.length > 0) {
+    while (audioQueueRef.current.length > 0 && !audioInterruptedRef.current) {
       const audioData = audioQueueRef.current.shift()
-      if (audioData) {
+      if (audioData && !audioInterruptedRef.current) {
         await playAudioBuffer(audioData)
       }
     }
 
+    // Add a small delay after playback stops before allowing audio capture
+    // This gives echo cancellation time to settle and prevents the mic
+    // from picking up the tail end of TTS audio
+    if (!audioInterruptedRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
+
     isPlayingRef.current = false
+    setIsPlayingAudio(false)
   }, [playAudioBuffer])
 
   // Connect to voice chat WebSocket
@@ -225,8 +251,10 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
           setCurrentTranscription('')
         }
 
-        setCurrentLLMText((prev) => prev + text)
+        // Accumulate the text for the assistant response
         currentAssistantTextRef.current += text
+        // Update display with the full accumulated text (not appending to state)
+        setCurrentLLMText(currentAssistantTextRef.current)
 
         if (isFinal) {
           // LLM response complete - add the full assistant message now
@@ -291,10 +319,18 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     setSessionId(null)
     setVoiceState('idle')
 
-    // Stop any ongoing recording
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop()
-      mediaRecorderRef.current = null
+    // Stop any ongoing recording (AudioWorklet cleanup)
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect()
+      workletNodeRef.current = null
+    }
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect()
+      sourceNodeRef.current = null
+    }
+    if (recordingContextRef.current) {
+      recordingContextRef.current.close()
+      recordingContextRef.current = null
     }
     if (activeStream) {
       activeStream.getTracks().forEach((track) => track.stop())
@@ -303,7 +339,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     setIsRecording(false)
   }, [activeStream])
 
-  // Start recording
+  // Start recording using AudioWorklet for raw PCM capture
   const startRecording = useCallback(async () => {
     if (!isConnected) {
       setError('Not connected to voice chat')
@@ -316,41 +352,52 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     }
 
     try {
+      // Get microphone stream with echo cancellation
+      // Echo cancellation is applied at getUserMedia level, before Web Audio API
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       })
 
       setActiveStream(stream)
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-      })
-      mediaRecorderRef.current = mediaRecorder
+      // Create AudioContext at 16kHz for recording
+      const audioContext = new AudioContext({ sampleRate: 16000 })
+      recordingContextRef.current = audioContext
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-          sendAudioData(wsRef.current, e.data)
+      // Load AudioWorklet processor
+      await audioContext.audioWorklet.addModule('/audio-processor.js')
+
+      // Create source from mic stream
+      const source = audioContext.createMediaStreamSource(stream)
+      sourceNodeRef.current = source
+
+      // Create worklet node for PCM capture
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor')
+      workletNodeRef.current = workletNode
+
+      // Handle PCM data from worklet - send directly to backend
+      // Don't send audio while frontend is playing TTS to prevent echo feedback.
+      // Even with echo cancellation, some audio can leak through.
+      workletNode.port.onmessage = (event) => {
+        // Skip sending if we're playing audio (prevents echo from being transcribed)
+        if (isPlayingRef.current) {
+          return
         }
-      }
-
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop())
-        setActiveStream(null)
-        setIsRecording(false)
-
-        // Send end signal to trigger processing
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          sendEndSignal(wsRef.current)
+          // Send raw PCM directly (ArrayBuffer)
+          wsRef.current.send(event.data)
         }
       }
 
-      // Start recording with small timeslices for low latency
-      mediaRecorder.start(100)
+      // Connect: mic → worklet (no destination - don't play back locally)
+      source.connect(workletNode)
+
       setIsRecording(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start recording'
@@ -361,9 +408,51 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
 
   // Stop recording
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
+    // Disconnect AudioWorklet nodes
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect()
+      workletNodeRef.current = null
     }
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect()
+      sourceNodeRef.current = null
+    }
+    if (recordingContextRef.current) {
+      recordingContextRef.current.close()
+      recordingContextRef.current = null
+    }
+
+    // Stop media stream tracks
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => track.stop())
+      setActiveStream(null)
+    }
+
+    setIsRecording(false)
+
+    // Send end signal to trigger processing
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      sendEndSignal(wsRef.current)
+    }
+  }, [activeStream])
+
+  // Stop audio playback immediately
+  const stopAudio = useCallback(() => {
+    // Set interrupt flag to stop queue processing
+    audioInterruptedRef.current = true
+    // Clear the queue
+    audioQueueRef.current = []
+    // Stop currently playing audio
+    if (currentSourceRef.current) {
+      try {
+        currentSourceRef.current.stop()
+      } catch {
+        // Ignore errors if already stopped
+      }
+      currentSourceRef.current = null
+    }
+    isPlayingRef.current = false
+    setIsPlayingAudio(false)
   }, [])
 
   // Send text message (bypasses STT)
@@ -375,20 +464,28 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     if (!text.trim()) {
       return
     }
+    // If currently speaking/playing, interrupt first
+    if (voiceState === 'speaking' || isPlayingRef.current) {
+      // Stop frontend audio playback immediately
+      stopAudio()
+      // Tell backend to stop generating
+      sendInterrupt(wsRef.current)
+    }
     // Store the user text so it can be added to messages when LLM response is final
     // This ensures the user message is captured even if server transcription echo is delayed
     currentUserTextRef.current = text.trim()
     sendTextToWs(wsRef.current, text.trim())
-  }, [isConnected])
+  }, [isConnected, voiceState, stopAudio])
 
-  // Interrupt TTS (barge-in)
+  // Interrupt TTS (barge-in) - stops both backend generation and frontend playback
   const interrupt = useCallback(() => {
+    // Stop frontend audio playback
+    stopAudio()
+    // Tell backend to stop generating
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       sendInterrupt(wsRef.current)
-      // Clear audio queue
-      audioQueueRef.current = []
     }
-  }, [])
+  }, [stopAudio])
 
   // Clear messages
   const clearMessages = useCallback(() => {
@@ -436,6 +533,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     currentTranscription,
     currentLLMText,
     isRecording,
+    isPlayingAudio,
     activeStream,
     connect,
     disconnect,
@@ -443,6 +541,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     stopRecording,
     sendTextMessage,
     interrupt,
+    stopAudio,
     clearMessages,
     updateConfig,
   }

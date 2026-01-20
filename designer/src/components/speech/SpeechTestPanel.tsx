@@ -148,6 +148,52 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // Determine which mode we're in
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
 
+  // Helper to convert raw PCM to WAV blob
+  const pcmToWavBlob = useCallback((pcmData: ArrayBuffer, sampleRate: number = 24000): Blob => {
+    const numChannels = 1
+    const bitsPerSample = 16
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8)
+    const blockAlign = numChannels * (bitsPerSample / 8)
+    const dataSize = pcmData.byteLength
+    const headerSize = 44
+    const totalSize = headerSize + dataSize
+
+    const buffer = new ArrayBuffer(totalSize)
+    const view = new DataView(buffer)
+
+    // RIFF header
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i))
+      }
+    }
+
+    writeString(0, 'RIFF')
+    view.setUint32(4, totalSize - 8, true)
+    writeString(8, 'WAVE')
+
+    // fmt chunk
+    writeString(12, 'fmt ')
+    view.setUint32(16, 16, true) // fmt chunk size
+    view.setUint16(20, 1, true) // audio format (PCM)
+    view.setUint16(22, numChannels, true)
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, byteRate, true)
+    view.setUint16(32, blockAlign, true)
+    view.setUint16(34, bitsPerSample, true)
+
+    // data chunk
+    writeString(36, 'data')
+    view.setUint32(40, dataSize, true)
+
+    // Copy PCM data
+    const pcmBytes = new Uint8Array(pcmData)
+    const wavBytes = new Uint8Array(buffer)
+    wavBytes.set(pcmBytes, headerSize)
+
+    return new Blob([buffer], { type: 'audio/wav' })
+  }, [])
+
   // Sync voiceChat messages with local messages state
   useEffect(() => {
     if (mode === 'conversation' && llmAvailable && voiceChat.messages.length > 0) {
@@ -157,11 +203,12 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         role: vm.role,
         text: vm.text,
         timestamp: vm.timestamp,
-        audioUrl: vm.audioData ? URL.createObjectURL(new Blob([vm.audioData], { type: 'audio/wav' })) : undefined,
+        // Convert PCM to proper WAV so HTML Audio element can play it
+        audioUrl: vm.audioData ? URL.createObjectURL(pcmToWavBlob(vm.audioData, 24000)) : undefined,
       }))
       setMessages(convertedMessages)
     }
-  }, [mode, llmAvailable, voiceChat.messages])
+  }, [mode, llmAvailable, voiceChat.messages, pcmToWavBlob])
 
   // Start recording when voice chat connects (if we were waiting)
   useEffect(() => {
@@ -196,15 +243,26 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   }, [pendingVoiceChatRecord, pendingTextMessage, voiceChat.error])
 
   // Sync voiceChat state with local state
+  // IMPORTANT: voiceChat.isRecording reflects whether the MediaRecorder is active.
+  // During a voice chat turn, the flow is: IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE
+  // The MediaRecorder stays running through all these states until user explicitly stops.
+  // We must keep showing the waveform (recordingState='recording') as long as isRecording is true.
   useEffect(() => {
     if (mode === 'conversation' && llmAvailable) {
       // Update recording state based on voiceChat
+      // Priority: isRecording > other states
       if (voiceChat.isRecording) {
+        // MediaRecorder is active - always show recording UI regardless of voiceState
+        // This ensures continuous listening works after each turn
         setRecordingState('recording')
-        setActiveStream(voiceChat.activeStream)
-      } else if (voiceChat.voiceState === 'processing') {
+        if (voiceChat.activeStream) {
+          setActiveStream(voiceChat.activeStream)
+        }
+      } else if (voiceChat.voiceState === 'processing' || voiceChat.voiceState === 'speaking') {
+        // Not recording but still processing/speaking (e.g., text input turn)
         setRecordingState('processing')
-      } else if (voiceChat.voiceState === 'idle' && recordingState === 'processing' && !pendingVoiceChatRecord) {
+      } else if (voiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingVoiceChatRecord) {
+        // Voice chat is idle and we're not recording - reset to idle
         setRecordingState('idle')
       }
 
@@ -802,7 +860,13 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 selectedVoice={ttsVoice}
                 onVoiceChange={setTtsVoice}
                 speed={ttsSpeed}
-                onSpeedChange={setTtsSpeed}
+                onSpeedChange={(speed) => {
+                  setTtsSpeed(speed)
+                  // Update the connected session if already connected
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ speed })
+                  }
+                }}
                 models={TTS_MODELS}
                 customVoices={customVoices}
               />
@@ -929,7 +993,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 playingMessageId={playingMessageId}
                 streamingUserText={llmAvailable ? voiceChat.currentTranscription : undefined}
                 streamingAssistantText={llmAvailable ? voiceChat.currentLLMText : undefined}
-                isSpeaking={llmAvailable && voiceChat.voiceState === 'speaking'}
+                isSpeaking={llmAvailable && (voiceChat.voiceState === 'speaking' || voiceChat.isPlayingAudio)}
                 onStopSpeaking={() => voiceChat.interrupt()}
                 className="flex-1"
               />

@@ -82,8 +82,8 @@ export function ConversationView({
         </div>
       )}
 
-      {/* Streaming assistant response */}
-      {streamingAssistantText && (
+      {/* Streaming assistant response OR stop button while audio plays */}
+      {(streamingAssistantText || isSpeaking) && (
         <div className="w-full flex justify-start">
           <div className="flex flex-col items-start max-w-[80%] md:max-w-[70%]">
             <div className="flex items-start gap-2">
@@ -97,12 +97,20 @@ export function ConversationView({
                   <StopCircle className="w-4 h-4" />
                 </button>
               )}
-              <div className="text-[15px] md:text-base leading-relaxed text-foreground/90">
-                <p className="text-base leading-relaxed">
-                  {streamingAssistantText}
-                  <span className="animate-pulse ml-0.5">▊</span>
-                </p>
-              </div>
+              {streamingAssistantText && (
+                <div className="text-[15px] md:text-base leading-relaxed text-foreground/90">
+                  <p className="text-base leading-relaxed">
+                    {streamingAssistantText}
+                    <span className="animate-pulse ml-0.5">▊</span>
+                  </p>
+                </div>
+              )}
+              {/* Show "Playing audio..." when audio is playing but text is done */}
+              {!streamingAssistantText && isSpeaking && (
+                <div className="text-sm text-muted-foreground italic">
+                  Playing audio...
+                </div>
+              )}
             </div>
           </div>
         </div>

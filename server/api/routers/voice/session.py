@@ -356,6 +356,17 @@ class VoiceSession:
         """Check if audio buffer has data."""
         return len(self._audio_buffer) > 0
 
+    def discard_audio(self) -> None:
+        """Discard accumulated audio without processing.
+
+        Use this on interrupt to clear any stale audio that was buffered
+        during TTS playback (echo that got through echo cancellation).
+        """
+        self._audio_buffer.clear()
+        self._format_detect_buffer.clear()
+        self._vad.reset()
+        logger.debug("Discarded audio buffer on interrupt")
+
     def flush_and_check_vad(self) -> bool:
         """Flush decoder and do final VAD check.
 

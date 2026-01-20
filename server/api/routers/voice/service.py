@@ -930,6 +930,10 @@ class VoiceChatService:
             StatusMessage(state=VoiceState.INTERRUPTED).model_dump()
         )
 
+        # Discard any audio that was buffered during TTS playback
+        # This prevents echo/stale audio from being processed
+        self.session.discard_audio()
+
         # Transition to listening for new input
         self.session.set_state(VoiceState.LISTENING)
         await websocket.send_json(
