@@ -48,26 +48,40 @@ for _ in range(100):
 print(str(data).replace(' ', ''))
 ")
 
-# Train the model
+# Train the model (overwrite=true to use consistent name)
 echo "   Training IsolationForest model..."
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/fit" \
+TRAIN_RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"server-metrics-model\",
         \"data\": $TRAINING_DATA,
         \"backend\": \"isolation_forest\",
-        \"contamination\": 0.1
+        \"contamination\": 0.1,
+        \"overwrite\": true
     }")
 
 echo "   Training response:"
-echo "$RESPONSE" | python3 -m json.tool
+echo "$TRAIN_RESPONSE" | python3 -m json.tool
 echo ""
 
-# Check model status
+# Extract the versioned model name from training response
+MODEL_NAME=$(echo "$TRAIN_RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('versioned_name', 'server-metrics-model'))")
+echo "   Using model: $MODEL_NAME"
+echo ""
+
+# Check model status - use models list and filter
 echo "3. Checking Model Status"
-RESPONSE=$(curl -s "$BASE_URL/v1/ml/anomaly/server-metrics-model/info")
+RESPONSE=$(curl -s "$BASE_URL/v1/ml/anomaly/models" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for m in data.get('data', []):
+    if m.get('base_name') == 'server-metrics-model':
+        print(json.dumps(m, indent=2))
+        break
+else:
+    print('{\"error\": \"Model not found\"}')")
 echo "   Model info:"
-echo "$RESPONSE" | python3 -m json.tool
+echo "$RESPONSE"
 echo ""
 
 # Create anomalous data points
@@ -93,7 +107,7 @@ echo ""
 RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/explain" \
     -H "Content-Type: application/json" \
     -d "{
-        \"model_id\": \"server-metrics-model\",
+        \"model_id\": \"$MODEL_NAME\",
         \"backend\": \"isolation_forest\",
         \"data\": [$ANOMALY_1, $ANOMALY_2, $ANOMALY_3],
         \"feature_names\": [\"cpu\", \"memory\", \"latency\"],
@@ -133,9 +147,10 @@ echo "7. Anomaly Scores for Reference"
 echo "   Scoring the same anomalous points..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/server-metrics-model/score" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/score" \
     -H "Content-Type: application/json" \
     -d "{
+        \"model\": \"$MODEL_NAME\",
         \"data\": [$ANOMALY_1, $ANOMALY_2, $ANOMALY_3]
     }")
 
@@ -145,8 +160,14 @@ import sys
 import json
 
 data = json.load(sys.stdin)
-if 'scores' in data:
-    labels = ['High CPU', 'High Mem+Lat', 'All High']
+labels = ['High CPU', 'High Mem+Lat', 'All High']
+if 'data' in data:
+    for i, item in enumerate(data['data']):
+        score = item.get('score', 0)
+        is_anom = item.get('is_anomaly', False)
+        marker = '🚨 ANOMALY' if is_anom else '✓ Normal'
+        print(f'   {labels[i]}: {score:.3f} {marker}')
+elif 'scores' in data:
     for i, score in enumerate(data['scores']):
         is_anomaly = '🚨 ANOMALY' if score > 0.5 else '✓ Normal'
         print(f'   {labels[i]}: {score:.3f} {is_anomaly}')
@@ -155,8 +176,8 @@ echo ""
 
 # Clean up
 echo "8. Cleanup"
-curl -s -X DELETE "$BASE_URL/v1/ml/anomaly/server-metrics-model" > /dev/null
-echo "   Deleted model: server-metrics-model"
+curl -s -X DELETE "$BASE_URL/v1/ml/anomaly/models/$MODEL_NAME" > /dev/null
+echo "   Deleted model: $MODEL_NAME"
 echo ""
 
 echo "=========================================="

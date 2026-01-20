@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
+
 from fastapi import (
     BackgroundTasks,
     FastAPI,
@@ -3912,6 +3914,25 @@ _keyword_extractor = None
 _keyword_extractor_lock = asyncio.Lock()
 
 
+class EncoderAdapter:
+    """Adapter to make async EncoderModel compatible with sync KeywordExtractor."""
+
+    def __init__(self, encoder_model):
+        self.encoder_model = encoder_model
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        """Sync encode method for KeywordExtractor compatibility."""
+        import asyncio
+
+        # Run the async embed method synchronously
+        loop = asyncio.new_event_loop()
+        try:
+            embeddings = loop.run_until_complete(self.encoder_model.embed(texts))
+            return np.array(embeddings)
+        finally:
+            loop.close()
+
+
 async def get_keyword_extractor():
     """Get or create keyword extractor with encoder model."""
     global _keyword_extractor
@@ -3927,7 +3948,9 @@ async def get_keyword_extractor():
                     encoder = await load_encoder(
                         "sentence-transformers/all-MiniLM-L6-v2"
                     )
-                    _keyword_extractor = KeywordExtractor(encoder_model=encoder)
+                    # Wrap encoder to provide sync encode() method
+                    adapter = EncoderAdapter(encoder)
+                    _keyword_extractor = KeywordExtractor(encoder_model=adapter)
                     logger.info("Keyword extractor initialized with encoder model")
                 except Exception as e:
                     logger.warning(f"Could not load encoder for keywords, using frequency fallback: {e}")
