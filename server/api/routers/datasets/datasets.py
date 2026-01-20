@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 
 from config.datamodel import Dataset
 from fastapi import APIRouter, HTTPException, Query, UploadFile
@@ -134,6 +135,10 @@ class DatasetActionRequest(BaseModel):
     file_hash: str | None = Field(
         None, description="File hash for delete_file_chunks action"
     )
+    parser_overrides: dict[str, dict[str, Any]] | None = Field(
+        default=None,
+        description="Optional parser config overrides for PROCESS actions",
+    )
 
 
 class DatasetActionResponse(BaseModel):
@@ -184,7 +189,9 @@ async def actions(
         )
 
     if action_type == DatasetActionType.PROCESS:
-        launch = DatasetService.start_dataset_ingestion(namespace, project, dataset)
+        launch = DatasetService.start_dataset_ingestion(
+            namespace, project, dataset, parser_overrides=request.parser_overrides
+        )
         return {
             "message": launch.message,
             "task_uri": task_uri(launch.task_id),

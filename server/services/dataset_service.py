@@ -3,6 +3,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from celery import group  # type: ignore[import-untyped]
 from config.datamodel import Dataset
@@ -500,7 +501,11 @@ class DatasetService:
 
     @classmethod
     def start_dataset_ingestion(
-        cls, namespace: str, project: str, dataset: str
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        parser_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> DatasetIngestLaunchResult:
         """
         Kick off ingestion tasks for all files in a dataset and return the tracking task id.
@@ -548,6 +553,7 @@ class DatasetService:
                     source_path=str(file_path),
                     filename=file_metadata.original_file_name,
                     dataset_name=dataset,
+                    parser_overrides=parser_overrides,
                 )
             )
 

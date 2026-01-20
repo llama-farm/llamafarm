@@ -98,6 +98,7 @@ def _deep_merge(target: dict, source: dict) -> dict:
 # Handle both relative and absolute imports
 try:
     from config.datamodel import LlamaFarmConfig
+
     from .component_resolver import ComponentResolver
 except ImportError:
     # If relative import fails, try absolute import (when run directly)

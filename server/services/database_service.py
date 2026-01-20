@@ -4,10 +4,10 @@ import sys
 from pathlib import Path
 
 from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
+from config.helpers.component_resolver import ComponentResolver
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
-from config.helpers.component_resolver import ComponentResolver
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
