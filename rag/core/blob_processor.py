@@ -135,11 +135,10 @@ class BlobProcessor:
         if parser_class := ToolAwareParserFactory.load_parser_class(parser_type):
             return parser_class
 
-        logger.error(f"Parser {parser_type} not found - falling back to mock parser")
-        logger.warning(
-            f"Mock parser fallback may cause silent processing failures for {parser_type}"
+        raise ValueError(
+            f"Parser {parser_type} not found. Check that the parser type is correct "
+            f"and all required dependencies are installed."
         )
-        return ToolAwareParserFactory.create_mock_parser(parser_type)
 
     def _get_extractor_class(self, extractor_type: str) -> type:
         """
