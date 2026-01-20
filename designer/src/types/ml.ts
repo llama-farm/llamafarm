@@ -818,11 +818,13 @@ export interface STTModel {
 }
 
 // Available Whisper models from the Universal Runtime (faster-whisper)
+// Valid model IDs from backend MODEL_SIZES dict
 export const STT_MODELS: STTModel[] = [
-  { id: 'distil-large-v3-turbo', name: 'Whisper Distil Large V3 Turbo', size: '~800M', description: 'Recommended default' },
+  { id: 'large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '~800M', description: 'Recommended - fast & accurate' },
   { id: 'distil-large-v3', name: 'Whisper Distil Large V3', size: '~800M', description: 'Distilled, high quality' },
-  { id: 'large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '1.5B', description: '~2x faster than v3' },
   { id: 'large-v3', name: 'Whisper Large V3', size: '1.5B', description: 'Best accuracy, slower' },
+  { id: 'large-v2', name: 'Whisper Large V2', size: '1.5B', description: 'Previous best' },
+  { id: 'large-v1', name: 'Whisper Large V1', size: '1.5B', description: 'Original large' },
   { id: 'medium', name: 'Whisper Medium', size: '769M', description: 'High accuracy' },
   { id: 'medium.en', name: 'Whisper Medium (English)', size: '769M', description: 'English-only' },
   { id: 'small', name: 'Whisper Small', size: '244M', description: 'Good accuracy' },

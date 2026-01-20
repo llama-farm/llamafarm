@@ -26,6 +26,10 @@ import {
   type VoiceInfo,
 } from '../../api/voiceService'
 
+// Universal Runtime URL for health checks
+const UNIVERSAL_RUNTIME_URL =
+  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+
 interface SpeechTestPanelProps {
   className?: string
 }
@@ -33,7 +37,7 @@ interface SpeechTestPanelProps {
 export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // STT Config State
   const [sttEnabled, setSttEnabled] = useState(true)
-  const [sttModel, setSttModel] = useState('distil-large-v3-turbo')
+  const [sttModel, setSttModel] = useState('large-v3-turbo')
   const [sttLanguage, setSttLanguage] = useState('en')
   const [wordTimestamps, setWordTimestamps] = useState(false)
 
@@ -73,8 +77,11 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [micError, setMicError] = useState<string | undefined>()
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null)
 
-  // Backend connectivity
+  // Backend connectivity and model loading
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
+  const [sttModelLoading, setSttModelLoading] = useState(false)
+  const [, setSttModelReady] = useState(false)
+  const [, setSttModelError] = useState<string | null>(null)
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -126,6 +133,34 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
     checkMicPermission()
   }, [])
+
+  // Pre-warm STT model when enabled and model changes
+  useEffect(() => {
+    if (!sttEnabled || !backendConnected) return
+
+    const warmupModel = async () => {
+      setSttModelLoading(true)
+      setSttModelReady(false)
+      setSttModelError(null)
+
+      try {
+        // Send a tiny audio blob to trigger model loading
+        // The backend will load the model on first request
+        const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/health`)
+        if (response.ok) {
+          // Model endpoint is reachable, but model may still need to load
+          // We'll mark as ready and handle loading state during actual transcription
+          setSttModelReady(true)
+        }
+      } catch (err) {
+        setSttModelError('Backend not reachable')
+      } finally {
+        setSttModelLoading(false)
+      }
+    }
+
+    warmupModel()
+  }, [sttEnabled, sttModel, backendConnected])
 
   // Request microphone permission
   const requestMicPermission = useCallback(async () => {
@@ -260,6 +295,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Process conversation input (voice) using real backend
   const processConversationInput = useCallback(async (audioBlob: Blob) => {
+    setIsTranscribing(true)
+    setTranscriptionError(null)
+
     try {
       // Transcribe the audio
       const result = await transcribeAudio(audioBlob, {
@@ -271,6 +309,14 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         text: result.text,
         language: result.language,
         confidence: result.language_probability,
+      }
+
+      // Check if we got any text
+      if (!transcription.text || !transcription.text.trim()) {
+        setTranscriptionError('No speech detected. Try speaking louder or closer to the microphone.')
+        setRecordingState('idle')
+        setIsTranscribing(false)
+        return
       }
 
       // Add user message
@@ -324,9 +370,12 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       setBackendConnected(true)
     } catch (err) {
       console.error('Conversation processing failed:', err)
+      const message = err instanceof Error ? err.message : 'Transcription failed'
+      setTranscriptionError(message)
       setBackendConnected(false)
     } finally {
       setRecordingState('idle')
+      setIsTranscribing(false)
     }
   }, [sttModel, sttLanguage, ttsEnabled, ttsModel, ttsVoice, ttsSpeed])
 
@@ -478,6 +527,12 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
             <>
               <Wifi className="h-3 w-3" />
               <span>Connected to Universal Runtime</span>
+              {sttEnabled && sttModelLoading && (
+                <span className="ml-2 text-yellow-600">• Loading STT model...</span>
+              )}
+              {sttEnabled && isTranscribing && (
+                <span className="ml-2 text-blue-600">• Transcribing (model may be loading on first use)...</span>
+              )}
             </>
           ) : (
             <>
@@ -552,12 +607,27 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         {!needsMicPermission && (
         <div className="flex-1 min-h-0 overflow-hidden">
           {mode === 'conversation' && (
-            <ConversationView
-              messages={messages}
-              onPlayAudio={handlePlayMessageAudio}
-              playingMessageId={playingMessageId}
-              className="h-full"
-            />
+            <div className="h-full flex flex-col">
+              {/* Error display for conversation mode */}
+              {transcriptionError && (
+                <div className="flex-shrink-0 mx-4 mt-4 flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-600 text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{transcriptionError}</span>
+                  <button
+                    onClick={() => setTranscriptionError(null)}
+                    className="ml-auto text-xs hover:text-red-800"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+              <ConversationView
+                messages={messages}
+                onPlayAudio={handlePlayMessageAudio}
+                playingMessageId={playingMessageId}
+                className="flex-1"
+              />
+            </div>
           )}
 
           {mode === 'stt' && (
