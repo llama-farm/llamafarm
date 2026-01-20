@@ -38,9 +38,13 @@ const UNIVERSAL_RUNTIME_URL =
 
 interface SpeechTestPanelProps {
   className?: string
+  /** Ref to expose clear function to parent */
+  clearRef?: React.MutableRefObject<(() => void) | null>
+  /** Callback when messages change (for parent to track if clear should be enabled) */
+  onMessagesChange?: (hasMessages: boolean) => void
 }
 
-export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
+export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: SpeechTestPanelProps) {
   // STT Config State
   const [sttEnabled, setSttEnabled] = useState(true)
   const [sttModel, setSttModel] = useState('base')
@@ -763,11 +767,30 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Clear conversation
   const handleClearConversation = useCallback(() => {
+    // Stop any ongoing audio playback and backend generation
+    voiceChat.interrupt()
     setMessages([])
     voiceChat.clearMessages()
     setPlayingMessageId(null)
     setTranscriptionError(null)
   }, [voiceChat])
+
+  // Expose clear function to parent via ref
+  useEffect(() => {
+    if (clearRef) {
+      clearRef.current = handleClearConversation
+    }
+    return () => {
+      if (clearRef) {
+        clearRef.current = null
+      }
+    }
+  }, [clearRef, handleClearConversation])
+
+  // Notify parent when messages change
+  useEffect(() => {
+    onMessagesChange?.(messages.length > 0)
+  }, [messages.length, onMessagesChange])
 
   // Play audio when playingMessageId changes
   useEffect(() => {

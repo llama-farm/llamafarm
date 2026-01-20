@@ -1727,6 +1727,9 @@ export default function TestChat({
 
   // Speech mode - Universal Runtime connection status
   const [speechRuntimeConnected, setSpeechRuntimeConnected] = useState<boolean | null>(null)
+  // Speech mode - clear function ref and message tracking
+  const speechClearRef = useRef<(() => void) | null>(null)
+  const [speechHasMessages, setSpeechHasMessages] = useState(false)
 
   // Check runtime health when speech mode is selected
   useEffect(() => {
@@ -3208,8 +3211,10 @@ export default function TestChat({
               } else if (modelType === 'encoder') {
                 // Encoder mode: clear results
                 clearEncoderResults()
+              } else if (modelType === 'speech') {
+                // Speech mode: call the clear function via ref
+                speechClearRef.current?.()
               }
-              // Speech mode: panel handles its own state clearing
             }}
             disabled={
               modelType === 'inference'
@@ -3222,7 +3227,9 @@ export default function TestChat({
                       ? (!scanResults && !scanError && !scanFile)
                       : modelType === 'encoder'
                         ? (!embeddingResult && !rerankResult && !encoderError)
-                        : true // Speech mode: always disabled, has its own controls
+                        : modelType === 'speech'
+                          ? !speechHasMessages
+                          : true
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -3787,7 +3794,11 @@ export default function TestChat({
         ) : modelType === 'speech' ? (
           /* Speech: Full speech test panel with STT, TTS, and voice cloning */
           <div className="absolute inset-0 overflow-hidden">
-            <SpeechTestPanel className="h-full" />
+            <SpeechTestPanel
+              className="h-full"
+              clearRef={speechClearRef}
+              onMessagesChange={setSpeechHasMessages}
+            />
           </div>
         ) : (
           /* Encoder: Embedding similarity or Reranking */
