@@ -2,8 +2,34 @@
 Shared pytest fixtures for Universal Runtime tests.
 """
 
+import os
+
 import pytest
 import torch
+
+
+def pytest_configure(config):
+    """Configure custom pytest markers."""
+    config.addinivalue_line(
+        "markers",
+        "requires_llm: marks tests as requiring an LLM model (may be slow or skipped in CI)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "slow: marks tests as slow (may be skipped with -m 'not slow')",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests that require LLM if the environment variable is set."""
+    skip_llm = pytest.mark.skip(
+        reason="Skipping LLM tests (set RUN_LLM_TESTS=1 to enable)"
+    )
+    for item in items:
+        if "requires_llm" in item.keywords:
+            # Skip unless RUN_LLM_TESTS=1 is set
+            if not os.environ.get("RUN_LLM_TESTS", "").strip() == "1":
+                item.add_marker(skip_llm)
 
 
 @pytest.fixture(scope="session")

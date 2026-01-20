@@ -3,6 +3,9 @@ Tests for server-level SSE streaming to ensure token-by-token delivery.
 
 These tests verify that the `await asyncio.sleep(0)` calls in server.py
 properly flush the stream, preventing buffered/chunked responses.
+
+Note: Most tests in this file require a real LLM model (Qwen/Qwen2.5-0.5B-Instruct)
+and are skipped by default. Set RUN_LLM_TESTS=1 to enable them.
 """
 
 import contextlib
@@ -22,6 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from server import app
 
 
+@pytest.mark.requires_llm
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_streaming_token_by_token_delivery():
     """
@@ -109,6 +114,8 @@ async def test_streaming_token_by_token_delivery():
         print(f"   - Average chunk interval: {chunk_times[-1] / len(chunk_times):.3f}s")
 
 
+@pytest.mark.requires_llm
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_streaming_without_asyncio_sleep_simulation():
     """
@@ -158,6 +165,8 @@ async def test_streaming_without_asyncio_sleep_simulation():
         print(f"   - Min size: {min(chunk_sizes)} bytes")
 
 
+@pytest.mark.requires_llm
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_streaming_completion_markers():
     """
@@ -226,6 +235,8 @@ async def test_streaming_completion_markers():
         )
 
 
+@pytest.mark.requires_llm
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_streaming_headers():
     """
@@ -274,6 +285,8 @@ async def test_streaming_headers():
             print(f"   - X-Accel-Buffering: {headers.get('x-accel-buffering')}")
 
 
+@pytest.mark.requires_llm
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_streaming_immediate_start():
     """
