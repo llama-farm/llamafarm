@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import celery.result
 from config.datamodel import LlamaFarmConfig, Model  # noqa: E402
@@ -36,6 +37,7 @@ from services.project_chat_service import (
     project_chat_service,
 )
 from services.project_service import ProjectService
+from services.template_service import TemplateError, TemplateService
 
 
 class Project(BaseModel):
@@ -434,6 +436,14 @@ class ChatRequest(BaseModel):
     # max_tokens is used for the final answer, thinking_budget is additional
     thinking_budget: int | None = None
 
+    # Dynamic template variables for prompt and tool substitution
+    variables: dict[str, Any] | None = Field(
+        default=None,
+        description="Dynamic variables for template substitution in prompts and tools. "
+        "Use {{variable_name}} syntax in config prompts/tools, then pass values here. "
+        "Example: {'user_name': 'Alice', 'company': 'Acme Corp'}",
+    )
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -532,8 +542,22 @@ async def chat(
         matched_docs = docs_service.match_docs_for_query(latest_user_message)
         agent.docs_context_provider.set_docs(matched_docs)
 
-    # Tools from request body (config tools are added by the agent via config_tools property)
-    tools = [ToolDefinition.from_openai_tool_dict(t) for t in (request.tools or [])]
+    # Resolve template variables in prompts, config tools, and request tools
+    try:
+        # Resolve agent prompts and config tools via single method
+        if hasattr(agent, "set_request_variables"):
+            agent.set_request_variables(request.variables)
+
+        # Resolve request tools separately (they're not part of agent config)
+        request_tools = TemplateService.resolve_object(
+            request.tools or [], request.variables or {}
+        )
+        tools = [ToolDefinition.from_openai_tool_dict(t) for t in request_tools]
+    except TemplateError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template resolution failed: {e}",
+        ) from e
 
     if request.stream:
         return create_streaming_response_from_iterator(

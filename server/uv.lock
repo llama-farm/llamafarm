@@ -1936,6 +1936,7 @@ test = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-mock" },
 ]
 test = [
@@ -1987,6 +1988,7 @@ provides-extras = ["dev", "test"]
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "pytest-mock", specifier = ">=3.12.0" },
 ]
 test = [
