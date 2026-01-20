@@ -370,6 +370,13 @@ async def voice_chat_websocket(
                             audio_bytes = session.get_audio_buffer()
                             await service.process_turn(websocket, audio_bytes)
 
+                    elif msg_type == "text":
+                        # Direct text input (bypasses STT)
+                        text = data.get("text", "").strip()
+                        if text:
+                            logger.info(f"Received text message: {text[:50]}...")
+                            await service.process_text_turn(websocket, text)
+
                     elif msg_type == "config":
                         # Update session configuration
                         session.update_config(

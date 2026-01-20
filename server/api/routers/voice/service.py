@@ -739,6 +739,98 @@ class VoiceChatService:
             )
             self.session.set_state(VoiceState.IDLE)
 
+    async def process_text_turn(self, websocket: WebSocket, text: str) -> None:
+        """Process a text input turn (bypasses STT).
+
+        This is similar to process_turn but skips the transcription step,
+        directly using the provided text for LLM generation and TTS.
+
+        Args:
+            websocket: Client WebSocket connection.
+            text: User's text input.
+        """
+        t_start = time.perf_counter()
+
+        # Clear any previous interrupt
+        self.session.clear_interrupt()
+        self.session.reset_phrase_counter()
+
+        # Update state to processing
+        self.session.set_state(VoiceState.PROCESSING)
+        await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
+
+        try:
+            # Send the text as a "transcription" so client can display it
+            await websocket.send_json(
+                TranscriptionMessage(text=text, is_final=True).model_dump()
+            )
+
+            # Go directly to LLM + TTS
+            self.session.set_state(VoiceState.SPEAKING)
+            await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
+
+            # Use phrase detector to accumulate LLM tokens
+            phrase_detector = PhraseBoundaryDetector(
+                sentence_boundary_only=self.session.config.sentence_boundary_only,
+            )
+            thinking_filter = StreamingThinkingFilter()
+            full_response = ""
+
+            async for token in self.stream_llm_response(text):
+                # Check for interrupt
+                if self.session.is_interrupted():
+                    logger.info("Turn interrupted by user")
+                    break
+
+                # Filter thinking content at token level
+                filtered_token = thinking_filter.filter_token(token)
+                full_response += token
+
+                if not filtered_token:
+                    continue
+
+                # Detect phrase boundaries
+                phrase = phrase_detector.add_token(filtered_token)
+                if phrase:
+                    await websocket.send_json(
+                        LLMTextMessage(text=phrase, is_final=False).model_dump()
+                    )
+                    await self._synthesize_and_stream_phrase(websocket, phrase)
+
+                    if self.session.is_interrupted():
+                        break
+
+            # Flush remaining text
+            if not self.session.is_interrupted():
+                remaining_filtered = thinking_filter.flush()
+                if remaining_filtered:
+                    phrase = phrase_detector.add_token(remaining_filtered)
+                    if phrase:
+                        await websocket.send_json(
+                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(websocket, phrase)
+
+                remaining = phrase_detector.flush()
+                if remaining:
+                    await websocket.send_json(
+                        LLMTextMessage(text=remaining, is_final=True).model_dump()
+                    )
+                    await self._synthesize_and_stream_phrase(websocket, remaining)
+
+            t_end = time.perf_counter()
+            logger.info(f"Text turn completed in {(t_end - t_start)*1000:.1f}ms")
+
+            self.session.set_state(VoiceState.IDLE)
+            await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+
+        except Exception as e:
+            logger.error(f"Error processing text turn: {e}", exc_info=True)
+            await websocket.send_json(
+                ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
+            )
+            self.session.set_state(VoiceState.IDLE)
+
     async def _synthesize_and_stream_phrase(
         self,
         websocket: WebSocket,

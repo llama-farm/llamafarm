@@ -15,6 +15,7 @@ import {
   sendInterrupt,
   sendEndSignal,
   sendConfigUpdate,
+  sendTextMessage as sendTextToWs,
   type VoiceState,
   type VoiceChatConfig,
 } from '../api/voiceService'
@@ -62,6 +63,7 @@ export interface UseVoiceChatReturn {
   disconnect: () => void
   startRecording: () => Promise<void>
   stopRecording: () => void
+  sendTextMessage: (text: string) => void
   interrupt: () => void
   clearMessages: () => void
   updateConfig: (config: Partial<VoiceChatConfig>) => void
@@ -348,6 +350,18 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     }
   }, [])
 
+  // Send text message (bypasses STT)
+  const sendTextMessage = useCallback((text: string) => {
+    if (!isConnected || !wsRef.current) {
+      setError('Not connected to voice chat')
+      return
+    }
+    if (!text.trim()) {
+      return
+    }
+    sendTextToWs(wsRef.current, text.trim())
+  }, [isConnected])
+
   // Interrupt TTS (barge-in)
   const interrupt = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -407,6 +421,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     disconnect,
     startRecording,
     stopRecording,
+    sendTextMessage,
     interrupt,
     clearMessages,
     updateConfig,

@@ -77,54 +77,56 @@ function MessageBubble({ message, isPlaying, onPlayAudio }: MessageBubbleProps) 
   }
 
   return (
-    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      {/* Message row with optional play button */}
-      <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
-        {/* Audio play button for assistant messages */}
-        {!isUser && message.audioUrl && (
-          <button
-            onClick={onPlayAudio}
-            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-              isPlaying
-                ? 'bg-primary/20 text-primary'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-            aria-label={isPlaying ? 'Playing audio' : 'Play audio'}
-          >
-            <Volume2 className={`w-4 h-4 ${isPlaying ? 'animate-pulse' : ''}`} />
-          </button>
-        )}
+    <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[80%] md:max-w-[70%]`}>
+        {/* Message row with optional play button */}
+        <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
+          {/* Audio play button for assistant messages */}
+          {!isUser && message.audioUrl && (
+            <button
+              onClick={onPlayAudio}
+              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                isPlaying
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+              aria-label={isPlaying ? 'Playing audio' : 'Play audio'}
+            >
+              <Volume2 className={`w-4 h-4 ${isPlaying ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
 
-        {/* Message bubble */}
+          {/* Message bubble */}
+          <div
+            className={
+              isUser
+                ? 'bg-secondary text-foreground rounded-lg px-4 py-3'
+                : 'text-[15px] md:text-base leading-relaxed text-foreground/90'
+            }
+          >
+            <p className="text-base leading-relaxed">
+              {message.text}
+            </p>
+          </div>
+        </div>
+
+        {/* Footer with time */}
         <div
-          className={`max-w-[80%] md:max-w-[70%] ${
-            isUser
-              ? 'bg-secondary text-foreground rounded-2xl rounded-br-sm px-4 py-3'
-              : 'text-[15px] md:text-base leading-relaxed text-foreground/90'
+          className={`flex items-center gap-2 mt-1.5 ${
+            isUser ? 'pr-1' : !isUser && message.audioUrl ? 'ml-10' : ''
           }`}
         >
-          <p className={`${isUser ? 'text-base leading-relaxed' : ''} break-words`}>
-            {message.text}
-          </p>
-        </div>
-      </div>
-
-      {/* Footer with time */}
-      <div
-        className={`flex items-center gap-2 mt-1.5 ${
-          isUser ? 'flex-row-reverse' : !isUser && message.audioUrl ? 'ml-10' : ''
-        }`}
-      >
-        <span className="text-xs text-muted-foreground">
-          {formatTime(message.timestamp)}
-        </span>
-
-        {/* Transcription confidence for user messages */}
-        {isUser && message.transcription?.confidence !== undefined && (
           <span className="text-xs text-muted-foreground">
-            {(message.transcription.confidence * 100).toFixed(0)}%
+            {formatTime(message.timestamp)}
           </span>
-        )}
+
+          {/* Transcription confidence for user messages */}
+          {isUser && message.transcription?.confidence !== undefined && (
+            <span className="text-xs text-muted-foreground">
+              {(message.transcription.confidence * 100).toFixed(0)}%
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -347,6 +347,15 @@ export function sendEndSignal(ws: WebSocket): void {
 }
 
 /**
+ * Send text message directly (bypasses STT)
+ */
+export function sendTextMessage(ws: WebSocket, text: string): void {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'text', text }))
+  }
+}
+
+/**
  * Update session configuration
  */
 export function sendConfigUpdate(

@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react'
-import { Play, Pause } from 'lucide-react'
+import { useState, useCallback, useRef } from 'react'
+import { Play, Pause, Loader2 } from 'lucide-react'
 import { Switch } from '../ui/switch'
 import { Selector } from '../ui/selector'
 import { Button } from '../ui/button'
 import { TTS_MODELS, getVoicesForModel } from '../../types/ml'
 import type { TTSModel, VoiceClone } from '../../types/ml'
+import { synthesizeSpeech } from '../../api/voiceService'
 
 interface TextToSpeechConfigProps {
   enabled: boolean
@@ -34,6 +35,9 @@ export function TextToSpeechConfig({
   className = '',
 }: TextToSpeechConfigProps) {
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const currentModel = models.find(m => m.id === selectedModel)
 
   // Get voices for the selected model + custom voices
@@ -51,20 +55,65 @@ export function TextToSpeechConfig({
     })),
   ]
 
-  const handlePreview = useCallback(() => {
+  const handlePreview = useCallback(async () => {
     if (isPreviewing) {
       // Stop preview
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
       setIsPreviewing(false)
       return
     }
 
-    // Start preview
-    setIsPreviewing(true)
-    // Simulate audio playback duration
-    setTimeout(() => {
+    // Get the voice name for the greeting
+    const voice = modelVoices.find(v => v.id === selectedVoice)
+    const voiceName = voice?.name || selectedVoice
+    const greeting = `Hello, I'm ${voiceName}! I can help you analyze documents, answer questions, or work through problems together.`
+
+    setIsLoading(true)
+    setPreviewError(null)
+    try {
+      // Synthesize speech
+      const audioBlob = await synthesizeSpeech({
+        model: selectedModel,
+        input: greeting,
+        voice: selectedVoice,
+        speed: speed,
+        response_format: 'wav',
+      })
+
+      // Create audio element and play
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsPreviewing(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      audio.onerror = () => {
+        setIsPreviewing(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      setIsPreviewing(true)
+      await audio.play()
+    } catch (error) {
+      console.error('Failed to preview voice:', error)
+      const message = error instanceof Error ? error.message : 'Failed to preview'
+      // Check for common connection errors
+      if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+        setPreviewError('Universal Runtime not available')
+      } else {
+        setPreviewError(message)
+      }
       setIsPreviewing(false)
-    }, 2000)
-  }, [isPreviewing])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isPreviewing, selectedModel, selectedVoice, speed, modelVoices])
 
   return (
     <div className={`rounded-lg border border-border bg-card/40 p-3 ${className}`}>
@@ -120,13 +169,26 @@ export function TextToSpeechConfig({
               size="icon"
               className="h-8 w-8 mb-0.5 flex-shrink-0"
               onClick={handlePreview}
-              disabled={!enabled}
-              aria-label={isPreviewing ? 'Stop preview' : 'Preview voice'}
+              disabled={!enabled || isLoading}
+              aria-label={isLoading ? 'Loading...' : isPreviewing ? 'Stop preview' : 'Preview voice'}
             >
-              {isPreviewing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isPreviewing ? (
+                <Pause className="h-3.5 w-3.5" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
             </Button>
           </div>
         </div>
+
+        {/* Preview error message */}
+        {previewError && (
+          <div className="text-xs text-destructive">
+            {previewError}
+          </div>
+        )}
 
         {/* Speed slider - inline with model info */}
         <div className="flex items-center gap-3">

@@ -551,18 +551,37 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       }
     } else {
       // Conversation mode - text input
+      const inputText = textInput
+      setTextInput('')
+
+      // If LLM is available, use voice chat to send text (LLM → TTS)
+      if (llmAvailable) {
+        // Connect if not already connected
+        if (!voiceChat.isConnected) {
+          voiceChat.connect()
+          // Wait a bit for connection, then send
+          // The useEffect will sync messages when they arrive
+          setTimeout(() => {
+            voiceChat.sendTextMessage(inputText)
+          }, 500)
+        } else {
+          voiceChat.sendTextMessage(inputText)
+        }
+        return
+      }
+
+      // Fallback: No LLM, use echo mode
       const userMessage: SpeechMessage = {
         id: `msg-${Date.now()}`,
         role: 'user',
-        text: textInput,
+        text: inputText,
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, userMessage])
-      setTextInput('')
 
-      // Generate TTS response if enabled
+      // Generate TTS response if enabled (echo mode)
       if (ttsEnabled) {
-        const responseText = `I heard you say: "${textInput}"`
+        const responseText = `I heard you say: "${inputText}"`
 
         try {
           const audioBlob = await synthesizeSpeech({
@@ -596,7 +615,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         }
       }
     }
-  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled])
+  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, voiceChat])
 
   // Handle key press in textarea
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
