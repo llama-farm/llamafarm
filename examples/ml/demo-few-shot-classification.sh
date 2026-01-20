@@ -122,12 +122,14 @@ print(f"Training with {len(images)} images, {len(set(labels))} classes")
 print(f"Classes: {sorted(set(labels))}")
 print("")
 
+# Build training_data in the correct format: [{"image": "<base64>", "label": "cat"}, ...]
+training_data = [{"image": img, "label": lbl} for img, lbl in zip(images, labels)]
+
 # Train the classifier
 data = json.dumps({
     "classifier_id": "${CLASSIFIER_ID}",
-    "images": images,
-    "labels": labels,
-    "epochs": 100
+    "training_data": training_data,
+    "num_iterations": 20
 }).encode()
 
 req = urllib.request.Request(
@@ -249,7 +251,10 @@ RESPONSE=$(curl -s -X DELETE "${BASE_URL}/v1/vision/classify/${CLASSIFIER_ID}")
 echo "$RESPONSE" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-print(f\"Deleted: {data.get('deleted', False)}\")
+deleted_disk = data.get('deleted_from_disk', False)
+deleted_memory = data.get('deleted_from_memory', False)
+print(f'Deleted from disk: {deleted_disk}')
+print(f'Deleted from memory: {deleted_memory}')
 "
 echo ""
 

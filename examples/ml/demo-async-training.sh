@@ -78,7 +78,7 @@ echo -e "${YELLOW}Starting anomaly detector training (background)...${NC}"
 TRAINING_START=$(date +%s.%N)
 
 # Start the training request in background
-curl -sf -X POST "${BASE_URL}/v1/anomaly/fit" \
+curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"async-test-detector\",
@@ -175,7 +175,7 @@ fi
 # Cleanup
 echo ""
 echo -e "${YELLOW}Cleaning up test model...${NC}"
-curl -sf -X DELETE "${BASE_URL}/v1/anomaly/models/async-test-detector" > /dev/null 2>&1 || true
+curl -sf -X DELETE "${BASE_URL}/v1/ml/anomaly/models/async-test-detector" > /dev/null 2>&1 || true
 echo -e "${GREEN}✓ Cleanup complete${NC}"
 
 echo ""

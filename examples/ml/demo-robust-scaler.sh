@@ -99,7 +99,7 @@ echo -e "${BLUE}============================================${NC}"
 echo ""
 
 echo -e "${YELLOW}Training anomaly detector with RobustScaler...${NC}"
-ROBUST_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/anomaly/fit" \
+ROBUST_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-robust-scaler\",
@@ -128,7 +128,7 @@ echo -e "${BLUE}============================================${NC}"
 echo ""
 
 echo -e "${YELLOW}Training anomaly detector with StandardScaler...${NC}"
-STANDARD_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/anomaly/fit" \
+STANDARD_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-standard-scaler\",
@@ -158,7 +158,7 @@ echo ""
 
 # Score with RobustScaler model
 echo -e "${YELLOW}Scoring with RobustScaler model...${NC}"
-ROBUST_SCORES=$(curl -sf -X POST "${BASE_URL}/v1/anomaly/score" \
+ROBUST_SCORES=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/score" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-robust-scaler\",
@@ -186,7 +186,7 @@ echo ""
 
 # Score with StandardScaler model
 echo -e "${YELLOW}Scoring with StandardScaler model...${NC}"
-STANDARD_SCORES=$(curl -sf -X POST "${BASE_URL}/v1/anomaly/score" \
+STANDARD_SCORES=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/score" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-standard-scaler\",
@@ -237,8 +237,8 @@ echo ""
 
 # Cleanup
 echo -e "${YELLOW}Cleaning up test models...${NC}"
-curl -sf -X DELETE "${BASE_URL}/v1/anomaly/models/demo-robust-scaler" > /dev/null 2>&1 || true
-curl -sf -X DELETE "${BASE_URL}/v1/anomaly/models/demo-standard-scaler" > /dev/null 2>&1 || true
+curl -sf -X DELETE "${BASE_URL}/v1/ml/anomaly/models/demo-robust-scaler" > /dev/null 2>&1 || true
+curl -sf -X DELETE "${BASE_URL}/v1/ml/anomaly/models/demo-standard-scaler" > /dev/null 2>&1 || true
 echo -e "${GREEN}✓ Cleanup complete${NC}"
 
 echo ""

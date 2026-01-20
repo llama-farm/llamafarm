@@ -26,6 +26,7 @@ class MLModelService:
     # Subdirectories by model type
     CLASSIFIER_DIR = "classifier"
     ANOMALY_DIR = "anomaly"
+    FEW_SHOT_DIR = "few_shot"
 
     # Timestamp format for versioning
     TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
@@ -41,18 +42,26 @@ class MLModelService:
         "autoencoder",
     ]
 
+    # File extensions by model type
+    MODEL_EXTENSIONS = {
+        "classifier": None,  # Directories
+        "anomaly": (".joblib", ".pkl", ".pt"),
+        "few_shot": (".fsc",),
+    }
+
     @classmethod
     def ensure_dirs(cls) -> None:
         """Ensure model directories exist."""
         (cls.MODELS_DIR / cls.CLASSIFIER_DIR).mkdir(parents=True, exist_ok=True)
         (cls.MODELS_DIR / cls.ANOMALY_DIR).mkdir(parents=True, exist_ok=True)
+        (cls.MODELS_DIR / cls.FEW_SHOT_DIR).mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def get_model_dir(cls, model_type: str) -> Path:
         """Get the directory for a model type.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: 'classifier', 'anomaly', or 'few_shot'
 
         Returns:
             Path to the model type directory
@@ -62,6 +71,8 @@ class MLModelService:
             return cls.MODELS_DIR / cls.CLASSIFIER_DIR
         elif model_type == "anomaly":
             return cls.MODELS_DIR / cls.ANOMALY_DIR
+        elif model_type == "few_shot":
+            return cls.MODELS_DIR / cls.FEW_SHOT_DIR
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -192,7 +203,7 @@ class MLModelService:
         """List all models of a type with their metadata.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: 'classifier', 'anomaly', or 'few_shot'
 
         Returns:
             List of model info dicts
@@ -221,7 +232,35 @@ class MLModelService:
                             "is_versioned": match is not None,
                         }
                     )
+        elif model_type == "few_shot":
+            # Few-shot classifiers are .fsc files
+            for item in model_dir.iterdir():
+                if item.is_file() and item.suffix == ".fsc":
+                    name_without_ext = item.stem
+
+                    # Parse version info
+                    match = cls.VERSION_PATTERN.match(name_without_ext)
+                    if match:
+                        base_name, timestamp = match.groups()
+                        created = datetime.strptime(timestamp, cls.TIMESTAMP_FORMAT)
+                    else:
+                        base_name = name_without_ext
+                        created = datetime.fromtimestamp(item.stat().st_mtime)
+
+                    models.append(
+                        {
+                            "classifier_id": name_without_ext,
+                            "name": name_without_ext,
+                            "filename": item.name,
+                            "base_name": base_name,
+                            "path": str(item),
+                            "size_bytes": item.stat().st_size,
+                            "created": created.isoformat(),
+                            "is_versioned": match is not None,
+                        }
+                    )
         else:
+            # Anomaly models are files with various extensions
             for item in model_dir.iterdir():
                 if item.is_file() and item.suffix in (".joblib", ".pkl", ".pt"):
                     name_without_ext = item.stem
@@ -313,7 +352,7 @@ class MLModelService:
         """Delete a model.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: 'classifier', 'anomaly', or 'few_shot'
             name: Model name or filename
 
         Returns:
@@ -331,6 +370,19 @@ class MLModelService:
             if path.is_dir():
                 shutil.rmtree(path)
                 logger.info(f"Deleted classifier model: {name}")
+                return True
+        elif model_type == "few_shot":
+            # Few-shot classifiers are .fsc files
+            # Try with .fsc extension if not already provided
+            if name.endswith(".fsc"):
+                path = cls._validate_path(model_dir, name)
+            else:
+                path = cls._validate_path(model_dir, f"{name}.fsc")
+
+            if path.is_file():
+                cls._delete_metadata(model_type, name)
+                path.unlink()
+                logger.info(f"Deleted few-shot classifier: {name}")
                 return True
         else:
             # For anomaly, name might be just the model name or the full filename

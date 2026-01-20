@@ -20,11 +20,13 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
 from .types import (
     BackgroundRemoveRequest,
     FewShotClassifyFitRequest,
+    FewShotClassifyLoadRequest,
     FewShotClassifyPredictBatchRequest,
     FewShotClassifyPredictRequest,
     FewShotClassifyRefineRequest,
@@ -576,6 +578,103 @@ async def get_classifier_info(classifier_id: str) -> dict[str, Any]:
     Returns metadata about the classifier including labels, model, and training stats.
     """
     return await UniversalRuntimeService.get_few_shot_classifier_info(classifier_id)
+
+
+@router.get("/classify/models")
+async def list_few_shot_classifiers() -> dict[str, Any]:
+    """List all saved few-shot classifiers.
+
+    Returns all classifiers that have been trained and auto-saved.
+    These can be loaded with POST /v1/vision/classify/load.
+
+    Response includes:
+    - classifier_id: Unique identifier
+    - base_name: Original name without version suffix
+    - is_versioned: Whether this is a versioned model
+    - created: ISO timestamp
+    - classes: Class labels (from saved model metadata)
+    - model: CLIP model used
+    """
+    # Get basic info with versioning from MLModelService
+    models = MLModelService.list_all_models("few_shot")
+
+    # Get detailed info (classes, model) from Runtime
+    try:
+        runtime_data = await UniversalRuntimeService.list_few_shot_classifiers()
+        runtime_classifiers = {
+            c["classifier_id"]: c for c in runtime_data.get("classifiers", [])
+        }
+
+        # Merge runtime metadata into model info
+        for model in models:
+            classifier_id = model.get("classifier_id", model.get("name"))
+            if classifier_id in runtime_classifiers:
+                runtime_info = runtime_classifiers[classifier_id]
+                model["classes"] = runtime_info.get("classes", [])
+                model["model"] = runtime_info.get("model", "unknown")
+    except Exception:
+        # Runtime may not be available, that's okay
+        pass
+
+    return {
+        "object": "list",
+        "classifiers": models,
+        "models_dir": str(MLModelService.get_model_dir("few_shot")),
+        "total": len(models),
+    }
+
+
+@router.post("/classify/load")
+async def load_few_shot_classifier(request: FewShotClassifyLoadRequest) -> dict[str, Any]:
+    """Load a previously saved few-shot classifier.
+
+    After loading, use POST /v1/vision/classify/predict to classify images.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "product-classifier",
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+    """
+    return await UniversalRuntimeService.load_few_shot_classifier(
+        classifier_id=request.classifier_id,
+        model=request.model,
+    )
+
+
+@router.delete("/classify/{classifier_id}")
+async def delete_few_shot_classifier(classifier_id: str) -> dict[str, Any]:
+    """Delete a few-shot classifier from disk and memory.
+
+    This removes the saved model file. If the classifier is loaded in the
+    Runtime, it will also be unloaded.
+
+    Returns whether the classifier was successfully deleted.
+    """
+    # Delete from disk via MLModelService
+    deleted_from_disk = MLModelService.delete_model("few_shot", classifier_id)
+
+    # Also try to unload from Runtime memory (ignore errors if not loaded)
+    try:
+        await UniversalRuntimeService.delete_few_shot_classifier(classifier_id)
+        deleted_from_memory = True
+    except Exception:
+        deleted_from_memory = False
+
+    if not deleted_from_disk and not deleted_from_memory:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Classifier '{classifier_id}' not found",
+        )
+
+    return {
+        "object": "deletion",
+        "classifier_id": classifier_id,
+        "deleted_from_disk": deleted_from_disk,
+        "deleted_from_memory": deleted_from_memory,
+    }
 
 
 # =============================================================================

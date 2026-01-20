@@ -80,11 +80,10 @@ echo -e "${BLUE}Test 1: Remove background from image${NC}"
 echo -e "${YELLOW}Processing image...${NC}"
 echo ""
 
-RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/segment" \
+RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/background-remove" \
   -H "Content-Type: application/json" \
   -d "{
-    \"image\": \"${TEST_IMAGE}\",
-    \"return_mask\": false
+    \"image\": \"${TEST_IMAGE}\"
   }")
 echo "$RESULT" | (cd "$RUNTIME_DIR" && uv run python -c "
 import json, sys, base64
@@ -118,11 +117,12 @@ echo -e "${BLUE}Test 2: Remove background and get mask${NC}"
 echo -e "${YELLOW}Processing with return_mask=true...${NC}"
 echo ""
 
-RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/segment" \
+# Note: return_mask not yet implemented in background-remove endpoint
+# Using the same call as Test 1 for now
+RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/background-remove" \
   -H "Content-Type: application/json" \
   -d "{
-    \"image\": \"${TEST_IMAGE}\",
-    \"return_mask\": true
+    \"image\": \"${TEST_IMAGE}\"
   }")
 echo "$RESULT" | (cd "$RUNTIME_DIR" && uv run python -c "
 import json, sys, base64
@@ -134,15 +134,18 @@ if 'error' in data or 'detail' in data:
     print(f\"Error: {data.get('detail', data.get('error', 'Unknown error'))}\")
     sys.exit(1)
 
-print(f\"Got image: {len(data['image'])} bytes (base64)\")
-print(f\"Got mask: {'mask' in data}\")
+print(f\"Output dimensions: {data.get('width', 'N/A')}x{data.get('height', 'N/A')}\")
 
-if 'mask' in data:
-    mask_data = base64.b64decode(data['mask'])
-    mask = Image.open(BytesIO(mask_data))
-    print(f\"Mask format: {mask.format}\")
-    print(f\"Mask mode: {mask.mode} (L = grayscale)\")
-    print(f\"Mask size: {mask.size[0]}x{mask.size[1]}\")
+# Decode and check the output image
+img_data = base64.b64decode(data['image'])
+img = Image.open(BytesIO(img_data))
+print(f\"Output mode: {img.mode} (RGBA = has alpha channel)\")
+
+if img.mode == 'RGBA':
+    alpha = img.split()[3]
+    alpha_min = min(alpha.getdata())
+    alpha_max = max(alpha.getdata())
+    print(f\"Alpha range: {alpha_min} to {alpha_max} (0=transparent, 255=opaque)\")
 ")
 echo ""
 
@@ -174,11 +177,10 @@ print(base64.b64encode(buffer.getvalue()).decode())
 EOF
 )
 
-RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/segment" \
+RESULT=$(curl -s -X POST "${BASE_URL}/v1/vision/background-remove" \
   -H "Content-Type: application/json" \
   -d "{
-    \"image\": \"${PRODUCT_IMAGE}\",
-    \"return_mask\": false
+    \"image\": \"${PRODUCT_IMAGE}\"
   }")
 echo "$RESULT" | (cd "$RUNTIME_DIR" && uv run python -c "
 import json, sys, base64

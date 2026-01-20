@@ -75,7 +75,7 @@ for i in "${!BACKENDS[@]}"; do
     echo "   === ${DESC} ==="
 
     # Train model
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/fit" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/fit" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"$MODEL_NAME\",
@@ -88,7 +88,7 @@ for i in "${!BACKENDS[@]}"; do
     echo "   Training time: ${TRAINING_TIME}ms"
 
     # Score test data
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/score" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/score" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"$MODEL_NAME\",
@@ -110,7 +110,7 @@ if 'data' in data:
 "
 
     # Delete model
-    curl -s -X DELETE "$BASE_URL/v1/anomaly/$MODEL_NAME" > /dev/null 2>&1 || true
+    curl -s -X DELETE "$BASE_URL/v1/ml/anomaly/$MODEL_NAME" > /dev/null 2>&1 || true
     echo ""
 done
 
@@ -133,7 +133,7 @@ echo "Key insights:"
 echo "  - COPOD: No hyperparameters, uses copula for dependency modeling"
 echo "  - HBOS: Very fast histogram-based, good for high-throughput"
 echo "  - ECOD: Uses empirical CDF, statistically interpretable"
-echo "  - All backends integrate with existing /v1/anomaly/fit and /score APIs"
+echo "  - All backends integrate with existing /v1/ml/anomaly/fit and /score APIs"
 echo ""
 echo "Use cases:"
 echo "  - COPOD: When you want zero hyperparameter tuning"

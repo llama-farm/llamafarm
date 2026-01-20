@@ -46,7 +46,7 @@ echo ""
 echo -e "${BLUE}Test 1: Extract keywords from technical document${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/keywords" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/keywords" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience. Deep learning, a further subset, uses neural networks with multiple layers to model complex patterns in data. Common applications include natural language processing, computer vision, and recommendation systems.",
@@ -67,7 +67,7 @@ echo ""
 echo -e "${BLUE}Test 2: Extract keywords from news article${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/keywords" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/keywords" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "The Federal Reserve announced a 25 basis point interest rate increase today, citing persistent inflation concerns. Stock markets reacted negatively, with the S&P 500 dropping 2% and technology stocks leading the decline. Economists predict continued monetary tightening through the end of the fiscal year.",
@@ -88,7 +88,7 @@ echo ""
 echo -e "${BLUE}Test 3: Extract only bigrams and trigrams${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/keywords" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/keywords" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Natural language processing enables computers to understand human language. Text classification and sentiment analysis are common NLP tasks. Named entity recognition identifies people, places, and organizations in text.",
@@ -110,7 +110,7 @@ echo ""
 echo -e "${BLUE}Test 4: Extract diverse keywords (diversity=0.9)${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/keywords" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/keywords" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Python programming language is popular for data science. Python libraries like NumPy and Pandas help with data analysis. Python is also used for web development with frameworks like Django and Flask. Many Python developers work on machine learning projects.",
@@ -131,7 +131,7 @@ echo ""
 echo -e "${BLUE}Test 5: Batch keyword extraction (multiple documents)${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/keywords/batch" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/keywords/batch" \
   -H "Content-Type: application/json" \
   -d '{
     "texts": [

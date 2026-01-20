@@ -3067,6 +3067,50 @@ async def classify_zero_shot_batch(request: ZeroShotClassifyBatchRequest):
 # ============================================================================
 
 
+# Few-shot classifier persistence directory
+FEW_SHOT_MODELS_DIR = _LF_DATA_DIR / "models" / "few_shot"
+
+
+def _get_few_shot_path(classifier_id: str) -> Path:
+    """Get the path for a few-shot classifier file.
+
+    The path is always within FEW_SHOT_MODELS_DIR - users cannot control it.
+    """
+    safe_name = _sanitize_model_name(classifier_id)
+    return FEW_SHOT_MODELS_DIR / f"{safe_name}.fsc"
+
+
+async def _auto_save_few_shot_classifier(
+    classifier: "FewShotImageClassifier",
+    classifier_id: str,
+) -> dict[str, str | None]:
+    """Auto-save few-shot classifier after training to prevent data loss.
+
+    Models are saved immediately after training to ensure they persist
+    across server restarts without requiring an explicit /save call.
+
+    Returns:
+        Dict with saved file path
+    """
+    try:
+        FEW_SHOT_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        save_path = _get_few_shot_path(classifier_id)
+        state_bytes = classifier.save_state()
+
+        # Write atomically using a temp file
+        temp_path = save_path.with_suffix(".tmp")
+        temp_path.write_bytes(state_bytes)
+        temp_path.rename(save_path)
+
+        logger.info(f"Auto-saved few-shot classifier to {save_path}")
+        return {"model_path": str(save_path)}
+
+    except Exception as e:
+        logger.warning(f"Auto-save failed (model still in memory): {e}")
+        return {"model_path": None}
+
+
 def _make_few_shot_cache_key(classifier_id: str, model_name: str) -> str:
     """Generate a cache key for a few-shot classifier.
 
@@ -3227,9 +3271,16 @@ async def train_few_shot_classifier(request: FewShotTrainRequest):
             learning_rate=request.learning_rate,
         )
 
+        # Auto-save after training to persist across restarts
+        saved_paths = await _auto_save_few_shot_classifier(
+            classifier=classifier,
+            classifier_id=request.classifier_id,
+        )
+
         return {
             "object": "few_shot_classifier",
             "classifier_id": request.classifier_id,
+            "saved_path": saved_paths.get("model_path"),
             **result,
         }
 
@@ -3303,9 +3354,16 @@ async def refine_few_shot_classifier(request: FewShotRefineRequest):
             learning_rate=request.learning_rate,
         )
 
+        # Auto-save after refinement to persist changes
+        saved_paths = await _auto_save_few_shot_classifier(
+            classifier=classifier,
+            classifier_id=request.classifier_id,
+        )
+
         return {
             "object": "few_shot_classifier",
             "classifier_id": request.classifier_id,
+            "saved_path": saved_paths.get("model_path"),
             **result,
         }
 
@@ -3313,6 +3371,136 @@ async def refine_few_shot_classifier(request: FewShotRefineRequest):
         raise
     except Exception as e:
         logger.error(f"Error in refine_few_shot_classifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/v1/vision/classify/models")
+async def list_few_shot_classifiers():
+    """
+    List all saved few-shot classifiers available for loading.
+
+    Returns classifiers saved in the FEW_SHOT_MODELS_DIR directory.
+
+    Response includes:
+    - classifier_id: Name of the saved classifier
+    - path: Full path to the classifier file
+    - classes: Class labels (if available in metadata)
+    - size_bytes: File size
+    """
+    try:
+        FEW_SHOT_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+        classifiers = []
+        for path in FEW_SHOT_MODELS_DIR.glob("*.fsc"):
+            info = {
+                "classifier_id": path.stem,
+                "path": str(path),
+                "size_bytes": path.stat().st_size,
+            }
+
+            # Try to extract metadata (classes) from saved state
+            try:
+                state_bytes = path.read_bytes()
+                # Parse metadata length and extract JSON
+                metadata_len = int.from_bytes(state_bytes[:4], byteorder="big")
+                metadata_bytes = state_bytes[4:4 + metadata_len]
+                import json
+                metadata = json.loads(metadata_bytes.decode("utf-8"))
+                info["classes"] = metadata.get("classes", [])
+                info["model"] = metadata.get("model", "unknown")
+            except Exception:
+                info["classes"] = []
+                info["model"] = "unknown"
+
+            classifiers.append(info)
+
+        return {
+            "object": "list",
+            "classifiers": classifiers,
+            "models_dir": str(FEW_SHOT_MODELS_DIR),
+            "total": len(classifiers),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in list_few_shot_classifiers: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+class FewShotLoadRequest(PydanticBaseModel):
+    """Request to load a saved few-shot classifier."""
+
+    classifier_id: str  # Classifier ID to load
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model (must match saved)
+
+
+@app.post("/v1/vision/classify/load")
+async def load_few_shot_classifier_endpoint(request: FewShotLoadRequest):
+    """
+    Load a previously saved few-shot classifier.
+
+    Example request:
+    ```json
+    {
+        "classifier_id": "cat-dog-classifier",
+        "model": "openai/clip-vit-base-patch32"
+    }
+    ```
+
+    After loading, use /v1/vision/classify/predict to classify images.
+    """
+    try:
+        model_path = _get_few_shot_path(request.classifier_id)
+
+        if not model_path.exists():
+            available = (
+                [f.stem for f in FEW_SHOT_MODELS_DIR.glob("*.fsc")]
+                if FEW_SHOT_MODELS_DIR.exists()
+                else []
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Classifier '{request.classifier_id}' not found. "
+                f"Available classifiers: {available}",
+            )
+
+        cache_key = _make_few_shot_cache_key(request.classifier_id, request.model)
+
+        # Remove existing model from cache if present
+        if cache_key in _few_shot_classifiers:
+            existing = _few_shot_classifiers.pop(cache_key)
+            if existing:
+                await existing.unload()
+
+        async with _model_load_lock:
+            logger.info(f"Loading saved few-shot classifier: {model_path}")
+            device = get_device()
+
+            classifier = FewShotImageClassifier(
+                model_id=request.classifier_id,
+                device=device,
+                hf_model_name=request.model,
+            )
+
+            await classifier.load()
+
+            # Load saved state
+            state_bytes = model_path.read_bytes()
+            classifier.load_state(state_bytes)
+
+            _few_shot_classifiers[cache_key] = classifier
+
+        return {
+            "object": "load_result",
+            "classifier_id": request.classifier_id,
+            "path": str(model_path),
+            "classes": classifier.classes,
+            "loaded": True,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in load_few_shot_classifier_endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -3500,20 +3688,24 @@ async def get_few_shot_classifier_info(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.delete("/v1/vision/classify/{classifier_id}")
-async def delete_few_shot_classifier(
+@app.post("/v1/vision/classify/{classifier_id}/unload")
+async def unload_few_shot_classifier(
     classifier_id: str,
     model: str = "openai/clip-vit-base-patch32",
 ):
     """
-    Delete a few-shot classifier and free its resources.
+    Unload a few-shot classifier from memory and free its resources.
+
+    This does NOT delete the saved model file - use DELETE through
+    the main LlamaFarm API for that. This only unloads from the
+    in-memory cache to free resources.
 
     Example response:
     ```json
     {
-        "object": "delete",
+        "object": "unload",
         "classifier_id": "cat-dog-classifier",
-        "deleted": true
+        "unloaded": true
     }
     ```
     """
@@ -3525,16 +3717,16 @@ async def delete_few_shot_classifier(
             if classifier:
                 await classifier.unload()
             return {
-                "object": "delete",
+                "object": "unload",
                 "classifier_id": classifier_id,
-                "deleted": True,
+                "unloaded": True,
             }
 
         return {
-            "object": "delete",
+            "object": "unload",
             "classifier_id": classifier_id,
-            "deleted": False,
-            "message": "Classifier not found",
+            "unloaded": False,
+            "message": "Classifier not loaded in memory",
         }
 
     except Exception as e:
@@ -4535,7 +4727,7 @@ async def load_background_removal_model(
     return _background_removal_models.get(cache_key)
 
 
-@app.post("/v1/vision/segment")
+@app.post("/v1/vision/remove-background")
 async def remove_background(request: BackgroundRemovalRequest):
     """
     Remove background from an image using RMBG.
@@ -4606,7 +4798,7 @@ async def remove_background(request: BackgroundRemovalRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/v1/vision/segment/batch")
+@app.post("/v1/vision/remove-background/batch")
 async def remove_background_batch(request: BackgroundRemovalBatchRequest):
     """
     Remove background from multiple images.

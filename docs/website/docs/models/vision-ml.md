@@ -102,14 +102,13 @@ curl -X POST http://localhost:8000/v1/ml/vision/classify/fit \
   -H "Content-Type: application/json" \
   -d '{
     "classifier_id": "dog-breeds",
-    "images": [
-      "'"$(base64 -i golden1.jpg)"'",
-      "'"$(base64 -i golden2.jpg)"'",
-      "'"$(base64 -i labrador1.jpg)"'",
-      "'"$(base64 -i labrador2.jpg)"'"
+    "training_data": [
+      {"image": "'"$(base64 -i golden1.jpg)"'", "label": "golden_retriever"},
+      {"image": "'"$(base64 -i golden2.jpg)"'", "label": "golden_retriever"},
+      {"image": "'"$(base64 -i labrador1.jpg)"'", "label": "labrador"},
+      {"image": "'"$(base64 -i labrador2.jpg)"'", "label": "labrador"}
     ],
-    "labels": ["golden_retriever", "golden_retriever", "labrador", "labrador"],
-    "epochs": 100
+    "num_iterations": 100
   }'
 ```
 
@@ -159,12 +158,11 @@ curl -X POST http://localhost:8000/v1/ml/vision/classify/refine \
   -H "Content-Type: application/json" \
   -d '{
     "classifier_id": "dog-breeds",
-    "images": [
-      "'"$(base64 -i german_shepherd1.jpg)"'",
-      "'"$(base64 -i german_shepherd2.jpg)"'"
+    "training_data": [
+      {"image": "'"$(base64 -i german_shepherd1.jpg)"'", "label": "german_shepherd"},
+      {"image": "'"$(base64 -i german_shepherd2.jpg)"'", "label": "german_shepherd"}
     ],
-    "labels": ["german_shepherd", "german_shepherd"],
-    "epochs": 50
+    "num_iterations": 50
   }'
 ```
 
@@ -253,7 +251,7 @@ curl -X POST http://localhost:8000/v1/ml/vision/detect-open \
   -H "Content-Type: application/json" \
   -d '{
     "image": "'"$(base64 -i wildlife.jpg)"'",
-    "queries": ["a golden retriever", "a german shepherd", "a labrador"],
+    "labels": ["a golden retriever", "a german shepherd", "a labrador"],
     "threshold": 0.1,
     "top_k": 5
   }'
@@ -265,20 +263,19 @@ curl -X POST http://localhost:8000/v1/ml/vision/detect-open \
   "object": "open_vocab_detection",
   "objects": [
     {
-      "query": "a golden retriever",
       "label": "a golden retriever",
       "score": 0.85,
       "box": {"x1": 100, "y1": 50, "x2": 400, "y2": 350}
     }
   ],
   "count": 1,
-  "queries": ["a golden retriever", "a german shepherd", "a labrador"],
+  "labels": ["a golden retriever", "a german shepherd", "a labrador"],
   "image_size": {"width": 640, "height": 480}
 }
 ```
 
 **Tips for Better Results:**
-- Use descriptive queries: `"a photo of a cat"` works better than just `"cat"`
+- Use descriptive labels: `"a photo of a cat"` works better than just `"cat"`
 - Lower threshold (0.05-0.1) for recall, higher (0.3-0.5) for precision
 - Combine with few-shot classification for species refinement
 
@@ -320,7 +317,7 @@ curl -X POST http://localhost:8000/v1/ml/vision/detect-open/by-image \
 
 Remove backgrounds from images, producing PNG with transparent background.
 
-**Endpoint:** `POST /v1/ml/vision/segment`
+**Endpoint:** `POST /v1/ml/vision/background-remove`
 
 **Use Cases:**
 - Product photography
@@ -328,7 +325,7 @@ Remove backgrounds from images, producing PNG with transparent background.
 - E-commerce images
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/vision/segment \
+curl -X POST http://localhost:8000/v1/ml/vision/background-remove \
   -H "Content-Type: application/json" \
   -d '{
     "image": "'"$(base64 -i product.jpg)"'",
@@ -544,14 +541,15 @@ result = response.json()
 print(f"Predicted: {result['label']} ({result['score']:.1%})")
 
 # Train few-shot classifier
+training_data = [{"image": encode_image(f"cat{i}.jpg"), "label": "cat"} for i in range(5)]
+training_data += [{"image": encode_image(f"dog{i}.jpg"), "label": "dog"} for i in range(5)]
+
 response = requests.post(
     "http://localhost:8000/v1/ml/vision/classify/fit",
     json={
         "classifier_id": "my-classifier",
-        "images": [encode_image(f"cat{i}.jpg") for i in range(5)] +
-                  [encode_image(f"dog{i}.jpg") for i in range(5)],
-        "labels": ["cat"] * 5 + ["dog"] * 5,
-        "epochs": 100
+        "training_data": training_data,
+        "num_iterations": 100
     }
 )
 print(f"Trained: {response.json()['classes']}")
@@ -561,12 +559,12 @@ response = requests.post(
     "http://localhost:8000/v1/ml/vision/detect-open",
     json={
         "image": encode_image("wildlife.jpg"),
-        "queries": ["a deer", "a bird", "a squirrel"],
+        "labels": ["a deer", "a bird", "a squirrel"],
         "threshold": 0.1
     }
 )
 for obj in response.json()["objects"]:
-    print(f"Found: {obj['query']} at {obj['box']} ({obj['score']:.1%})")
+    print(f"Found: {obj['label']} at {obj['box']} ({obj['score']:.1%})")
 ```
 
 ### Using httpx (async)
@@ -619,7 +617,7 @@ detect_response = requests.post(
     f"{BASE_URL}/vision/detect-open",
     json={
         "image": encode_image("wildlife_photo.jpg"),
-        "queries": ["an animal", "a mammal", "a bird"],
+        "labels": ["an animal", "a mammal", "a bird"],
         "threshold": 0.1
     }
 )
@@ -639,7 +637,7 @@ for det in detections:
         }
     )
     species = classify_response.json()
-    print(f"Detected {det['query']}: {species['label']} ({species['score']:.1%})")
+    print(f"Detected {det['label']}: {species['label']} ({species['score']:.1%})")
 ```
 
 ---
@@ -652,7 +650,7 @@ for det in detections:
 | Few-Shot Classifier | `/vision/classify/fit` | Yes (5-50 images) | Custom classification |
 | YOLOS | `/vision/detect-objects` | No | COCO object detection |
 | OWL-ViT | `/vision/detect-open` | No | Open-vocabulary detection |
-| RMBG | `/vision/segment` | No | Background removal |
+| RMBG | `/vision/background-remove` | No | Background removal |
 | Surya/EasyOCR | `/ocr` | No | Text extraction |
 | Donut/LayoutLM | `/documents/extract` | No | Document extraction |
 | XLM-RoBERTa | `/text/detect-language` | No | Language detection |

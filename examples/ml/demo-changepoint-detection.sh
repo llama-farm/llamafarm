@@ -34,10 +34,10 @@ echo ""
 echo "2. Basic Change Point Detection"
 echo "   Detecting changes in a step signal..."
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
     -H "Content-Type: application/json" \
     -d '{
-        "values": [1,1,1,1,1,1,1,1,1,1, 5,5,5,5,5,5,5,5,5,5, 2,2,2,2,2,2,2,2,2,2],
+        "data": [1,1,1,1,1,1,1,1,1,1, 5,5,5,5,5,5,5,5,5,5, 2,2,2,2,2,2,2,2,2,2],
         "algorithm": "pelt",
         "model": "rbf"
     }')
@@ -56,7 +56,7 @@ echo ""
 
 for ALGO in pelt binseg window bottomup; do
     echo "   Algorithm: $ALGO"
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
         -H "Content-Type: application/json" \
         -d "{
             \"values\": [1,1,1,1,1,1,1,1,1,1, 5,5,5,5,5,5,5,5,5,5, 2,2,2,2,2,2,2,2,2,2],
@@ -74,10 +74,10 @@ done
 echo "4. Exact Number of Change Points"
 echo "   Requesting exactly 2 change points..."
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
     -H "Content-Type: application/json" \
     -d '{
-        "values": [1,1,1,1,1, 3,3,3,3,3, 5,5,5,5,5, 2,2,2,2,2],
+        "data": [1,1,1,1,1, 3,3,3,3,3, 5,5,5,5,5, 2,2,2,2,2],
         "n_changepoints": 2,
         "algorithm": "binseg",
         "model": "l2"
@@ -97,7 +97,7 @@ echo ""
 
 for PENALTY in 1 10 100; do
     echo "   Penalty: $PENALTY"
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
         -H "Content-Type: application/json" \
         -d "{
             \"values\": [1,1,1,1,1, 2,2,2,2,2, 3,3,3,3,3, 4,4,4,4,4],
@@ -114,7 +114,7 @@ echo ""
 echo "6. Batch Change Point Detection"
 echo "   Processing multiple time-series at once..."
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints/batch" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints/batch" \
     -H "Content-Type: application/json" \
     -d '{
         "series": [
@@ -142,7 +142,7 @@ echo ""
 # Simulated CPU usage: normal -> high load -> normal
 CPU_DATA='[20,22,19,21,20,23,18,21,20,22,85,88,92,87,90,89,91,88,25,23,21,24,22,20,21,23]'
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
     -H "Content-Type: application/json" \
     -d "{
         \"values\": $CPU_DATA,

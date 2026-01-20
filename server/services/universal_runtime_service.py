@@ -784,7 +784,7 @@ class UniversalRuntimeService:
         return await cls._make_request(
             "POST",
             "/v1/timeseries/forecast",
-            json={"data": data, "horizon": horizon, "model": model},
+            json={"values": data, "horizon": horizon, "model": model},
         )
 
     @classmethod
@@ -803,7 +803,7 @@ class UniversalRuntimeService:
             n_changepoints: Expected number of change points
             penalty: Penalty value for PELT algorithm
         """
-        payload = {"data": data, "algorithm": algorithm}
+        payload = {"values": data, "algorithm": algorithm}
         if n_changepoints is not None:
             payload["n_changepoints"] = n_changepoints
         if penalty is not None:
@@ -1021,12 +1021,13 @@ class UniversalRuntimeService:
         model: str = "google/owlvit-base-patch32",
     ) -> dict[str, Any]:
         """Detect objects by text description (open-vocabulary)."""
+        # Runtime uses 'queries' not 'labels'
         return await cls._make_request(
             "POST",
             "/v1/vision/detect-open",
             {
                 "image": image,
-                "labels": labels,
+                "queries": labels,
                 "threshold": threshold,
                 "model": model,
             },
@@ -1041,12 +1042,13 @@ class UniversalRuntimeService:
         model: str = "google/owlvit-base-patch32",
     ) -> dict[str, Any]:
         """Detect objects in multiple images by text description."""
+        # Runtime uses 'queries' not 'labels'
         return await cls._make_request(
             "POST",
             "/v1/vision/detect-open/batch",
             {
                 "images": images,
-                "labels": labels,
+                "queries": labels,
                 "threshold": threshold,
                 "model": model,
             },
@@ -1124,15 +1126,25 @@ class UniversalRuntimeService:
         model: str = "openai/clip-vit-base-patch32",
         num_iterations: int = 20,
     ) -> dict[str, Any]:
-        """Train a few-shot image classifier."""
+        """Train a few-shot image classifier.
+
+        Transforms the LlamaFarm training_data format (list of dicts with
+        'image' and 'label' keys) into the Universal Runtime format
+        (separate 'images' and 'labels' lists).
+        """
+        # Transform training_data format to images/labels format for runtime
+        images = [item["image"] for item in training_data]
+        labels = [item["label"] for item in training_data]
+
         return await cls._make_request(
             "POST",
             "/v1/vision/classify/fit",
             {
                 "classifier_id": classifier_id,
-                "training_data": training_data,
+                "images": images,
+                "labels": labels,
                 "model": model,
-                "num_iterations": num_iterations,
+                "epochs": num_iterations,  # Runtime uses 'epochs' not 'num_iterations'
             },
         )
 
@@ -1175,14 +1187,24 @@ class UniversalRuntimeService:
         training_data: list[dict[str, str]],
         num_iterations: int = 10,
     ) -> dict[str, Any]:
-        """Refine a few-shot classifier with additional data."""
+        """Refine a few-shot classifier with additional data.
+
+        Transforms the LlamaFarm training_data format (list of dicts with
+        'image' and 'label' keys) into the Universal Runtime format
+        (separate 'images' and 'labels' lists).
+        """
+        # Transform training_data format to images/labels format for runtime
+        images = [item["image"] for item in training_data]
+        labels = [item["label"] for item in training_data]
+
         return await cls._make_request(
             "POST",
             "/v1/vision/classify/refine",
             {
                 "classifier_id": classifier_id,
-                "training_data": training_data,
-                "num_iterations": num_iterations,
+                "images": images,
+                "labels": labels,
+                "epochs": num_iterations,  # Runtime uses 'epochs' not 'num_iterations'
             },
         )
 
@@ -1192,6 +1214,42 @@ class UniversalRuntimeService:
         return await cls._make_request(
             "GET",
             f"/v1/vision/classify/info/{classifier_id}",
+        )
+
+    @classmethod
+    async def list_few_shot_classifiers(cls) -> dict[str, Any]:
+        """List all saved few-shot classifiers."""
+        return await cls._make_request(
+            "GET",
+            "/v1/vision/classify/models",
+        )
+
+    @classmethod
+    async def load_few_shot_classifier(
+        cls,
+        classifier_id: str,
+        model: str = "openai/clip-vit-base-patch32",
+    ) -> dict[str, Any]:
+        """Load a previously saved few-shot classifier."""
+        return await cls._make_request(
+            "POST",
+            "/v1/vision/classify/load",
+            {
+                "classifier_id": classifier_id,
+                "model": model,
+            },
+        )
+
+    @classmethod
+    async def delete_few_shot_classifier(cls, classifier_id: str) -> dict[str, Any]:
+        """Unload a few-shot classifier from Runtime memory.
+
+        Note: This only unloads from memory, not from disk. Disk deletion
+        is handled by MLModelService at the API layer.
+        """
+        return await cls._make_request(
+            "POST",
+            f"/v1/vision/classify/{classifier_id}/unload",
         )
 
     # =========================================================================
@@ -1254,7 +1312,7 @@ class UniversalRuntimeService:
             "POST",
             "/v1/timeseries/forecast/batch",
             {
-                "data": data,
+                "series": data,
                 "horizon": horizon,
                 "model": model,
             },
@@ -1273,7 +1331,7 @@ class UniversalRuntimeService:
             "POST",
             "/v1/timeseries/changepoints/batch",
             {
-                "data": data,
+                "series": data,
                 "algorithm": algorithm,
                 "n_changepoints": n_changepoints,
                 "penalty": penalty,

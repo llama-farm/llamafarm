@@ -100,7 +100,7 @@ echo ""
 
 # First, upload the file
 echo "Uploading file..."
-UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/upload-training-data" \
+UPLOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/upload-training-data" \
     -F "file=@${CSV_FILE}" \
     -F "skip_columns=timestamp")
 
@@ -137,7 +137,7 @@ PYEOF
 )
 
     echo "Training on 5,000 samples (in-memory for demo)..."
-    FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/fit" \
+    FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"streaming_demo\",
@@ -151,7 +151,7 @@ else
     # Use the file reference for training
     echo "Training from uploaded file (file_id: ${FILE_ID})..."
 
-    FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/fit" \
+    FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"streaming_demo\",
@@ -195,7 +195,7 @@ print(json.dumps(test))
 PYEOF
 )
 
-DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/detect" \
+DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/detect" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"streaming_demo\",

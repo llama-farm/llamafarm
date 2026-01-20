@@ -137,6 +137,13 @@ class FewShotClassifyRefineRequest(BaseModel):
     num_iterations: int = Field(default=10, ge=1, le=100)
 
 
+class FewShotClassifyLoadRequest(BaseModel):
+    """Request to load a previously saved few-shot classifier."""
+
+    classifier_id: str  # Classifier ID to load (must exist in saved models)
+    model: str = "openai/clip-vit-base-patch32"  # CLIP model (must match saved)
+
+
 # =============================================================================
 # Segmentation & Background Removal Types
 # =============================================================================

@@ -99,8 +99,8 @@ if not test_image:
 image_b64 = resize_and_encode(test_image)
 fname = os.path.basename(test_image)
 
-# Define queries - use descriptive phrases for better results
-queries = [
+# Define labels - use descriptive phrases for better results
+labels = [
     "a cat",
     "a dog",
     "a horse",
@@ -108,15 +108,14 @@ queries = [
 ]
 
 print(f"Image: {fname}")
-print(f"Queries: {queries}")
+print(f"Labels: {labels}")
 print("")
 
 # Make detection request
 data = json.dumps({
     "image": image_b64,
-    "queries": queries,
-    "threshold": 0.1,
-    "top_k": 5
+    "labels": labels,
+    "threshold": 0.1
 }).encode()
 
 req = urllib.request.Request(
@@ -137,7 +136,8 @@ try:
     else:
         for obj in result['objects'][:5]:  # Show top 5
             box = obj['box']
-            print(f"  {obj['query']}")
+            label = obj.get('label', obj.get('query', 'unknown'))
+            print(f"  {label}")
             print(f"    Score: {obj['score']:.1%}")
             print(f"    Box: ({box['x1']:.0f}, {box['y1']:.0f}) - ({box['x2']:.0f}, {box['y2']:.0f})")
             print("")
@@ -190,8 +190,8 @@ if not test_image:
 
 image_b64 = resize_and_encode(test_image)
 
-# Specific breed queries
-queries = [
+# Specific breed labels
+labels = [
     "a tabby cat",
     "a siamese cat",
     "an orange cat",
@@ -200,14 +200,13 @@ queries = [
 ]
 
 print(f"Image: {os.path.basename(test_image)}")
-print(f"Testing breed detection with: {queries}")
+print(f"Testing breed detection with: {labels}")
 print("")
 
 data = json.dumps({
     "image": image_b64,
-    "queries": queries,
-    "threshold": 0.05,  # Lower threshold for specific breeds
-    "top_k": 3
+    "labels": labels,
+    "threshold": 0.05  # Lower threshold for specific breeds
 }).encode()
 
 req = urllib.request.Request(
@@ -223,7 +222,8 @@ try:
     if result['count'] > 0:
         print("Best matches:")
         for obj in result['objects']:
-            print(f"  {obj['query']}: {obj['score']:.1%}")
+            label = obj.get('label', obj.get('query', 'unknown'))
+            print(f"  {label}: {obj['score']:.1%}")
     else:
         print("No species-specific detections (try lower threshold)")
 
@@ -273,16 +273,16 @@ if not test_image:
     exit(0)
 
 image_b64 = resize_and_encode(test_image)
-queries = ["an animal", "a pet"]
+labels = ["an animal", "a pet"]
 
 print(f"Image: {os.path.basename(test_image)}")
-print(f"Queries: {queries}")
+print(f"Labels: {labels}")
 print("")
 
 for threshold in [0.3, 0.1, 0.05]:
     data = json.dumps({
         "image": image_b64,
-        "queries": queries,
+        "labels": labels,
         "threshold": threshold
     }).encode()
 
@@ -298,7 +298,8 @@ for threshold in [0.3, 0.1, 0.05]:
     print(f"Threshold {threshold:.0%}: {result['count']} detections")
     if result['count'] > 0:
         top = result['objects'][0]
-        print(f"  Best: {top['query']} ({top['score']:.1%})")
+        label = top.get('label', top.get('query', 'unknown'))
+        print(f"  Best: {label} ({top['score']:.1%})")
     print("")
 EOF
 echo ""

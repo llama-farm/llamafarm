@@ -39,9 +39,9 @@ DEFAULT_CLIP_MODEL = "openai/clip-vit-base-patch32"
 class LinearProbe(nn.Module):
     """Simple linear classifier head."""
 
-    def __init__(self, input_dim: int, num_classes: int):
+    def __init__(self, input_dim: int, num_classes: int, dtype: torch.dtype = torch.float32):
         super().__init__()
-        self.linear = nn.Linear(input_dim, num_classes)
+        self.linear = nn.Linear(input_dim, num_classes, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.linear(x)
@@ -251,11 +251,14 @@ class FewShotImageClassifier(BaseModel):
         logger.info("Extracting CLIP features...")
         features = self._extract_features(images)
 
+        # Convert features to float32 for training stability (float16 causes NaN on MPS)
+        features = features.float()
+
         # Convert labels to indices
         label_indices = torch.tensor([class_to_idx[lbl] for lbl in labels], device=self.device)
 
-        # Create classifier
-        self.classifier = LinearProbe(self._embed_dim, num_classes).to(self.device)
+        # Create classifier as float32 for training stability
+        self.classifier = LinearProbe(self._embed_dim, num_classes, dtype=torch.float32).to(self.device)
 
         # Training
         optimizer = torch.optim.Adam(self.classifier.parameters(), lr=learning_rate)
@@ -322,8 +325,8 @@ class FewShotImageClassifier(BaseModel):
 
     def _predict_sync(self, image: str | bytes) -> dict[str, Any]:
         """Synchronous prediction."""
-        # Extract features
-        features = self._extract_features([image])
+        # Extract features and convert to float32 to match classifier dtype
+        features = self._extract_features([image]).float()
 
         # Classify
         self.classifier.eval()
@@ -362,8 +365,8 @@ class FewShotImageClassifier(BaseModel):
 
     def _predict_batch_sync(self, images: list) -> list[dict[str, Any]]:
         """Synchronous batch prediction."""
-        # Extract features for all images
-        features = self._extract_features(images)
+        # Extract features for all images and convert to float32 to match classifier dtype
+        features = self._extract_features(images).float()
 
         # Classify all at once
         self.classifier.eval()
@@ -441,22 +444,24 @@ class FewShotImageClassifier(BaseModel):
 
             logger.info(f"Adding {len(new_classes)} new classes: {new_classes}")
 
-            # Create new classifier with more outputs
+            # Create new classifier with more outputs (float32 for training stability)
             old_classifier = self.classifier
-            self.classifier = LinearProbe(self._embed_dim, num_classes).to(self.device)
+            self.classifier = LinearProbe(self._embed_dim, num_classes, dtype=torch.float32).to(self.device)
 
             # Copy old weights for existing classes
             with torch.no_grad():
                 for i, c in enumerate(old_classes):
                     new_idx = self.classes.index(c)
-                    self.classifier.linear.weight[new_idx] = old_classifier.linear.weight[i]
-                    self.classifier.linear.bias[new_idx] = old_classifier.linear.bias[i]
+                    self.classifier.linear.weight[new_idx] = old_classifier.linear.weight[i].float()
+                    self.classifier.linear.bias[new_idx] = old_classifier.linear.bias[i].float()
 
         class_to_idx = {c: i for i, c in enumerate(self.classes)}
 
         # Extract features for new images
         logger.info(f"Refining with {len(images)} additional images...")
         features = self._extract_features(images)
+        # Convert features to float32 for training stability
+        features = features.float()
         label_indices = torch.tensor([class_to_idx[lbl] for lbl in labels], device=self.device)
 
         # Fine-tune
@@ -555,8 +560,8 @@ class FewShotImageClassifier(BaseModel):
         weights_buffer = io.BytesIO(weights_bytes)
         state_dict = torch.load(weights_buffer, map_location=self.device, weights_only=True)
 
-        # Recreate classifier
-        self.classifier = LinearProbe(self._embed_dim, len(self.classes)).to(self.device)
+        # Recreate classifier as float32 for consistency
+        self.classifier = LinearProbe(self._embed_dim, len(self.classes), dtype=torch.float32).to(self.device)
         self.classifier.load_state_dict(state_dict)
         self.classifier.eval()
 

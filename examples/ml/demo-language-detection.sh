@@ -49,7 +49,7 @@ echo -e "${BLUE}Test 1: Detect English text${NC}"
 echo -e "${YELLOW}Text: \"Hello, how are you today?\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, how are you today?", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -59,7 +59,7 @@ echo -e "${BLUE}Test 2: Detect Spanish text${NC}"
 echo -e "${YELLOW}Text: \"Hola, ¿cómo estás hoy?\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "Hola, ¿cómo estás hoy?", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -69,7 +69,7 @@ echo -e "${BLUE}Test 3: Detect French text${NC}"
 echo -e "${YELLOW}Text: \"Bonjour, comment allez-vous?\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "Bonjour, comment allez-vous?", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -79,7 +79,7 @@ echo -e "${BLUE}Test 4: Detect German text${NC}"
 echo -e "${YELLOW}Text: \"Guten Tag, wie geht es Ihnen?\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "Guten Tag, wie geht es Ihnen?", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -89,7 +89,7 @@ echo -e "${BLUE}Test 5: Detect Chinese text${NC}"
 echo -e "${YELLOW}Text: \"你好，今天天气怎么样？\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "你好，今天天气怎么样？", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -99,7 +99,7 @@ echo -e "${BLUE}Test 6: Detect Japanese text${NC}"
 echo -e "${YELLOW}Text: \"こんにちは、今日はお元気ですか？\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language" \
   -H "Content-Type: application/json" \
   -d '{"text": "こんにちは、今日はお元気ですか？", "top_k": 3}' | python3 -m json.tool
 echo ""
@@ -109,7 +109,7 @@ echo -e "${BLUE}Test 7: Batch language detection (multiple texts)${NC}"
 echo -e "${YELLOW}Detecting languages for multiple texts at once${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/language/batch" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/language/batch" \
   -H "Content-Type: application/json" \
   -d '{
     "texts": [

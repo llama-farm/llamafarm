@@ -51,7 +51,7 @@ for _ in range(100):
 print(str(data).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/fit" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-pipeline\",
@@ -65,7 +65,7 @@ echo "      Training time: ${TRAINING_TIME}ms"
 
 echo "   b) Scoring test data..."
 TEST_DATA="[[32.5,52.3,24.1],[28.7,48.9,26.2],[95.0,95.0,200.0]]"
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/score" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/score" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo-pipeline\",
@@ -85,7 +85,7 @@ if 'data' in data:
 "
 
 echo "   c) Getting SHAP explanations..."
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/explain" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/explain" \
     -H "Content-Type: application/json" \
     -d "{
         \"model_id\": \"demo-pipeline\",
@@ -175,7 +175,7 @@ echo "==========================================="
 echo ""
 
 echo "   Creating drift detector..."
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/create" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/create" \
     -H "Content-Type: application/json" \
     -d "{
         \"detector_id\": \"demo-drift\",
@@ -186,7 +186,7 @@ echo "   Detector created: demo-drift"
 echo "   Streaming normal data (50 samples)..."
 for i in $(seq 1 50); do
     VAL=$(python3 -c "import random; random.seed($i); print(5 + random.uniform(-0.5, 0.5))")
-    curl -s -X POST "$BASE_URL/v1/streaming/drift/update" \
+    curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/update" \
         -H "Content-Type: application/json" \
         -d "{\"detector_id\": \"demo-drift\", \"value\": $VAL}" > /dev/null
 done
@@ -196,7 +196,7 @@ echo "   Streaming shifted data (50 samples)..."
 DRIFT_DETECTED="false"
 for i in $(seq 51 100); do
     VAL=$(python3 -c "import random; random.seed($i); print(10 + random.uniform(-0.5, 0.5))")
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/streaming/drift/update" \
+    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/update" \
         -H "Content-Type: application/json" \
         -d "{\"detector_id\": \"demo-drift\", \"value\": $VAL}")
 
@@ -213,7 +213,7 @@ if [ "$DRIFT_DETECTED" = "false" ]; then
 fi
 
 # Get stats
-RESPONSE=$(curl -s "$BASE_URL/v1/streaming/drift/demo-drift/stats")
+RESPONSE=$(curl -s "$BASE_URL/v1/ml/analysis/drift/demo-drift/stats")
 echo "   Detector stats:"
 echo "$RESPONSE" | python3 -c "
 import sys, json
@@ -243,7 +243,7 @@ data = seg1 + seg2
 print(str(data).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
     -H "Content-Type: application/json" \
     -d "{
         \"data\": $TIMESERIES,
@@ -271,8 +271,8 @@ echo "==========================================="
 echo ""
 
 echo "   Deleting test models and detectors..."
-curl -s -X DELETE "$BASE_URL/v1/anomaly/demo-pipeline" > /dev/null 2>&1 || true
-curl -s -X DELETE "$BASE_URL/v1/streaming/drift/demo-drift" > /dev/null 2>&1 || true
+curl -s -X DELETE "$BASE_URL/v1/ml/anomaly/demo-pipeline" > /dev/null 2>&1 || true
+curl -s -X DELETE "$BASE_URL/v1/ml/analysis/drift/demo-drift" > /dev/null 2>&1 || true
 echo "   Cleanup complete!"
 echo ""
 

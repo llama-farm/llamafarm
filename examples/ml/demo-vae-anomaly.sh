@@ -79,7 +79,7 @@ echo "  - Validation split: 10%"
 echo "  - Max epochs: 200"
 echo ""
 
-FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/fit" \
+FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo_vae_sensor\",
@@ -148,7 +148,7 @@ echo ""
 echo "=== Step 4: Detect Anomalies ==="
 echo ""
 
-DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/detect" \
+DETECT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/detect" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"demo_vae_sensor\",

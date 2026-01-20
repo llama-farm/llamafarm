@@ -47,7 +47,7 @@ echo -e "${BLUE}Test 1: Detect PII in text${NC}"
 echo -e "${YELLOW}Input: \"Contact John Smith at john.smith@acme.com or call 555-123-4567\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/pii-detect" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/pii/detect" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact John Smith at john.smith@acme.com or call 555-123-4567",
@@ -66,7 +66,7 @@ echo -e "${BLUE}Test 2: Redact PII from text${NC}"
 echo -e "${YELLOW}Input: \"My SSN is 123-45-6789 and email is test@example.com\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/pii-redact" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/redact" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "My SSN is 123-45-6789 and email is test@example.com",
@@ -84,7 +84,7 @@ echo -e "${BLUE}Test 3: Custom per-type replacement patterns${NC}"
 echo -e "${YELLOW}Using different replacements for different PII types${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/pii-redact" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/redact" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Call Jane Doe at 555-987-6543 or email jane@company.org. Her IP is 192.168.1.100",
@@ -111,7 +111,7 @@ echo -e "${BLUE}Test 4: Detect credit card numbers${NC}"
 echo -e "${YELLOW}Input: \"Payment card: 4111-1111-1111-1111, expiry 12/25\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/pii-detect" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/pii/detect" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Payment card: 4111-1111-1111-1111, expiry 12/25",
@@ -130,7 +130,7 @@ echo -e "${BLUE}Test 5: Detect healthcare-related PII${NC}"
 echo -e "${YELLOW}Using custom entity types for healthcare data${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/text/pii-detect" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/pii/detect" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Patient Robert Johnson, DOB 1985-03-15, MRN 12345678, diagnosed with hypertension",
