@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
+import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare } from 'lucide-react'
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
@@ -9,6 +9,8 @@ import { TranscriptionOutput } from './TranscriptionOutput'
 import { AudioPlayer } from './AudioPlayer'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
 import { Waveform } from './Waveform'
+import { Selector } from '../ui/selector'
+import { Switch } from '../ui/switch'
 import {
   STT_MODELS,
   TTS_MODELS,
@@ -25,6 +27,9 @@ import {
   listVoices,
   type VoiceInfo,
 } from '../../api/voiceService'
+import { useActiveProject } from '../../hooks/useActiveProject'
+import { useProjectModels } from '../../hooks/useProjectModels'
+import { useVoiceChat, type VoiceMessage } from '../../hooks/useVoiceChat'
 
 // Universal Runtime URL for health checks
 const UNIVERSAL_RUNTIME_URL =
@@ -37,14 +42,14 @@ interface SpeechTestPanelProps {
 export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // STT Config State
   const [sttEnabled, setSttEnabled] = useState(true)
-  const [sttModel, setSttModel] = useState('large-v3-turbo')
+  const [sttModel, setSttModel] = useState('base')
   const [sttLanguage, setSttLanguage] = useState('en')
   const [wordTimestamps, setWordTimestamps] = useState(false)
 
   // TTS Config State
   const [ttsEnabled, setTtsEnabled] = useState(true)
-  const [ttsModel, setTtsModel] = useState('kokoro')
-  const [ttsVoice, setTtsVoice] = useState('af_heart')
+  const [ttsModel, setTtsModel] = useState('pocket-tts')
+  const [ttsVoice, setTtsVoice] = useState('alba')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
 
   // Available voices from backend (fetched but used for validation)
@@ -85,6 +90,43 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // UI State
   const [configExpanded, setConfigExpanded] = useState(true)
+  const [pendingVoiceChatRecord, setPendingVoiceChatRecord] = useState(false) // Waiting for connection to start recording
+
+  // LLM Integration State
+  const activeProject = useActiveProject()
+  const { data: projectModelsData } = useProjectModels(
+    activeProject?.namespace,
+    activeProject?.project
+  )
+  const availableLLMModels = projectModelsData?.models || []
+  const [selectedLLMModel, setSelectedLLMModel] = useState<string>('')
+  const [llmEnabled, setLlmEnabled] = useState(true) // User toggle for LLM
+
+  // Set default LLM model when models are loaded
+  useEffect(() => {
+    if (availableLLMModels.length > 0 && !selectedLLMModel) {
+      // Prefer the default model, otherwise use the first one
+      const defaultModel = availableLLMModels.find(m => m.default)
+      setSelectedLLMModel(defaultModel?.name || availableLLMModels[0].name)
+    }
+  }, [availableLLMModels, selectedLLMModel])
+
+  // Voice chat hook for LLM conversation
+  const voiceChat = useVoiceChat({
+    namespace: activeProject?.namespace || '',
+    project: activeProject?.project || '',
+    llmModel: selectedLLMModel,
+    sttModel,
+    ttsModel,
+    ttsVoice,
+    language: sttLanguage,
+    speed: ttsSpeed,
+    autoConnect: false,
+    onError: (error) => setTranscriptionError(error),
+  })
+
+  // LLM is available when we have a project with models, and user has it enabled
+  const llmAvailable = availableLLMModels.length > 0 && !!activeProject && llmEnabled
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -94,6 +136,69 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Determine which mode we're in
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
+
+  // Sync voiceChat messages with local messages state
+  useEffect(() => {
+    if (mode === 'conversation' && llmAvailable && voiceChat.messages.length > 0) {
+      // Convert VoiceMessage to SpeechMessage format
+      const convertedMessages: SpeechMessage[] = voiceChat.messages.map((vm: VoiceMessage) => ({
+        id: vm.id,
+        role: vm.role,
+        text: vm.text,
+        timestamp: vm.timestamp,
+        audioUrl: vm.audioData ? URL.createObjectURL(new Blob([vm.audioData], { type: 'audio/wav' })) : undefined,
+      }))
+      setMessages(convertedMessages)
+    }
+  }, [mode, llmAvailable, voiceChat.messages])
+
+  // Start recording when voice chat connects (if we were waiting)
+  useEffect(() => {
+    if (pendingVoiceChatRecord && voiceChat.isConnected) {
+      setPendingVoiceChatRecord(false)
+      voiceChat.startRecording().then(() => {
+        setRecordingState('recording')
+        setActiveStream(voiceChat.activeStream)
+      }).catch((err) => {
+        setTranscriptionError(err instanceof Error ? err.message : 'Failed to start recording')
+        setRecordingState('idle')
+      })
+    }
+  }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
+
+  // Handle voice chat connection errors
+  useEffect(() => {
+    if (pendingVoiceChatRecord && voiceChat.error) {
+      setPendingVoiceChatRecord(false)
+      setRecordingState('idle')
+      setTranscriptionError(voiceChat.error)
+    }
+  }, [pendingVoiceChatRecord, voiceChat.error])
+
+  // Sync voiceChat state with local state
+  useEffect(() => {
+    if (mode === 'conversation' && llmAvailable) {
+      // Update recording state based on voiceChat
+      if (voiceChat.isRecording) {
+        setRecordingState('recording')
+        setActiveStream(voiceChat.activeStream)
+      } else if (voiceChat.voiceState === 'processing') {
+        setRecordingState('processing')
+      } else if (voiceChat.voiceState === 'idle' && recordingState === 'processing' && !pendingVoiceChatRecord) {
+        setRecordingState('idle')
+      }
+
+      // Update transcription display
+      if (voiceChat.currentTranscription) {
+        setTranscriptionError(null)
+      }
+
+      // Update error state (but not if we're handling it in the pending effect)
+      if (voiceChat.error && !pendingVoiceChatRecord) {
+        setTranscriptionError(voiceChat.error)
+      }
+    }
+  }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord])
 
   // Fetch available voices from backend
   useEffect(() => {
@@ -202,6 +307,27 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       }
     }
 
+    // Collapse settings on first interaction
+    setConfigExpanded(false)
+
+    // Use voice chat for LLM conversation mode
+    if (mode === 'conversation' && llmAvailable) {
+      if (voiceChat.isConnected) {
+        // Already connected, start recording
+        await voiceChat.startRecording()
+        setRecordingState('recording')
+        setActiveStream(voiceChat.activeStream)
+      } else {
+        // Need to connect first - set pending state and connect
+        // The effect below will start recording once connected
+        setPendingVoiceChatRecord(true)
+        setRecordingState('processing') // Show loading state
+        voiceChat.connect()
+      }
+      return
+    }
+
+    // Fall back to local recording for STT-only or no LLM
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -245,15 +371,24 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
       console.error('Failed to start recording:', err)
       setRecordingState('error')
     }
-  }, [micPermission, mode])
+  }, [micPermission, mode, llmAvailable, voiceChat])
 
   // Stop recording
   const stopRecording = useCallback(() => {
+    // If using voice chat, use its stop method
+    if (mode === 'conversation' && llmAvailable && voiceChat.isRecording) {
+      voiceChat.stopRecording()
+      setRecordingState('processing')
+      setActiveStream(null)
+      return
+    }
+
+    // Otherwise use local media recorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
       setRecordingState('processing')
     }
-  }, [])
+  }, [mode, llmAvailable, voiceChat])
 
   // Process transcription using real backend
   const processTranscription = useCallback(async (audioBlob: Blob) => {
@@ -385,6 +520,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // Send text message / synthesize TTS
   const sendTextMessage = useCallback(async () => {
     if (!textInput.trim()) return
+
+    // Collapse settings on first interaction
+    setConfigExpanded(false)
 
     if (mode === 'tts') {
       // TTS-only mode: synthesize the text
@@ -530,10 +668,22 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
             <>
               <Wifi className="h-3 w-3" />
               <span>Connected to Universal Runtime</span>
-              {sttEnabled && sttModelLoading && (
+              {mode === 'conversation' && llmAvailable && voiceChat.isConnected && (
+                <span className="ml-2 text-green-600">• Voice Chat Active</span>
+              )}
+              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'listening' && (
+                <span className="ml-2 text-blue-600">• Listening...</span>
+              )}
+              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'processing' && (
+                <span className="ml-2 text-purple-600">• Processing...</span>
+              )}
+              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'speaking' && (
+                <span className="ml-2 text-teal-600">• Speaking...</span>
+              )}
+              {sttEnabled && sttModelLoading && !llmAvailable && (
                 <span className="ml-2 text-yellow-600">• Loading STT model...</span>
               )}
-              {sttEnabled && isTranscribing && (
+              {sttEnabled && isTranscribing && !llmAvailable && (
                 <span className="ml-2 text-blue-600">• Transcribing (model may be loading on first use)...</span>
               )}
             </>
@@ -617,6 +767,60 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 previewingVoiceId={previewingVoiceId}
               />
             )}
+
+            {/* LLM Model Selection - only shown in conversation mode */}
+            {mode === 'conversation' && (
+              <div className="rounded-lg border border-border bg-card/40 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">LLM Response</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={llmEnabled}
+                      onCheckedChange={setLlmEnabled}
+                      disabled={!activeProject || availableLLMModels.length === 0 || voiceChat.isConnected}
+                      aria-label="Enable LLM responses"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {llmEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                </div>
+                {activeProject && availableLLMModels.length > 0 ? (
+                  <div className={`flex items-center gap-3 ${!llmEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className="flex-1 max-w-xs">
+                      <Selector
+                        value={selectedLLMModel}
+                        options={availableLLMModels.map(m => ({
+                          value: m.name,
+                          label: m.name,
+                          description: m.model,
+                        }))}
+                        onChange={setSelectedLLMModel}
+                        disabled={!llmEnabled || voiceChat.isConnected}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {voiceChat.isConnected ? (
+                        <span className="text-green-600">Connected</span>
+                      ) : llmEnabled ? (
+                        'Will connect on first message'
+                      ) : (
+                        'Echo mode (no LLM)'
+                      )}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {!activeProject
+                      ? 'Select a project to enable LLM conversation'
+                      : 'No LLM models configured in this project'}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -659,6 +863,24 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 playingMessageId={playingMessageId}
                 className="flex-1"
               />
+              {/* Live transcription/LLM text display when using voice chat */}
+              {llmAvailable && (voiceChat.currentTranscription || voiceChat.currentLLMText) && (
+                <div className="flex-shrink-0 mx-4 mb-2 p-3 rounded-lg bg-muted/50 border border-border">
+                  {voiceChat.currentTranscription && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">You: </span>
+                      <span className="text-foreground italic">{voiceChat.currentTranscription}</span>
+                    </div>
+                  )}
+                  {voiceChat.currentLLMText && (
+                    <div className="text-sm mt-1">
+                      <span className="text-muted-foreground">Assistant: </span>
+                      <span className="text-foreground">{voiceChat.currentLLMText}</span>
+                      <span className="animate-pulse">▊</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

@@ -106,6 +106,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   const currentUserTextRef = useRef('')
   const currentAssistantTextRef = useRef('')
   const currentAssistantAudioRef = useRef<ArrayBuffer[]>([])
+  const hasConnectedRef = useRef(false) // Track if we ever successfully connected
 
   // Get or create audio context
   const getAudioContext = useCallback(() => {
@@ -173,6 +174,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     }
 
     setError(null)
+    hasConnectedRef.current = false // Reset connection tracking
 
     const config: VoiceChatConfig = {
       llmModel,
@@ -186,6 +188,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
 
     const ws = createVoiceChatConnection(namespace, project, config, {
       onSessionInfo: (id) => {
+        hasConnectedRef.current = true // Mark as successfully connected
         setSessionId(id)
         setIsConnected(true)
       },
@@ -250,6 +253,12 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         onError?.(message)
       },
       onClose: () => {
+        // If we never got connected (no session_id), this is a connection failure
+        if (!hasConnectedRef.current) {
+          const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 8000?'
+          setError(errorMsg)
+          onError?.(errorMsg)
+        }
         setIsConnected(false)
         setSessionId(null)
         setVoiceState('idle')

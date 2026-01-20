@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Volume2, User } from 'lucide-react'
+import { Volume2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import type { SpeechMessage } from '../../types/ml'
 
@@ -29,8 +29,8 @@ export function ConversationView({
     return (
       <div className={`flex items-center justify-center h-full ${className}`}>
         <div className="text-center px-6 py-10">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/20 border border-indigo-500/30">
-            <Volume2 className="w-5 h-5 text-indigo-400" />
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+            <Volume2 className="w-5 h-5 text-primary" />
           </div>
           <div className="text-lg font-medium text-foreground">
             Start a voice conversation
@@ -47,7 +47,7 @@ export function ConversationView({
   }
 
   return (
-    <div ref={scrollRef} className={`flex-1 overflow-y-auto p-4 space-y-4 ${className}`}>
+    <div ref={scrollRef} className={`flex-1 overflow-y-auto p-4 space-y-5 ${className}`}>
       {messages.map((message) => (
         <MessageBubble
           key={message.id}
@@ -77,64 +77,54 @@ function MessageBubble({ message, isPlaying, onPlayAudio }: MessageBubbleProps) 
   }
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      {/* Avatar */}
-      <div
-        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-          isUser
-            ? 'bg-primary/20 border border-primary/30'
-            : 'bg-indigo-500/20 border border-indigo-500/30'
-        }`}
-      >
-        {isUser ? (
-          <User className="w-4 h-4 text-primary" />
-        ) : (
-          <Volume2 className="w-4 h-4 text-indigo-400" />
+    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      {/* Message row with optional play button */}
+      <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
+        {/* Audio play button for assistant messages */}
+        {!isUser && message.audioUrl && (
+          <button
+            onClick={onPlayAudio}
+            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+              isPlaying
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+            aria-label={isPlaying ? 'Playing audio' : 'Play audio'}
+          >
+            <Volume2 className={`w-4 h-4 ${isPlaying ? 'animate-pulse' : ''}`} />
+          </button>
         )}
+
+        {/* Message bubble */}
+        <div
+          className={`max-w-[80%] md:max-w-[70%] ${
+            isUser
+              ? 'bg-secondary text-foreground rounded-2xl rounded-br-sm px-4 py-3'
+              : 'text-[15px] md:text-base leading-relaxed text-foreground/90'
+          }`}
+        >
+          <p className={`${isUser ? 'text-base leading-relaxed' : ''} break-words`}>
+            {message.text}
+          </p>
+        </div>
       </div>
 
-      {/* Message content */}
-      <div className={`flex-1 max-w-[80%] ${isUser ? 'text-right' : ''}`}>
-        <div
-          className={`inline-block rounded-2xl px-4 py-2 ${
-            isUser
-              ? 'bg-primary text-primary-foreground rounded-tr-sm'
-              : 'bg-muted rounded-tl-sm'
-          }`}
-        >
-          <p className="text-sm">{message.text}</p>
-        </div>
+      {/* Footer with time */}
+      <div
+        className={`flex items-center gap-2 mt-1.5 ${
+          isUser ? 'flex-row-reverse' : !isUser && message.audioUrl ? 'ml-10' : ''
+        }`}
+      >
+        <span className="text-xs text-muted-foreground">
+          {formatTime(message.timestamp)}
+        </span>
 
-        {/* Footer with time and audio button */}
-        <div
-          className={`flex items-center gap-2 mt-1 ${
-            isUser ? 'justify-end' : 'justify-start'
-          }`}
-        >
+        {/* Transcription confidence for user messages */}
+        {isUser && message.transcription?.confidence !== undefined && (
           <span className="text-xs text-muted-foreground">
-            {formatTime(message.timestamp)}
+            {(message.transcription.confidence * 100).toFixed(0)}%
           </span>
-
-          {/* Audio playback button for assistant messages */}
-          {!isUser && message.audioUrl && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onPlayAudio}
-            >
-              <Volume2 className={`w-3 h-3 mr-1 ${isPlaying ? 'text-primary animate-pulse' : ''}`} />
-              {isPlaying ? 'Playing...' : 'Play'}
-            </Button>
-          )}
-
-          {/* Transcription confidence for user messages */}
-          {isUser && message.transcription?.confidence !== undefined && (
-            <span className="text-xs text-muted-foreground">
-              {(message.transcription.confidence * 100).toFixed(0)}% confidence
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )

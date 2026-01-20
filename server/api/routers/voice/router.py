@@ -65,8 +65,9 @@ def _get_voice_config_defaults(
         "sentence_boundary_only": True,  # Natural speech by default
     }
 
-    if project_config and project_config.voice:
-        voice = project_config.voice
+    # Use getattr to safely access voice config - it may not exist in the schema yet
+    voice = getattr(project_config, "voice", None) if project_config else None
+    if voice:
 
         # LLM model from voice config
         if voice.llm_model:
@@ -165,9 +166,10 @@ async def voice_chat_websocket(
     project_config: LlamaFarmConfig | None = None
     try:
         project_config = ProjectService.load_config(namespace, project)
+        voice_config = getattr(project_config, "voice", None)
         logger.info(
             f"Loaded voice config from project {namespace}/{project}",
-            extra={"has_voice_config": project_config.voice is not None},
+            extra={"has_voice_config": voice_config is not None},
         )
     except Exception as e:
         logger.warning(
@@ -204,7 +206,8 @@ async def voice_chat_websocket(
         return
 
     # Check if voice is explicitly disabled in config
-    if project_config and project_config.voice and project_config.voice.enabled is False:
+    voice_cfg = getattr(project_config, "voice", None) if project_config else None
+    if voice_cfg and getattr(voice_cfg, "enabled", True) is False:
         await websocket.send_json(
             ErrorMessage(
                 message="Voice chat is disabled for this project (voice.enabled=false)"
