@@ -186,8 +186,8 @@ Examples:
 		datasetName := args[0]
 		// 1) Validate required parameters
 		if dataProcessingStrategy == "" {
-			fmt.Fprintf(os.Stderr, "Error: --data-processing-strategy is required\n")
-			os.Exit(1)
+			// Default to universal_rag if not specified
+			dataProcessingStrategy = "universal_rag"
 		}
 		if database == "" {
 			fmt.Fprintf(os.Stderr, "Error: --database is required\n")
@@ -988,11 +988,10 @@ func init() {
 	datasetsCmd.PersistentFlags().StringVar(&projectID, "project", "", "Project ID (default: from llamafarm.yaml)")
 
 	// Add flags specific to add command
-	datasetsCreateCmd.Flags().StringVarP(&dataProcessingStrategy, "data-processing-strategy", "s", "", "Data processing strategy to use for this dataset (required)")
+	datasetsCreateCmd.Flags().StringVarP(&dataProcessingStrategy, "data-processing-strategy", "s", "", "Data processing strategy to use for this dataset (default: universal_rag)")
 	datasetsCreateCmd.Flags().StringVarP(&database, "database", "b", "", "Database to use for this dataset (required)")
 
-	// Mark flags as required
-	datasetsCreateCmd.MarkFlagRequired("data-processing-strategy")
+	// Mark flags as required (data-processing-strategy is optional, defaults to universal_rag)
 	datasetsCreateCmd.MarkFlagRequired("database")
 
 	// Upload flags

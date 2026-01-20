@@ -235,18 +235,36 @@ class SchemaHandler:
     def get_processing_strategy_config(
         self, proc_name: str
     ) -> DataProcessingStrategy | None:
-        """Get processing strategy configuration by name."""
+        """Get processing strategy configuration by name.
+
+        If the strategy is 'universal_rag' and not explicitly defined,
+        returns the default universal_rag strategy.
+        """
         if not self.rag_config:
+            # Even without rag_config, universal_rag is available
+            if proc_name == "universal_rag":
+                return _create_default_universal_rag_strategy()
             return None
 
-        return next(
+        # Search for explicitly defined strategy
+        strategy = next(
             (
-                strategy
-                for strategy in (self.rag_config.data_processing_strategies or [])
-                if strategy.name == proc_name
+                s
+                for s in (self.rag_config.data_processing_strategies or [])
+                if s.name == proc_name
             ),
             None,
         )
+
+        if strategy:
+            return strategy
+
+        # If universal_rag is requested but not defined, return the default
+        if proc_name == "universal_rag":
+            logger.info("Using default universal_rag strategy")
+            return _create_default_universal_rag_strategy()
+
+        return None
 
     def get_combined_config(
         self, strategy_name: str, source_path: Path | None = None

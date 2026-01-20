@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT_DEFAULT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT_ROOT="${1:-${PROJECT_ROOT_DEFAULT}}"
-LF_BIN="${LF_BIN:-${PROJECT_ROOT}/lf}"
+LF_BIN="${LF_BIN:-${PROJECT_ROOT}/dist/lf}"
 CONFIG_PATH="${CONFIG_PATH:-${SCRIPT_DIR}/llamafarm.yaml}"
 FILES_DIR="${SCRIPT_DIR}/files"
 RUN_ID=$(date +%Y%m%d%H%M%S)
@@ -69,17 +69,12 @@ duplicate_database() {
   PYTHON_CONFIG_PATH="$CONFIG_PATH" \
   PYTHON_DATABASE_NAME="$DATABASE_NAME" \
   PYTHON_BASE_DATABASE_NAME="universal_db" \
-  python3 <<'PY'
+  uv run --directory "${PROJECT_ROOT}/rag" python3 <<'PY'
 import copy
 import os
 import sys
 from pathlib import Path
-
-try:
-    import yaml
-except ImportError:
-    print("PyYAML is required. Install with 'uv pip install pyyaml'.", file=sys.stderr)
-    sys.exit(1)
+import yaml
 
 cfg_path = Path(os.environ['PYTHON_CONFIG_PATH'])
 if not cfg_path.exists():
