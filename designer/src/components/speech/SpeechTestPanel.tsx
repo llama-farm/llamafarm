@@ -555,7 +555,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         >
           <div className="flex items-center gap-2 text-sm font-medium">
             <Settings2 className="h-4 w-4 text-muted-foreground" />
-            <span>Model Configuration</span>
+            <span>Models & Settings</span>
             {/* Compact summary when collapsed */}
             {!configExpanded && (
               <span className="text-xs text-muted-foreground font-normal ml-2">
