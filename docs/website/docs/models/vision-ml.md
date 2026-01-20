@@ -394,10 +394,10 @@ curl -X POST http://localhost:8000/v1/ml/documents/extract \
 
 Detect the language of text.
 
-**Endpoint:** `POST /v1/ml/text/detect-language`
+**Endpoint:** `POST /v1/ml/nlp/language`
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/text/detect-language \
+curl -X POST http://localhost:8000/v1/ml/nlp/language \
   -H "Content-Type: application/json" \
   -d '{
     "texts": ["Hello world", "Bonjour le monde", "Hola mundo"]
@@ -409,11 +409,11 @@ curl -X POST http://localhost:8000/v1/ml/text/detect-language \
 Detect and redact personally identifiable information.
 
 **Endpoints:**
-- `POST /v1/ml/text/pii/detect` - Find PII
-- `POST /v1/ml/text/pii/redact` - Redact PII
+- `POST /v1/ml/nlp/pii/detect` - Find PII
+- `POST /v1/ml/nlp/redact` - Redact PII
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/text/pii/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact John Smith at john@email.com or 555-123-4567",
@@ -425,7 +425,7 @@ curl -X POST http://localhost:8000/v1/ml/text/pii/redact \
 
 Extract keywords and keyphrases from text.
 
-**Endpoint:** `POST /v1/ml/text/keywords`
+**Endpoint:** `POST /v1/ml/nlp/keywords`
 
 ---
 
@@ -457,7 +457,7 @@ Detect significant changes in time series.
 
 Detect distribution drift in streaming data.
 
-**Endpoint:** `POST /v1/ml/timeseries/drift`
+**Endpoint:** `POST /v1/ml/analysis/drift`
 
 ---
 
@@ -466,12 +466,12 @@ Detect distribution drift in streaming data.
 Train anomaly detection models and detect outliers.
 
 **Endpoints:**
-- `POST /v1/ml/anomaly/train` - Train model
+- `POST /v1/ml/anomaly/fit` - Train model
 - `POST /v1/ml/anomaly/detect` - Detect anomalies
 
 ```bash
 # Train on normal data
-curl -X POST http://localhost:8000/v1/ml/anomaly/train \
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model_id": "api-monitor",
@@ -498,10 +498,10 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
 
 Answer questions about tabular data.
 
-**Endpoint:** `POST /v1/ml/tables/qa`
+**Endpoint:** `POST /v1/ml/analysis/table-qa`
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/tables/qa \
+curl -X POST http://localhost:8000/v1/ml/analysis/table-qa \
   -H "Content-Type: application/json" \
   -d '{
     "table": {

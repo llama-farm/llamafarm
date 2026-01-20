@@ -2751,7 +2751,7 @@ The ML API provides custom text classification and anomaly detection capabilitie
 **Base URL:** `http://localhost:8000/v1/ml`
 
 :::tip Model Versioning
-When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
+When `overwrite: false`, models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version. By default, `overwrite: true` so models use their exact name without timestamps.
 :::
 
 ### Custom Text Classification (SetFit)
@@ -2780,7 +2780,7 @@ Train a new text classifier.
   ],
   "num_iterations": 20,
   "batch_size": 16,
-  "overwrite": false
+  "overwrite": true
 }
 ```
 
@@ -2793,7 +2793,7 @@ Train a new text classifier.
 | `training_data` | array | Yes | - | List of `{"text", "label"}` objects |
 | `num_iterations` | int | No | 20 | Contrastive learning iterations |
 | `batch_size` | int | No | 16 | Training batch size |
-| `overwrite` | bool | No | false | If false, version with timestamp |
+| `overwrite` | bool | No | true | If true, overwrite existing model; if false, version with timestamp |
 
 **Response:**
 
@@ -2811,7 +2811,7 @@ Train a new text classifier.
   "saved_path": "~/.llamafarm/models/classifier/intent-classifier-test_20260102_202450",
   "base_name": "intent-classifier-test",
   "versioned_name": "intent-classifier-test_20260102_202450",
-  "overwrite": false
+  "overwrite": true
 }
 ```
 
@@ -2999,7 +2999,7 @@ Train an anomaly detection model.
     [24.2, 1050], [22.7, 1080], [23.1, 990]
   ],
   "contamination": 0.1,
-  "overwrite": false
+  "overwrite": true
 }
 ```
 
@@ -3032,7 +3032,7 @@ Train an anomaly detection model.
 | `data` | array | Yes | - | Training data (numeric arrays or dicts) |
 | `schema` | object | No | - | Feature encoding schema (required for dict data) |
 | `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
-| `overwrite` | bool | No | false | If false, version with timestamp |
+| `overwrite` | bool | No | true | If true, overwrite existing model; if false, version with timestamp |
 
 **Response:**
 
@@ -3052,7 +3052,7 @@ Train an anomaly detection model.
   "status": "fitted",
   "base_name": "sensor_anomaly_detector",
   "versioned_name": "sensor_anomaly_detector_20260102_202438",
-  "overwrite": false
+  "overwrite": true
 }
 ```
 

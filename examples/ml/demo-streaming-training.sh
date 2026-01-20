@@ -142,7 +142,8 @@ PYEOF
         -d "{
             \"model\": \"streaming_demo\",
             \"backend\": \"isolation_forest\",
-            \"data\": ${TRAIN_DATA}
+            \"data\": ${TRAIN_DATA},
+            \"overwrite\": true
         }")
 
     echo "Training response:"

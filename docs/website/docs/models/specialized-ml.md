@@ -19,13 +19,13 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
 | [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
 | [Time-Series Forecasting](#time-series-forecasting) | `POST /v1/ml/timeseries/forecast` | Predict future values with confidence intervals |
-| [PII Detection & Redaction](#pii-detection--redaction) | `POST /v1/ml/pii/*` | Find and redact sensitive information |
-| [Language Detection](#language-detection) | `POST /v1/ml/language/detect` | Identify language of text (20 languages) |
-| [Table Question Answering](#table-question-answering) | `POST /v1/ml/table/answer` | Answer questions about tabular data |
-| [Keyword Extraction](#keyword-extraction) | `POST /v1/ml/keywords/extract` | Extract key phrases from documents |
-| [Change Point Detection](#change-point-detection) | `POST /v1/ml/changepoint/detect` | Find structural changes in time-series |
-| [Drift Detection](#drift-detection) | `POST /v1/ml/drift/detect` | Monitor for concept drift in data streams |
-| [Dataset Quality Audit](#dataset-quality-audit) | `POST /v1/ml/audit/*` | Find label errors and duplicates |
+| [PII Detection & Redaction](#pii-detection--redaction) | `POST /v1/ml/nlp/pii/*` | Find and redact sensitive information |
+| [Language Detection](#language-detection) | `POST /v1/ml/nlp/language` | Identify language of text (20 languages) |
+| [Table Question Answering](#table-question-answering) | `POST /v1/ml/analysis/table-qa` | Answer questions about tabular data |
+| [Keyword Extraction](#keyword-extraction) | `POST /v1/ml/nlp/keywords` | Extract key phrases from documents |
+| [Change Point Detection](#change-point-detection) | `POST /v1/ml/timeseries/changepoints` | Find structural changes in time-series |
+| [Drift Detection](#drift-detection) | `POST /v1/ml/analysis/drift` | Monitor for concept drift in data streams |
+| [Dataset Quality Audit](#dataset-quality-audit) | `POST /v1/ml/analysis/dataset-audit` | Find label errors and duplicates |
 | [Anomaly Explanations](#anomaly-explanations) | `POST /v1/ml/anomaly/explain` | Explain why points are anomalous (SHAP) |
 
 ## Starting the Universal Runtime
@@ -301,8 +301,8 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
 
 :::tip LlamaFarm API Features
 The LlamaFarm API (`/v1/ml/classifier/*`) provides additional features:
-- **Model Versioning**: Automatic timestamped versions when `overwrite: false`
-- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
+- **Model Versioning**: Optional timestamped versions when `overwrite: false` (default is `true` for exact model names)
+- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version (when using `overwrite: false`)
 - **File Upload Support**: Direct file handling without base64 encoding
 :::
 
@@ -730,7 +730,7 @@ Detect and redact personally identifiable information (PII) using GLiNER, a zero
 Find PII entities in text without modifying it:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/pii/detect \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/detect \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact John Smith at john.smith@email.com or call 555-123-4567"
@@ -753,7 +753,7 @@ curl -X POST http://localhost:8000/v1/ml/pii/detect \
 Replace PII with placeholder text:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/pii/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Customer: Jane Doe\nSSN: 123-45-6789\nEmail: jane@company.com"
@@ -778,7 +778,7 @@ curl -X POST http://localhost:8000/v1/ml/pii/redact \
 Use different placeholders for each PII type:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/pii/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact Alice at alice@example.com or 555-0123",
@@ -804,7 +804,7 @@ curl -X POST http://localhost:8000/v1/ml/pii/redact \
 Focus on particular PII categories:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/pii/detect \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/detect \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Patient Robert Johnson, MRN 12345678, DOB 03/15/1985",
@@ -818,7 +818,7 @@ curl -X POST http://localhost:8000/v1/ml/pii/detect \
 Process multiple documents efficiently:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/pii/detect_batch \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/detect_batch \
   -H "Content-Type: application/json" \
   -d '{
     "texts": [
@@ -866,7 +866,7 @@ import httpx
 def sanitize_for_logging(log_entry: str) -> str:
     """Remove PII from log entries before storage."""
     response = httpx.post(
-        "http://localhost:8000/v1/ml/pii/redact",
+        "http://localhost:8000/v1/ml/nlp/redact",
         json={
             "text": log_entry,
             "replacement": "***"
@@ -889,7 +889,7 @@ from collections import Counter
 def audit_document(text: str) -> dict:
     """Generate PII audit report for compliance."""
     response = httpx.post(
-        "http://localhost:8000/v1/ml/pii/detect",
+        "http://localhost:8000/v1/ml/nlp/pii/detect",
         json={"text": text, "threshold": 0.5}
     )
 
@@ -919,7 +919,7 @@ Arabic, Bulgarian, Chinese, Dutch, English, French, German, Greek, Hindi, Italia
 ### Detect Language
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/language/detect \
+curl -X POST http://localhost:8000/v1/ml/nlp/language \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Bonjour, comment allez-vous?"
@@ -945,7 +945,7 @@ curl -X POST http://localhost:8000/v1/ml/language/detect \
 Detect languages for multiple texts:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/language/detect_batch \
+curl -X POST http://localhost:8000/v1/ml/nlp/language_batch \
   -H "Content-Type: application/json" \
   -d '{
     "texts": [
@@ -971,7 +971,7 @@ import httpx
 
 def route_by_language(text: str) -> dict:
     response = httpx.post(
-        "http://localhost:8000/v1/ml/language/detect",
+        "http://localhost:8000/v1/ml/nlp/language",
         json={"text": text}
     )
     result = response.json()
@@ -1005,7 +1005,7 @@ Answer natural language questions about tabular data using TAPAS (Table Parser).
 ### Basic Table QA
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/table/answer \
+curl -X POST http://localhost:8000/v1/ml/analysis/table-qa \
   -H "Content-Type: application/json" \
   -d '{
     "table": {
@@ -1038,7 +1038,7 @@ TAPAS automatically detects when aggregation is needed:
 
 ```bash
 # SUM query
-curl -X POST http://localhost:8000/v1/ml/table/answer \
+curl -X POST http://localhost:8000/v1/ml/analysis/table-qa \
   -H "Content-Type: application/json" \
   -d '{
     "table": {
@@ -1057,7 +1057,7 @@ curl -X POST http://localhost:8000/v1/ml/table/answer \
 
 ```bash
 # COUNT query
-curl -X POST http://localhost:8000/v1/ml/table/answer \
+curl -X POST http://localhost:8000/v1/ml/analysis/table-qa \
   -H "Content-Type: application/json" \
   -d '{
     "table": {...},
@@ -1072,7 +1072,7 @@ curl -X POST http://localhost:8000/v1/ml/table/answer \
 Ask multiple questions about the same table:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/table/answer_batch \
+curl -X POST http://localhost:8000/v1/ml/analysis/table-qa_batch \
   -H "Content-Type: application/json" \
   -d '{
     "table": {
@@ -1112,7 +1112,7 @@ def query_csv(csv_path: str, question: str) -> str:
     }
 
     response = httpx.post(
-        "http://localhost:8000/v1/ml/table/answer",
+        "http://localhost:8000/v1/ml/analysis/table-qa",
         json={"table": table, "question": question}
     )
     return response.json()["answer"]
@@ -1130,7 +1130,7 @@ Extract the most important keywords and keyphrases from documents using embeddin
 ### Basic Extraction
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/keywords/extract \
+curl -X POST http://localhost:8000/v1/ml/nlp/keywords \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Machine learning is a subset of artificial intelligence that enables systems to learn from data. Deep learning, a branch of machine learning, uses neural networks with multiple layers.",
@@ -1156,7 +1156,7 @@ curl -X POST http://localhost:8000/v1/ml/keywords/extract \
 Use MMR diversity to avoid redundant keywords:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/keywords/extract \
+curl -X POST http://localhost:8000/v1/ml/nlp/keywords \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Your document text here...",
@@ -1190,7 +1190,7 @@ import httpx
 def auto_tag_document(text: str, max_tags: int = 5) -> list[str]:
     """Automatically generate tags for a document."""
     response = httpx.post(
-        "http://localhost:8000/v1/ml/keywords/extract",
+        "http://localhost:8000/v1/ml/nlp/keywords",
         json={
             "text": text,
             "top_k": max_tags,
@@ -1228,7 +1228,7 @@ Detect structural changes (regime shifts) in time-series data using the Ruptures
 ### Basic Detection
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/changepoint/detect \
+curl -X POST http://localhost:8000/v1/ml/timeseries/changepoints \
   -H "Content-Type: application/json" \
   -d '{
     "values": [1, 1, 1, 1, 5, 5, 5, 5, 2, 2, 2, 2],
@@ -1256,7 +1256,7 @@ curl -X POST http://localhost:8000/v1/ml/changepoint/detect \
 If you know how many changes to expect:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/changepoint/detect \
+curl -X POST http://localhost:8000/v1/ml/timeseries/changepoints \
   -H "Content-Type: application/json" \
   -d '{
     "values": [10, 12, 11, 50, 52, 48, 20, 22, 19],
@@ -1269,7 +1269,7 @@ curl -X POST http://localhost:8000/v1/ml/changepoint/detect \
 Control sensitivity with penalty parameter (higher = fewer change points):
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/changepoint/detect \
+curl -X POST http://localhost:8000/v1/ml/timeseries/changepoints \
   -H "Content-Type: application/json" \
   -d '{
     "values": [...],
@@ -1292,7 +1292,7 @@ import httpx
 def find_metric_shifts(daily_values: list[float]) -> list[dict]:
     """Find significant changes in a daily metric."""
     response = httpx.post(
-        "http://localhost:8000/v1/ml/changepoint/detect",
+        "http://localhost:8000/v1/ml/timeseries/changepoints",
         json={
             "values": daily_values,
             "algorithm": "pelt",
@@ -1338,7 +1338,7 @@ Monitor streaming data for concept drift - when statistical properties change ov
 ### Detect Drift in Stream
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/drift/detect \
+curl -X POST http://localhost:8000/v1/ml/analysis/drift \
   -H "Content-Type: application/json" \
   -d '{
     "values": [1.0, 1.1, 0.9, 1.0, 1.1, 5.0, 5.2, 4.9, 5.1, 5.0],
@@ -1362,7 +1362,7 @@ curl -X POST http://localhost:8000/v1/ml/drift/detect \
 For monitoring model prediction errors:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/drift/detect \
+curl -X POST http://localhost:8000/v1/ml/analysis/drift \
   -H "Content-Type: application/json" \
   -d '{
     "values": [0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1],
@@ -1407,7 +1407,7 @@ class ModelMonitor:
 
     def check_drift(self) -> dict:
         response = httpx.post(
-            "http://localhost:8000/v1/ml/drift/detect",
+            "http://localhost:8000/v1/ml/analysis/drift",
             json={
                 "values": self.errors[-500:],  # Last 500 predictions
                 "algorithm": "ddm"
@@ -1433,7 +1433,7 @@ Find label errors, duplicates, and quality issues in classification datasets usi
 ### Audit Dataset
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/audit/dataset \
+curl -X POST http://localhost:8000/v1/ml/analysis/dataset-audit \
   -H "Content-Type: application/json" \
   -d '{
     "labels": [0, 1, 0, 1, 0, 1, 0, 1],
@@ -1475,7 +1475,7 @@ curl -X POST http://localhost:8000/v1/ml/audit/dataset \
 Include feature vectors to detect near-duplicate samples:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/audit/dataset \
+curl -X POST http://localhost:8000/v1/ml/analysis/dataset-audit \
   -H "Content-Type: application/json" \
   -d '{
     "labels": [...],
@@ -1491,7 +1491,7 @@ curl -X POST http://localhost:8000/v1/ml/audit/dataset \
 Get per-sample quality scores:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/audit/quality_scores \
+curl -X POST http://localhost:8000/v1/ml/analysis/dataset-audit \
   -H "Content-Type: application/json" \
   -d '{
     "labels": [0, 1, 0, 1],
@@ -1506,7 +1506,7 @@ curl -X POST http://localhost:8000/v1/ml/audit/quality_scores \
 Get high-confidence correction suggestions:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/audit/suggest_corrections \
+curl -X POST http://localhost:8000/v1/ml/analysis/dataset-audit \
   -H "Content-Type: application/json" \
   -d '{
     "labels": [...],
@@ -1532,7 +1532,7 @@ def cleanup_training_data(texts: list, labels: list, classifier_probs):
 
     # Audit the dataset
     response = httpx.post(
-        "http://localhost:8000/v1/ml/audit/dataset",
+        "http://localhost:8000/v1/ml/analysis/dataset-audit",
         json={
             "labels": labels,
             "pred_probs": classifier_probs.tolist(),

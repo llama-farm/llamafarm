@@ -106,7 +106,8 @@ ROBUST_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
         \"backend\": \"isolation_forest\",
         \"data\": ${TRAINING_DATA},
         \"contamination\": 0.1,
-        \"scaler_type\": \"robust\"
+        \"scaler_type\": \"robust\",
+        \"overwrite\": true
     }")
 
 if echo "$ROBUST_RESULT" | python3 -c "import sys, json; data=json.load(sys.stdin); sys.exit(0 if 'status' in data else 1)" 2>/dev/null; then
@@ -135,7 +136,8 @@ STANDARD_RESULT=$(curl -sf -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
         \"backend\": \"isolation_forest\",
         \"data\": ${TRAINING_DATA},
         \"contamination\": 0.1,
-        \"scaler_type\": \"standard\"
+        \"scaler_type\": \"standard\",
+        \"overwrite\": true
     }")
 
 if echo "$STANDARD_RESULT" | python3 -c "import sys, json; data=json.load(sys.stdin); sys.exit(0 if 'status' in data else 1)" 2>/dev/null; then

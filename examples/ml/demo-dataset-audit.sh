@@ -98,7 +98,7 @@ echo "3. Running Dataset Quality Audit"
 echo "   Analyzing labels with Cleanlab..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/dataset/audit" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/dataset-audit" \
     -H "Content-Type: application/json" \
     -d "{
         \"labels\": $LABELS,
@@ -151,37 +151,6 @@ if 'duplicates' in data and data['duplicates']:
         print(f'     Samples {dup[\"index_a\"]} and {dup[\"index_b\"]}: similarity = {dup[\"similarity\"]:.4f}')
 else:
     print('   No near-duplicates found!')
-"
-echo ""
-
-# Get quality scores
-echo "6. Label Quality Scores (per-sample)"
-echo "   Getting confidence that each label is correct..."
-echo ""
-
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/dataset/quality-scores" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"labels\": $LABELS,
-        \"pred_probs\": $PRED_PROBS
-    }")
-
-echo "   Quality Statistics:"
-echo "$RESPONSE" | python3 -c "
-import sys
-import json
-
-data = json.load(sys.stdin)
-print(f'     Mean quality:  {data[\"mean_quality\"]:.3f}')
-print(f'     Min quality:   {data[\"min_quality\"]:.3f}')
-print(f'     Max quality:   {data[\"max_quality\"]:.3f}')
-print()
-print('   Lowest quality samples (most likely mislabeled):')
-scores = data['scores']
-indexed = [(i, s) for i, s in enumerate(scores)]
-indexed.sort(key=lambda x: x[1])
-for idx, score in indexed[:5]:
-    print(f'     Sample {idx}: quality = {score:.3f}')
 "
 echo ""
 

@@ -34,7 +34,7 @@ echo ""
 echo "2. Basic Question Answering"
 echo "   Table: Employee information"
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -58,7 +58,7 @@ echo ""
 echo "3. Selection Query"
 echo "   Question: Who is the oldest employee?"
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -81,7 +81,7 @@ echo ""
 echo "4. Server Metrics Analysis"
 echo "   Table: Server health metrics"
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -106,7 +106,7 @@ echo ""
 echo "5. Batch Questions (Same Table)"
 echo "   Asking multiple questions about server metrics..."
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa/batch" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa/batch" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -138,7 +138,7 @@ echo ""
 echo "6. Product Inventory Query"
 echo "   Table: Product inventory"
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {
@@ -163,7 +163,7 @@ echo ""
 echo "7. Status Query"
 echo "   Finding items by status..."
 echo ""
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/analysis/table-qa" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/table-qa" \
     -H "Content-Type: application/json" \
     -d '{
         "table": {

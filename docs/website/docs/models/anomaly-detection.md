@@ -20,14 +20,14 @@ Anomaly detection learns what "normal" looks like from training data and then id
 
 :::tip Using the LlamaFarm API (Recommended)
 The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Universal Runtime with added features:
-- **Model Versioning**: When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_160000`
-- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
+- **Model Versioning**: When `overwrite: false`, models are saved with timestamps like `my-model_20251215_160000`. By default, `overwrite: true` uses the exact model name.
+- **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version (when using `overwrite: false`)
 
 ```bash
-# Via LlamaFarm API (port 8000) - with versioning
+# Via LlamaFarm API (port 8000) - overwrite by default
 curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
-  -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
+  -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...]}'
 
 # Use -latest suffix to auto-resolve
 curl -X POST http://localhost:8000/v1/ml/anomaly/detect \

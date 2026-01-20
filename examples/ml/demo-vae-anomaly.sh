@@ -90,7 +90,8 @@ FIT_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/ml/anomaly/fit" \
         \"scaler_type\": \"robust\",
         \"patience\": 10,
         \"min_delta\": 0.0001,
-        \"validation_split\": 0.1
+        \"validation_split\": 0.1,
+        \"overwrite\": true
     }")
 
 echo "Training response:"

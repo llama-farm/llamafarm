@@ -25,7 +25,7 @@ class ClassifierFitRequest(BaseModel):
     num_iterations: int = 20
     batch_size: int = 16
     overwrite: bool = (
-        False  # If False, version with timestamp; if True, overwrite existing
+        True  # If True, overwrite existing model; if False, version with timestamp
     )
     description: str | None = None  # Optional model description
 
@@ -113,7 +113,7 @@ class AnomalyFitRequest(BaseModel):
         description="Minimum change in validation loss for improvement",
     )
     overwrite: bool = (
-        False  # If False, version with timestamp; if True, overwrite existing
+        True  # If True, overwrite existing model; if False, version with timestamp
     )
     description: str | None = None  # Optional model description
 

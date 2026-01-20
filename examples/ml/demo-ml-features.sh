@@ -45,9 +45,8 @@ echo "   | Time-Series       | Change Point Detection    | /v1/ml/timeseries/cha
 echo "   | Streaming         | Concept Drift Detection   | /v1/ml/analysis/drift/*           |"
 echo "   | Anomaly           | Multi-Backend Detection   | /v1/ml/anomaly/fit, /score         |"
 echo "   | Anomaly           | SHAP Explanations         | /v1/ml/anomaly/explain             |"
-echo "   | Data Quality      | Dataset Audit (Cleanlab)  | /v1/dataset/audit               |"
-echo "   | Data Quality      | Label Quality Scores      | /v1/dataset/quality-scores      |"
-echo "   | Analysis          | Table QA (TAPAS)          | /v1/analysis/table-qa           |"
+echo "   | Data Quality      | Dataset Audit (Cleanlab)  | /v1/ml/analysis/dataset-audit    |"
+echo "   | Analysis          | Table QA (TAPAS)          | /v1/ml/analysis/table-qa         |"
 echo ""
 
 echo "3. Anomaly Detection Backends"

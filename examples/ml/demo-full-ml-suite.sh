@@ -146,7 +146,7 @@ print(json.dumps({'labels': labels, 'pred_probs': pred_probs}))
 LABELS=$(echo "$AUDIT_DATA" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['labels']))")
 PROBS=$(echo "$AUDIT_DATA" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['pred_probs']))")
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/dataset/audit" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/dataset-audit" \
     -H "Content-Type: application/json" \
     -d "{
         \"labels\": $LABELS,
@@ -170,56 +170,41 @@ echo ""
 # DRIFT DETECTION
 # ============================================
 echo "==========================================="
-echo "4. Streaming Drift Detection"
+echo "4. Batch Drift Detection"
 echo "==========================================="
 echo ""
 
-echo "   Creating drift detector..."
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/create" \
+echo "   Generating stream with drift..."
+DRIFT_STREAM=$(python3 -c "
+import random
+random.seed(42)
+# First 50 values around mean 5
+stream1 = [5 + random.uniform(-0.5, 0.5) for _ in range(50)]
+# Next 50 values around mean 10 (drift!)
+stream2 = [10 + random.uniform(-0.5, 0.5) for _ in range(50)]
+print(str(stream1 + stream2).replace(' ', ''))
+")
+
+echo "   Stream: 50 values ~5, then 50 values ~10 (drift at ~50)"
+echo ""
+
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/drift" \
     -H "Content-Type: application/json" \
     -d "{
-        \"detector_id\": \"demo-drift\",
-        \"algorithm\": \"adwin\"
+        \"values\": $DRIFT_STREAM,
+        \"algorithm\": \"adwin\",
+        \"delta\": 0.001
     }")
-echo "   Detector created: demo-drift"
 
-echo "   Streaming normal data (50 samples)..."
-for i in $(seq 1 50); do
-    VAL=$(python3 -c "import random; random.seed($i); print(5 + random.uniform(-0.5, 0.5))")
-    curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/update" \
-        -H "Content-Type: application/json" \
-        -d "{\"detector_id\": \"demo-drift\", \"value\": $VAL}" > /dev/null
-done
-echo "   Normal data streamed (mean ~5)"
-
-echo "   Streaming shifted data (50 samples)..."
-DRIFT_DETECTED="false"
-for i in $(seq 51 100); do
-    VAL=$(python3 -c "import random; random.seed($i); print(10 + random.uniform(-0.5, 0.5))")
-    RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/analysis/drift/update" \
-        -H "Content-Type: application/json" \
-        -d "{\"detector_id\": \"demo-drift\", \"value\": $VAL}")
-
-    DETECTED=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('drift_detected', False))")
-    if [ "$DETECTED" = "True" ]; then
-        DRIFT_DETECTED="true"
-        echo "   🚨 Drift detected at sample $i!"
-        break
-    fi
-done
-
-if [ "$DRIFT_DETECTED" = "false" ]; then
-    echo "   Shifted data streamed (mean ~10)"
-fi
-
-# Get stats
-RESPONSE=$(curl -s "$BASE_URL/v1/ml/analysis/drift/demo-drift/stats")
-echo "   Detector stats:"
+echo "   Drift detection result:"
 echo "$RESPONSE" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-print(f'     Samples processed: {data.get(\"n_samples\", 0)}')
-print(f'     Drifts detected: {data.get(\"n_drifts\", 0)}')
+detected = data.get('drift_detected', False)
+points = data.get('drift_points', [])
+print(f'     Drift detected: {detected}')
+if points:
+    print(f'     Drift points: {points}')
 "
 echo ""
 
