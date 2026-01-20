@@ -2887,8 +2887,17 @@ async def create_transcription(
         # Optimized path: if raw PCM, convert directly to numpy array (no file I/O)
         if format_name == "PCM (assumed)":
             logger.debug(f"Using optimized PCM path ({len(audio_bytes)} bytes)")
+            # Ensure buffer size is a multiple of 2 bytes (int16 = 2 bytes per sample)
+            # Truncate any trailing byte that can't form a complete sample
+            usable_bytes = len(audio_bytes) - (len(audio_bytes) % 2)
+            if usable_bytes < 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Audio data too short - need at least 2 bytes for PCM",
+                )
+            pcm_bytes = audio_bytes[:usable_bytes] if usable_bytes < len(audio_bytes) else audio_bytes
             # Convert int16 PCM to float32 normalized to [-1.0, 1.0]
-            audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            audio_array = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
             if stream:
                 # Streaming not yet supported for numpy array path
@@ -2963,6 +2972,14 @@ async def create_transcription(
             except Exception as e:
                 logger.warning(f"Failed to decode {format_name}: {e}, using original data")
                 # Fall back to original data - faster-whisper might handle it
+        elif format_name == "PCM (assumed)":
+            # Raw PCM needs to be wrapped in WAV container for faster-whisper
+            try:
+                audio_bytes = pcm_to_wav(audio_bytes)
+                file_extension = ".wav"
+                logger.debug(f"Wrapped raw PCM in WAV container ({len(audio_bytes)} bytes)")
+            except Exception as e:
+                logger.warning(f"Failed to wrap PCM in WAV: {e}, using original data")
 
         # Write audio to temp file (faster-whisper requires file path for streaming)
         # Assign tmp_path before write to ensure cleanup even if write fails

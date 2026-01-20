@@ -127,6 +127,7 @@ export interface VoiceChatConfig {
   speed?: number
   systemPrompt?: string
   sentenceBoundaryOnly?: boolean
+  silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
 }
 
 // =============================================================================
@@ -175,6 +176,25 @@ export async function synthesizeSpeech(request: SpeechRequest): Promise<Blob> {
   }
 
   return response.blob()
+}
+
+// =============================================================================
+// Health Check
+// =============================================================================
+
+/**
+ * Check if Universal Runtime is available
+ */
+export async function checkRuntimeHealth(): Promise<boolean> {
+  try {
+    const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3000),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 // =============================================================================
@@ -368,6 +388,7 @@ export function sendConfigUpdate(
     language: string
     speed: number
     sentence_boundary_only: boolean
+    silence_duration: number
   }>
 ): void {
   if (ws.readyState === WebSocket.OPEN) {

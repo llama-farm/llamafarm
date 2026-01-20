@@ -396,6 +396,7 @@ class VoiceSession:
         language: str | None = None,
         speed: float | None = None,
         sentence_boundary_only: bool | None = None,
+        silence_duration: float | None = None,
     ) -> None:
         """Update session configuration."""
         if stt_model is not None:
@@ -412,6 +413,8 @@ class VoiceSession:
             self.config.speed = speed
         if sentence_boundary_only is not None:
             self.config.sentence_boundary_only = sentence_boundary_only
+        if silence_duration is not None:
+            self._vad.config.silence_duration = silence_duration
 
 
 class SessionManager:

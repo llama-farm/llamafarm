@@ -387,6 +387,7 @@ async def voice_chat_websocket(
                             language=data.get("language"),
                             speed=data.get("speed"),
                             sentence_boundary_only=data.get("sentence_boundary_only"),
+                            silence_duration=data.get("silence_duration"),
                         )
                         logger.debug(f"Session config updated: {session.session_id}")
 

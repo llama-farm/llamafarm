@@ -17,6 +17,7 @@ import { useProject } from '../../hooks/useProjects'
 import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
 import { SpeechTestPanel } from '../speech'
+import { checkRuntimeHealth } from '../../api/voiceService'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
   DOCUMENT_SCANNING_LANGUAGES,
@@ -1724,6 +1725,27 @@ export default function TestChat({
   // Reranking right panel tab state
   const [rerankRightPanelTab, setRerankRightPanelTab] = useState<'inputs' | 'history'>('inputs')
 
+  // Speech mode - Universal Runtime connection status
+  const [speechRuntimeConnected, setSpeechRuntimeConnected] = useState<boolean | null>(null)
+
+  // Check runtime health when speech mode is selected
+  useEffect(() => {
+    if (modelType !== 'speech') {
+      setSpeechRuntimeConnected(null)
+      return
+    }
+
+    const checkConnection = async () => {
+      const connected = await checkRuntimeHealth()
+      setSpeechRuntimeConnected(connected)
+    }
+
+    checkConnection()
+    // Recheck periodically while in speech mode
+    const interval = setInterval(checkConnection, 10000)
+    return () => clearInterval(interval)
+  }, [modelType])
+
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
 
@@ -3209,21 +3231,34 @@ export default function TestChat({
         </div>
         {/* Second row: Model Type and mode-specific selectors */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
-          {/* Model Type selector - FIRST dropdown */}
-          <Selector
-            value={modelType}
-            options={[
-              { value: 'inference', label: 'Text Generation' },
-              { value: 'anomaly', label: 'Anomaly Detection' },
-              { value: 'classifier', label: 'Classifier' },
-              { value: 'document_scanning', label: 'Document Scanning' },
-              { value: 'encoder', label: 'Encoder' },
-              { value: 'speech', label: 'Speech' },
-            ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech')}
-            label="Model Type"
-            className="w-[200px]"
-          />
+          {/* Model Type selector with optional status tag */}
+          <div className="flex items-end gap-2">
+            <Selector
+              value={modelType}
+              options={[
+                { value: 'inference', label: 'Text Generation' },
+                { value: 'anomaly', label: 'Anomaly Detection' },
+                { value: 'classifier', label: 'Classifier' },
+                { value: 'document_scanning', label: 'Document Scanning' },
+                { value: 'encoder', label: 'Encoder' },
+                { value: 'speech', label: 'Speech' },
+              ]}
+              onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech')}
+              label="Model Type"
+              className="w-[200px]"
+            />
+            {/* Speech mode runtime status tag */}
+            {modelType === 'speech' && speechRuntimeConnected !== null && (
+              <span className={`inline-flex items-center gap-1 px-2 py-1.5 h-9 text-xs rounded-md border ${
+                speechRuntimeConnected
+                  ? 'bg-green-500/10 text-green-600 border-green-500/30'
+                  : 'bg-red-500/10 text-red-600 border-red-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${speechRuntimeConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                {speechRuntimeConnected ? 'Runtime Connected' : 'Runtime Offline'}
+              </span>
+            )}
+          </div>
 
           {/* Inference-specific selectors */}
           {modelType === 'inference' && USE_PROJECT_CHAT && (

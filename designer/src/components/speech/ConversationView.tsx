@@ -1,12 +1,19 @@
 import { useRef, useEffect } from 'react'
-import { Volume2 } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Volume2, StopCircle } from 'lucide-react'
 import type { SpeechMessage } from '../../types/ml'
 
 interface ConversationViewProps {
   messages: SpeechMessage[]
   onPlayAudio?: (messageId: string) => void
   playingMessageId?: string | null
+  /** Currently streaming user transcription text */
+  streamingUserText?: string
+  /** Currently streaming assistant response text */
+  streamingAssistantText?: string
+  /** Whether the assistant is currently speaking (for stop button) */
+  isSpeaking?: boolean
+  /** Callback to stop speaking */
+  onStopSpeaking?: () => void
   className?: string
 }
 
@@ -14,16 +21,20 @@ export function ConversationView({
   messages,
   onPlayAudio,
   playingMessageId,
+  streamingUserText,
+  streamingAssistantText,
+  isSpeaking,
+  onStopSpeaking,
   className = '',
 }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or streaming content changes
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, streamingUserText, streamingAssistantText])
 
   if (messages.length === 0) {
     return (
@@ -56,6 +67,46 @@ export function ConversationView({
           onPlayAudio={() => onPlayAudio?.(message.id)}
         />
       ))}
+
+      {/* Streaming user transcription */}
+      {streamingUserText && (
+        <div className="w-full flex justify-end">
+          <div className="flex flex-col items-end max-w-[80%] md:max-w-[70%]">
+            <div className="bg-secondary text-foreground rounded-lg px-4 py-3">
+              <p className="text-base leading-relaxed italic text-foreground/70">
+                {streamingUserText}
+                <span className="animate-pulse ml-0.5">▊</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Streaming assistant response */}
+      {streamingAssistantText && (
+        <div className="w-full flex justify-start">
+          <div className="flex flex-col items-start max-w-[80%] md:max-w-[70%]">
+            <div className="flex items-start gap-2">
+              {/* Stop button when speaking */}
+              {isSpeaking && onStopSpeaking && (
+                <button
+                  onClick={onStopSpeaking}
+                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-red-500/20 text-red-600 hover:bg-red-500/30"
+                  aria-label="Stop speaking"
+                >
+                  <StopCircle className="w-4 h-4" />
+                </button>
+              )}
+              <div className="text-[15px] md:text-base leading-relaxed text-foreground/90">
+                <p className="text-base leading-relaxed">
+                  {streamingAssistantText}
+                  <span className="animate-pulse ml-0.5">▊</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

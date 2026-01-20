@@ -712,6 +712,12 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal end of LLM response
+                    # This ensures the client can add the user message to history
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -817,6 +823,12 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal end of LLM response
+                    # This ensures the client can add the user message to history
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             t_end = time.perf_counter()
             logger.info(f"Text turn completed in {(t_end - t_start)*1000:.1f}ms")

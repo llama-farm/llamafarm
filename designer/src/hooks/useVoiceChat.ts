@@ -38,6 +38,7 @@ export interface UseVoiceChatOptions {
   language?: string
   speed?: number
   systemPrompt?: string
+  silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
   autoConnect?: boolean
   onError?: (error: string) => void
 }
@@ -80,6 +81,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     language,
     speed,
     systemPrompt,
+    silenceDuration,
     autoConnect = false,
     onError,
   } = options
@@ -186,6 +188,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       language,
       speed,
       systemPrompt,
+      silenceDuration,
     }
 
     const ws = createVoiceChatConnection(namespace, project, config, {
@@ -193,6 +196,10 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         hasConnectedRef.current = true // Mark as successfully connected
         setSessionId(id)
         setIsConnected(true)
+        // Send VAD config after connection established
+        if (silenceDuration !== undefined && ws.readyState === WebSocket.OPEN) {
+          sendConfigUpdate(ws, { silence_duration: silenceDuration })
+        }
       },
       onStateChange: (state) => {
         setVoiceState(state)
@@ -204,44 +211,48 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         }
       },
       onLLMText: (text, isFinal) => {
+        // Add user message on FIRST LLM text received (before any assistant content)
+        // This ensures proper message ordering: user message appears before assistant response
+        if (currentUserTextRef.current && currentAssistantTextRef.current === '') {
+          const userMessage: VoiceMessage = {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            text: currentUserTextRef.current,
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, userMessage])
+          currentUserTextRef.current = ''
+          setCurrentTranscription('')
+        }
+
         setCurrentLLMText((prev) => prev + text)
         currentAssistantTextRef.current += text
 
         if (isFinal) {
-          // Add user message
-          if (currentUserTextRef.current) {
-            const userMessage: VoiceMessage = {
-              id: `user-${Date.now()}`,
-              role: 'user',
-              text: currentUserTextRef.current,
+          // LLM response complete - add the full assistant message now
+          if (currentAssistantTextRef.current) {
+            const combinedAudio = currentAssistantAudioRef.current.length > 0
+              ? combineAudioBuffers(currentAssistantAudioRef.current)
+              : undefined
+
+            const assistantMessage: VoiceMessage = {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              text: currentAssistantTextRef.current,
               timestamp: new Date(),
+              audioData: combinedAudio,
             }
-            setMessages((prev) => [...prev, userMessage])
-            currentUserTextRef.current = ''
+            setMessages((prev) => [...prev, assistantMessage])
+            currentAssistantTextRef.current = ''
+            currentAssistantAudioRef.current = []
           }
-          setCurrentTranscription('')
+          setCurrentLLMText('')
         }
       },
       onTTSDone: () => {
-        // Add assistant message when TTS is complete
-        if (currentAssistantTextRef.current) {
-          // Combine all audio chunks for this response
-          const combinedAudio = currentAssistantAudioRef.current.length > 0
-            ? combineAudioBuffers(currentAssistantAudioRef.current)
-            : undefined
-
-          const assistantMessage: VoiceMessage = {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            text: currentAssistantTextRef.current,
-            timestamp: new Date(),
-            audioData: combinedAudio,
-          }
-          setMessages((prev) => [...prev, assistantMessage])
-          currentAssistantTextRef.current = ''
-          currentAssistantAudioRef.current = []
-        }
-        setCurrentLLMText('')
+        // TTS done is sent per-phrase, not at end of response
+        // We don't add messages here - messages are added when LLM text is final
+        // This callback can be used for other purposes like tracking playback progress
       },
       onAudio: (audioData) => {
         // Store for message history
@@ -268,7 +279,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     })
 
     wsRef.current = ws
-  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, onError, processAudioQueue])
+  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, silenceDuration, onError, processAudioQueue])
 
   // Disconnect from voice chat
   const disconnect = useCallback(() => {
@@ -297,6 +308,11 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     if (!isConnected) {
       setError('Not connected to voice chat')
       return
+    }
+
+    // If assistant is speaking, interrupt first (barge-in)
+    if (voiceState === 'speaking' && wsRef.current?.readyState === WebSocket.OPEN) {
+      sendInterrupt(wsRef.current)
     }
 
     try {
@@ -341,7 +357,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       setError(message)
       onError?.(message)
     }
-  }, [isConnected, onError])
+  }, [isConnected, voiceState, onError])
 
   // Stop recording
   const stopRecording = useCallback(() => {
@@ -359,6 +375,9 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     if (!text.trim()) {
       return
     }
+    // Store the user text so it can be added to messages when LLM response is final
+    // This ensures the user message is captured even if server transcription echo is delayed
+    currentUserTextRef.current = text.trim()
     sendTextToWs(wsRef.current, text.trim())
   }, [isConnected])
 
@@ -392,6 +411,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         language: config.language,
         speed: config.speed,
         sentence_boundary_only: config.sentenceBoundaryOnly,
+        silence_duration: config.silenceDuration,
       })
     }
   }, [])

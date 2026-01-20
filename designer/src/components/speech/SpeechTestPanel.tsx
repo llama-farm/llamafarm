@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Mic, Send, MicOff, StopCircle, Volume2, Wifi, WifiOff, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare } from 'lucide-react'
+import { Mic, Send, MicOff, StopCircle, Volume2, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare } from 'lucide-react'
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
+import { VADSettings } from './VADSettings'
 import { VoiceCloning } from './VoiceCloning'
 import { ConversationView } from './ConversationView'
 import { TranscriptionOutput } from './TranscriptionOutput'
@@ -52,6 +53,10 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   const [ttsVoice, setTtsVoice] = useState('alba')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
 
+  // VAD Config State
+  const [vadEnabled, setVadEnabled] = useState(true)
+  const [silenceDuration, setSilenceDuration] = useState(0.4)
+
   // Available voices from backend (fetched but used for validation)
   const [, setAvailableVoices] = useState<VoiceInfo[]>([])
   const [, setVoicesLoading] = useState(false)
@@ -63,6 +68,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   // Conversation State
   const [messages, setMessages] = useState<SpeechMessage[]>([])
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null)
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
 
   // STT-only State
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null)
@@ -84,13 +90,14 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
 
   // Backend connectivity and model loading
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
-  const [sttModelLoading, setSttModelLoading] = useState(false)
+  const [, setSttModelLoading] = useState(false)
   const [, setSttModelReady] = useState(false)
   const [, setSttModelError] = useState<string | null>(null)
 
   // UI State
   const [configExpanded, setConfigExpanded] = useState(true)
   const [pendingVoiceChatRecord, setPendingVoiceChatRecord] = useState(false) // Waiting for connection to start recording
+  const [pendingTextMessage, setPendingTextMessage] = useState<string | null>(null) // Waiting for connection to send text
 
   // LLM Integration State
   const activeProject = useActiveProject()
@@ -112,6 +119,9 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
   }, [availableLLMModels, selectedLLMModel])
 
   // Voice chat hook for LLM conversation
+  // Effective silence duration: use 999s when VAD is disabled to effectively disable auto-detection
+  const effectiveSilenceDuration = vadEnabled ? silenceDuration : 999
+
   const voiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
@@ -121,6 +131,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     ttsVoice,
     language: sttLanguage,
     speed: ttsSpeed,
+    silenceDuration: effectiveSilenceDuration,
     autoConnect: false,
     onError: (error) => setTranscriptionError(error),
   })
@@ -166,14 +177,23 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
   }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
 
+  // Send pending text message when voice chat connects
+  useEffect(() => {
+    if (pendingTextMessage && voiceChat.isConnected) {
+      voiceChat.sendTextMessage(pendingTextMessage)
+      setPendingTextMessage(null)
+    }
+  }, [pendingTextMessage, voiceChat.isConnected, voiceChat])
+
   // Handle voice chat connection errors
   useEffect(() => {
-    if (pendingVoiceChatRecord && voiceChat.error) {
+    if ((pendingVoiceChatRecord || pendingTextMessage) && voiceChat.error) {
       setPendingVoiceChatRecord(false)
+      setPendingTextMessage(null)
       setRecordingState('idle')
       setTranscriptionError(voiceChat.error)
     }
-  }, [pendingVoiceChatRecord, voiceChat.error])
+  }, [pendingVoiceChatRecord, pendingTextMessage, voiceChat.error])
 
   // Sync voiceChat state with local state
   useEffect(() => {
@@ -517,9 +537,21 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
   }, [sttModel, sttLanguage, ttsEnabled, ttsModel, ttsVoice, ttsSpeed])
 
+  // Stop any playing audio
+  const stopAudioPlayback = useCallback(() => {
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause()
+      audioPlayerRef.current.currentTime = 0
+    }
+    setPlayingMessageId(null)
+  }, [])
+
   // Send text message / synthesize TTS
   const sendTextMessage = useCallback(async () => {
     if (!textInput.trim()) return
+
+    // Stop any playing audio when user sends input
+    stopAudioPlayback()
 
     // Collapse settings on first interaction
     setConfigExpanded(false)
@@ -559,11 +591,8 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         // Connect if not already connected
         if (!voiceChat.isConnected) {
           voiceChat.connect()
-          // Wait a bit for connection, then send
-          // The useEffect will sync messages when they arrive
-          setTimeout(() => {
-            voiceChat.sendTextMessage(inputText)
-          }, 500)
+          // Store pending message - effect will send when connected
+          setPendingTextMessage(inputText)
         } else {
           voiceChat.sendTextMessage(inputText)
         }
@@ -615,7 +644,7 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         }
       }
     }
-  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, voiceChat])
+  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, voiceChat, stopAudioPlayback])
 
   // Handle key press in textarea
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -673,48 +702,51 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
     }
   }, [playingMessageId])
 
+  // Play audio when playingMessageId changes
+  useEffect(() => {
+    if (!playingMessageId) {
+      // Stop playback if no message selected
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause()
+      }
+      return
+    }
+
+    const message = messages.find(m => m.id === playingMessageId)
+    if (!message?.audioUrl) {
+      setPlayingMessageId(null)
+      return
+    }
+
+    // Create or reuse audio element
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio()
+    }
+
+    const audio = audioPlayerRef.current
+    audio.src = message.audioUrl
+    audio.onended = () => setPlayingMessageId(null)
+    audio.onerror = () => setPlayingMessageId(null)
+    audio.play().catch(() => setPlayingMessageId(null))
+
+    return () => {
+      audio.onended = null
+      audio.onerror = null
+    }
+  }, [playingMessageId, messages])
+
+  // Stop audio playback when user starts recording or speaking
+  useEffect(() => {
+    if (recordingState === 'recording' || voiceChat.isRecording) {
+      stopAudioPlayback()
+    }
+  }, [recordingState, voiceChat.isRecording, stopAudioPlayback])
+
   // Show mic permission prompt if needed and trying to record
   const needsMicPermission = micPermission !== 'granted' && sttEnabled
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {/* Backend status indicator */}
-      {backendConnected !== null && (
-        <div className={`flex-shrink-0 px-4 py-1.5 text-xs flex items-center gap-1.5 ${
-          backendConnected ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'
-        }`}>
-          {backendConnected ? (
-            <>
-              <Wifi className="h-3 w-3" />
-              <span>Connected to Universal Runtime</span>
-              {mode === 'conversation' && llmAvailable && voiceChat.isConnected && (
-                <span className="ml-2 text-green-600">• Voice Chat Active</span>
-              )}
-              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'listening' && (
-                <span className="ml-2 text-blue-600">• Listening...</span>
-              )}
-              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'processing' && (
-                <span className="ml-2 text-purple-600">• Processing...</span>
-              )}
-              {mode === 'conversation' && llmAvailable && voiceChat.voiceState === 'speaking' && (
-                <span className="ml-2 text-teal-600">• Speaking...</span>
-              )}
-              {sttEnabled && sttModelLoading && !llmAvailable && (
-                <span className="ml-2 text-yellow-600">• Loading STT model...</span>
-              )}
-              {sttEnabled && isTranscribing && !llmAvailable && (
-                <span className="ml-2 text-blue-600">• Transcribing (model may be loading on first use)...</span>
-              )}
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-3 w-3" />
-              <span>Backend unavailable - check that Universal Runtime is running</span>
-            </>
-          )}
-        </div>
-      )}
-
       {/* Configuration Section - Collapsible */}
       <div className="flex-shrink-0 border-b border-border">
         {/* Header - always visible */}
@@ -787,29 +819,30 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
               />
             )}
 
-            {/* LLM Model Selection - only shown in conversation mode */}
+            {/* LLM Model Selection + VAD Settings - side by side in conversation mode */}
             {mode === 'conversation' && (
-              <div className="rounded-lg border border-border bg-card/40 p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">LLM Response</span>
+              <div className="grid grid-cols-2 gap-2">
+                {/* LLM Response Card */}
+                <div className="rounded-lg border border-border bg-card/40 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">LLM Response</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={llmEnabled}
+                        onCheckedChange={setLlmEnabled}
+                        disabled={!activeProject || availableLLMModels.length === 0 || voiceChat.isConnected}
+                        aria-label="Enable LLM responses"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {llmEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={llmEnabled}
-                      onCheckedChange={setLlmEnabled}
-                      disabled={!activeProject || availableLLMModels.length === 0 || voiceChat.isConnected}
-                      aria-label="Enable LLM responses"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {llmEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                </div>
-                {activeProject && availableLLMModels.length > 0 ? (
-                  <div className={`flex items-center gap-3 ${!llmEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <div className="flex-1 max-w-xs">
+                  {activeProject && availableLLMModels.length > 0 ? (
+                    <div className={`space-y-1 ${!llmEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
                       <Selector
                         value={selectedLLMModel}
                         options={availableLLMModels.map(m => ({
@@ -820,24 +853,38 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                         onChange={setSelectedLLMModel}
                         disabled={!llmEnabled || voiceChat.isConnected}
                       />
+                      <span className="text-xs text-muted-foreground">
+                        {voiceChat.isConnected ? (
+                          <span className="text-green-600">Connected</span>
+                        ) : llmEnabled ? (
+                          'Will connect on first message'
+                        ) : (
+                          'Echo mode (no LLM)'
+                        )}
+                      </span>
                     </div>
+                  ) : (
                     <span className="text-xs text-muted-foreground">
-                      {voiceChat.isConnected ? (
-                        <span className="text-green-600">Connected</span>
-                      ) : llmEnabled ? (
-                        'Will connect on first message'
-                      ) : (
-                        'Echo mode (no LLM)'
-                      )}
+                      {!activeProject
+                        ? 'Select a project to enable LLM conversation'
+                        : 'No LLM models configured in this project'}
                     </span>
-                  </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {!activeProject
-                      ? 'Select a project to enable LLM conversation'
-                      : 'No LLM models configured in this project'}
-                  </span>
-                )}
+                  )}
+                </div>
+
+                {/* VAD Settings Card - always visible in conversation mode */}
+                <VADSettings
+                  enabled={vadEnabled}
+                  onEnabledChange={setVadEnabled}
+                  silenceDuration={silenceDuration}
+                  onSilenceDurationChange={(duration) => {
+                    setSilenceDuration(duration)
+                    // Update the connected session if already connected
+                    if (voiceChat.isConnected) {
+                      voiceChat.updateConfig({ silenceDuration: duration })
+                    }
+                  }}
+                />
               </div>
             )}
           </div>
@@ -880,26 +927,12 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
                 messages={messages}
                 onPlayAudio={handlePlayMessageAudio}
                 playingMessageId={playingMessageId}
+                streamingUserText={llmAvailable ? voiceChat.currentTranscription : undefined}
+                streamingAssistantText={llmAvailable ? voiceChat.currentLLMText : undefined}
+                isSpeaking={llmAvailable && voiceChat.voiceState === 'speaking'}
+                onStopSpeaking={() => voiceChat.interrupt()}
                 className="flex-1"
               />
-              {/* Live transcription/LLM text display when using voice chat */}
-              {llmAvailable && (voiceChat.currentTranscription || voiceChat.currentLLMText) && (
-                <div className="flex-shrink-0 mx-4 mb-2 p-3 rounded-lg bg-muted/50 border border-border">
-                  {voiceChat.currentTranscription && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">You: </span>
-                      <span className="text-foreground italic">{voiceChat.currentTranscription}</span>
-                    </div>
-                  )}
-                  {voiceChat.currentLLMText && (
-                    <div className="text-sm mt-1">
-                      <span className="text-muted-foreground">Assistant: </span>
-                      <span className="text-foreground">{voiceChat.currentLLMText}</span>
-                      <span className="animate-pulse">▊</span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -972,108 +1005,105 @@ export function SpeechTestPanel({ className = '' }: SpeechTestPanelProps) {
         {/* Input Area (for conversation and STT modes) */}
         {!needsMicPermission && (mode === 'conversation' || mode === 'stt') && (
           <div className="flex-shrink-0 p-3 border-t border-border bg-background/60">
-            <div className="flex items-end gap-2">
-              {/* Text input (only for conversation mode) */}
-              {mode === 'conversation' && (
-                <textarea
-                  ref={inputRef}
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type or speak..."
-                  rows={1}
-                  className="flex-1 px-3 py-2 rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[40px] max-h-[120px]"
-                  style={{ height: 'auto' }}
-                />
-              )}
+            <div className="flex items-center gap-2">
+              {/* Recording mode: full-width waveform with stop button on right */}
+              {recordingState === 'recording' && activeStream ? (
+                <>
+                  {/* Full-width waveform */}
+                  <div className="flex-1 flex items-center justify-center">
+                    <Waveform
+                      stream={activeStream}
+                      isActive={true}
+                      height={24}
+                      barCount={80}
+                      gap={1}
+                      color="rgb(156, 163, 175)"
+                      className="w-full"
+                    />
+                  </div>
 
-              {/* STT-only prompt or waveform */}
-              {mode === 'stt' && (
-                <div className="flex-1 py-2">
-                  {recordingState === 'recording' && activeStream ? (
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 text-red-500">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-sm font-medium">Recording</span>
-                      </div>
-                      <Waveform
-                        stream={activeStream}
-                        isActive={true}
-                        height={32}
-                        barCount={24}
-                        color="rgb(239, 68, 68)"
-                        className="flex-1"
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      {recordingState === 'idle'
-                        ? 'Click the microphone to start recording'
-                        : 'Processing audio...'}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Waveform for conversation mode when recording */}
-              {mode === 'conversation' && recordingState === 'recording' && activeStream && (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <Waveform
-                    stream={activeStream}
-                    isActive={true}
-                    height={32}
-                    barCount={16}
-                    color="rgb(239, 68, 68)"
-                    className="w-24"
-                  />
-                </div>
-              )}
-
-              {/* Mic button */}
-              {sttEnabled && micPermission === 'granted' && (
-                <Button
-                  variant={recordingState === 'recording' ? 'destructive' : 'outline'}
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  onClick={recordingState === 'recording' ? stopRecording : startRecording}
-                  disabled={recordingState === 'processing'}
-                  aria-label={recordingState === 'recording' ? 'Stop recording' : 'Start recording'}
-                >
-                  {recordingState === 'recording' ? (
+                  {/* Stop button */}
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-10 w-10 rounded-full flex-shrink-0"
+                    onClick={stopRecording}
+                    aria-label="Stop recording"
+                  >
                     <StopCircle className="h-5 w-5" />
-                  ) : recordingState === 'processing' ? (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  ) : (
-                    <Mic className="h-5 w-5" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* Text input (only for conversation mode, hidden when recording) */}
+                  {mode === 'conversation' && (
+                    <textarea
+                      ref={inputRef}
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Type or speak..."
+                      rows={1}
+                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[40px] max-h-[120px]"
+                      style={{ height: 'auto' }}
+                    />
                   )}
-                </Button>
-              )}
 
-              {/* Mic permission denied indicator */}
-              {sttEnabled && micPermission === 'denied' && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  onClick={requestMicPermission}
-                  aria-label="Microphone access denied"
-                >
-                  <MicOff className="h-5 w-5 text-muted-foreground" />
-                </Button>
-              )}
+                  {/* STT-only prompt */}
+                  {mode === 'stt' && (
+                    <div className="flex-1 py-2">
+                      <div className="text-sm text-muted-foreground">
+                        {recordingState === 'idle'
+                          ? 'Click the microphone to start recording'
+                          : 'Processing audio...'}
+                      </div>
+                    </div>
+                  )}
 
-              {/* Send button (only for conversation mode) */}
-              {mode === 'conversation' && (
-                <Button
-                  size="icon"
-                  className="h-10 w-10 rounded-full"
-                  onClick={sendTextMessage}
-                  disabled={!textInput.trim()}
-                  aria-label="Send message"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
+                  {/* Mic button */}
+                  {sttEnabled && micPermission === 'granted' && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-full flex-shrink-0"
+                      onClick={startRecording}
+                      disabled={recordingState === 'processing'}
+                      aria-label="Start recording"
+                    >
+                      {recordingState === 'processing' ? (
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Mic className="h-5 w-5" />
+                      )}
+                    </Button>
+                  )}
+
+                  {/* Mic permission denied indicator */}
+                  {sttEnabled && micPermission === 'denied' && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-full flex-shrink-0"
+                      onClick={requestMicPermission}
+                      aria-label="Microphone access denied"
+                    >
+                      <MicOff className="h-5 w-5 text-muted-foreground" />
+                    </Button>
+                  )}
+
+                  {/* Send button (only for conversation mode) */}
+                  {mode === 'conversation' && (
+                    <Button
+                      size="icon"
+                      className="h-10 w-10 rounded-full flex-shrink-0"
+                      onClick={sendTextMessage}
+                      disabled={!textInput.trim()}
+                      aria-label="Send message"
+                    >
+                      <Send className="h-5 w-5" />
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
