@@ -327,7 +327,9 @@ class SchemaHandler:
             else (parser.type if parser else None)
         )
         embedder_type = (
-            embedder.type.value if embedder and hasattr(embedder.type, "value") else None
+            embedder.type.value
+            if embedder and hasattr(embedder.type, "value")
+            else (embedder.type if embedder else None)
         )
         retrieval_type = (
             retrieval.type.value
@@ -337,7 +339,7 @@ class SchemaHandler:
         vector_store_type = (
             vector_store.type.value
             if vector_store and hasattr(vector_store.type, "value")
-            else None
+            else (vector_store.type if vector_store else None)
         )
 
         return {
