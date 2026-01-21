@@ -301,18 +301,24 @@ class DatasetService:
             and rag_config.data_processing_strategies
         ):
             for strategy in rag_config.data_processing_strategies:
-                if hasattr(strategy, "name") and strategy.name:
-                    if strategy.name not in strategies:
-                        strategies.append(strategy.name)
+                if (
+                    hasattr(strategy, "name")
+                    and strategy.name
+                    and strategy.name not in strategies
+                ):
+                    strategies.append(strategy.name)
         elif (
             isinstance(rag_config, dict) and "data_processing_strategies" in rag_config
         ):
             strat_list = rag_config["data_processing_strategies"]
             if isinstance(strat_list, list):
                 for strategy in strat_list:
-                    if isinstance(strategy, dict) and "name" in strategy:
-                        if strategy["name"] not in strategies:
-                            strategies.append(strategy["name"])
+                    if (
+                        isinstance(strategy, dict)
+                        and "name" in strategy
+                        and strategy["name"] not in strategies
+                    ):
+                        strategies.append(strategy["name"])
 
         return strategies
 

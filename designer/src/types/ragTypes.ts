@@ -1024,7 +1024,7 @@ export interface UniversalExtractorConfig {
 // Type Constants
 // ============================================================================
 
-export const PARSER_TYPES = ["CSVParser_LlamaIndex","CSVParser_Pandas","CSVParser_Python","DocxParser_LlamaIndex","DocxParser_PythonDocx","ExcelParser_LlamaIndex","ExcelParser_OpenPyXL","ExcelParser_Pandas","MSGParser_ExtractMsg","MarkdownParser_LlamaIndex","MarkdownParser_Python","PDFParser_LlamaIndex","PDFParser_PyPDF2","TextParser_LlamaIndex","TextParser_Python","UniversalParser_","auto"] as const
+export const PARSER_TYPES = ["CSVParser_LlamaIndex","CSVParser_Pandas","CSVParser_Python","DocxParser_LlamaIndex","DocxParser_PythonDocx","ExcelParser_LlamaIndex","ExcelParser_OpenPyXL","ExcelParser_Pandas","MSGParser_ExtractMsg","MarkdownParser_LlamaIndex","MarkdownParser_Python","PDFParser_LlamaIndex","PDFParser_PyPDF2","TextParser_LlamaIndex","TextParser_Python","UniversalParser","auto"] as const
 export type ParserType = typeof PARSER_TYPES[number]
 
 export const EXTRACTOR_TYPES = ["ContentStatisticsExtractor","DateTimeExtractor","EntityExtractor","HeadingExtractor","KeywordExtractor","LinkExtractor","PathExtractor","PatternExtractor","RAKEExtractor","SummaryExtractor","TFIDFExtractor","TableExtractor","YAKEExtractor","UniversalExtractor"] as const

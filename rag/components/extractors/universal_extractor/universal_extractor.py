@@ -445,6 +445,9 @@ class UniversalExtractor(BaseExtractor):
         Returns:
             Sentence count
         """
+        # Return 0 for empty or whitespace-only content
+        if not text or not text.strip():
+            return 0
         # Count sentence-ending punctuation followed by space or end
         endings = len(re.findall(r"[.!?]+(?:\s|$)", text))
         return max(endings, 1)
