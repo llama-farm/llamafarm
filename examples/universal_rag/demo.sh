@@ -102,7 +102,10 @@ else:
     new_db['name'] = new_name
     cfg_dir = new_db.setdefault('config', {})
     persist = cfg_dir.get('persist_directory') or f"./data/{base_name}"
-    cfg_dir['persist_directory'] = persist.rsplit('/', 1)[0] + f"/{new_name}"
+    # Use pathlib for robust cross-platform path manipulation
+    from pathlib import Path
+    new_persist_dir = Path(persist).parent / new_name
+    cfg_dir['persist_directory'] = str(new_persist_dir)
     databases.append(new_db)
     cfg_path.write_text(yaml.dump(cfg, sort_keys=False, allow_unicode=True))
     print(f"Added database {new_name} to configuration.")

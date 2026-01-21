@@ -74,8 +74,8 @@ class TestCoreModules:
         """Test creating parsers via factory."""
         from core.factories import create_parser_from_config
 
-        # Test creating text parser
-        config = {"type": "text", "config": {}}
+        # Test creating text parser using proper parser name
+        config = {"type": "TextParser_Python", "config": {}}
         parser = create_parser_from_config(config)
         assert parser is not None
 

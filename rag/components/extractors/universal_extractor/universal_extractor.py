@@ -161,11 +161,15 @@ class UniversalExtractor(BaseExtractor):
         metadata["processed_at"] = processing_time
         metadata["extractor"] = "UniversalExtractor"
 
-        # Extract document-level metadata from source path
+        # Extract document-level metadata from source path (only if not already set)
         if doc.source:
             source_path = Path(doc.source)
             if source_path.exists():
-                metadata.update(self._extract_file_metadata(source_path))
+                file_metadata = self._extract_file_metadata(source_path, metadata)
+                # Only add keys that don't exist in metadata
+                for key, value in file_metadata.items():
+                    if key not in metadata:
+                        metadata[key] = value
 
         # Extract chunk-level metadata
         metadata.update(self._extract_chunk_metadata(content, metadata))
@@ -177,34 +181,45 @@ class UniversalExtractor(BaseExtractor):
         doc.metadata = metadata
         return doc
 
-    def _extract_file_metadata(self, file_path: Path) -> dict[str, Any]:
-        """Extract metadata from file system.
+    def _extract_file_metadata(
+        self, file_path: Path, existing_metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Extract metadata from file system if not already present.
 
         Args:
             file_path: Path to the source file
+            existing_metadata: The document's current metadata
 
         Returns:
-            Dictionary with file metadata
+            Dictionary with file metadata (only fields not in existing_metadata)
         """
         metadata: dict[str, Any] = {}
 
         try:
             stat = file_path.stat()
 
-            # Basic file info
-            metadata["document_name"] = file_path.name
-            metadata["document_path"] = str(file_path.absolute())
-            metadata["document_type"] = file_path.suffix.lower()
-            metadata["document_size"] = stat.st_size
+            # Basic file info - only set if not already present
+            if "document_name" not in existing_metadata:
+                metadata["document_name"] = file_path.name
+            if "document_path" not in existing_metadata:
+                metadata["document_path"] = str(file_path.absolute())
+            if "document_type" not in existing_metadata:
+                metadata["document_type"] = file_path.suffix.lower()
+            if "document_size" not in existing_metadata:
+                metadata["document_size"] = stat.st_size
 
-            # Timestamps
-            metadata["created_date"] = datetime.fromtimestamp(
-                stat.st_birthtime if hasattr(stat, "st_birthtime") else stat.st_ctime,
-                tz=UTC,
-            ).isoformat()
-            metadata["modified_date"] = datetime.fromtimestamp(
-                stat.st_mtime, tz=UTC
-            ).isoformat()
+            # Timestamps - only set if not already present
+            if "created_date" not in existing_metadata:
+                metadata["created_date"] = datetime.fromtimestamp(
+                    stat.st_birthtime
+                    if hasattr(stat, "st_birthtime")
+                    else stat.st_ctime,
+                    tz=UTC,
+                ).isoformat()
+            if "modified_date" not in existing_metadata:
+                metadata["modified_date"] = datetime.fromtimestamp(
+                    stat.st_mtime, tz=UTC
+                ).isoformat()
 
         except Exception as e:
             self.logger.warning(f"Failed to extract file metadata: {e}")

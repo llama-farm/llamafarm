@@ -389,34 +389,36 @@ class UniversalParser(BaseParser):
     def _chunk_sections(self, text: str) -> list[str]:
         """Chunk text by markdown headers (h1-h6).
 
+        Each header is grouped with its following content until the next header.
+
         Args:
             text: Text to chunk
 
         Returns:
             List of section-based chunks
         """
-        # Pattern for markdown headers
-        header_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+        # Pattern for markdown headers - captures the full header line
+        header_pattern = re.compile(r"^(#{1,6}\s+.+)$", re.MULTILINE)
 
+        # Split text by headers, keeping the headers
+        parts = header_pattern.split(text)
         chunks: list[str] = []
-        last_end = 0
 
-        for match in header_pattern.finditer(text):
-            # Add text before this header as a chunk
-            if match.start() > last_end:
-                prev_text = text[last_end : match.start()].strip()
-                if prev_text and len(prev_text) >= self.min_chunk_size:
-                    chunks.extend(self._split_if_too_large(prev_text))
+        # First element is text before any headers
+        if parts[0].strip():
+            preamble = parts[0].strip()
+            if len(preamble) >= self.min_chunk_size:
+                chunks.extend(self._split_if_too_large(preamble))
 
-            last_end = match.start()
+        # Group headers with their content (header at odd index, content at even)
+        for i in range(1, len(parts), 2):
+            header = parts[i]
+            content = parts[i + 1] if (i + 1) < len(parts) else ""
+            section = (header + content).strip()
+            if section and len(section) >= self.min_chunk_size:
+                chunks.extend(self._split_if_too_large(section))
 
-        # Add remaining text
-        if last_end < len(text):
-            remaining = text[last_end:].strip()
-            if remaining and len(remaining) >= self.min_chunk_size:
-                chunks.extend(self._split_if_too_large(remaining))
-
-        # If no sections found, fall back to paragraphs
+        # If no sections found or only preamble, fall back to paragraphs
         if not chunks:
             return self._chunk_paragraphs(text)
 
