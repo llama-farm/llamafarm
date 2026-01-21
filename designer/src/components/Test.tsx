@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import FontIcon from '../common/FontIcon'
 import ModeToggle from './ModeToggle'
 import { Button } from './ui/button'
@@ -13,13 +13,28 @@ import { useModeWithReset } from '../hooks/useModeWithReset'
 import { useConfigPointer } from '../hooks/useConfigPointer'
 import { useProject } from '../hooks/useProjects'
 import { useActiveProject } from '../hooks/useActiveProject'
+import { useOnboardingContext } from '../contexts/OnboardingContext'
 import type { ProjectConfig } from '../types/config'
 import { DevToolsProvider } from '../contexts/DevToolsContext'
 import { DevToolsDrawer } from './DevTools'
 
+// Sample test inputs for each sample dataset
+const SAMPLE_TEST_INPUTS: Record<string, string> = {
+  // Classifier samples
+  sentiment: "This product exceeded my expectations!",
+  expense: "Uber to downtown office meeting",
+  // Anomaly samples
+  'fridge-temp': "42.5",
+  'biometric': "85, 99.1, 95, 135, 18",
+  'build-status': "failed",
+  'support-ticket': "critical, security, phone, escalated, 0",
+}
+
 const Test = () => {
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { openPackageModal } = usePackageModal()
+  const onboarding = useOnboardingContext()
 
   // Model type for Test page: 'inference' (default), 'anomaly', 'classifier', 'document_scanning', or 'encoder'
   const [modelType, setModelType] = useState<'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'>(() => {
@@ -28,6 +43,69 @@ const Test = () => {
     if (stored === 'anomaly' || stored === 'classifier' || stored === 'document_scanning' || stored === 'encoder') return stored
     return 'inference'
   })
+
+  // Apply mode from URL param (takes precedence over localStorage/onboarding defaults)
+  // This is used when navigating from checklist with ?mode=classifier or ?mode=anomaly
+  useEffect(() => {
+    const modeParam = searchParams.get('mode')
+    if (modeParam === 'classifier' || modeParam === 'anomaly') {
+      setModelType(modeParam)
+
+      // Also set the model override from onboarding if available
+      // This ensures the trained model is auto-selected when coming from checklist
+      const { trainedModelName, trainedModelType } = onboarding.state.answers
+      if (trainedModelName && trainedModelType === modeParam) {
+        const overrideKey = modeParam === 'classifier'
+          ? 'lf_test_classifierModel_override'
+          : 'lf_test_anomalyModel_override'
+        localStorage.setItem(overrideKey, trainedModelName)
+      }
+
+      // Clean up the URL param without triggering navigation
+      const newParams = new URLSearchParams(searchParams)
+      newParams.delete('mode')
+      setSearchParams(newParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams, onboarding.state.answers])
+
+  // Track if we've applied onboarding defaults (only do once per session)
+  const appliedOnboardingDefaultsRef = useRef(false)
+
+  // Apply onboarding-based defaults on first visit (based on project type)
+  useEffect(() => {
+    if (appliedOnboardingDefaultsRef.current) return
+
+    const { projectType, dataStatus, selectedSampleDataset, trainedModelName, trainedModelType } = onboarding.state.answers
+
+    // Only apply if user has completed onboarding
+    if (!onboarding.state.onboardingCompleted) return
+
+    appliedOnboardingDefaultsRef.current = true
+
+    // Set model type based on project type
+    if (projectType === 'classifier' && trainedModelType === 'classifier' && trainedModelName) {
+      setModelType('classifier')
+      // Set as one-time override that TestChat will consume and clear
+      localStorage.setItem('lf_test_classifierModel_override', trainedModelName)
+    } else if (projectType === 'anomaly' && trainedModelType === 'anomaly' && trainedModelName) {
+      setModelType('anomaly')
+      // Set as one-time override that TestChat will consume and clear
+      localStorage.setItem('lf_test_anomalyModel_override', trainedModelName)
+    } else if (projectType === 'doc-qa' || projectType === 'exploring') {
+      // Doc-QA and exploring projects should always use inference (text generation) mode
+      setModelType('inference')
+    }
+
+    // Set sample input if available (for classifier/anomaly sample data)
+    if (dataStatus === 'sample-data' && selectedSampleDataset && SAMPLE_TEST_INPUTS[selectedSampleDataset]) {
+      const sampleInput = SAMPLE_TEST_INPUTS[selectedSampleDataset]
+      if (projectType === 'classifier') {
+        localStorage.setItem('lf_test_classifierInput', sampleInput)
+      } else if (projectType === 'anomaly') {
+        localStorage.setItem('lf_test_anomalyInput', sampleInput)
+      }
+    }
+  }, [onboarding.state.answers, onboarding.state.onboardingCompleted])
 
   // Persist modelType to localStorage
   useEffect(() => {

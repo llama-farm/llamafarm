@@ -55,7 +55,11 @@ dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 test = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "pytest-mock>=3.12.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.1.0",
+    "pytest-mock>=3.12.0",
+]
 test = ["pytest>=8.4.1", "pytest-asyncio>=1.1.0", "pytest-mock>=3.14.1"]
 
 [tool.pytest.ini_options]

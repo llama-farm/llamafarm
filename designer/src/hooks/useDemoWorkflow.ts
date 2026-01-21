@@ -10,8 +10,9 @@ import YAML from 'yaml'
 import projectService from '../api/projectService'
 import datasetService from '../api/datasets'
 import modelService from '../api/modelService'
-import { DemoConfig } from '../config/demos'
+import { type FileBasedDemo } from '../config/demos'
 import { projectKeys } from './useProjects'
+import { setActiveProject } from '../utils/projectUtils'
 
 export type DemoStep =
   | 'idle'
@@ -52,7 +53,7 @@ export interface UseDemoWorkflowReturn {
   processingResult: ProcessingResult | null
 
   // Actions
-  startDemo: (demo: DemoConfig, namespace: string) => Promise<void>
+  startDemo: (demo: FileBasedDemo, namespace: string) => Promise<void>
   reset: () => void
   navigateToChat: () => void
 }
@@ -111,7 +112,7 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
   }, [navigate, projectName])
 
   const startDemo = useCallback(
-    async (demo: DemoConfig, namespace: string) => {
+    async (demo: FileBasedDemo, namespace: string) => {
       // Always reset state completely before starting
       reset()
 
@@ -468,8 +469,20 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
         // Mark as completed
         updateStep('completed')
 
-        // Set as active project
-        localStorage.setItem('activeProject', newProjectName)
+        // Set as active project (dispatches lf-active-project event)
+        setActiveProject(newProjectName)
+
+        // Mark this project as a demo project (for checklist and onboarding logic)
+        let storedDemoProjects: string[] = []
+        try {
+          storedDemoProjects = JSON.parse(localStorage.getItem('lf_demo_projects') || '[]')
+        } catch {
+          storedDemoProjects = []
+        }
+        if (!storedDemoProjects.includes(newProjectName)) {
+          storedDemoProjects.push(newProjectName)
+          localStorage.setItem('lf_demo_projects', JSON.stringify(storedDemoProjects))
+        }
 
         // Invalidate queries
         queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })

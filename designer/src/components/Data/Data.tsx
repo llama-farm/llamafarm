@@ -4,7 +4,7 @@ import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
-import { AVAILABLE_DEMOS } from '../../config/demos'
+import { getFileBasedDemos } from '../../config/demos'
 import * as YAML from 'yaml'
 import {
   saveDatasetTaskId,
@@ -443,19 +443,231 @@ const Data = () => {
     return Array.isArray(ragDatabases) ? ragDatabases : []
   }, [projectResp])
 
-  // If navigated with ?dataset= query, auto-redirect to that dataset's detail if it exists
-  const hasRedirectedFromQuery = useRef(false)
+  // Ref for auto-import demo handling
+  const autoImportDemoRef = useRef<string | null>(null)
+  // Handle URL query params for modal triggers and redirects
+  const hasHandledQueryParams = useRef(false)
   useEffect(() => {
-    if (hasRedirectedFromQuery.current) return
+    if (hasHandledQueryParams.current) return
     const params = new URLSearchParams(location.search)
+
+    // Check for auto-import demo first (from onboarding wizard)
+    const autoImportDemo = params.get('autoImportDemo')
+    if (autoImportDemo) {
+      hasHandledQueryParams.current = true
+      autoImportDemoRef.current = autoImportDemo
+      // Clear the query param from URL
+      navigate('/chat/data', { replace: true })
+      return
+    }
+
+    // Check for modal triggers
+    const modal = params.get('modal')
+    if (modal === 'create') {
+      hasHandledQueryParams.current = true
+      setIsCreateOpen(true)
+      // Clear the query param from URL
+      navigate('/chat/data', { replace: true })
+      return
+    }
+    if (modal === 'import') {
+      hasHandledQueryParams.current = true
+      setIsImportOpen(true)
+      // Clear the query param from URL
+      navigate('/chat/data', { replace: true })
+      return
+    }
+
+    // Check for dataset redirect
     const datasetParam = params.get('dataset')
     if (!datasetParam) return
     const found = datasets.find(d => d.id === datasetParam)
     if (found) {
-      hasRedirectedFromQuery.current = true
+      hasHandledQueryParams.current = true
       navigate(`/chat/data/${found.id}`, { replace: true })
     }
   }, [location.search, datasets, navigate])
+
+  // Auto-import demo dataset when triggered from onboarding
+  useEffect(() => {
+    if (!autoImportDemoRef.current) return
+    if (!activeProject?.namespace || !activeProject?.project) return
+
+    const demoId = autoImportDemoRef.current
+    const fileBasedDemos = getFileBasedDemos()
+    const demo = fileBasedDemos.find(d => d.id === demoId)
+    if (!demo) {
+      autoImportDemoRef.current = null
+      return
+    }
+
+    // Trigger the import - reuse the existing import handler pattern
+    autoImportDemoRef.current = null
+
+    // Use a small delay to ensure the component is fully mounted
+    const timer = setTimeout(() => {
+      // Programmatically trigger the import by simulating what the modal does
+      const handleAutoImport = async () => {
+        try {
+          toast({
+            message: `Importing sample dataset "${demo.datasetName}"...`,
+            variant: 'default',
+          })
+
+          // Fetch demo config
+          const configResponse = await fetch(demo.configPath)
+          if (!configResponse.ok) {
+            throw new Error('Failed to fetch demo configuration')
+          }
+          const configText = await configResponse.text()
+          const configData = YAML.parse(configText)
+
+          // Extract processing strategy from demo config
+          const demoDataset = configData.datasets?.find(
+            (ds: any) => ds.name === demo.datasetName
+          )
+          const processingStrategyName =
+            demoDataset?.data_processing_strategy || 'default'
+          const database = demoDataset?.database || 'default'
+
+          // Import processing strategy and database if needed
+          const currentProjectConfig = (projectResp as any)?.project?.config
+          if (currentProjectConfig) {
+            let needsUpdate = false
+            let updatedConfig = { ...currentProjectConfig }
+
+            // Check and add processing strategy
+            const existingStrategies =
+              currentProjectConfig.rag?.data_processing_strategies || []
+            const strategyExists = existingStrategies.some(
+              (s: any) => s.name === processingStrategyName
+            )
+
+            if (!strategyExists) {
+              const demoStrategy =
+                configData.rag?.data_processing_strategies?.find(
+                  (s: any) => s.name === processingStrategyName
+                )
+              if (demoStrategy) {
+                updatedConfig = {
+                  ...updatedConfig,
+                  rag: {
+                    ...updatedConfig.rag,
+                    data_processing_strategies: [
+                      ...(updatedConfig.rag?.data_processing_strategies || []),
+                      demoStrategy,
+                    ],
+                  },
+                }
+                needsUpdate = true
+              }
+            }
+
+            // Check and add database
+            const existingDatabases = currentProjectConfig.rag?.databases || []
+            const databaseExists = existingDatabases.some(
+              (db: any) => db.name === database
+            )
+
+            if (!databaseExists && database !== 'default') {
+              const demoDatabase = configData.rag?.databases?.find(
+                (db: any) => db.name === database
+              )
+              if (demoDatabase) {
+                updatedConfig = {
+                  ...updatedConfig,
+                  rag: {
+                    ...updatedConfig.rag,
+                    databases: [
+                      ...(updatedConfig.rag?.databases || []),
+                      demoDatabase,
+                    ],
+                    default_database: database,
+                  },
+                }
+                needsUpdate = true
+              }
+            }
+
+            if (needsUpdate) {
+              await projectService.updateProject(
+                activeProject.namespace,
+                activeProject.project,
+                { config: updatedConfig }
+              )
+              await refetchDatasets()
+            }
+          }
+
+          // Create dataset
+          await createDatasetMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            name: demo.datasetName,
+            data_processing_strategy: processingStrategyName,
+            database: database,
+          })
+
+          // Upload demo files
+          toast({
+            message: `Uploading ${demo.files.length} file(s)...`,
+            variant: 'default',
+          })
+
+          for (const demoFile of demo.files) {
+            const fileResponse = await fetch(demoFile.path)
+            if (!fileResponse.ok) {
+              throw new Error(`Failed to fetch file: ${demoFile.filename}`)
+            }
+            const fileBlob = await fileResponse.blob()
+            const file = new File([fileBlob], demoFile.filename, {
+              type: demoFile.type,
+            })
+            await datasetService.uploadFileToDataset(
+              activeProject.namespace,
+              activeProject.project,
+              demo.datasetName,
+              file
+            )
+          }
+
+          // Process the dataset
+          toast({
+            message: 'Processing files...',
+            variant: 'default',
+          })
+
+          await datasetService.executeDatasetAction(
+            activeProject.namespace,
+            activeProject.project,
+            demo.datasetName,
+            { action_type: 'process' }
+          )
+
+          // Refetch datasets to update the UI
+          await refetchDatasets()
+
+          toast({
+            message: `Sample dataset "${demo.datasetName}" imported successfully!`,
+            variant: 'default',
+          })
+
+          // Navigate to the new dataset
+          navigate(`/chat/data/${demo.datasetName}`)
+        } catch (error) {
+          console.error('Auto-import failed:', error)
+          toast({
+            message: `Failed to import sample dataset: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            variant: 'destructive',
+          })
+        }
+      }
+
+      handleAutoImport()
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [activeProject, projectResp, navigate, toast, createDatasetMutation, refetchDatasets])
 
   // Map of fileKey -> array of dataset ids (transient UI state)
   // const [fileAssignments] = useState<Record<string, string[]>>({})
@@ -1634,8 +1846,9 @@ const Data = () => {
               return
             }
 
-            // Check if this is a demo import
-            const demo = AVAILABLE_DEMOS.find(d => d.id === sourceProjectId)
+            // Check if this is a demo import (only file-based demos can be imported here)
+            const fileBasedDemos = getFileBasedDemos()
+            const demo = fileBasedDemos.find(d => d.id === sourceProjectId)
 
             if (demo) {
               // Handle demo import

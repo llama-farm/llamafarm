@@ -1392,6 +1392,12 @@ export default function TestChat({
   // Selected anomaly model (stores the actual model name, not base_name)
   const [selectedAnomalyModel, setSelectedAnomalyModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    // Check for one-time override from onboarding (takes priority)
+    const override = localStorage.getItem('lf_test_anomalyModel_override')
+    if (override) {
+      localStorage.removeItem('lf_test_anomalyModel_override')
+      return override
+    }
     return localStorage.getItem('lf_test_anomalyModel')
   })
 
@@ -1416,6 +1422,20 @@ export default function TestChat({
       return
     }
 
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-support-ticket_20260115_123456" should match model with base_name "sample-support-ticket"
+    if (selectedAnomalyModel) {
+      const matchingModel = sortedAnomalyModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedAnomalyModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedAnomalyModel(matchingModel.name)
+        return
+      }
+    }
+
     // Selected model is invalid or doesn't exist - fall back to first available
     if (validModelNames.length > 0) {
       setSelectedAnomalyModel(validModelNames[0])
@@ -1435,7 +1455,17 @@ export default function TestChat({
   }, [selectedAnomalyModel, sortedAnomalyModels])
 
   // Anomaly input and result state
-  const [anomalyInput, setAnomalyInput] = useState('')
+  const [anomalyInput, setAnomalyInput] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    // Check for pre-populated input from onboarding sample flow
+    const stored = localStorage.getItem('lf_test_anomalyInput')
+    if (stored) {
+      // Clear it after reading so it doesn't persist across sessions
+      localStorage.removeItem('lf_test_anomalyInput')
+      return stored
+    }
+    return ''
+  })
   const [anomalyResult, setAnomalyResult] = useState<{
     score: number
     isAnomaly: boolean
@@ -1494,6 +1524,12 @@ export default function TestChat({
   // Selected classifier model
   const [selectedClassifierModel, setSelectedClassifierModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    // Check for one-time override from onboarding (takes priority)
+    const override = localStorage.getItem('lf_test_classifierModel_override')
+    if (override) {
+      localStorage.removeItem('lf_test_classifierModel_override')
+      return override
+    }
     return localStorage.getItem('lf_test_classifierModel')
   })
 
@@ -1515,6 +1551,20 @@ export default function TestChat({
       return
     }
 
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-sentiment_20260115_123456" should match model with base_name "sample-sentiment"
+    if (selectedClassifierModel) {
+      const matchingModel = sortedClassifierModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedClassifierModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedClassifierModel(matchingModel.name)
+        return
+      }
+    }
+
     if (validModelNames.length > 0) {
       setSelectedClassifierModel(validModelNames[0])
     } else {
@@ -1533,7 +1583,17 @@ export default function TestChat({
   }, [selectedClassifierModel, sortedClassifierModels])
 
   // Classifier input and result state
-  const [classifierInput, setClassifierInput] = useState('')
+  const [classifierInput, setClassifierInput] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    // Check for pre-populated input from onboarding sample flow
+    const stored = localStorage.getItem('lf_test_classifierInput')
+    if (stored) {
+      // Clear it after reading so it doesn't persist across sessions
+      localStorage.removeItem('lf_test_classifierInput')
+      return stored
+    }
+    return ''
+  })
   const [classifierResult, setClassifierResult] = useState<{
     predictions: Array<{
       label: string

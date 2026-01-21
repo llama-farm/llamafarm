@@ -1,0 +1,75 @@
+version: v1
+name: dynamic_values_complete
+namespace: examples
+
+runtime:
+  models:
+    - name: assistant
+      description: "Complete demo of dynamic value substitution"
+      provider: universal
+      model: llama3.2:3b
+      default: true
+      tool_call_strategy: native_api
+      prompts:
+        - system
+        - context
+      tools:
+        - type: function
+          name: search_knowledge_base
+          description: "Search the {{company_name | Company}} knowledge base for {{department | General}} topics"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query"
+              category:
+                type: string
+                description: "Category to search in {{department | General}}"
+                enum: ["general", "technical", "billing", "support"]
+            required:
+              - query
+        - type: function
+          name: create_ticket
+          description: "Create a support ticket for {{user_name | a customer}}"
+          parameters:
+            type: object
+            properties:
+              title:
+                type: string
+                description: "Ticket title"
+              priority:
+                type: string
+                enum: ["low", "medium", "high", "urgent"]
+                default: "medium"
+              description:
+                type: string
+            required:
+              - title
+              - description
+
+prompts:
+  - name: system
+    messages:
+      - role: system
+        content: |
+          You are a helpful customer service assistant for {{company_name | Acme Corp}}.
+          You work in the {{department | General}} department.
+
+          Current date: {{current_date | today}}
+
+          Be professional, helpful, and concise in your responses.
+
+  - name: context
+    messages:
+      - role: system
+        content: |
+          ## Customer Information
+          - Name: {{user_name | Valued Customer}}
+          - Account Tier: {{account_tier | standard}}
+          - Preferred Language: {{language | English}}
+
+          Adjust your responses based on the customer's tier:
+          - basic: Focus on self-service options
+          - standard: Provide helpful guidance
+          - premium: Offer personalized, detailed assistance
