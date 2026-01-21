@@ -5,19 +5,18 @@ sidebar_position: 4
 
 # Vision & ML Models
 
-LlamaFarm provides a comprehensive suite of vision and ML models through the Universal Runtime. These models are accessible via the LlamaFarm API proxy, making them easy to integrate into your applications.
+LlamaFarm provides a comprehensive suite of vision and ML models. These endpoints are accessible via the LlamaFarm API at `http://localhost:8000`.
 
 ## Quick Start
 
-All vision/ML endpoints are available through the LlamaFarm API at `http://localhost:8000/v1/ml/...` (when the server is running). The Universal Runtime runs on port 11540 by default.
+All vision/ML endpoints are available through the LlamaFarm API at `http://localhost:8000/v1/ml/...`.
 
 ```bash
-# Start the servers
+# Start the server
 lf services start
 
 # Or manually:
-cd runtimes/universal && uv run python server.py  # Port 11540
-cd server && uv run uvicorn main:app              # Port 8000
+nx start server
 ```
 
 ---

@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Specialized ML Models
 
-Beyond text generation, the Universal Runtime provides a comprehensive suite of specialized ML endpoints for document processing, text analysis, and anomaly detection. These endpoints run on the Universal Runtime server (port 11540).
+LlamaFarm provides a comprehensive suite of specialized ML endpoints for document processing, text analysis, and anomaly detection.
 
 ## Quick Reference
 
@@ -14,10 +14,10 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [OCR](#ocr-text-extraction) | `POST /v1/ocr` | Extract text from images/PDFs |
 | [Document Extraction](#document-extraction) | `POST /v1/documents/extract` | Extract structured data from forms |
 | [Text Classification](#text-classification-pre-trained) | `POST /v1/classify` | Sentiment, spam detection (pre-trained models) |
-| [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
+| [Custom Classification](#custom-text-classification-setfit) | `POST /v1/ml/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
 | [Time-Series Forecasting](#time-series-forecasting) | `POST /v1/ml/timeseries/forecast` | Predict future values with confidence intervals |
 | [PII Detection & Redaction](#pii-detection--redaction) | `POST /v1/ml/nlp/pii/*` | Find and redact sensitive information |
 | [Language Detection](#language-detection) | `POST /v1/ml/nlp/language` | Identify language of text (20 languages) |
@@ -28,21 +28,18 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Dataset Quality Audit](#dataset-quality-audit) | `POST /v1/ml/analysis/dataset-audit` | Find label errors and duplicates |
 | [Anomaly Explanations](#anomaly-explanations) | `POST /v1/ml/anomaly/explain` | Explain why points are anomalous (SHAP) |
 
-## Starting the Universal Runtime
+## Starting LlamaFarm
 
 ```bash
-# Start the runtime server
-nx start universal-runtime
-
-# Or with custom port
-LF_RUNTIME_PORT=8080 nx start universal-runtime
+# Start the LlamaFarm server
+nx start server
 ```
 
-The server runs on `http://localhost:8000` by default. However, all examples in this guide use the **LlamaFarm API** at `http://localhost:8000` which proxies requests to the runtime with additional features.
+The server runs on `http://localhost:8000` by default.
 
 ### Model Caching
 
-The Universal Runtime caches loaded models in memory for faster inference on repeated requests:
+LlamaFarm caches loaded models in memory for faster inference on repeated requests:
 
 - **Default TTL:** 5 minutes (300 seconds) of inactivity before unloading
 - **Environment variable:** Set `MODEL_UNLOAD_TIMEOUT` to customize (in seconds)
@@ -325,24 +322,15 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
    /classifier/fit    /classifier/predict    /classifier/save
 ```
 
-:::tip Using the LlamaFarm API (Recommended)
-The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the Universal Runtime with added features:
+:::tip LlamaFarm API Features
+The LlamaFarm API (`/v1/ml/classifier/*`) provides:
 - **Model Versioning**: Optional timestamped versions when `overwrite: false` (default is `true` for exact model names)
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version (when using `overwrite: false`)
 - **File Upload Support**: Direct file handling without base64 encoding
 
 ```bash
-# Via LlamaFarm API (port 8000)
 curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
-
-# Via Universal Runtime (port 11540)
-curl -X POST http://localhost:11540/v1/classifier/fit ...
 ```
-:::
-
-:::warning Server vs Universal Runtime
-- **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
-- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 8000) and proxies to Universal Runtime.
 :::
 
 ### Step 1: Train Your Classifier
@@ -1736,7 +1724,7 @@ def investigate_anomalies(anomalous_data: list, feature_names: list):
 
 ## File Management Endpoints
 
-The Universal Runtime provides file storage for processing documents across multiple requests.
+The LlamaFarm provides file storage for processing documents across multiple requests.
 
 ### Upload File
 
@@ -1779,5 +1767,5 @@ Files are stored temporarily (5-minute TTL by default).
 
 - [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
 - [Vision Models](./vision-ml.md) - Image classification, object detection, OCR
-- [Universal Runtime Overview](./index.md#universal-runtime) - General runtime configuration
+- [LlamaFarm Overview](./index.md#universal-runtime) - General runtime configuration
 - [API Reference](../api/index.md) - Full API documentation

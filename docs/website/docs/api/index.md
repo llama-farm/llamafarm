@@ -188,6 +188,49 @@ Common HTTP status codes:
 - `POST /v1/ml/anomaly/load` - Load anomaly model from disk
 - `GET /v1/ml/anomaly/models` - List saved anomaly models
 - `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
+- `POST /v1/ml/anomaly/explain` - Explain anomaly scores using SHAP
+
+### NLP
+
+- `POST /v1/ml/nlp/language` - Detect language of text
+- `POST /v1/ml/nlp/language/batch` - Batch language detection
+- `POST /v1/ml/nlp/keywords` - Extract keywords from text
+- `POST /v1/ml/nlp/keywords/batch` - Batch keyword extraction
+- `POST /v1/ml/nlp/pii/detect` - Detect PII in text
+- `POST /v1/ml/nlp/redact` - Redact PII from text
+
+### Time Series
+
+- `POST /v1/ml/timeseries/forecast` - Forecast future values
+- `POST /v1/ml/timeseries/forecast/batch` - Batch forecasting
+- `POST /v1/ml/timeseries/changepoints` - Detect change points
+- `POST /v1/ml/timeseries/changepoints/batch` - Batch change point detection
+
+### Streaming/Drift Detection
+
+- `POST /v1/ml/streaming/drift/create` - Create drift detector
+- `POST /v1/ml/streaming/drift/update/{detector_id}` - Update with new data
+- `GET /v1/ml/streaming/drift/state/{detector_id}` - Get detector state
+- `POST /v1/ml/streaming/drift/detect` - Detect drift in batch
+- `DELETE /v1/ml/streaming/drift/{detector_id}` - Delete detector
+
+### Vision ML
+
+- `POST /v1/ml/vision/classify-zero-shot` - Zero-shot image classification (CLIP)
+- `POST /v1/ml/vision/classify-zero-shot/batch` - Batch zero-shot classification
+- `POST /v1/ml/vision/classify/fit` - Train few-shot image classifier
+- `POST /v1/ml/vision/classify/predict` - Predict with trained classifier
+- `POST /v1/ml/vision/classify/predict/batch` - Batch prediction
+- `POST /v1/ml/vision/classify/refine` - Refine classifier with more data
+- `POST /v1/ml/vision/classify/load` - Load saved classifier
+- `GET /v1/ml/vision/classify/models` - List saved classifiers
+- `POST /v1/ml/vision/detect-objects` - Object detection (YOLOS)
+- `POST /v1/ml/vision/detect-objects/batch` - Batch object detection
+- `POST /v1/ml/vision/detect-open` - Open-vocabulary detection (OWL-ViT)
+- `POST /v1/ml/vision/detect-open/batch` - Batch open-vocab detection
+- `POST /v1/ml/vision/detect-open/by-image` - Image-guided detection
+- `POST /v1/ml/vision/remove-background` - Background removal (RMBG)
+- `POST /v1/ml/vision/remove-background/batch` - Batch background removal
 
 ### Health
 
