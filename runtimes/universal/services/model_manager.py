@@ -117,20 +117,25 @@ class ModelManager:
         use_mlock: bool | None = None,
         cache_type_k: str | None = None,
         cache_type_v: str | None = None,
-        preferred_quantization: str | None = None,
+        preferred_quantization: str | None = None,  # Kept for API compat, not used in key
     ) -> str:
-        """Generate cache key for language models (GGUF/transformers)."""
+        """Generate cache key for language models (GGUF/transformers).
+
+        Note: preferred_quantization is NOT included in the cache key because it
+        only affects which file is downloaded, not how the model runs. The actual
+        loaded model file determines runtime behavior regardless of the preference.
+        """
 
         def _val(v, default="auto"):
             return v if v is not None else default
 
+        # Note: quantization is excluded - it's a download preference, not runtime config
         return (
             f"language:{model_id}:"
             f"ctx{_val(n_ctx)}:batch{_val(n_batch)}:gpu{_val(n_gpu_layers)}:"
             f"threads{_val(n_threads)}:flash{_val(flash_attn, 'default')}:"
             f"mmap{_val(use_mmap, 'default')}:mlock{_val(use_mlock, 'default')}:"
-            f"cachek{_val(cache_type_k, 'default')}:cachev{_val(cache_type_v, 'default')}:"
-            f"quant{_val(preferred_quantization, 'default')}"
+            f"cachek{_val(cache_type_k, 'default')}:cachev{_val(cache_type_v, 'default')}"
         )
 
     @staticmethod

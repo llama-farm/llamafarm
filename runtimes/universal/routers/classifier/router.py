@@ -90,7 +90,7 @@ async def fit_classifier(request: ClassifierFitRequest):
         raise
     except Exception as e:
         logger.error(f"Error in fit_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error during classifier training") from e
 
 
 @router.post("/v1/classifier/predict")
@@ -129,7 +129,7 @@ async def predict_classifier(request: ClassifierPredictRequest):
         ) from e
     except Exception as e:
         logger.error(f"Error in predict_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error during prediction") from e
 
 
 @router.post("/v1/classifier/save")
@@ -163,16 +163,16 @@ async def save_classifier(request: ClassifierSaveRequest):
     except KeyError as e:
         raise HTTPException(
             status_code=404,
-            detail=f"{e}. Fit the model first with /v1/classifier/fit",
+            detail=f"Model not found: {request.model}. Fit the model first with /v1/classifier/fit",
         ) from e
     except ValueError as e:
         raise HTTPException(
             status_code=400,
-            detail=f"{e}. Call /v1/classifier/fit first.",
+            detail=f"Invalid model state. Call /v1/classifier/fit first.",
         ) from e
     except Exception as e:
         logger.error(f"Error in save_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error during save") from e
 
 
 @router.post("/v1/classifier/load")
@@ -206,11 +206,11 @@ async def load_classifier_endpoint(request: ClassifierLoadRequest):
             "status": "loaded",
         }
 
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Model '{request.model}' not found on disk") from None
     except Exception as e:
         logger.error(f"Error in load_classifier_endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error during load") from e
 
 
 @router.get("/v1/classifier/models")
@@ -238,7 +238,7 @@ async def list_classifier_models():
 
     except Exception as e:
         logger.error(f"Error in list_classifier_models: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error listing models") from e
 
 
 @router.delete("/v1/classifier/models/{model_name}")
@@ -258,10 +258,10 @@ async def delete_classifier_model(model_name: str):
             "status": "deleted",
         }
 
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found") from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid model name") from None
     except Exception as e:
         logger.error(f"Error in delete_classifier_model: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error during deletion") from e

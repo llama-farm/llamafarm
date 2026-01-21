@@ -7,6 +7,7 @@ Handles anomaly model management including:
 - SHAP-based explanations
 """
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -32,6 +33,9 @@ _encoders: dict[str, Any] = {}
 
 # Global streaming data loader
 _streaming_loader = None
+
+# Shared lock for model loading to prevent race conditions
+_load_model_lock = asyncio.Lock()
 
 
 def get_device() -> str:
@@ -420,9 +424,8 @@ class AnomalyService:
                 f"Available models: {available}",
             )
 
-        # Load with double-check locking
-        lock = asyncio.Lock()
-        async with lock:
+        # Load with double-check locking using shared module-level lock
+        async with _load_model_lock:
             logger.info(f"Loading pre-trained anomaly model: {model_path}")
             device = get_device()
 

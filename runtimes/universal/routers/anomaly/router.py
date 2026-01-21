@@ -390,7 +390,7 @@ async def save_anomaly_model(request: AnomalySaveRequest):
     """
     try:
         cache_key = anomaly_service._make_cache_key(
-            request.model, request.backend, request.normalization
+            request.model, request.backend, request.normalization, request.scaler_type
         )
 
         from services.model_manager import ModelType, model_manager
@@ -400,9 +400,9 @@ async def save_anomaly_model(request: AnomalySaveRequest):
         if model is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Model '{request.model}' with backend '{request.backend}' and "
-                f"normalization '{request.normalization}' not found in cache. "
-                "Fit the model first with /v1/anomaly/fit",
+                detail=f"Model '{request.model}' with backend '{request.backend}', "
+                f"normalization '{request.normalization}', and scaler_type '{request.scaler_type}' "
+                "not found in cache. Fit the model first with /v1/anomaly/fit",
             )
 
         if not model.is_fitted:

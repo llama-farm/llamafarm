@@ -48,7 +48,8 @@ class TestCacheKeyGeneration:
         key = ModelManager.make_language_cache_key("meta-llama/Llama-2-7b")
         assert "language:meta-llama/Llama-2-7b" in key
         assert "ctxauto" in key
-        assert "quantdefault" in key
+        # quantization is NOT in cache key - it's a download preference, not runtime config
+        assert "quant" not in key
 
     def test_language_cache_key_with_params(self):
         """Language cache key with all params."""
@@ -62,7 +63,8 @@ class TestCacheKeyGeneration:
         assert "ctx4096" in key
         assert "batch512" in key
         assert "gpu-1" in key
-        assert "quantQ4_K_M" in key
+        # quantization is NOT in cache key - it's a download preference, not runtime config
+        assert "quant" not in key
 
     def test_encoder_cache_key(self):
         """Encoder cache key generation."""

@@ -111,6 +111,7 @@ class AnomalySaveRequest(BaseModel):
     normalization: str = (
         "standardization"  # Must match the normalization used during fit
     )
+    scaler_type: str = "robust"  # Must match the scaler_type used during fit
 
 
 class AnomalyLoadRequest(BaseModel):
@@ -126,8 +127,8 @@ class AnomalyExplainRequest(BaseModel):
     model_id: str  # ID of trained anomaly model
     data: list[list[float]]  # Data points to explain
     feature_names: list[str] | None = None  # Optional feature names
-    background_samples: int = 100  # Number of background samples
-    nsamples: int = 100  # Number of SHAP samples
+    background_samples: int = Field(default=100, ge=1)  # Number of background samples (must be >= 1)
+    nsamples: int = Field(default=100, ge=1)  # Number of SHAP samples (must be >= 1)
     backend: str = "isolation_forest"  # Backend used when training
     normalization: str = "standardization"  # Normalization method
     scaler_type: str = "robust"  # Scaler type

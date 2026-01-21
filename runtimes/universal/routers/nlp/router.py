@@ -176,6 +176,12 @@ async def extract_keywords(request: KeywordExtractRequest):
                 detail="Text cannot be empty",
             )
 
+        if len(request.ngram_range) != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="ngram_range must be a list of exactly 2 integers [min, max]",
+            )
+
         keywords = await nlp_service.extract_keywords(
             request.text,
             top_k=request.top_k,
@@ -193,7 +199,7 @@ async def extract_keywords(request: KeywordExtractRequest):
         raise
     except Exception as e:
         logger.error(f"Error in extract_keywords: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 @router.post("/v1/ml/nlp/keywords/batch")
@@ -228,6 +234,12 @@ async def extract_keywords_batch(request: KeywordExtractBatchRequest):
                 detail="At least one text is required",
             )
 
+        if len(request.ngram_range) != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="ngram_range must be a list of exactly 2 integers [min, max]",
+            )
+
         results = await nlp_service.extract_keywords_batch(
             request.texts,
             top_k=request.top_k,
@@ -247,7 +259,7 @@ async def extract_keywords_batch(request: KeywordExtractBatchRequest):
         raise
     except Exception as e:
         logger.error(f"Error in extract_keywords_batch: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # =============================================================================

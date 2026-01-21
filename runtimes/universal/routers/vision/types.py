@@ -110,7 +110,7 @@ class OpenVocabDetectTextRequest(BaseModel):
 
     image: str  # Base64-encoded image or file path
     queries: list[str]  # Text queries describing what to find
-    threshold: float = 0.1  # Confidence threshold (lower = more detections)
+    threshold: float = Field(default=0.1, ge=0.0, le=1.0)  # Confidence threshold [0,1]
     top_k: int | None = None  # Limit number of detections
     model: str = "google/owlvit-base-patch32"
 
@@ -120,7 +120,7 @@ class OpenVocabDetectTextBatchRequest(BaseModel):
 
     images: list[str]  # List of base64-encoded images or file paths
     queries: list[str]  # Text queries (applied to all images)
-    threshold: float = 0.1
+    threshold: float = Field(default=0.1, ge=0.0, le=1.0)  # Confidence threshold [0,1]
     top_k: int | None = None
     model: str = "google/owlvit-base-patch32"
 
@@ -130,7 +130,7 @@ class OpenVocabDetectImageRequest(BaseModel):
 
     image: str  # Target image to search in
     query_images: list[str]  # Reference images showing what to find
-    threshold: float = 0.9  # Similarity threshold (higher = stricter match)
+    threshold: float = Field(default=0.9, ge=0.0, le=1.0)  # Similarity threshold [0,1]
     top_k: int | None = None
     model: str = "google/owlvit-base-patch32"
 

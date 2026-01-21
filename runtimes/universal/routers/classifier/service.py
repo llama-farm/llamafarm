@@ -50,8 +50,13 @@ def _get_classifier_path(model_name: str) -> Path:
     """Get the path for a classifier model directory.
 
     The path is always within CLASSIFIER_MODELS_DIR - users cannot control it.
+
+    Raises:
+        ValueError: If model_name is empty or sanitizes to empty string
     """
     safe_name = _sanitize_model_name(model_name)
+    if not safe_name:
+        raise ValueError("Model name cannot be empty or contain only invalid characters")
     return CLASSIFIER_MODELS_DIR / safe_name
 
 

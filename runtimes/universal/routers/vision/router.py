@@ -68,6 +68,11 @@ async def classify_zero_shot(request: ZeroShotClassifyRequest):
     ```
     """
     try:
+        if not request.image or not request.image.strip():
+            raise HTTPException(
+                status_code=400, detail="Image data is required"
+            )
+
         if not request.labels:
             raise HTTPException(
                 status_code=400, detail="At least one label is required"
@@ -517,6 +522,11 @@ async def detect_open_vocabulary(request: OpenVocabDetectTextRequest):
     - Lower threshold (0.05-0.2) for recall, higher (0.3-0.5) for precision
     """
     try:
+        if not request.image or not request.image.strip():
+            raise HTTPException(
+                status_code=400, detail="Image data is required"
+            )
+
         if not request.queries:
             raise HTTPException(
                 status_code=400, detail="At least one text query is required"
@@ -586,6 +596,11 @@ async def detect_by_reference_image(request: OpenVocabDetectImageRequest):
     Use this when you have example images of what you want to find.
     """
     try:
+        if not request.image or not request.image.strip():
+            raise HTTPException(
+                status_code=400, detail="Target image is required"
+            )
+
         if not request.query_images:
             raise HTTPException(
                 status_code=400, detail="At least one query image is required"

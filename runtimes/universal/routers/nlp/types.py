@@ -36,7 +36,7 @@ class KeywordExtractRequest(BaseModel):
     diversity: float = Field(
         default=0.5, ge=0, le=1, description="Diversity parameter (0-1)"
     )
-    ngram_range: list[int] = [1, 3]  # Min and max n-gram size
+    ngram_range: list[int] = Field(default_factory=lambda: [1, 3])  # Min and max n-gram size
 
 
 class KeywordExtractBatchRequest(BaseModel):
@@ -47,7 +47,7 @@ class KeywordExtractBatchRequest(BaseModel):
     diversity: float = Field(
         default=0.5, ge=0, le=1, description="Diversity parameter (0-1)"
     )
-    ngram_range: list[int] = [1, 3]
+    ngram_range: list[int] = Field(default_factory=lambda: [1, 3])
 
 
 # =============================================================================
