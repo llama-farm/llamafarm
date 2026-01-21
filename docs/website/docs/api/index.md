@@ -2752,6 +2752,12 @@ The ML API provides custom text classification and anomaly detection capabilitie
 
 :::tip Model Versioning
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
+
+**Endpoints supporting `-latest` resolution:**
+- `/v1/ml/classifier/predict`, `/v1/ml/classifier/load`
+- `/v1/ml/anomaly/score`, `/v1/ml/anomaly/detect`, `/v1/ml/anomaly/load`
+
+Note: The `fit` endpoints do NOT support `-latest` since they create new models.
 :::
 
 ### Custom Text Classification (SetFit)
@@ -2794,6 +2800,10 @@ Train a new text classifier.
 | `num_iterations` | int | No | 20 | Contrastive learning iterations |
 | `batch_size` | int | No | 16 | Training batch size |
 | `overwrite` | bool | No | false | If false, version with timestamp |
+
+:::note Description Field
+To add a description to a model, use the `/v1/ml/classifier/save` endpoint after fitting. The `description` parameter in fit requests is not persisted.
+:::
 
 **Response:**
 
@@ -2976,6 +2986,8 @@ Load a previously saved classifier.
 
 **Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
 
+The `model_name` is the directory name (e.g., `intent-classifier_20251215_155054`). SetFit classifiers are stored as directories under `~/.llamafarm/models/classifier/`.
+
 ---
 
 ### Anomaly Detection
@@ -3031,7 +3043,7 @@ Train an anomaly detection model.
 | `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
 | `data` | array | Yes | - | Training data (numeric arrays or dicts) |
 | `schema` | object | No | - | Feature encoding schema (required for dict data) |
-| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (must be >0 and ≤0.5) |
 | `overwrite` | bool | No | false | If false, version with timestamp |
 
 **Response:**
@@ -3196,6 +3208,8 @@ The anomalies detected are:
 
 **Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
 
+The `filename` includes the file extension (e.g., `sensor-detector_isolation_forest.pkl`). Anomaly models are stored as `.pkl` files under `~/.llamafarm/models/anomaly/`.
+
 ---
 
 ## Universal Runtime API
@@ -3247,6 +3261,11 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+
+:::info Classification Endpoints
+- **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
+- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:8000`.
+:::
 
 ### Quick Examples
 

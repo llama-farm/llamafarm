@@ -79,12 +79,10 @@ export async function sendChatCompletion(
   // Ensure stream is false for non-streaming requests
   const chatRequest = { ...request, stream: false }
 
+  const urlPath = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
+
   try {
-    const response = await apiClient.post<ChatResponse>(
-      `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`,
-      chatRequest,
-      { headers }
-    )
+    const response = await apiClient.post<ChatResponse>(urlPath, chatRequest, { headers })
 
     // Extract session ID from response headers (server provides this)
     const responseSessionId =
@@ -168,33 +166,32 @@ export async function streamChatCompletion(
     }
   }
 
+  // Ensure streaming is enabled
+  const streamingRequest = { ...request, stream: true }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+    'Cache-Control': 'no-cache',
+  }
+
+  // Add session header if provided
+  if (sessionId) {
+    headers['X-Session-ID'] = sessionId
+  }
+
+  // Add active project header if provided (for dev chat context)
+  if (activeProject) {
+    headers['X-Active-Project'] = activeProject
+  }
+
+  // Use fetch directly for streaming instead of axios
+  const rawBaseURL = apiClient.defaults.baseURL || ''
+  const baseURL = rawBaseURL.endsWith('/') ? rawBaseURL.slice(0, -1) : rawBaseURL
+  const urlPath = `/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
+  const url = `${baseURL}${urlPath}`
+
   try {
-    // Ensure streaming is enabled
-    const streamingRequest = { ...request, stream: true }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache',
-    }
-
-    // Add session header if provided
-    if (sessionId) {
-      headers['X-Session-ID'] = sessionId
-    }
-
-    // Add active project header if provided (for dev chat context)
-    if (activeProject) {
-      headers['X-Active-Project'] = activeProject
-    }
-
-    // Use fetch directly for streaming instead of axios
-    const rawBaseURL = apiClient.defaults.baseURL || ''
-    const baseURL = rawBaseURL.endsWith('/')
-      ? rawBaseURL.slice(0, -1)
-      : rawBaseURL
-    const url = `${baseURL}/projects/${encodeURIComponent(namespace)}/${encodeURIComponent(projectId)}/chat/completions`
-
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -207,10 +204,11 @@ export async function streamChatCompletion(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error')
-      throw new NetworkError(
+      const error = new NetworkError(
         `HTTP ${response.status}: ${response.statusText} - ${errorText}`,
         new Error(`Fetch failed with status ${response.status}`)
       )
+      throw error
     }
 
     // Extract session ID from response headers (server provides this)

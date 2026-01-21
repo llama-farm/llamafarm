@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.0.25](https://github.com/llama-farm/llamafarm/compare/v0.0.24...v0.0.25) (2026-01-14)
+
+
+### Features
+
+* auto-process files on dataset upload ([#661](https://github.com/llama-farm/llamafarm/issues/661)) ([e08d762](https://github.com/llama-farm/llamafarm/commit/e08d762d73baf128023ab571352c88b8e88a1533))
+* **designer:** add all api calls to dev tools ([#680](https://github.com/llama-farm/llamafarm/issues/680)) ([d36f6ff](https://github.com/llama-farm/llamafarm/commit/d36f6ffb9967d9e43027c7761c2395d5ca94b4ee))
+* **designer:** add sse streaming for embedding model downloads ([#655](https://github.com/llama-farm/llamafarm/issues/655)) ([b2ffbd0](https://github.com/llama-farm/llamafarm/commit/b2ffbd0319f6bab7c165fd78a1c87cbfc9738833))
+* **designer:** test space to include anomaly and classifier tests +other updates  ([#657](https://github.com/llama-farm/llamafarm/issues/657)) ([fc94563](https://github.com/llama-farm/llamafarm/commit/fc94563cbcde16614dddb6bcddc4a9c0fe93077d))
+* **runtime:** support for native tool calling ([#636](https://github.com/llama-farm/llamafarm/issues/636)) ([f99f305](https://github.com/llama-farm/llamafarm/commit/f99f30538ffc4d42be46ba1cfd43ef1cc758f935))
+
+
+### Bug Fixes
+
+* **cli:** config validation errors output ([#673](https://github.com/llama-farm/llamafarm/issues/673)) ([6d92f43](https://github.com/llama-farm/llamafarm/commit/6d92f43913cc5cbd135516a624b20900f4c55970))
+* install/run failures on windows w/ nvidia ([#665](https://github.com/llama-farm/llamafarm/issues/665)) ([29f3242](https://github.com/llama-farm/llamafarm/commit/29f324246040d1db6cc45faf570fdd60d0396cce))
+* **rag:** remove parser fallback ([#642](https://github.com/llama-farm/llamafarm/issues/642)) ([7037219](https://github.com/llama-farm/llamafarm/commit/7037219de690a4518bf5acb16afe730d390faa82))
+* **runtime:** move deps to main and enable offline GGUF loading ([#670](https://github.com/llama-farm/llamafarm/issues/670)) ([1d9de0c](https://github.com/llama-farm/llamafarm/commit/1d9de0ce9cc80c1ad0bdf4bdbbfef8af75c3c21d))
+
+
+### Miscellaneous Chores
+
+* release 0.0.25 ([74dea58](https://github.com/llama-farm/llamafarm/commit/74dea58befffae34d9a3ac1072c680b3e20b5ea5))
+
 ## [0.0.24](https://github.com/llama-farm/llamafarm/compare/v0.0.23...v0.0.24) (2026-01-06)
 
 

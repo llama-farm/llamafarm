@@ -1,0 +1,30 @@
+version: v1
+name: dynamic_prompts_demo
+namespace: examples
+
+runtime:
+  models:
+    - name: dynamic_model
+      description: "Demo model with dynamic prompt variables"
+      provider: universal
+      model: llama3.2:3b
+      default: true
+      prompts:
+        - greeting
+        - context
+
+prompts:
+  - name: greeting
+    messages:
+      - role: system
+        content: |
+          Hello {{user_name | Guest}}! Welcome to {{company_name | Our Service}}.
+
+  - name: context
+    messages:
+      - role: system
+        content: |
+          You are a helpful assistant for the {{department | General}} department.
+          Your role is to assist with {{role_description | general inquiries}}.
+
+          Please be helpful and concise in your responses.

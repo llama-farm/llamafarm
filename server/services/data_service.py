@@ -21,6 +21,8 @@ class MetadataFileContent(BaseModel):
     size: int
     mime_type: str
     hash: str
+    # Optional fields populated at runtime by dataset service
+    chunk_count: int | None = None  # Number of chunks in vector DB (None = unknown)
 
 
 class DataService:

@@ -525,6 +525,7 @@ export interface DocumentScanningResponse {
   model: string
   usage: {
     images_processed: number
+    pages_combined?: number // Present when pages were combined into single result
   }
 }
 
@@ -533,6 +534,7 @@ export interface DocumentScanningHistoryEntry {
   timestamp: Date
   fileName: string
   pageCount: number
+  pagesCombined?: number // Original page count when pages were combined into one
   avgConfidence: number
   previewText: string
   backend: string

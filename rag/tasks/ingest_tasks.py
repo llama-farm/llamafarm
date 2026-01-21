@@ -47,6 +47,7 @@ def ingest_file_with_rag_task(
     source_path: str,
     filename: str | None = None,
     dataset_name: str | None = None,
+    parser_overrides: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """
     Ingest a single file using the RAG system via Celery task.
@@ -104,6 +105,7 @@ def ingest_file_with_rag_task(
             data_processing_strategy=data_processing_strategy_name,
             database=database_name,
             dataset_name=dataset_name,
+            parser_overrides=parser_overrides,
         )
 
         # Read the file

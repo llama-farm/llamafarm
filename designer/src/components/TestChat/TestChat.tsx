@@ -984,7 +984,7 @@ function DocumentScanningHistoryItem({
             ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
             : 'bg-sky-500/20 text-sky-400 border-sky-500/30'
         }`}>
-          {isError ? 'Error' : `${item.pageCount} pg`}
+          {isError ? 'Error' : item.pagesCombined ? `Full (${item.pagesCombined} pg)` : `${item.pageCount} pg`}
         </Badge>
         {!isError && (
           <span className="text-[10px] text-muted-foreground">
@@ -1392,6 +1392,12 @@ export default function TestChat({
   // Selected anomaly model (stores the actual model name, not base_name)
   const [selectedAnomalyModel, setSelectedAnomalyModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    // Check for one-time override from onboarding (takes priority)
+    const override = localStorage.getItem('lf_test_anomalyModel_override')
+    if (override) {
+      localStorage.removeItem('lf_test_anomalyModel_override')
+      return override
+    }
     return localStorage.getItem('lf_test_anomalyModel')
   })
 
@@ -1416,6 +1422,20 @@ export default function TestChat({
       return
     }
 
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-support-ticket_20260115_123456" should match model with base_name "sample-support-ticket"
+    if (selectedAnomalyModel) {
+      const matchingModel = sortedAnomalyModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedAnomalyModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedAnomalyModel(matchingModel.name)
+        return
+      }
+    }
+
     // Selected model is invalid or doesn't exist - fall back to first available
     if (validModelNames.length > 0) {
       setSelectedAnomalyModel(validModelNames[0])
@@ -1435,7 +1455,17 @@ export default function TestChat({
   }, [selectedAnomalyModel, sortedAnomalyModels])
 
   // Anomaly input and result state
-  const [anomalyInput, setAnomalyInput] = useState('')
+  const [anomalyInput, setAnomalyInput] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    // Check for pre-populated input from onboarding sample flow
+    const stored = localStorage.getItem('lf_test_anomalyInput')
+    if (stored) {
+      // Clear it after reading so it doesn't persist across sessions
+      localStorage.removeItem('lf_test_anomalyInput')
+      return stored
+    }
+    return ''
+  })
   const [anomalyResult, setAnomalyResult] = useState<{
     score: number
     isAnomaly: boolean
@@ -1494,6 +1524,12 @@ export default function TestChat({
   // Selected classifier model
   const [selectedClassifierModel, setSelectedClassifierModel] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    // Check for one-time override from onboarding (takes priority)
+    const override = localStorage.getItem('lf_test_classifierModel_override')
+    if (override) {
+      localStorage.removeItem('lf_test_classifierModel_override')
+      return override
+    }
     return localStorage.getItem('lf_test_classifierModel')
   })
 
@@ -1515,6 +1551,20 @@ export default function TestChat({
       return
     }
 
+    // Check if selected model matches by base_name (for onboarding-trained models)
+    // e.g., "sample-sentiment_20260115_123456" should match model with base_name "sample-sentiment"
+    if (selectedClassifierModel) {
+      const matchingModel = sortedClassifierModels.find(m => {
+        const baseName = m.base_name || m.name
+        return selectedClassifierModel.startsWith(baseName)
+      })
+      if (matchingModel) {
+        // Update to the actual model name
+        setSelectedClassifierModel(matchingModel.name)
+        return
+      }
+    }
+
     if (validModelNames.length > 0) {
       setSelectedClassifierModel(validModelNames[0])
     } else {
@@ -1533,7 +1583,17 @@ export default function TestChat({
   }, [selectedClassifierModel, sortedClassifierModels])
 
   // Classifier input and result state
-  const [classifierInput, setClassifierInput] = useState('')
+  const [classifierInput, setClassifierInput] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    // Check for pre-populated input from onboarding sample flow
+    const stored = localStorage.getItem('lf_test_classifierInput')
+    if (stored) {
+      // Clear it after reading so it doesn't persist across sessions
+      localStorage.removeItem('lf_test_classifierInput')
+      return stored
+    }
+    return ''
+  })
   const [classifierResult, setClassifierResult] = useState<{
     predictions: Array<{
       label: string
@@ -1593,6 +1653,18 @@ export default function TestChat({
       localStorage.setItem('lf_test_scanLanguage', selectedScanLanguage)
     }
   }, [selectedScanLanguage])
+
+  // Parse by page setting (persisted) - when checked, returns separate results per page
+  const [parseByPage, setParseByPage] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('lf_test_parseByPage') === 'true'
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lf_test_parseByPage', String(parseByPage))
+    }
+  }, [parseByPage])
 
   // Document scanning file state
   const [scanFile, setScanFile] = useState<File | null>(null)
@@ -2255,7 +2327,7 @@ export default function TestChat({
       lastUserInputRef.current = content
       const assistantId = addMessage({
         type: 'assistant',
-        content: 'Loading model (may take a moment if downloading)…',
+        content: 'Thinking…',
         timestamp: new Date(),
         isLoading: true,
       })
@@ -2938,6 +3010,7 @@ export default function TestChat({
         model: selectedScanBackend,
         languages: selectedScanLanguage,
         returnBoxes: false,
+        parseByPage,
       })
 
       if (result.data) {
@@ -2952,12 +3025,14 @@ export default function TestChat({
         // Add to history
         const avgConfidence = result.data.reduce((sum, r) => sum + r.confidence, 0) / result.data.length
         const previewText = result.data[0]?.text?.substring(0, 100) || ''
+        const pagesCombined = result.usage?.pages_combined
 
         setScanHistory(prev => [{
           id: `scan-${Date.now()}`,
           timestamp: new Date(),
           fileName: file.name,
           pageCount: result.data.length,
+          pagesCombined,
           avgConfidence,
           previewText,
           backend: selectedScanBackend,
@@ -2981,7 +3056,7 @@ export default function TestChat({
         error: errorMsg,
       }, ...prev].slice(0, 50))
     }
-  }, [selectedScanBackend, selectedScanLanguage, scanDocumentMutation, hasScannedBefore])
+  }, [selectedScanBackend, selectedScanLanguage, parseByPage, scanDocumentMutation, hasScannedBefore])
 
   const clearScanResults = useCallback(() => {
     setScanResults(null)
@@ -3330,6 +3405,18 @@ export default function TestChat({
                 label="Language"
                 className="min-w-[100px]"
               />
+              <div>
+                <div className="text-xs text-muted-foreground mb-1 invisible">Spacer</div>
+                <label className="h-9 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={parseByPage}
+                    onChange={(e) => setParseByPage(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  Parse by page
+                </label>
+              </div>
             </>
           )}
 
@@ -4374,7 +4461,7 @@ export function TestChatMessage({
         }
       >
         {message.isLoading && isAssistant ? (
-          <TypingDots label="Loading model (may take a moment if downloading)" />
+          <TypingDots label="Thinking" />
         ) : message.metadata?.isTest && isUser ? (
           <div className="whitespace-pre-wrap">
             <div className="mb-2">
@@ -4785,7 +4872,7 @@ function References({ sources }: { sources: any[] }) {
   )
 }
 
-function TypingDots({ label = 'Loading model' }: { label?: string }) {
+function TypingDots({ label = 'Thinking' }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-1 opacity-80">
       <span>{label}</span>
