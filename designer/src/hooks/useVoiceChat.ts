@@ -38,6 +38,7 @@ export interface UseVoiceChatOptions {
   speed?: number
   systemPrompt?: string
   silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
+  enableLLM?: boolean // When false, only STT is performed (transcription-only mode with VAD)
   autoConnect?: boolean
   onError?: (error: string) => void
 }
@@ -85,6 +86,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     speed,
     systemPrompt,
     silenceDuration,
+    enableLLM = true,
     autoConnect = false,
     onError,
   } = options
@@ -215,6 +217,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       speed,
       systemPrompt,
       silenceDuration,
+      enableLLM,
     }
 
     const ws = createVoiceChatConnection(namespace, project, config, {
@@ -307,7 +310,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     })
 
     wsRef.current = ws
-  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, silenceDuration, onError, processAudioQueue])
+  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, silenceDuration, enableLLM, onError, processAudioQueue])
 
   // Disconnect from voice chat
   const disconnect = useCallback(() => {

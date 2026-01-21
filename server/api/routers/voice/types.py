@@ -144,3 +144,7 @@ class VoiceSessionConfig(BaseModel):
         description="Only split text on sentence boundaries (. ! ?) for natural speech. "
         "Set to False for aggressive chunking (lower latency but choppier speech).",
     )
+    enable_llm: bool = Field(
+        default=True,
+        description="Enable LLM processing. When False, only STT is performed (transcription-only mode).",
+    )

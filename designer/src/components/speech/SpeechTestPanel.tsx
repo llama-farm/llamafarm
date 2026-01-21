@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Mic, Send, MicOff, StopCircle, Volume2, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare } from 'lucide-react'
+import { Mic, Send, MicOff, StopCircle, Volume2, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare, HelpCircle } from 'lucide-react'
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
@@ -7,11 +7,11 @@ import { VADSettings } from './VADSettings'
 import { VoiceCloning } from './VoiceCloning'
 import { ConversationView } from './ConversationView'
 import { TranscriptionOutput } from './TranscriptionOutput'
-import { AudioPlayer } from './AudioPlayer'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
 import { Waveform } from './Waveform'
 import { Selector } from '../ui/selector'
 import { Switch } from '../ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   STT_MODELS,
   TTS_MODELS,
@@ -42,6 +42,14 @@ interface SpeechTestPanelProps {
   clearRef?: React.MutableRefObject<(() => void) | null>
   /** Callback when messages change (for parent to track if clear should be enabled) */
   onMessagesChange?: (hasMessages: boolean) => void
+}
+
+/** History item for TTS-only mode */
+interface TTSHistoryItem {
+  id: string
+  text: string
+  audioUrl: string
+  timestamp: Date
 }
 
 export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: SpeechTestPanelProps) {
@@ -80,10 +88,13 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null)
 
   // TTS-only State
-  const [ttsInputText, setTtsInputText] = useState('')
-  const [ttsOutputBlob, setTtsOutputBlob] = useState<Blob | null>(null)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
+
+  // TTS History State (for TTS-only mode conversation-style UI)
+  const [ttsHistory, setTtsHistory] = useState<TTSHistoryItem[]>([])
+  const [playingTtsId, setPlayingTtsId] = useState<string | null>(null)
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Input State
   const [textInput, setTextInput] = useState('')
@@ -101,6 +112,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   // UI State
   const [configExpanded, setConfigExpanded] = useState(true)
   const [pendingVoiceChatRecord, setPendingVoiceChatRecord] = useState(false) // Waiting for connection to start recording
+  const [pendingSttOnlyRecord, setPendingSttOnlyRecord] = useState(false) // Waiting for STT-only VAD connection
   const [pendingTextMessage, setPendingTextMessage] = useState<string | null>(null) // Waiting for connection to send text
 
   // LLM Integration State
@@ -136,6 +148,20 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     language: sttLanguage,
     speed: ttsSpeed,
     silenceDuration: effectiveSilenceDuration,
+    enableLLM: true, // Full conversation mode
+    autoConnect: false,
+    onError: (error) => setTranscriptionError(error),
+  })
+
+  // Voice chat hook for STT-only mode with VAD (no LLM responses)
+  const sttOnlyVoiceChat = useVoiceChat({
+    namespace: activeProject?.namespace || '',
+    project: activeProject?.project || '',
+    llmModel: selectedLLMModel, // Still needed for backend validation, but won't be used
+    sttModel,
+    language: sttLanguage,
+    silenceDuration: effectiveSilenceDuration,
+    enableLLM: false, // STT-only mode - no LLM, no TTS
     autoConnect: false,
     onError: (error) => setTranscriptionError(error),
   })
@@ -151,6 +177,23 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
   // Determine which mode we're in
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
+
+  // Handlers for STT/TTS toggles with mutual exclusivity (at least one must be enabled)
+  const handleSttEnabledChange = useCallback((enabled: boolean) => {
+    if (!enabled && !ttsEnabled) {
+      // If trying to disable STT and TTS is already off, enable TTS first
+      setTtsEnabled(true)
+    }
+    setSttEnabled(enabled)
+  }, [ttsEnabled])
+
+  const handleTtsEnabledChange = useCallback((enabled: boolean) => {
+    if (!enabled && !sttEnabled) {
+      // If trying to disable TTS and STT is already off, enable STT first
+      setSttEnabled(true)
+    }
+    setTtsEnabled(enabled)
+  }, [sttEnabled])
 
   // Helper to convert raw PCM to WAV blob
   const pcmToWavBlob = useCallback((pcmData: ArrayBuffer, sampleRate: number = 24000): Blob => {
@@ -229,6 +272,20 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
 
+  // Start recording when STT-only voice chat connects (if we were waiting)
+  useEffect(() => {
+    if (pendingSttOnlyRecord && sttOnlyVoiceChat.isConnected) {
+      setPendingSttOnlyRecord(false)
+      sttOnlyVoiceChat.startRecording().then(() => {
+        setRecordingState('recording')
+        setActiveStream(sttOnlyVoiceChat.activeStream)
+      }).catch((err) => {
+        setTranscriptionError(err instanceof Error ? err.message : 'Failed to start recording')
+        setRecordingState('idle')
+      })
+    }
+  }, [pendingSttOnlyRecord, sttOnlyVoiceChat.isConnected, sttOnlyVoiceChat])
+
   // Send pending text message when voice chat connects
   useEffect(() => {
     if (pendingTextMessage && voiceChat.isConnected) {
@@ -246,6 +303,15 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       setTranscriptionError(voiceChat.error)
     }
   }, [pendingVoiceChatRecord, pendingTextMessage, voiceChat.error])
+
+  // Handle STT-only voice chat connection errors
+  useEffect(() => {
+    if (pendingSttOnlyRecord && sttOnlyVoiceChat.error) {
+      setPendingSttOnlyRecord(false)
+      setRecordingState('idle')
+      setTranscriptionError(sttOnlyVoiceChat.error)
+    }
+  }, [pendingSttOnlyRecord, sttOnlyVoiceChat.error])
 
   // Sync voiceChat state with local state
   // IMPORTANT: voiceChat.isRecording reflects whether the MediaRecorder is active.
@@ -282,6 +348,40 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       }
     }
   }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord])
+
+  // Sync STT-only voice chat state with local state (for VAD-based transcription)
+  useEffect(() => {
+    if (mode === 'stt' && vadEnabled) {
+      // Update recording state based on sttOnlyVoiceChat
+      if (sttOnlyVoiceChat.isRecording) {
+        setRecordingState('recording')
+        if (sttOnlyVoiceChat.activeStream) {
+          setActiveStream(sttOnlyVoiceChat.activeStream)
+        }
+      } else if (sttOnlyVoiceChat.voiceState === 'processing') {
+        setRecordingState('processing')
+      } else if (sttOnlyVoiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingSttOnlyRecord) {
+        setRecordingState('idle')
+      }
+
+      // When we get a final transcription from STT-only mode, update the result
+      if (sttOnlyVoiceChat.currentTranscription) {
+        // The transcription is final when voiceState returns to idle
+        if (sttOnlyVoiceChat.voiceState === 'idle' && sttOnlyVoiceChat.currentTranscription) {
+          setTranscriptionResult({
+            text: sttOnlyVoiceChat.currentTranscription,
+            language: sttLanguage,
+          })
+          setTranscriptionError(null)
+        }
+      }
+
+      // Update error state
+      if (sttOnlyVoiceChat.error && !pendingSttOnlyRecord) {
+        setTranscriptionError(sttOnlyVoiceChat.error)
+      }
+    }
+  }, [mode, vadEnabled, sttOnlyVoiceChat.isRecording, sttOnlyVoiceChat.activeStream, sttOnlyVoiceChat.voiceState, sttOnlyVoiceChat.currentTranscription, sttOnlyVoiceChat.error, recordingState, pendingSttOnlyRecord, sttLanguage])
 
   // Fetch available voices from backend
   useEffect(() => {
@@ -410,7 +510,23 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       return
     }
 
-    // Fall back to local recording for STT-only or no LLM
+    // Use STT-only voice chat for VAD-based transcription (no LLM)
+    if (mode === 'stt' && vadEnabled) {
+      if (sttOnlyVoiceChat.isConnected) {
+        // Already connected, start recording
+        await sttOnlyVoiceChat.startRecording()
+        setRecordingState('recording')
+        setActiveStream(sttOnlyVoiceChat.activeStream)
+      } else {
+        // Need to connect first - set pending state and connect
+        setPendingSttOnlyRecord(true)
+        setRecordingState('processing') // Show loading state
+        sttOnlyVoiceChat.connect()
+      }
+      return
+    }
+
+    // Fall back to local recording for STT-only (manual mode) or no LLM
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -458,9 +574,17 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
   // Stop recording
   const stopRecording = useCallback(() => {
-    // If using voice chat, use its stop method
+    // If using voice chat for conversation mode, use its stop method
     if (mode === 'conversation' && llmAvailable && voiceChat.isRecording) {
       voiceChat.stopRecording()
+      setRecordingState('processing')
+      setActiveStream(null)
+      return
+    }
+
+    // If using STT-only voice chat for VAD-based transcription
+    if (mode === 'stt' && vadEnabled && sttOnlyVoiceChat.isRecording) {
+      sttOnlyVoiceChat.stopRecording()
       setRecordingState('processing')
       setActiveStream(null)
       return
@@ -471,7 +595,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       mediaRecorderRef.current.stop()
       setRecordingState('processing')
     }
-  }, [mode, llmAvailable, voiceChat])
+  }, [mode, llmAvailable, vadEnabled, voiceChat, sttOnlyVoiceChat])
 
   // Process transcription using real backend
   const processTranscription = useCallback(async (audioBlob: Blob) => {
@@ -620,29 +744,47 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     setConfigExpanded(false)
 
     if (mode === 'tts') {
-      // TTS-only mode: synthesize the text
+      // TTS-only mode: synthesize the text and add to history
       setIsSynthesizing(true)
-      setTtsInputText(textInput)
+      const inputTextCopy = textInput
       setTtsError(null)
 
       try {
         const audioBlob = await synthesizeSpeech({
           model: ttsModel,
-          input: textInput,
+          input: inputTextCopy,
           voice: ttsVoice,
           speed: ttsSpeed,
           response_format: 'mp3',
         })
 
-        setTtsOutputBlob(audioBlob)
+        const audioUrl = URL.createObjectURL(audioBlob)
+        const newItemId = `tts-${Date.now()}`
+
+        // Add to history
+        const newItem: TTSHistoryItem = {
+          id: newItemId,
+          text: inputTextCopy,
+          audioUrl,
+          timestamp: new Date(),
+        }
+        setTtsHistory(prev => [...prev, newItem])
         setBackendConnected(true)
+        setTextInput('')
+
+        // Auto-play the new audio
+        setPlayingTtsId(newItemId)
+        const audio = new Audio(audioUrl)
+        ttsAudioRef.current = audio
+        audio.onended = () => setPlayingTtsId(null)
+        audio.onerror = () => setPlayingTtsId(null)
+        audio.play().catch(() => setPlayingTtsId(null))
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Speech synthesis failed'
         setTtsError(message)
         setBackendConnected(false)
       } finally {
         setIsSynthesizing(false)
-        setTextInput('')
       }
     } else {
       // Conversation mode - text input
@@ -756,6 +898,35 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [previewingVoiceId, ttsModel, ttsSpeed])
 
+  // Play TTS history item
+  const handlePlayTtsHistory = useCallback((itemId: string) => {
+    const item = ttsHistory.find(i => i.id === itemId)
+    if (!item) return
+
+    // If already playing this item, stop it
+    if (playingTtsId === itemId) {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause()
+        ttsAudioRef.current = null
+      }
+      setPlayingTtsId(null)
+      return
+    }
+
+    // Stop any currently playing audio
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause()
+    }
+
+    // Play the new item
+    const audio = new Audio(item.audioUrl)
+    ttsAudioRef.current = audio
+    setPlayingTtsId(itemId)
+    audio.onended = () => setPlayingTtsId(null)
+    audio.onerror = () => setPlayingTtsId(null)
+    audio.play().catch(() => setPlayingTtsId(null))
+  }, [ttsHistory, playingTtsId])
+
   // Play message audio
   const handlePlayMessageAudio = useCallback((messageId: string) => {
     if (playingMessageId === messageId) {
@@ -765,15 +936,36 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [playingMessageId])
 
-  // Clear conversation
+  // Clear all content (works in all modes: conversation, STT-only, TTS-only)
   const handleClearConversation = useCallback(() => {
     // Stop any ongoing audio playback and backend generation
     voiceChat.interrupt()
+    sttOnlyVoiceChat.interrupt()
+
+    // Clear conversation mode state
     setMessages([])
     voiceChat.clearMessages()
+    sttOnlyVoiceChat.clearMessages()
     setPlayingMessageId(null)
+
+    // Clear STT-only mode state
+    setTranscriptionResult(null)
     setTranscriptionError(null)
-  }, [voiceChat])
+    setIsTranscribing(false)
+
+    // Clear TTS-only mode state
+    setTtsError(null)
+    setIsSynthesizing(false)
+    setTtsHistory([])
+    setPlayingTtsId(null)
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause()
+      ttsAudioRef.current = null
+    }
+
+    // Clear text input
+    setTextInput('')
+  }, [voiceChat, sttOnlyVoiceChat])
 
   // Expose clear function to parent via ref
   useEffect(() => {
@@ -787,10 +979,14 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [clearRef, handleClearConversation])
 
-  // Notify parent when messages change
+  // Notify parent when there's content to clear (in any mode)
   useEffect(() => {
-    onMessagesChange?.(messages.length > 0)
-  }, [messages.length, onMessagesChange])
+    const hasContent =
+      messages.length > 0 ||           // Conversation mode
+      transcriptionResult !== null ||   // STT-only mode
+      ttsHistory.length > 0             // TTS-only mode (history)
+    onMessagesChange?.(hasContent)
+  }, [messages.length, transcriptionResult, ttsHistory.length, onMessagesChange])
 
   // Play audio when playingMessageId changes
   useEffect(() => {
@@ -869,7 +1065,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <SpeechToTextConfig
                 enabled={sttEnabled}
-                onEnabledChange={setSttEnabled}
+                onEnabledChange={handleSttEnabledChange}
                 selectedModel={sttModel}
                 onModelChange={setSttModel}
                 selectedLanguage={sttLanguage}
@@ -881,7 +1077,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
               <TextToSpeechConfig
                 enabled={ttsEnabled}
-                onEnabledChange={setTtsEnabled}
+                onEnabledChange={handleTtsEnabledChange}
                 selectedModel={ttsModel}
                 onModelChange={(model) => {
                   setTtsModel(model)
@@ -915,89 +1111,105 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
               />
             )}
 
-            {/* LLM Model Selection + VAD Settings - side by side in conversation mode */}
-            {mode === 'conversation' && (
-              <div className="grid grid-cols-2 gap-2">
-                {/* LLM Response Card */}
-                <div className="rounded-lg border border-border bg-card/40 p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">LLM Response</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={llmEnabled}
-                        onCheckedChange={(enabled) => {
-                          setLlmEnabled(enabled)
-                          // Disconnect when turning off LLM while connected
-                          if (!enabled && voiceChat.isConnected) {
-                            voiceChat.disconnect()
-                          }
-                        }}
-                        disabled={!activeProject || availableLLMModels.length === 0}
-                        aria-label="Enable LLM responses"
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {llmEnabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
-                  </div>
-                  {activeProject && availableLLMModels.length > 0 ? (
-                    <div className={`space-y-1 ${!llmEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                      <Selector
-                        value={selectedLLMModel}
-                        options={availableLLMModels.map(m => ({
-                          value: m.name,
-                          label: m.name,
-                          description: m.model,
-                        }))}
-                        onChange={setSelectedLLMModel}
-                        disabled={!llmEnabled || voiceChat.isConnected}
-                      />
+            {/* LLM Model Selection + VAD Settings - always visible, grayed out when irrelevant */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* LLM Response Card */}
+              <div className={`rounded-lg border border-border bg-card/40 p-3 ${!sttEnabled && !ttsEnabled ? 'opacity-50' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">LLM Response</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px]">
+                          <p>{!sttEnabled && !ttsEnabled
+                            ? 'Enable STT or TTS to use LLM responses.'
+                            : 'Enable for two-way conversation. When off, speech is only echoed back.'}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    {/* Connection status inline with header */}
+                    {activeProject && availableLLMModels.length > 0 && llmEnabled && (sttEnabled || ttsEnabled) && (
                       <span className="text-xs text-muted-foreground">
                         {voiceChat.isConnected ? (
-                          <span className="text-green-600">Connected</span>
-                        ) : llmEnabled ? (
-                          'Will connect on first message'
+                          <span className="text-green-600">• Connected</span>
                         ) : (
-                          'Echo mode (no LLM)'
+                          '• Connects on first message'
                         )}
                       </span>
-                    </div>
-                  ) : (
+                    )}
+                  </div>
+                  <div className={`flex items-center gap-2 ${!sttEnabled && !ttsEnabled ? 'pointer-events-none' : ''}`}>
+                    <Switch
+                      checked={llmEnabled}
+                      onCheckedChange={(enabled) => {
+                        setLlmEnabled(enabled)
+                        // Disconnect when turning off LLM while connected
+                        if (!enabled && voiceChat.isConnected) {
+                          voiceChat.disconnect()
+                        }
+                      }}
+                      disabled={!activeProject || availableLLMModels.length === 0 || (!sttEnabled && !ttsEnabled)}
+                      aria-label="Enable LLM responses"
+                    />
                     <span className="text-xs text-muted-foreground">
-                      {!activeProject
-                        ? 'Select a project to enable LLM conversation'
-                        : 'No LLM models configured in this project'}
+                      {llmEnabled ? 'Enabled' : 'Disabled'}
                     </span>
-                  )}
+                  </div>
                 </div>
-
-                {/* VAD Settings Card - always visible in conversation mode */}
-                <VADSettings
-                  enabled={vadEnabled}
-                  onEnabledChange={setVadEnabled}
-                  silenceDuration={silenceDuration}
-                  onSilenceDurationChange={(duration) => {
-                    setSilenceDuration(duration)
-                    // Update the connected session if already connected
-                    if (voiceChat.isConnected) {
-                      voiceChat.updateConfig({ silenceDuration: duration })
-                    }
-                  }}
-                />
+                {activeProject && availableLLMModels.length > 0 ? (
+                  <div className={!llmEnabled || (!sttEnabled && !ttsEnabled) ? 'opacity-50 pointer-events-none' : ''}>
+                    <Selector
+                      value={selectedLLMModel}
+                      options={availableLLMModels.map(m => ({
+                        value: m.name,
+                        label: m.name,
+                        description: m.model,
+                      }))}
+                      onChange={setSelectedLLMModel}
+                      disabled={!llmEnabled || voiceChat.isConnected || (!sttEnabled && !ttsEnabled)}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {!activeProject
+                      ? 'Select a project to enable LLM conversation'
+                      : 'No LLM models configured in this project'}
+                  </span>
+                )}
               </div>
-            )}
+
+              {/* VAD Settings Card - always visible, grayed out when STT is disabled */}
+              <VADSettings
+                enabled={vadEnabled}
+                onEnabledChange={setVadEnabled}
+                silenceDuration={silenceDuration}
+                onSilenceDurationChange={(duration) => {
+                  setSilenceDuration(duration)
+                  // Update the connected session if already connected
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ silenceDuration: duration })
+                  }
+                  if (sttOnlyVoiceChat.isConnected) {
+                    sttOnlyVoiceChat.updateConfig({ silenceDuration: duration })
+                  }
+                }}
+                sttDisabled={!sttEnabled}
+                vadNotAvailable={false}
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* Test Area */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {/* Mic permission prompt */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* Mic permission prompt - scrollable container for short screens */}
         {needsMicPermission && (
-          <div className="p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
             <MicPermissionPrompt
               state={micPermission}
               onRequestPermission={requestMicPermission}
@@ -1051,54 +1263,107 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
           )}
 
           {mode === 'tts' && (
-            <div className="h-full p-4 overflow-y-auto">
-              <div className="max-w-2xl mx-auto space-y-4">
-                {/* TTS Input */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Text to Speak</label>
-                  <textarea
-                    value={ttsInputText || textInput}
-                    onChange={(e) => setTextInput(e.target.value)}
-                    placeholder="Enter text to convert to speech..."
-                    rows={4}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+            <div className="h-full flex flex-col">
+              {/* Error message */}
+              {ttsError && (
+                <div className="flex-shrink-0 mx-4 mt-4 flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-600 text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{ttsError}</span>
+                  <button
+                    onClick={() => setTtsError(null)}
+                    className="ml-auto text-xs hover:text-red-800"
+                  >
+                    Dismiss
+                  </button>
                 </div>
+              )}
 
-                {/* Error message */}
-                {ttsError && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-600 text-sm">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <span>{ttsError}</span>
+              {/* TTS History - scrollable area */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {ttsHistory.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center px-6 py-10">
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                        <Volume2 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="text-lg font-medium text-foreground">
+                        Text-to-Speech
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        Type text below to hear it spoken aloud
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {ttsHistory.map((item) => (
+                      <div key={item.id} className="flex items-start gap-3">
+                        {/* Play button */}
+                        <button
+                          onClick={() => handlePlayTtsHistory(item.id)}
+                          className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            playingTtsId === item.id
+                              ? 'bg-primary/20 text-primary'
+                              : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                          aria-label={playingTtsId === item.id ? 'Stop' : 'Play'}
+                        >
+                          {playingTtsId === item.id ? (
+                            <StopCircle className="w-5 h-5" />
+                          ) : (
+                            <Volume2 className={`w-5 h-5 ${playingTtsId === item.id ? 'animate-pulse' : ''}`} />
+                          )}
+                        </button>
+
+                        {/* Text content */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-base leading-relaxed text-foreground">
+                            {item.text}
+                          </p>
+                          <span className="text-xs text-muted-foreground mt-1 block">
+                            {item.timestamp.toLocaleTimeString(undefined, {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
 
-                {/* Synthesize button */}
-                <Button
-                  onClick={sendTextMessage}
-                  disabled={!textInput.trim() || isSynthesizing}
-                  className="w-full"
-                >
-                  {isSynthesizing ? (
-                    <>
-                      <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Synthesizing...
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="w-4 h-4 mr-2" />
-                      Speak
-                    </>
-                  )}
-                </Button>
-
-                {/* Audio output */}
-                {ttsOutputBlob && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Output</label>
-                    <AudioPlayer blob={ttsOutputBlob} />
-                  </div>
-                )}
+              {/* Input area at bottom */}
+              <div className="flex-shrink-0 p-3 border-t border-border bg-background/60">
+                <div className="flex items-center gap-2">
+                  <textarea
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        sendTextMessage()
+                      }
+                    }}
+                    placeholder="Type text to speak..."
+                    rows={1}
+                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[40px] max-h-[120px]"
+                    style={{ height: 'auto' }}
+                  />
+                  <Button
+                    size="icon"
+                    className="h-10 w-10 rounded-full flex-shrink-0"
+                    onClick={sendTextMessage}
+                    disabled={!textInput.trim() || isSynthesizing}
+                    aria-label={isSynthesizing ? 'Synthesizing...' : 'Speak'}
+                  >
+                    {isSynthesizing ? (
+                      <div className="w-5 h-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <Volume2 className="h-5 w-5" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -1112,8 +1377,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
               {/* Recording mode: full-width waveform with stop button on right */}
               {recordingState === 'recording' && activeStream ? (
                 <>
-                  {/* Full-width waveform */}
-                  <div className="flex-1 flex items-center justify-center">
+                  {/* Waveform with optional helper text for manual mode */}
+                  <div className="flex-1 flex flex-col items-center justify-center gap-1">
                     <Waveform
                       stream={activeStream}
                       isActive={true}
@@ -1123,6 +1388,12 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                       color="rgb(156, 163, 175)"
                       className="w-full"
                     />
+                    {/* Show helper text when VAD is off (manual mode) */}
+                    {!vadEnabled && (
+                      <span className="text-xs text-muted-foreground">
+                        Tap stop when done speaking
+                      </span>
+                    )}
                   </div>
 
                   {/* Stop button */}

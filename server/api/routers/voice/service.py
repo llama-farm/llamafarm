@@ -628,6 +628,13 @@ class VoiceChatService:
                 TranscriptionMessage(text=transcription_for_llm, is_final=True).model_dump()
             )
 
+            # STT-only mode: skip LLM and TTS, return to idle
+            if not self.session.config.enable_llm:
+                logger.debug("STT-only mode (enable_llm=False), skipping LLM/TTS")
+                self.session.set_state(VoiceState.IDLE)
+                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+                return
+
             # Step 2 & 3: Stream LLM and TTS in parallel
             self.session.set_state(VoiceState.SPEAKING)
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())

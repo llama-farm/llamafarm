@@ -128,6 +128,7 @@ export interface VoiceChatConfig {
   systemPrompt?: string
   sentenceBoundaryOnly?: boolean
   silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
+  enableLLM?: boolean // When false, only STT is performed (transcription-only mode with VAD)
 }
 
 // =============================================================================
@@ -280,6 +281,9 @@ export function createVoiceChatConnection(
   if (config.systemPrompt) url.searchParams.set('system_prompt', config.systemPrompt)
   if (config.sentenceBoundaryOnly !== undefined) {
     url.searchParams.set('sentence_boundary_only', String(config.sentenceBoundaryOnly))
+  }
+  if (config.enableLLM !== undefined) {
+    url.searchParams.set('enable_llm', String(config.enableLLM))
   }
 
   const ws = new WebSocket(url.toString())
