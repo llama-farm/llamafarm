@@ -3,7 +3,7 @@
 Endpoints:
 - Language detection: POST /v1/ml/nlp/language, POST /v1/ml/nlp/language/batch
 - Keyword extraction: POST /v1/ml/nlp/keywords, POST /v1/ml/nlp/keywords/batch
-- PII handling: POST /v1/ml/nlp/pii/detect, POST /v1/ml/nlp/redact
+- PII handling: POST /v1/ml/nlp/pii/detect, POST /v1/ml/nlp/pii/redact
 """
 
 import logging
@@ -327,7 +327,7 @@ async def detect_pii(request: PIIDetectRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/v1/ml/nlp/redact")
+@router.post("/v1/ml/nlp/pii/redact")
 async def redact_pii(request: PIIRedactRequest):
     """
     Detect and redact PII from text.

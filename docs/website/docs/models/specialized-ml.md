@@ -788,7 +788,7 @@ curl -X POST http://localhost:8000/v1/ml/nlp/pii/detect \
 Replace PII with placeholder text:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/nlp/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Customer: Jane Doe\nSSN: 123-45-6789\nEmail: jane@company.com"
@@ -813,7 +813,7 @@ curl -X POST http://localhost:8000/v1/ml/nlp/redact \
 Use different placeholders for each PII type:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/nlp/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact Alice at alice@example.com or 555-0123",
@@ -901,7 +901,7 @@ import httpx
 def sanitize_for_logging(log_entry: str) -> str:
     """Remove PII from log entries before storage."""
     response = httpx.post(
-        "http://localhost:8000/v1/ml/nlp/redact",
+        "http://localhost:8000/v1/ml/nlp/pii/redact",
         json={
             "text": log_entry,
             "replacement": "***"

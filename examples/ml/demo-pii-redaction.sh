@@ -66,7 +66,7 @@ echo -e "${BLUE}Test 2: Redact PII from text${NC}"
 echo -e "${YELLOW}Input: \"My SSN is 123-45-6789 and email is test@example.com\"${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/nlp/redact" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/pii/redact" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "My SSN is 123-45-6789 and email is test@example.com",
@@ -84,7 +84,7 @@ echo -e "${BLUE}Test 3: Custom per-type replacement patterns${NC}"
 echo -e "${YELLOW}Using different replacements for different PII types${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/nlp/redact" \
+curl -s -X POST "${BASE_URL}/v1/ml/nlp/pii/redact" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Call Jane Doe at 555-987-6543 or email jane@company.org. Her IP is 192.168.1.100",

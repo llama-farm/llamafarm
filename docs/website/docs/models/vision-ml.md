@@ -409,10 +409,10 @@ Detect and redact personally identifiable information.
 
 **Endpoints:**
 - `POST /v1/ml/nlp/pii/detect` - Find PII
-- `POST /v1/ml/nlp/redact` - Redact PII
+- `POST /v1/ml/nlp/pii/redact` - Redact PII
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/nlp/redact \
+curl -X POST http://localhost:8000/v1/ml/nlp/pii/redact \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Contact John Smith at john@email.com or 555-123-4567",

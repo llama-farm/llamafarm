@@ -197,7 +197,7 @@ Common HTTP status codes:
 - `POST /v1/ml/nlp/keywords` - Extract keywords from text
 - `POST /v1/ml/nlp/keywords/batch` - Batch keyword extraction
 - `POST /v1/ml/nlp/pii/detect` - Detect PII in text
-- `POST /v1/ml/nlp/redact` - Redact PII from text
+- `POST /v1/ml/nlp/pii/redact` - Redact PII from text
 
 ### Time Series
 

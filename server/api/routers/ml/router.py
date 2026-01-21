@@ -632,7 +632,7 @@ async def detect_pii(request: PIIDetectRequest) -> dict[str, Any]:
     )
 
 
-@router.post("/nlp/redact")
+@router.post("/nlp/pii/redact")
 async def redact_pii(request: PIIRedactRequest) -> dict[str, Any]:
     """Redact PII from text.
 

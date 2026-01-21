@@ -39,7 +39,7 @@ echo "   | Vision            | Object Detection (YOLOS)  | /v1/vision/detect    
 echo "   | Vision            | Background Removal        | /v1/vision/remove-background    |"
 echo "   | NLP               | Language Identification   | /v1/ml/nlp/identify-language       |"
 echo "   | NLP               | Keyword Extraction        | /v1/ml/nlp/keywords                |"
-echo "   | NLP               | PII Redaction (GLiNER)    | /v1/ml/nlp/redact                  |"
+echo "   | NLP               | PII Redaction (GLiNER)    | /v1/ml/nlp/pii/redact              |"
 echo "   | Time-Series       | Forecasting (Chronos)     | /v1/ml/timeseries/forecast         |"
 echo "   | Time-Series       | Change Point Detection    | /v1/ml/timeseries/changepoints     |"
 echo "   | Streaming         | Concept Drift Detection   | /v1/ml/analysis/drift/*           |"
