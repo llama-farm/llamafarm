@@ -294,7 +294,11 @@ test_env_file() {
 test_list_with_worktree() {
     log_test "wt list (with worktree)"
 
-    if "$WT_SCRIPT" list 2>&1 | grep -q "$TEST_WT_NAME"; then
+    # Capture output first to avoid pipe buffering issues with grep -q
+    local list_output
+    list_output=$("$WT_SCRIPT" list 2>&1)
+
+    if echo "$list_output" | grep -q "$TEST_WT_NAME"; then
         log_pass "list shows created worktree"
     else
         log_fail "list does not show created worktree"
