@@ -15,7 +15,7 @@ from pathlib import Path
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from components.parsers.universal import UniversalParser
+from components.parsers.universal import UniversalParser  # noqa: E402
 
 
 def create_sample_files() -> tuple[Path, Path]:
@@ -71,20 +71,20 @@ languages in the world. Whether you're building web applications, analyzing data
 developing machine learning models, Python has the tools you need.
 """
 
-    # Create temp files
-    txt_file = tempfile.NamedTemporaryFile(
+    # Create temp files using context managers
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, prefix="demo_"
-    )
-    txt_file.write(txt_content)
-    txt_file.close()
+    ) as txt_file:
+        txt_file.write(txt_content)
+        txt_path = txt_file.name
 
-    md_file = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", delete=False, prefix="demo_"
-    )
-    md_file.write(md_content)
-    md_file.close()
+    ) as md_file:
+        md_file.write(md_content)
+        md_path = md_file.name
 
-    return Path(txt_file.name), Path(md_file.name)
+    return Path(txt_path), Path(md_path)
 
 
 def demo_chunk_strategy(
@@ -110,7 +110,7 @@ def demo_chunk_strategy(
     for i, doc in enumerate(result.documents):
         print(f"\n--- Chunk {i + 1} ---")
         print(f"Content preview: {doc.content[:100]}...")
-        print(f"\nMetadata:")
+        print("\nMetadata:")
         print(json.dumps(doc.metadata, indent=2, default=str))
 
 

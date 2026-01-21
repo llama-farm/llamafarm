@@ -8,13 +8,10 @@ This test file verifies the complete flow:
 5. Backward compatibility - existing configs still work
 """
 
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-
 
 # =============================================================================
 # Test Fixtures

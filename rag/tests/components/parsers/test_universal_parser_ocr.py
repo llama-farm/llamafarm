@@ -11,8 +11,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestUniversalParserOCRDetection:
     """Test OCR detection logic."""
@@ -220,7 +218,7 @@ class TestUniversalParserOCRIntegration:
 
         try:
             parser = UniversalParser(config={"use_ocr": True})
-            result = parser.parse(temp_path)
+            parser.parse(temp_path)  # result not needed, just verify flow
 
             # OCR should have been called
             assert mock_post.called
@@ -277,7 +275,7 @@ class TestUniversalParserOCRIntegration:
         try:
             # Parse should not call OCR even though text is short
             with patch.object(parser, "_run_remote_ocr") as mock_ocr:
-                result = parser.parse(temp_path)
+                parser.parse(temp_path)  # result not needed, just verify mock
                 # OCR should not be called
                 mock_ocr.assert_not_called()
 

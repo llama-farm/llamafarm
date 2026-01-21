@@ -6,7 +6,6 @@ This test file verifies:
 3. Legacy parsers still work when explicitly requested
 """
 
-import pytest
 
 
 class TestParserFactoryDiscovery:

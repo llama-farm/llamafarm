@@ -17,7 +17,7 @@ import yaml
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from core.strategies.handler import SchemaHandler
+from core.strategies.handler import SchemaHandler  # noqa: E402
 
 
 def create_minimal_config(tmp_dir: Path) -> Path:

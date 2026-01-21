@@ -19,7 +19,7 @@ from pathlib import Path
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-import yaml
+import yaml  # noqa: E402
 
 
 def create_minimal_config(temp_dir):
@@ -154,7 +154,7 @@ def demo_minimal_config_uses_universal_rag():
 
         # Get the universal_rag strategy config
         universal = handler.create_processing_config("universal_rag")
-        print(f"\n--- Universal RAG Strategy Config ---")
+        print("\n--- Universal RAG Strategy Config ---")
         print(f"Name: {universal.name}")
         print(f"Parsers: {[p.type for p in universal.parsers or []]}")
         print(f"Extractors: {[e.type for e in universal.extractors or []]}")
@@ -217,14 +217,14 @@ def demo_process_files_with_universal_rag():
             if documents:
                 # Show first chunk info
                 first_doc = documents[0]
-                print(f"  First chunk metadata:")
+                print("  First chunk metadata:")
                 print(f"    - chunk_index: {first_doc.metadata.get('chunk_index')}")
                 print(f"    - chunk_label: {first_doc.metadata.get('chunk_label')}")
                 print(f"    - total_chunks: {first_doc.metadata.get('total_chunks')}")
                 print(f"    - word_count: {first_doc.metadata.get('word_count')}")
                 print(f"    - document_name: {first_doc.metadata.get('document_name')}")
 
-        print(f"\n--- Summary ---")
+        print("\n--- Summary ---")
         print(f"Files processed: {len(sample_files)}")
         print(f"Total chunks created: {total_docs}")
 

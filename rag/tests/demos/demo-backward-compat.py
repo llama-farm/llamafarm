@@ -18,7 +18,7 @@ from pathlib import Path
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-import yaml
+import yaml  # noqa: E402
 
 
 def demo_legacy_parsers_available():
@@ -141,7 +141,7 @@ def demo_explicit_strategy_overrides_default():
 
         # Get custom strategy
         custom = handler.create_processing_config("custom_text_strategy")
-        print(f"\n--- Custom Strategy ---")
+        print("\n--- Custom Strategy ---")
         print(f"Name: {custom.name}")
         print(f"Parser: {custom.parsers[0].type}")
 
@@ -153,7 +153,7 @@ def demo_explicit_strategy_overrides_default():
 
         # Get universal_rag strategy
         universal = handler.create_processing_config("universal_rag")
-        print(f"\n--- Universal RAG Strategy ---")
+        print("\n--- Universal RAG Strategy ---")
         print(f"Name: {universal.name}")
         print(f"Parser: {universal.parsers[0].type}")
 
@@ -220,7 +220,7 @@ def demo_priority_system():
     if legacy_check:
         legacy_priorities = [p for p, n in priorities if n in legacy_check]
         if all(p == 100 for p in legacy_priorities):
-            print(f"[PASS] Legacy parsers have default priority (100)")
+            print("[PASS] Legacy parsers have default priority (100)")
         else:
             print(f"[INFO] Legacy parser priorities vary: {set(legacy_priorities)}")
 
@@ -305,9 +305,9 @@ def demo_mixed_config_processing():
         print(f"Documents created: {len(legacy_docs)}")
         if legacy_docs:
             print(f"Content sample: {legacy_docs[0].content[:50]}...")
-            print(f"[PASS] Legacy parser processed file successfully")
+            print("[PASS] Legacy parser processed file successfully")
         else:
-            print(f"[FAIL] No documents created")
+            print("[FAIL] No documents created")
             return False
 
         print("\n--- Processing with Universal Strategy ---")
@@ -320,9 +320,9 @@ def demo_mixed_config_processing():
         print(f"Documents created: {len(universal_docs)}")
         if universal_docs:
             print(f"Content sample: {universal_docs[0].content[:50]}...")
-            print(f"[PASS] Universal parser processed file successfully")
+            print("[PASS] Universal parser processed file successfully")
         else:
-            print(f"[FAIL] No documents created")
+            print("[FAIL] No documents created")
             return False
 
     print("\n" + "=" * 60)

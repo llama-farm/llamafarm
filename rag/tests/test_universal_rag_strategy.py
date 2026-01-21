@@ -7,9 +7,6 @@ This test file verifies:
 4. Backward compatibility with existing strategy configs
 """
 
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -255,7 +252,7 @@ class TestUniversalParserIntegration:
 
         # Extract parser names from all types
         parser_names = []
-        for parser_type, configs in parsers.items():
+        for _parser_type, configs in parsers.items():
             for config in configs:
                 parser_names.append(config.get("name"))
 

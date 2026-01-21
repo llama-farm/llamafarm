@@ -15,8 +15,8 @@ from pathlib import Path
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from components.extractors.universal_extractor import UniversalExtractor
-from core.base import Document
+from components.extractors.universal_extractor import UniversalExtractor  # noqa: E402
+from core.base import Document  # noqa: E402
 
 
 def create_sample_documents() -> tuple[list[Document], Path]:

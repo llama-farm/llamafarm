@@ -14,8 +14,8 @@ from pathlib import Path
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from components.parsers.parser_factory import ToolAwareParserFactory
-from components.parsers.parser_registry import ParserRegistry
+from components.parsers.parser_factory import ToolAwareParserFactory  # noqa: E402
+from components.parsers.parser_registry import ParserRegistry  # noqa: E402
 
 
 def demo_parser_discovery():

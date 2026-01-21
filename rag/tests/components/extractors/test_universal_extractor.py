@@ -1,19 +1,16 @@
 """Tests for the UniversalExtractor."""
 
+# Import from the rag package
+import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Import from the rag package
-import sys
 rag_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from core.base import Document
+from core.base import Document  # noqa: E402
 
 
 class TestUniversalExtractorImport:
@@ -80,8 +77,8 @@ class TestUniversalExtractorKeywords:
 
     def test_extracts_keywords_from_text(self):
         """Test: UniversalExtractor extracts keywords from text."""
-        from components.extractors.universal_extractor import UniversalExtractor
         import components.extractors.universal_extractor.universal_extractor as mod
+        from components.extractors.universal_extractor import UniversalExtractor
 
         if not mod.YAKE_AVAILABLE:
             pytest.skip("YAKE not available")

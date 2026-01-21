@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 rag_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(rag_dir))
 
-from components.parsers.universal import UniversalParser
+from components.parsers.universal import UniversalParser  # noqa: E402
 
 
 def demo_ocr_detection():
@@ -108,7 +108,7 @@ def demo_ocr_endpoint_mocked():
                 print(f"Request JSON keys: {list(call_args[1]['json'].keys())}")
 
             print(f"\nOCR Result: {result[:100]}...")
-            print(f"[PASS] OCR endpoint call simulation successful")
+            print("[PASS] OCR endpoint call simulation successful")
 
     finally:
         Path(temp_path).unlink(missing_ok=True)
