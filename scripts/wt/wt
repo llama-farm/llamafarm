@@ -1271,6 +1271,9 @@ start_rag() {
     log_info "Starting RAG worker..."
 
     cd "$wt_path/rag"
+    CELERY_BROKER_URL="filesystem://" \
+    CELERY_BROKER_FOLDER="$data_path/broker" \
+    CELERY_RESULT_BACKEND="file://$data_path/broker/results" \
     LF_DATA_DIR="$data_path" \
     nohup uv run celery -A celery_app worker --loglevel=INFO > "$data_path/logs/rag.log" 2>&1 &
     echo $! > "$data_path/pids/rag.pid"
@@ -1577,7 +1580,7 @@ cmd_health() {
 
     # Check server
     printf "  Server (:%s): " "$LF_SERVER_PORT"
-    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LF_SERVER_PORT/v1/health" 2>/dev/null | grep -q "200"; then
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LF_SERVER_PORT/health" 2>/dev/null | grep -q "200"; then
         echo -e "${GREEN}healthy${NC}"
     else
         echo -e "${RED}unreachable${NC}"
