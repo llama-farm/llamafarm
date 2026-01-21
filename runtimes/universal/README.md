@@ -1072,6 +1072,52 @@ See [examples/universal-embedder-rag/](../../examples/universal-embedder-rag/) f
 - **Lower inference steps** for speed: 20-30 steps instead of 50
 - **Use turbo models** for fastest generation: `stabilityai/sdxl-turbo`
 
+### ML Feature Memory Requirements
+
+The Universal Runtime includes several ML features with specific memory requirements:
+
+| Feature | Model Memory | Per-Item Memory | Max Batch | Notes |
+|---------|--------------|-----------------|-----------|-------|
+| **Few-Shot Classifier** | ~500MB | ~50MB/image | 32 images | CLIP-based, training uses float32 |
+| **Open-Vocab Detection** | ~600MB | ~50MB/image + ~50MB/query | 32 images | OWL-ViT based |
+| **Object Detection** | ~50-200MB | ~20MB/image | 32 images | YOLO-based |
+| **Background Removal** | ~300MB | ~50MB/image | 32 images | RMBG model |
+| **Anomaly Detection** | ~50-500MB | ~1KB/sample | 10,000 samples | Depends on backend |
+| **Time Series Forecast** | ~200MB | ~10KB/series | 1,000 series | Chronos model |
+
+**Batch Size Limits:**
+
+The runtime enforces configurable batch size limits to prevent out-of-memory errors:
+
+| Limit | Default | Environment Variable | Purpose |
+|-------|---------|---------------------|---------|
+| `MAX_IMAGE_BATCH_SIZE` | 32 | `LF_MAX_IMAGE_BATCH_SIZE` | Vision model inference batches |
+| `MAX_TRAINING_IMAGES` | 500 | `LF_MAX_TRAINING_IMAGES` | Few-shot classifier training |
+| `MAX_TEXT_QUERIES` | 100 | `LF_MAX_TEXT_QUERIES` | Open-vocab detection queries |
+| `MAX_QUERY_IMAGES` | 10 | `LF_MAX_QUERY_IMAGES` | Image-conditioned detection |
+| `MAX_EMBEDDING_BATCH_SIZE` | 128 | `LF_MAX_EMBEDDING_BATCH_SIZE` | Text embedding batches |
+| `MAX_ANOMALY_BATCH_SIZE` | 10,000 | `LF_MAX_ANOMALY_BATCH_SIZE` | Anomaly scoring batches |
+
+**Example: Adjusting limits for high-memory systems:**
+
+```bash
+# For a system with 64GB RAM and 24GB VRAM
+export LF_MAX_IMAGE_BATCH_SIZE=64
+export LF_MAX_TRAINING_IMAGES=1000
+```
+
+**Memory Estimation Formula:**
+
+For vision models:
+```
+Total Memory ≈ Model Memory + (Per-Item Memory × Batch Size) + 500MB overhead
+```
+
+Example: Few-shot classification with 32 images:
+```
+~500MB (CLIP) + (50MB × 32) + 500MB = ~2.6GB peak memory
+```
+
 ---
 
 ## Testing

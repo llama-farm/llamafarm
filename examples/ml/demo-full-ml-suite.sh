@@ -228,7 +228,7 @@ data = seg1 + seg2
 print(str(data).replace(' ', ''))
 ")
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/timeseries/changepoints" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/timeseries/changepoints" \
     -H "Content-Type: application/json" \
     -d "{
         \"data\": $TIMESERIES,

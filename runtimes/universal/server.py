@@ -62,7 +62,12 @@ from models import (
     SpeechModel,
     TimeSeriesModel,
 )
+from routers.anomaly import router as anomaly_router
 from routers.chat_completions import router as chat_completions_router
+from routers.classifier import router as classifier_router
+from routers.nlp import router as nlp_router
+from routers.timeseries import router as timeseries_router
+from routers.vision import router as vision_router
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import (
@@ -233,7 +238,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(anomaly_router)
 app.include_router(chat_completions_router)
+app.include_router(classifier_router)
+app.include_router(nlp_router)
+app.include_router(timeseries_router)
+app.include_router(vision_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)

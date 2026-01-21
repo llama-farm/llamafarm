@@ -50,7 +50,7 @@ print(str(data).replace(' ', ''))
 
 # Train the model (overwrite=true to use consistent name)
 echo "   Training IsolationForest model..."
-TRAIN_RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/fit" \
+TRAIN_RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/fit" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"server-metrics-model\",
@@ -71,7 +71,7 @@ echo ""
 
 # Check model status - use models list and filter
 echo "3. Checking Model Status"
-RESPONSE=$(curl -s "$BASE_URL/v1/ml/anomaly/models" | python3 -c "
+RESPONSE=$(curl -s "$BASE_URL/v1/anomaly/models" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for m in data.get('data', []):
@@ -104,7 +104,7 @@ echo "5. Explaining Anomalies with SHAP"
 echo "   Asking WHY each point is anomalous..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/explain" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/explain" \
     -H "Content-Type: application/json" \
     -d "{
         \"model_id\": \"$MODEL_NAME\",
@@ -147,7 +147,7 @@ echo "7. Anomaly Scores for Reference"
 echo "   Scoring the same anomalous points..."
 echo ""
 
-RESPONSE=$(curl -s -X POST "$BASE_URL/v1/ml/anomaly/score" \
+RESPONSE=$(curl -s -X POST "$BASE_URL/v1/anomaly/score" \
     -H "Content-Type: application/json" \
     -d "{
         \"model\": \"$MODEL_NAME\",
@@ -176,7 +176,7 @@ echo ""
 
 # Clean up
 echo "8. Cleanup"
-curl -s -X DELETE "$BASE_URL/v1/ml/anomaly/models/$MODEL_NAME" > /dev/null
+curl -s -X DELETE "$BASE_URL/v1/anomaly/models/$MODEL_NAME" > /dev/null
 echo "   Deleted model: $MODEL_NAME"
 echo ""
 

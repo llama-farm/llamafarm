@@ -48,10 +48,10 @@ echo -e "${BLUE}Test 1: Forecast linear trend${NC}"
 echo -e "${YELLOW}Input: 30 days of linear growth (1, 2, 3, ..., 30)${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/timeseries/forecast" \
+curl -s -X POST "${BASE_URL}/v1/timeseries/forecast" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+    "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
     "horizon": 7
   }' | python3 -c "
 import json, sys
@@ -74,10 +74,10 @@ echo -e "${BLUE}Test 2: Forecast seasonal pattern${NC}"
 echo -e "${YELLOW}Input: 21 days with weekly seasonality${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/timeseries/forecast" \
+curl -s -X POST "${BASE_URL}/v1/timeseries/forecast" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": [10, 12, 14, 15, 13, 11, 10, 11, 13, 15, 16, 14, 12, 11, 12, 14, 16, 17, 15, 13, 12],
+    "values": [10, 12, 14, 15, 13, 11, 10, 11, 13, 15, 16, 14, 12, 11, 12, 14, 16, 17, 15, 13, 12],
     "horizon": 7,
     "quantiles": [0.1, 0.5, 0.9]
   }' | python3 -c "
@@ -100,10 +100,10 @@ echo -e "${BLUE}Test 3: Forecast sales-like data${NC}"
 echo -e "${YELLOW}Input: 30 days of simulated daily sales${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/timeseries/forecast" \
+curl -s -X POST "${BASE_URL}/v1/timeseries/forecast" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": [120, 135, 142, 155, 168, 210, 195, 125, 140, 150, 162, 175, 215, 200, 130, 145, 155, 165, 180, 220, 205, 135, 150, 160, 170, 185, 225, 210, 140, 155],
+    "values": [120, 135, 142, 155, 168, 210, 195, 125, 140, 150, 162, 175, 215, 200, 130, 145, 155, 165, 180, 220, 205, 135, 150, 160, 170, 185, 225, 210, 140, 155],
     "horizon": 7,
     "num_samples": 50
   }' | python3 -c "
@@ -129,10 +129,10 @@ echo -e "${BLUE}Test 4: Forecast with custom confidence levels${NC}"
 echo -e "${YELLOW}Using 5th and 95th percentiles for wider intervals${NC}"
 echo ""
 
-curl -s -X POST "${BASE_URL}/v1/ml/timeseries/forecast" \
+curl -s -X POST "${BASE_URL}/v1/timeseries/forecast" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": [100, 105, 110, 108, 112, 118, 115, 120, 125, 122, 128, 130, 127, 135, 140],
+    "values": [100, 105, 110, 108, 112, 118, 115, 120, 125, 122, 128, 130, 127, 135, 140],
     "horizon": 5,
     "quantiles": [0.05, 0.5, 0.95]
   }' | python3 -c "
