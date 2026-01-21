@@ -1969,7 +1969,7 @@ export const PARSER_SCHEMAS = {
       ".msg"
     ]
   },
-  "UniversalParser_": {
+  "UniversalParser": {
     "properties": {
       "chunk_size": {
         "type": "integer",
