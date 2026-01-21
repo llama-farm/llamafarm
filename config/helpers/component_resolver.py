@@ -16,15 +16,18 @@ Notes:
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any
 
 from config.datamodel import (
     Database,
-    DataProcessingStrategy,
-    EmbeddingStrategy,
+    DatabaseEmbeddingStrategy,
+    DatabaseRetrievalStrategy,
+    DataProcessingStrategyDefinition,
     LlamaFarmConfig,
+    NamedEmbeddingStrategy,
+    NamedParserDefinition,
+    NamedRetrievalStrategy,
     Parser,
-    RetrievalStrategy,
 )
 
 
@@ -67,12 +70,12 @@ class ComponentResolver:
     @staticmethod
     def _build_component_map(
         components: list[Any], component_type: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate that each component has a unique, non-empty name and build a map.
         Raises ValueError when validation fails to avoid None keys masking lookups.
         """
-        mapping: Dict[str, Any] = {}
+        mapping: dict[str, Any] = {}
         for component in components:
             name = (
                 component.get("name")
@@ -98,7 +101,7 @@ class ComponentResolver:
         if rag_cfg:
             # Resolve databases
             databases = getattr(rag_cfg, "databases", None) or []
-            resolved_dbs: List[Database] = []
+            resolved_dbs: list[Database] = []
             for db in databases:
                 resolved_db = self._resolve_database_references(db)
                 resolved_db = self._apply_defaults(resolved_db)
@@ -107,7 +110,7 @@ class ComponentResolver:
 
             # Resolve parsers in data processing strategies
             strategies = getattr(rag_cfg, "data_processing_strategies", None) or []
-            resolved_strategies: List[DataProcessingStrategy] = []
+            resolved_strategies: list[DataProcessingStrategyDefinition] = []
             for strategy in strategies:
                 resolved_strategies.append(self._resolve_parsers(strategy))
             rag_cfg.data_processing_strategies = resolved_strategies
@@ -192,11 +195,13 @@ class ComponentResolver:
 
         return db_copy
 
-    def _resolve_parsers(self, strategy: DataProcessingStrategy) -> DataProcessingStrategy:
+    def _resolve_parsers(
+        self, strategy: DataProcessingStrategyDefinition
+    ) -> DataProcessingStrategyDefinition:
         """Expand parser references within a data processing strategy."""
-        strat_copy: DataProcessingStrategy = strategy.model_copy(deep=True)
+        strat_copy: DataProcessingStrategyDefinition = strategy.model_copy(deep=True)
         parsers: list[Any] = getattr(strategy, "parsers", None) or []
-        resolved_parsers: List[Parser] = []
+        resolved_parsers: list[Parser] = []
 
         for parser in parsers:
             if isinstance(parser, str):
@@ -204,7 +209,7 @@ class ComponentResolver:
                 resolved_parsers.append(self._to_parser(parser_def))
             else:
                 # Already inline
-                resolved_parsers.append(parser)
+                resolved_parsers.append(self._to_parser(parser))
 
         strat_copy.parsers = resolved_parsers
         return strat_copy
@@ -229,27 +234,44 @@ class ComponentResolver:
             )
 
     def _resolve_named_component(
-        self, ref: str, collection: Dict[str, Any], component_type: str
+        self, ref: str, collection: dict[str, Any], component_type: str
     ) -> Any:
         self._validate_component_exists(ref, component_type)
         return collection[ref]
 
     @staticmethod
-    def _to_embedding_strategy(defn: Any) -> EmbeddingStrategy:
-        if isinstance(defn, EmbeddingStrategy):
+    def _to_embedding_strategy(defn: Any) -> DatabaseEmbeddingStrategy:
+        if isinstance(defn, DatabaseEmbeddingStrategy):
             return defn.model_copy(deep=True)
         try:
-            # Assume dict-like
-            return EmbeddingStrategy(**deepcopy(defn))
+            payload = (
+                defn.model_dump()
+                if isinstance(defn, NamedEmbeddingStrategy)
+                else deepcopy(defn)
+            )
+            if isinstance(payload, dict):
+                type_value = payload.get("type")
+                if hasattr(type_value, "value"):
+                    payload["type"] = type_value.value
+            return DatabaseEmbeddingStrategy(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid embedding strategy definition: {e}") from e
 
     @staticmethod
-    def _to_retrieval_strategy(defn: Any) -> RetrievalStrategy:
-        if isinstance(defn, RetrievalStrategy):
+    def _to_retrieval_strategy(defn: Any) -> DatabaseRetrievalStrategy:
+        if isinstance(defn, DatabaseRetrievalStrategy):
             return defn.model_copy(deep=True)
         try:
-            return RetrievalStrategy(**deepcopy(defn))
+            payload = (
+                defn.model_dump()
+                if isinstance(defn, NamedRetrievalStrategy)
+                else deepcopy(defn)
+            )
+            if isinstance(payload, dict):
+                type_value = payload.get("type")
+                if hasattr(type_value, "value"):
+                    payload["type"] = type_value.value
+            return DatabaseRetrievalStrategy(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid retrieval strategy definition: {e}") from e
 
@@ -258,6 +280,13 @@ class ComponentResolver:
         if isinstance(defn, Parser):
             return defn.model_copy(deep=True)
         try:
-            return Parser(**deepcopy(defn))
+            payload = (
+                defn.model_dump()
+                if isinstance(defn, NamedParserDefinition)
+                else deepcopy(defn)
+            )
+            if isinstance(payload, dict):
+                payload.pop("name", None)
+            return Parser(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid parser definition: {e}") from e

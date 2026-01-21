@@ -19,7 +19,7 @@ properties:
     description: Independent database definitions with their own embedding/retrieval strategies
     minItems: 1
     items:
-      $ref: "#/definitions/databaseDefinition"
+      $ref: "#/definitions/Database"
   data_processing_strategies:
     type: array
     description: Processing pipelines for parsers and extractors
@@ -1986,7 +1986,85 @@ definitions:
           description: "Maximum parallel workers for sub-query retrieval"
 
   # NEW SCHEMA DEFINITIONS
-  databaseDefinition:
+  DatabaseType:
+    type: string
+    enum: [ChromaStore, QdrantStore]
+    description: Database type (accepts both short names and Store class names)
+
+  DatabaseEmbeddingType:
+    type: string
+    enum:
+      [
+        HuggingFaceEmbedder,
+        OllamaEmbedder,
+        OpenAIEmbedder,
+        SentenceTransformerEmbedder,
+        UniversalEmbedder,
+      ]
+    description: Embedding type
+
+  DatabaseRetrievalType:
+    type: string
+    enum:
+      [
+        VectorRetriever,
+        HybridRetriever,
+        BM25Retriever,
+        RerankedRetriever,
+        GraphRetriever,
+        ElasticRetriever,
+        BasicSimilarityStrategy,
+        MetadataFilteredStrategy,
+        MultiQueryStrategy,
+        RerankedStrategy,
+        HybridUniversalStrategy,
+        CrossEncoderRerankedStrategy,
+        MultiTurnRAGStrategy,
+      ]
+    description: Retrieval type
+
+  DatabaseEmbeddingStrategy:
+    type: object
+    required: [name, type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: Strategy identifier
+      type:
+        $ref: "#/definitions/DatabaseEmbeddingType"
+      config:
+        type: object
+        description: Embedder configuration
+        additionalProperties: true
+      condition:
+        type: ["string", "null"]
+        description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
+      priority:
+        type: integer
+        default: 0
+        description: Priority for automatic selection
+
+  DatabaseRetrievalStrategy:
+    type: object
+    required: [name, type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        description: Strategy identifier
+      type:
+        $ref: "#/definitions/DatabaseRetrievalType"
+      config:
+        type: object
+        description: Retrieval configuration
+        additionalProperties: true
+      default:
+        type: boolean
+        default: false
+        description: Whether this is the default strategy
+
+  Database:
     type: object
     description: Database configuration with embedded embedding/retrieval strategies
     required: [name, type]
@@ -1999,9 +2077,7 @@ definitions:
         maxLength: 50
         description: Unique database identifier
       type:
-        type: string
-        enum: [ChromaStore, QdrantStore]
-        description: Database type (accepts both short names and Store class names)
+        $ref: "#/definitions/DatabaseType"
       config:
         type: object
         description: Database-specific configuration
@@ -2010,35 +2086,7 @@ definitions:
         type: array
         description: Multiple embedding strategies for hybrid search
         items:
-          type: object
-          required: [name, type]
-          additionalProperties: false
-          properties:
-            name:
-              type: string
-              description: Strategy identifier
-            type:
-              type: string
-              enum:
-                [
-                  HuggingFaceEmbedder,
-                  OllamaEmbedder,
-                  OpenAIEmbedder,
-                  SentenceTransformerEmbedder,
-                  UniversalEmbedder,
-                ]
-              description: Embedding type
-            config:
-              type: object
-              description: Embedder configuration
-              additionalProperties: true
-            condition:
-              type: ["string", "null"]
-              description: Optional condition for when to use this embedding (e.g., doc.type == 'code')
-            priority:
-              type: integer
-              default: 0
-              description: Priority for automatic selection
+          $ref: "#/definitions/DatabaseEmbeddingStrategy"
       embedding_strategy:
         type: string
         pattern: ^[a-z][a-z0-9_]*$
@@ -2047,40 +2095,7 @@ definitions:
         type: array
         description: Multiple retrieval strategies for different query patterns
         items:
-          type: object
-          required: [name, type]
-          additionalProperties: false
-          properties:
-            name:
-              type: string
-              description: Strategy identifier
-            type:
-              type: string
-              enum:
-                [
-                  VectorRetriever,
-                  HybridRetriever,
-                  BM25Retriever,
-                  RerankedRetriever,
-                  GraphRetriever,
-                  ElasticRetriever,
-                  BasicSimilarityStrategy,
-                  MetadataFilteredStrategy,
-                  MultiQueryStrategy,
-                  RerankedStrategy,
-                  HybridUniversalStrategy,
-                  CrossEncoderRerankedStrategy,
-                  MultiTurnRAGStrategy,
-                ]
-              description: Retrieval type
-            config:
-              type: object
-              description: Retrieval configuration
-              additionalProperties: true
-            default:
-              type: boolean
-              default: false
-              description: Whether this is the default strategy
+          $ref: "#/definitions/DatabaseRetrievalStrategy"
       retrieval_strategy:
         type: string
         pattern: ^[a-z][a-z0-9_]*$
@@ -2118,54 +2133,7 @@ definitions:
             - type: string
               pattern: ^[a-z][a-z0-9_]*$
               description: Reference to a reusable parser defined under components.parsers
-            - type: object
-              additionalProperties: false
-              properties:
-                type:
-                  type: string
-                  pattern: "^[A-Za-z][A-Za-z0-9_]*Parser[A-Za-z0-9_]*$|^DirectoryParser$"
-                  description: Parser type identifier (e.g., PDFParser_PyPDF2, TextParser_LlamaIndex)
-                config:
-                  type: object
-                  description: Parser configuration
-                  additionalProperties: true
-                file_extensions:
-                  type: ["array", "null"]
-                  items:
-                    type: string
-                    pattern: ^\.[a-zA-Z0-9]+$
-                  description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
-                  examples:
-                    - [".pdf", ".PDF"] # PDF parser
-                    - [".csv", ".tsv"] # CSV parser
-                    - [".md", ".markdown"] # Markdown parser
-                file_include_patterns:
-                  type: array
-                  items:
-                    type: string
-                  description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
-                  examples:
-                    - ["*.pdf", "*.PDF"] # All PDF files
-                    - ["report_*.csv"] # CSV files starting with report_
-                    - ["README*", "*.md"] # README files and markdown
-                priority:
-                  type: integer
-                  description: Parser priority (lower = try first)
-                  default: 50
-                  minimum: 0
-                  maximum: 1000
-                mime_types:
-                  type: ["array", "null"]
-                  items:
-                    type: string
-                  description: MIME types this parser handles (e.g., ["application/pdf"])
-                  examples:
-                    - ["application/pdf"] # PDF parser
-                    - ["text/csv", "text/tab-separated-values"] # CSV parser
-                    - ["text/markdown", "text/x-markdown"] # Markdown parser
-                fallback_parser:
-                  type: ["string", "null"]
-                  description: Parser to use if this one fails
+            - $ref: "#/definitions/Parser"
       extractors:
         type: array
         description: Metadata and feature extractors
@@ -2313,6 +2281,56 @@ definitions:
         items:
           type: string
         description: MIME types this parser handles (e.g., ["application/pdf"])
+      fallback_parser:
+        type: ["string", "null"]
+        description: Parser to use if this one fails
+
+  Parser:
+    type: object
+    additionalProperties: false
+    properties:
+      type:
+        type: string
+        pattern: "^[A-Za-z][A-Za-z0-9_]*Parser[A-Za-z0-9_]*$|^DirectoryParser$"
+        description: Parser type identifier (e.g., PDFParser_PyPDF2, TextParser_LlamaIndex)
+      config:
+        type: object
+        description: Parser configuration
+        additionalProperties: true
+      file_extensions:
+        type: ["array", "null"]
+        items:
+          type: string
+          pattern: ^\.[a-zA-Z0-9]+$
+        description: File extensions this parser handles (e.g., [".pdf", ".PDF"])
+        examples:
+          - [".pdf", ".PDF"] # PDF parser
+          - [".csv", ".tsv"] # CSV parser
+          - [".md", ".markdown"] # Markdown parser
+      file_include_patterns:
+        type: array
+        items:
+          type: string
+        description: Glob patterns for files to include (e.g., ["*.pdf", "report_*.pdf"])
+        examples:
+          - ["*.pdf", "*.PDF"] # All PDF files
+          - ["report_*.csv"] # CSV files starting with report_
+          - ["README*", "*.md"] # README files and markdown
+      priority:
+        type: integer
+        description: Parser priority (lower = try first)
+        default: 50
+        minimum: 0
+        maximum: 1000
+      mime_types:
+        type: ["array", "null"]
+        items:
+          type: string
+        description: MIME types this parser handles (e.g., ["application/pdf"])
+        examples:
+          - ["application/pdf"] # PDF parser
+          - ["text/csv", "text/tab-separated-values"] # CSV parser
+          - ["text/markdown", "text/x-markdown"] # Markdown parser
       fallback_parser:
         type: ["string", "null"]
         description: Parser to use if this one fails

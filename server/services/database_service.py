@@ -3,7 +3,11 @@
 import sys
 from pathlib import Path
 
-from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
+from config.datamodel import (
+    Database,
+    DatabaseEmbeddingStrategy,
+    DatabaseRetrievalStrategy,
+)
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
@@ -130,8 +134,8 @@ class DatabaseService:
         project: str,
         name: str,
         config: dict | None = None,
-        embedding_strategies: list[EmbeddingStrategy] | None = None,
-        retrieval_strategies: list[RetrievalStrategy] | None = None,
+        embedding_strategies: list[DatabaseEmbeddingStrategy] | None = None,
+        retrieval_strategies: list[DatabaseRetrievalStrategy] | None = None,
         embedding_strategy: str | None = None,
         retrieval_strategy: str | None = None,
         default_embedding_strategy: str | None = None,

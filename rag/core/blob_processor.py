@@ -24,7 +24,7 @@ if str(repo_root) not in sys.path:
 
 try:
     from config.datamodel import (
-        DataProcessingStrategy,
+        DataProcessingStrategyDefinition,
         Extractor,
         Parser,
     )
@@ -48,7 +48,7 @@ class BlobProcessor:
     Implements centralized pattern matching using fnmatch for glob-style patterns.
     """
 
-    def __init__(self, strategy_config: DataProcessingStrategy):
+    def __init__(self, strategy_config: DataProcessingStrategyDefinition):
         """
         Initialize the blob processor with a strategy configuration.
 

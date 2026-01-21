@@ -16,7 +16,7 @@ import pytest
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.datamodel import DataProcessingStrategy, Parsers
+from config.datamodel import DataProcessingStrategyDefinition, Parser
 
 from core.blob_processor import BlobProcessor
 from utils.parsing_safety import (
@@ -116,11 +116,11 @@ class TestParserRequirement:
 
     def test_pdf_without_pdf_parser_raises_error(self):
         """PDF file with only text parser (wrong patterns) should raise error."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="text_only_strategy",
             description="Only has text parser for txt files",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],  # Only matches txt files
@@ -140,11 +140,11 @@ class TestParserRequirement:
 
     def test_txt_without_matching_parser_raises_error(self):
         """Text file without matching parser should raise error (no fallback)."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="pdf_only_strategy",
             description="Only has PDF parser for pdf files",
             parsers=[
-                Parsers(
+                Parser(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -163,11 +163,11 @@ class TestParserRequirement:
 
     def test_txt_with_text_parser_succeeds(self):
         """Text file with matching text parser should work."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="text_strategy",
             description="Has text parser that matches all files",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all files
@@ -184,11 +184,11 @@ class TestParserRequirement:
 
     def test_docx_without_docx_parser_raises_error(self):
         """DOCX without matching docx parser should raise error."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="text_only_strategy",
             description="Only has text parser for txt files",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -207,11 +207,11 @@ class TestParserRequirement:
 
     def test_unknown_extension_raises_error(self):
         """File with unknown extension should raise error (no fallback)."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="specific_strategy",
             description="Parser only matches specific patterns",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt", "*.md"],
@@ -245,11 +245,11 @@ class TestParserFailure:
 
         mock_get_parser_class.return_value = FailingParser
 
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="failing_strategy",
             description="Strategy with parser that always fails",
             parsers=[
-                Parsers(
+                Parser(
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -279,11 +279,11 @@ class TestParserFailure:
 
         mock_get_parser_class.return_value = FailingParser
 
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="failing_strategy",
             description="Strategy with parser that always fails",
             parsers=[
-                Parsers(
+                Parser(
                     type="PDFParser_PyPDF2",
                     config={},
                     file_include_patterns=["*.pdf"],
@@ -314,11 +314,11 @@ class TestBatchProcessingContinuesOnFailure:
         a skipped status instead of propagating the exception.
         """
         # Create a strategy with only PDF parser
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="pdf_only",
             description="Only handles PDF files for testing",
             parsers=[
-                Parsers(
+                Parser(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -337,11 +337,11 @@ class TestBatchProcessingContinuesOnFailure:
         # This tests that the exception handling in ingest_file catches 
         # the exceptions and returns error/skipped status instead of raising
         
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="pdf_only",
             description="Only handles PDF files for testing",
             parsers=[
-                Parsers(
+                Parser(
                     type="PDFParser_PyPDF2",
                     file_include_patterns=["*.pdf"],
                     config={},
@@ -397,11 +397,11 @@ class TestExplicitConfiguration:
 
     def test_parser_with_matching_pattern_succeeds(self):
         """Parser with matching file pattern should process file."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="text_strategy",
             description="Text parser matching txt files",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     file_include_patterns=["*.txt"],
@@ -417,11 +417,11 @@ class TestExplicitConfiguration:
 
     def test_parser_without_patterns_matches_all(self):
         """Parser without file patterns should match all files."""
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="catch_all_strategy",
             description="Text parser without patterns matches all",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     config={},
                     # No file_include_patterns = matches all
@@ -475,16 +475,16 @@ class TestExplicitConfiguration:
         
         mock_get_parser_class.side_effect = get_parser_class
         
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="multi_parser_strategy",
             description="Multiple parsers with different priorities",
             parsers=[
-                Parsers(
+                Parser(
                     type="MockLowPriorityParser",
                     config={},
                     priority=10,  # Lower priority (higher number)
                 ),
-                Parsers(
+                Parser(
                     type="MockHighPriorityParser",
                     config={},
                     priority=1,  # Higher priority (lower number = tried first)
