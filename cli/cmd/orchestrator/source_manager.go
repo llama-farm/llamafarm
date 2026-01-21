@@ -78,8 +78,9 @@ func (m *SourceManager) EnsureSource() error {
 		return fmt.Errorf("failed to determine CLI version: %w", err)
 	}
 
-	// Run everything manually
-	if targetVersion == "dev" {
+	// Dev builds should skip source management entirely - developer runs services manually
+	// Check the actual build version, not targetVersion (which returns "main" for dev builds)
+	if buildinfo.CurrentVersion == "dev" || buildinfo.CurrentVersion == "" {
 		return nil
 	}
 
