@@ -10,6 +10,7 @@ import { TranscriptionOutput } from './TranscriptionOutput'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
 import { Waveform } from './Waveform'
 import { Selector } from '../ui/selector'
+import { Switch } from '../ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   STT_MODELS,
@@ -124,6 +125,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   )
   const availableLLMModels = projectModelsData?.models || []
   const [selectedLLMModel, setSelectedLLMModel] = useState<string>('')
+  const [llmEnabled, setLlmEnabled] = useState(true)
 
   // Set default LLM model when models are loaded
   useEffect(() => {
@@ -156,8 +158,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     onError: (error) => setTranscriptionError(error),
   })
 
-  // LLM is available when we have a project with models
-  const llmAvailable = availableLLMModels.length > 0 && !!activeProject
+  // LLM is available when we have a project with models and LLM is enabled
+  const llmAvailable = availableLLMModels.length > 0 && !!activeProject && llmEnabled
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -1076,12 +1078,12 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
             {/* LLM Model Selection + Turn Detection Settings - always visible, grayed out when irrelevant */}
             <div className="grid grid-cols-2 gap-2">
-              {/* LLM Model Card */}
+              {/* LLM Response Card */}
               <div className={`rounded-lg border border-border bg-card/40 p-3 ${!sttEnabled && !ttsEnabled ? 'opacity-50' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">LLM Model</span>
+                    <span className="text-sm font-medium">LLM Response</span>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1090,24 +1092,37 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                         <TooltipContent side="top" className="max-w-[200px]">
                           <p>{!sttEnabled && !ttsEnabled
                             ? 'Enable STT or TTS to use LLM responses.'
-                            : 'Select the language model for generating responses.'}</p>
+                            : 'Enable for two-way conversation. When off, speech is only echoed back.'}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  {/* Connection status */}
+                  {/* Toggle + Connection status */}
                   {activeProject && availableLLMModels.length > 0 && (sttEnabled || ttsEnabled) && (
-                    <span className="text-xs text-muted-foreground">
-                      {voiceChat.isConnected ? (
-                        <span className="text-green-600">• Connected</span>
-                      ) : (
-                        '• Connects on first message'
-                      )}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={llmEnabled}
+                        onCheckedChange={(enabled) => {
+                          setLlmEnabled(enabled)
+                          // Disconnect if turning off while connected
+                          if (!enabled && voiceChat.isConnected) {
+                            voiceChat.disconnect()
+                          }
+                        }}
+                        aria-label="Enable LLM responses"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {llmEnabled ? (
+                          voiceChat.isConnected ? (
+                            <span className="text-green-600">Connected</span>
+                          ) : 'Enabled'
+                        ) : 'Off'}
+                      </span>
+                    </div>
                   )}
                 </div>
                 {activeProject && availableLLMModels.length > 0 ? (
-                  <div className={!sttEnabled && !ttsEnabled ? 'opacity-50 pointer-events-none' : ''}>
+                  <div className={!llmEnabled || (!sttEnabled && !ttsEnabled) ? 'opacity-50 pointer-events-none' : ''}>
                     <Selector
                       value={selectedLLMModel}
                       options={availableLLMModels.map(m => ({
@@ -1116,7 +1131,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                         description: m.model,
                       }))}
                       onChange={setSelectedLLMModel}
-                      disabled={voiceChat.isConnected || (!sttEnabled && !ttsEnabled)}
+                      disabled={!llmEnabled || voiceChat.isConnected || (!sttEnabled && !ttsEnabled)}
                     />
                   </div>
                 ) : (
