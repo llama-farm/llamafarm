@@ -134,7 +134,9 @@ LLAMA_CDEF = """
         bool no_host;
     };
 
-    // Context parameters - must match llama.cpp b7376+ layout exactly
+    // Context parameters - must match llama.cpp b7690+ layout exactly
+    // Note: Jetson builds use newer llama.cpp (b7690+) which requires the samplers field.
+    // The bundled b7376 binaries for other platforms ignore this extra field safely.
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
@@ -166,6 +168,7 @@ LLAMA_CDEF = """
         bool op_offload;
         bool swa_full;
         bool kv_unified;
+        void * samplers;                     // llama_sampler_seq_config * (NULL = no backend samplers, b7690+)
     };
 
     // Batch
