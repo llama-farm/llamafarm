@@ -95,6 +95,106 @@ class UniversalRuntimeService:
             ) from e
 
     # =========================================================================
+    # NLP (Embeddings, Rerank, Classify, NER)
+    # =========================================================================
+
+    @classmethod
+    async def embeddings(
+        cls,
+        input: str | list[str],
+        model: str,
+        encoding_format: str = "float",
+        dimensions: int | None = None,
+    ) -> dict[str, Any]:
+        """Generate embeddings for text input.
+
+        Args:
+            input: Text or list of texts to embed
+            model: HuggingFace model ID or GGUF path
+            encoding_format: Output format (float, base64)
+            dimensions: Truncate embeddings to this size
+        """
+        payload: dict[str, Any] = {
+            "input": input,
+            "model": model,
+            "encoding_format": encoding_format,
+        }
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
+
+        return await cls._make_request("POST", "/v1/embeddings", json=payload)
+
+    @classmethod
+    async def rerank(
+        cls,
+        query: str,
+        documents: list[str],
+        model: str,
+        top_n: int | None = None,
+        return_documents: bool = True,
+    ) -> dict[str, Any]:
+        """Rerank documents by relevance to a query.
+
+        Args:
+            query: The query to rank against
+            documents: List of documents to rerank
+            model: Reranker model ID
+            top_n: Return only top N results
+            return_documents: Include document text in response
+        """
+        payload: dict[str, Any] = {
+            "query": query,
+            "documents": documents,
+            "model": model,
+            "return_documents": return_documents,
+        }
+        if top_n is not None:
+            payload["top_n"] = top_n
+
+        return await cls._make_request("POST", "/v1/rerank", json=payload)
+
+    @classmethod
+    async def classify(
+        cls,
+        input: str | list[str],
+        model: str,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Classify text using zero-shot or trained classifier.
+
+        Args:
+            input: Text or list of texts to classify
+            model: Classification model ID
+            labels: Labels for zero-shot classification
+        """
+        payload: dict[str, Any] = {
+            "input": input,
+            "model": model,
+        }
+        if labels:
+            payload["labels"] = labels
+
+        return await cls._make_request("POST", "/v1/classify", json=payload)
+
+    @classmethod
+    async def ner(
+        cls,
+        input: str | list[str],
+        model: str,
+    ) -> dict[str, Any]:
+        """Extract named entities from text.
+
+        Args:
+            input: Text or list of texts
+            model: NER model ID
+        """
+        payload = {
+            "input": input,
+            "model": model,
+        }
+        return await cls._make_request("POST", "/v1/ner", json=payload)
+
+    # =========================================================================
     # OCR
     # =========================================================================
 

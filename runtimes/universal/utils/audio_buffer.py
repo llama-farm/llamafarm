@@ -143,9 +143,19 @@ COMPRESSED_AUDIO_SIGNATURES = {
 WEBM_CLUSTER_ID = b"\x1f\x43\xb6\x75"
 
 # Allowed audio formats for FFmpeg input (whitelist for security)
-ALLOWED_FFMPEG_FORMATS = frozenset({
-    "webm", "ogg", "mp3", "flac", "aiff", "wav", "m4a", "mp4", "opus",
-})
+ALLOWED_FFMPEG_FORMATS = frozenset(
+    {
+        "webm",
+        "ogg",
+        "mp3",
+        "flac",
+        "aiff",
+        "wav",
+        "m4a",
+        "mp4",
+        "opus",
+    }
+)
 
 
 def detect_audio_format(audio_data: bytes) -> tuple[str, bool]:
@@ -285,20 +295,28 @@ def _decode_with_ffmpeg(
             "ffmpeg",
             "-y",
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
         ]
 
         if input_format:
             cmd.extend(["-f", input_format])
 
-        cmd.extend([
-            "-i", tmp_in_path,
-            "-ar", str(sample_rate),
-            "-ac", str(channels),
-            "-f", "s16le",
-            "-acodec", "pcm_s16le",
-            "pipe:1",
-        ])
+        cmd.extend(
+            [
+                "-i",
+                tmp_in_path,
+                "-ar",
+                str(sample_rate),
+                "-ac",
+                str(channels),
+                "-f",
+                "s16le",
+                "-acodec",
+                "pcm_s16le",
+                "pipe:1",
+            ]
+        )
 
         result = subprocess.run(cmd, capture_output=True, timeout=timeout)
 
@@ -931,8 +949,8 @@ def convert_audio_format(
             # Channel/width mismatch
             if actual_channels != CHANNELS or actual_width != SAMPLE_WIDTH:
                 raise ValueError(
-                    f"Audio format mismatch: got {actual_channels}ch/{actual_width*8}bit, "
-                    f"expected {CHANNELS}ch/{SAMPLE_WIDTH*8}bit. Convert audio format first."
+                    f"Audio format mismatch: got {actual_channels}ch/{actual_width * 8}bit, "
+                    f"expected {CHANNELS}ch/{SAMPLE_WIDTH * 8}bit. Convert audio format first."
                 )
 
             return pcm_data

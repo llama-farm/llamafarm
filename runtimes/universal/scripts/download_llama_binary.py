@@ -18,7 +18,10 @@ def main():
     binary_path = Path("/app/packages/llamafarm-llama/src/llamafarm_llama/_binary.py")
     if not binary_path.exists():
         # Fallback for local development
-        binary_path = Path(__file__).resolve().parents[3] / "packages/llamafarm-llama/src/llamafarm_llama/_binary.py"
+        binary_path = (
+            Path(__file__).resolve().parents[3]
+            / "packages/llamafarm-llama/src/llamafarm_llama/_binary.py"
+        )
 
     spec = importlib.util.spec_from_file_location("_binary", binary_path)
     _binary = importlib.util.module_from_spec(spec)
@@ -40,7 +43,9 @@ def main():
         system, machine, _ = platform_key
         cpu_key = (system, machine, "cpu")
         if cpu_key not in BINARY_MANIFEST:
-            print(f"WARNING: No pre-built llama.cpp binary available for {platform_key}")
+            print(
+                f"WARNING: No pre-built llama.cpp binary available for {platform_key}"
+            )
             print("The binary will be downloaded at runtime if needed.")
             print("Skipping pre-download step.")
             return

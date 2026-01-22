@@ -43,6 +43,7 @@ class ToolCallStreamState(Enum):
     BUFFERING_START = "buffering_start"  # Detected <tool_call>, waiting for name
     STREAMING_ARGS = "streaming_args"  # Name emitted, streaming arguments
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -215,7 +216,9 @@ class ChatCompletionsService:
                     strategy = None
                     if chat_request.truncation_strategy:
                         try:
-                            strategy = TruncationStrategy(chat_request.truncation_strategy)
+                            strategy = TruncationStrategy(
+                                chat_request.truncation_strategy
+                            )
                         except ValueError:
                             logger.warning(
                                 f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
@@ -229,10 +232,16 @@ class ChatCompletionsService:
                     if strategy == TruncationStrategy.SUMMARIZE:
                         try:
                             # Pass the server's load_language for proper caching
-                            summarizer = ContextSummarizer(load_language=self.load_language)
-                            messages_dict = await summarizer.summarize_messages(messages_dict)
+                            summarizer = ContextSummarizer(
+                                load_language=self.load_language
+                            )
+                            messages_dict = await summarizer.summarize_messages(
+                                messages_dict
+                            )
                             # Re-validate after summarization
-                            usage = model.context_manager.validate_messages(messages_dict)
+                            usage = model.context_manager.validate_messages(
+                                messages_dict
+                            )
 
                             # Check if we STILL need truncation after summarization
                             # (e.g., if recent messages are still too large)
@@ -241,8 +250,11 @@ class ChatCompletionsService:
                                     f"Still over budget after summarization "
                                     f"({usage.prompt_tokens} tokens), applying fallback truncation"
                                 )
-                                messages_dict, usage = model.context_manager.truncate_if_needed(
-                                    messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                                messages_dict, usage = (
+                                    model.context_manager.truncate_if_needed(
+                                        messages_dict,
+                                        TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                    )
                                 )
                                 usage = type(usage)(
                                     total_context=usage.total_context,
@@ -268,8 +280,11 @@ class ChatCompletionsService:
                             logger.warning(
                                 f"Summarization failed: {e}, falling back to keep_system"
                             )
-                            messages_dict, usage = model.context_manager.truncate_if_needed(
-                                messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                            messages_dict, usage = (
+                                model.context_manager.truncate_if_needed(
+                                    messages_dict,
+                                    TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                )
                             )
                     else:
                         # Use regular truncation strategy
@@ -465,7 +480,9 @@ class ChatCompletionsService:
 
                                     # Emit remaining arguments (from where we left off)
                                     if len(final_args) > args_emitted_length:
-                                        remaining_args = final_args[args_emitted_length:]
+                                        remaining_args = final_args[
+                                            args_emitted_length:
+                                        ]
                                         args_chunk = ChatCompletionChunk(
                                             id=completion_id,
                                             object="chat.completion.chunk",
@@ -744,8 +761,7 @@ class ChatCompletionsService:
             # Debug log the response
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"Sending response:\n"
-                    f"{json.dumps(response, indent=2, default=str)}"
+                    f"Sending response:\n{json.dumps(response, indent=2, default=str)}"
                 )
 
             return response
