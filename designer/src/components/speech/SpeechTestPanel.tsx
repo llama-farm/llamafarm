@@ -113,7 +113,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   // UI State
   const [configExpanded, setConfigExpanded] = useState(true)
   const [pendingVoiceChatRecord, setPendingVoiceChatRecord] = useState(false) // Waiting for connection to start recording
-  const [pendingSttOnlyRecord, setPendingSttOnlyRecord] = useState(false) // Waiting for STT-only VAD connection
+  // pendingSttOnlyRecord removed - now using single voiceChat hook with sttOnly mode
   const [pendingTextMessage, setPendingTextMessage] = useState<string | null>(null) // Waiting for connection to send text
 
   // LLM Integration State
@@ -259,20 +259,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
 
-  // Start recording when STT-only voice chat connects (if we were waiting)
-  useEffect(() => {
-    if (pendingSttOnlyRecord && sttOnlyVoiceChat.isConnected) {
-      setPendingSttOnlyRecord(false)
-      sttOnlyVoiceChat.startRecording().then(() => {
-        setRecordingState('recording')
-        setActiveStream(sttOnlyVoiceChat.activeStream)
-      }).catch((err) => {
-        setTranscriptionError(err instanceof Error ? err.message : 'Failed to start recording')
-        setRecordingState('idle')
-      })
-    }
-  }, [pendingSttOnlyRecord, sttOnlyVoiceChat.isConnected, sttOnlyVoiceChat])
-
   // Send pending text message when voice chat connects
   useEffect(() => {
     if (pendingTextMessage && voiceChat.isConnected) {
@@ -290,15 +276,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       setTranscriptionError(voiceChat.error)
     }
   }, [pendingVoiceChatRecord, pendingTextMessage, voiceChat.error])
-
-  // Handle STT-only voice chat connection errors
-  useEffect(() => {
-    if (pendingSttOnlyRecord && sttOnlyVoiceChat.error) {
-      setPendingSttOnlyRecord(false)
-      setRecordingState('idle')
-      setTranscriptionError(sttOnlyVoiceChat.error)
-    }
-  }, [pendingSttOnlyRecord, sttOnlyVoiceChat.error])
 
   // Sync voiceChat state with local state
   // IMPORTANT: voiceChat.isRecording reflects whether the MediaRecorder is active.
@@ -337,26 +314,27 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord])
 
   // Sync STT-only voice chat state with local state (for turn detection-based transcription)
+  // Now uses the same voiceChat hook with sttOnly mode
   useEffect(() => {
     if (mode === 'stt' && turnDetectionEnabled) {
-      // Update recording state based on sttOnlyVoiceChat
-      if (sttOnlyVoiceChat.isRecording) {
+      // Update recording state based on voiceChat (in sttOnly mode)
+      if (voiceChat.isRecording) {
         setRecordingState('recording')
-        if (sttOnlyVoiceChat.activeStream) {
-          setActiveStream(sttOnlyVoiceChat.activeStream)
+        if (voiceChat.activeStream) {
+          setActiveStream(voiceChat.activeStream)
         }
-      } else if (sttOnlyVoiceChat.voiceState === 'processing') {
+      } else if (voiceChat.voiceState === 'processing') {
         setRecordingState('processing')
-      } else if (sttOnlyVoiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingSttOnlyRecord) {
+      } else if (voiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingVoiceChatRecord) {
         setRecordingState('idle')
       }
 
       // When we get a final transcription from STT-only mode, update the result
-      if (sttOnlyVoiceChat.currentTranscription) {
+      if (voiceChat.currentTranscription) {
         // The transcription is final when voiceState returns to idle
-        if (sttOnlyVoiceChat.voiceState === 'idle' && sttOnlyVoiceChat.currentTranscription) {
+        if (voiceChat.voiceState === 'idle' && voiceChat.currentTranscription) {
           setTranscriptionResult({
-            text: sttOnlyVoiceChat.currentTranscription,
+            text: voiceChat.currentTranscription,
             language: sttLanguage,
           })
           setTranscriptionError(null)
@@ -364,11 +342,11 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       }
 
       // Update error state
-      if (sttOnlyVoiceChat.error && !pendingSttOnlyRecord) {
-        setTranscriptionError(sttOnlyVoiceChat.error)
+      if (voiceChat.error && !pendingVoiceChatRecord) {
+        setTranscriptionError(voiceChat.error)
       }
     }
-  }, [mode, turnDetectionEnabled, sttOnlyVoiceChat.isRecording, sttOnlyVoiceChat.activeStream, sttOnlyVoiceChat.voiceState, sttOnlyVoiceChat.currentTranscription, sttOnlyVoiceChat.error, recordingState, pendingSttOnlyRecord, sttLanguage])
+  }, [mode, turnDetectionEnabled, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord, sttLanguage])
 
   // Fetch available voices from backend
   useEffect(() => {
@@ -497,18 +475,18 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       return
     }
 
-    // Use STT-only voice chat for turn detection-based transcription (no LLM)
+    // Use voice chat for STT-only turn detection mode (sttOnly flag handles skipping LLM/TTS)
     if (mode === 'stt' && turnDetectionEnabled) {
-      if (sttOnlyVoiceChat.isConnected) {
+      if (voiceChat.isConnected) {
         // Already connected, start recording
-        await sttOnlyVoiceChat.startRecording()
+        await voiceChat.startRecording()
         setRecordingState('recording')
-        setActiveStream(sttOnlyVoiceChat.activeStream)
+        setActiveStream(voiceChat.activeStream)
       } else {
         // Need to connect first - set pending state and connect
-        setPendingSttOnlyRecord(true)
+        setPendingVoiceChatRecord(true)
         setRecordingState('processing') // Show loading state
-        sttOnlyVoiceChat.connect()
+        voiceChat.connect()
       }
       return
     }
@@ -570,8 +548,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
 
     // If using STT-only voice chat for turn detection-based transcription
-    if (mode === 'stt' && turnDetectionEnabled && sttOnlyVoiceChat.isRecording) {
-      sttOnlyVoiceChat.stopRecording()
+    if (mode === 'stt' && turnDetectionEnabled && voiceChat.isRecording) {
+      voiceChat.stopRecording()
       setRecordingState('processing')
       setActiveStream(null)
       return
@@ -582,7 +560,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       mediaRecorderRef.current.stop()
       setRecordingState('processing')
     }
-  }, [mode, llmAvailable, turnDetectionEnabled, voiceChat, sttOnlyVoiceChat])
+  }, [mode, llmAvailable, turnDetectionEnabled, voiceChat])
 
   // Process transcription using real backend
   const processTranscription = useCallback(async (audioBlob: Blob) => {
@@ -927,12 +905,10 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const handleClearConversation = useCallback(() => {
     // Stop any ongoing audio playback and backend generation
     voiceChat.interrupt()
-    sttOnlyVoiceChat.interrupt()
 
     // Clear conversation mode state
     setMessages([])
     voiceChat.clearMessages()
-    sttOnlyVoiceChat.clearMessages()
     setPlayingMessageId(null)
 
     // Clear STT-only mode state
@@ -952,7 +928,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
     // Clear text input
     setTextInput('')
-  }, [voiceChat, sttOnlyVoiceChat])
+  }, [voiceChat])
 
   // Expose clear function to parent via ref
   useEffect(() => {
@@ -1163,9 +1139,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   if (voiceChat.isConnected) {
                     voiceChat.updateConfig({ baseSilenceDuration: duration })
                   }
-                  if (sttOnlyVoiceChat.isConnected) {
-                    sttOnlyVoiceChat.updateConfig({ baseSilenceDuration: duration })
-                  }
                 }}
                 thinkingSilenceDuration={thinkingSilenceDuration}
                 onThinkingSilenceDurationChange={(duration) => {
@@ -1173,18 +1146,12 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   if (voiceChat.isConnected) {
                     voiceChat.updateConfig({ thinkingSilenceDuration: duration })
                   }
-                  if (sttOnlyVoiceChat.isConnected) {
-                    sttOnlyVoiceChat.updateConfig({ thinkingSilenceDuration: duration })
-                  }
                 }}
                 maxSilenceDuration={maxSilenceDuration}
                 onMaxSilenceDurationChange={(duration) => {
                   setMaxSilenceDuration(duration)
                   if (voiceChat.isConnected) {
                     voiceChat.updateConfig({ maxSilenceDuration: duration })
-                  }
-                  if (sttOnlyVoiceChat.isConnected) {
-                    sttOnlyVoiceChat.updateConfig({ maxSilenceDuration: duration })
                   }
                 }}
                 sttDisabled={!sttEnabled}
