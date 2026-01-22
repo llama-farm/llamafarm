@@ -347,19 +347,21 @@ class VoiceChatService:
             )
         return cls._http_client
 
-    def __init__(self, session: VoiceSession, llm_model_config: Model):
+    def __init__(self, session: VoiceSession, llm_model_config: Model | None):
         """Initialize voice chat service.
 
         Args:
             session: Voice session with conversation state.
             llm_model_config: Resolved LLM model configuration from project.
                               Contains the actual model ID, base_url, etc.
+                              None when running in stt_only mode.
         """
         self.session = session
         self._llm_model_config = llm_model_config
 
         # LLM endpoint - use model's base_url if specified, otherwise runtime default
-        if llm_model_config.base_url:
+        # Note: In stt_only mode, llm_model_config is None and LLM won't be called
+        if llm_model_config and llm_model_config.base_url:
             self._llm_url = llm_model_config.base_url.rstrip("/")
         else:
             self._llm_url = f"http://{settings.universal_host}:{settings.universal_port}/v1"
@@ -382,14 +384,17 @@ class VoiceChatService:
         the user speaks.
         """
         try:
-            # Pre-establish TTS WebSocket
-            ws = await self._get_tts_websocket()
-            logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
+            # Pre-establish TTS WebSocket (skip in stt_only mode)
+            if not self.session.config.stt_only:
+                ws = await self._get_tts_websocket()
+                logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
 
-            # Pre-warm HTTP connection pool with a lightweight request
-            client = self.get_http_client()
-            # Just establish the TCP connection, don't make a full request
-            logger.debug("HTTP client pool pre-warmed")
+                # Pre-warm HTTP connection pool with a lightweight request
+                client = self.get_http_client()
+                # Just establish the TCP connection, don't make a full request
+                logger.debug("HTTP client pool pre-warmed")
+            else:
+                logger.debug("STT-only mode: skipping TTS/LLM connection warm-up")
         except Exception as e:
             logger.warning(f"Connection pre-warm failed (non-fatal): {e}")
 

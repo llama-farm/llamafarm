@@ -70,7 +70,7 @@ def _get_voice_config_defaults(
         "max_silence_duration": 2.5,
     }
 
-    if project_config and project_config.voice:
+    if project_config and hasattr(project_config, 'voice') and project_config.voice:
         voice = project_config.voice
 
         # LLM model from voice config
@@ -189,9 +189,10 @@ async def voice_chat_websocket(
     project_config: LlamaFarmConfig | None = None
     try:
         project_config = ProjectService.load_config(namespace, project)
+        has_voice_config = hasattr(project_config, 'voice') and project_config.voice is not None
         logger.info(
             f"Loaded voice config from project {namespace}/{project}",
-            extra={"has_voice_config": project_config.voice is not None},
+            extra={"has_voice_config": has_voice_config},
         )
     except Exception as e:
         logger.warning(
@@ -246,7 +247,8 @@ async def voice_chat_websocket(
         return
 
     # Check if voice is explicitly disabled in config
-    if project_config and project_config.voice and project_config.voice.enabled is False:
+    voice_config = getattr(project_config, 'voice', None) if project_config else None
+    if voice_config and voice_config.enabled is False:
         await websocket.send_json(
             ErrorMessage(
                 message="Voice chat is disabled for this project (voice.enabled=false)"
@@ -298,9 +300,10 @@ async def voice_chat_websocket(
 
     # Inject prompts if session is new (no messages yet)
     # Order: 1) Model config prompts, 2) Query param system_prompt
-    if not session.messages:
+    # Skip prompt injection in stt_only mode (no LLM processing)
+    if not session.messages and not stt_only:
         # First: inject prompts from model config (runtime.models[].prompts)
-        if project_config:
+        if project_config and llm_model_config:
             resolved_prompts = PromptService.resolve_prompts_for_model(
                 project_config, llm_model_config
             )
@@ -340,9 +343,10 @@ async def voice_chat_websocket(
         f"Voice chat session started: {session.session_id}",
         extra={
             "llm_model_name": effective_llm_model,
-            "llm_model_id": llm_model_config.model,
+            "llm_model_id": llm_model_config.model if llm_model_config else None,
             "tts_voice": effective_tts_voice,
             "stt_model": effective_stt_model,
+            "stt_only": stt_only,
             "project": f"{namespace}/{project}" if namespace and project else None,
         },
     )
