@@ -13,7 +13,6 @@ Or from the CLI:
 
 import logging
 import os
-import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -78,8 +77,8 @@ def download_librispeech_sample(
         True if successful, False otherwise
     """
     try:
-        import soundfile as sf
         import numpy as np
+        import soundfile as sf
     except ImportError:
         logger.error("soundfile not installed. Run: pip install soundfile")
         return False
