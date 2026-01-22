@@ -134,7 +134,7 @@ LLAMA_CDEF = """
         bool no_host;
     };
 
-    // Context parameters - must match llama.cpp b7690+ layout exactly
+    // Context parameters - must match llama.cpp b7376+ layout exactly
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
@@ -166,7 +166,6 @@ LLAMA_CDEF = """
         bool op_offload;
         bool swa_full;
         bool kv_unified;
-        void * samplers;                     // llama_sampler_seq_config * (NULL = no backend samplers)
     };
 
     // Batch

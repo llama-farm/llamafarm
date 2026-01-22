@@ -1129,12 +1129,14 @@ version = "0.1.0"
 source = { editable = "../../packages/llamafarm-llama" }
 dependencies = [
     { name = "cffi" },
+    { name = "numpy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "cffi", specifier = ">=1.15.0" },
     { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy", specifier = ">=1.20.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
