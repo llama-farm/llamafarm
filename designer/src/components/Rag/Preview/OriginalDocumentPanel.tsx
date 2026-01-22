@@ -6,12 +6,8 @@
 import React, { useEffect, useMemo } from 'react'
 import { FileText, AlertCircle } from 'lucide-react'
 import type { PreviewChunk } from '../../../hooks/useDocumentPreview'
-
-interface Segment {
-  type: 'chunk' | 'overlap'
-  index?: number
-  text: string
-}
+import { buildSegmentsFromChunks } from './utils'
+import { VALID_FILE_TYPES } from '../../../utils/fileValidation'
 
 interface OriginalDocumentPanelProps {
   originalText: string
@@ -22,7 +18,10 @@ interface OriginalDocumentPanelProps {
   selectedRange?: { start: number; end: number } | null
 }
 
-const BINARY_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.doc', '.xls', '.pptx', '.ppt']
+// Binary file extensions derived from VALID_FILE_TYPES
+const BINARY_EXTENSIONS = Object.keys(VALID_FILE_TYPES).filter(ext =>
+  ['.pdf', '.docx', '.xlsx', '.xls', '.parquet'].includes(ext)
+)
 
 function isBinaryFile(filename: string, contentType: string | null): boolean {
   const lowerFilename = filename.toLowerCase()
@@ -64,48 +63,7 @@ export function OriginalDocumentPanel({
     if (!chunks.length) {
       return [{ type: 'chunk' as const, text: originalText }]
     }
-
-    const result: Segment[] = []
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]
-      const nextChunk = chunks[i + 1]
-
-      // Skip chunks not found in text
-      if (chunk.start_position < 0) {
-        result.push({
-          type: 'chunk',
-          index: i,
-          text: chunk.content,
-        })
-        continue
-      }
-
-      // Calculate non-overlap portion (same logic as PreviewPanel)
-      const nonOverlapEnd =
-        nextChunk && chunkOverlap > 0
-          ? Math.max(chunk.start_position, chunk.end_position - chunkOverlap)
-          : chunk.end_position
-
-      // Add non-overlap portion of chunk
-      if (nonOverlapEnd > chunk.start_position) {
-        result.push({
-          type: 'chunk',
-          index: i,
-          text: originalText.slice(chunk.start_position, nonOverlapEnd),
-        })
-      }
-
-      // Add overlap region (if exists)
-      if (nextChunk && chunkOverlap > 0 && nonOverlapEnd < chunk.end_position) {
-        result.push({
-          type: 'overlap',
-          text: originalText.slice(nonOverlapEnd, chunk.end_position),
-        })
-      }
-    }
-
-    return result
+    return buildSegmentsFromChunks(originalText, chunks, chunkOverlap, false)
   }, [originalText, chunks, chunkOverlap])
 
   // Check if a position is within the selected range

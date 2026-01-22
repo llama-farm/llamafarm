@@ -63,8 +63,17 @@ function setupMswHandlers() {
     http.post(`${API_BASE}/projects/:namespace/:project/rag/databases/:database/preview`, () => {
       return HttpResponse.json(mockPreviewResponse)
     }),
-    // Handle CORS preflight
+    // Handle strategies endpoint used by useAvailableStrategies hook
+    http.get(`${API_BASE}/projects/:namespace/:project/datasets/strategies`, () => {
+      return HttpResponse.json({
+        data_processing_strategies: ['default', 'semantic'],
+      })
+    }),
+    // Handle CORS preflight for both endpoints
     http.options(`${API_BASE}/projects/:namespace/:project/rag/databases/:database/preview`, () => {
+      return new HttpResponse(null, { status: 204 })
+    }),
+    http.options(`${API_BASE}/projects/:namespace/:project/datasets/strategies`, () => {
       return new HttpResponse(null, { status: 204 })
     })
   )
@@ -134,13 +143,11 @@ describe('DocumentPreviewModal', () => {
       </TestWrapper>
     )
 
+    // Check for stats panel and content (format: "3 chunks")
     await waitFor(() => {
-      expect(screen.getByText(/Chunks: 3/)).toBeInTheDocument()
-    })
-
-    // Check for average size text
-    await waitFor(() => {
-      expect(screen.getByTestId('preview-stats')).toBeInTheDocument()
+      const statsPanel = screen.getByTestId('preview-stats')
+      expect(statsPanel).toBeInTheDocument()
+      expect(statsPanel).toHaveTextContent(/3.*chunks/)
     })
   })
 
@@ -186,14 +193,17 @@ describe('DocumentPreviewModal', () => {
       expect(fetchCount).toBe(1)
     })
 
-    // Wait for content to load
+    // Wait for content to load (stats panel appears when data is ready)
     await waitFor(() => {
-      expect(screen.getByText(/Refresh Preview/i)).toBeInTheDocument()
+      expect(screen.getByTestId('preview-stats')).toBeInTheDocument()
     })
 
-    // Click refresh
-    const refreshButton = screen.getByRole('button', { name: /refresh/i })
-    await user.click(refreshButton)
+    // Click refresh button (it only has an icon, find by button role within strategy selector area)
+    const buttons = screen.getAllByRole('button')
+    // Find the refresh button - it's the one with the RefreshCw icon after the strategy selector
+    const refreshButton = buttons.find(btn => btn.querySelector('svg.lucide-refresh-cw'))
+    expect(refreshButton).toBeTruthy()
+    await user.click(refreshButton!)
 
     await waitFor(() => {
       expect(fetchCount).toBe(2)
@@ -290,8 +300,7 @@ describe('DocumentPreviewModal', () => {
     })
   })
 
-  it('passes override settings to API', async () => {
-    const user = userEvent.setup()
+  it('passes file hash to API', async () => {
     let capturedBody: any = null
 
     server.use(
@@ -307,27 +316,14 @@ describe('DocumentPreviewModal', () => {
       </TestWrapper>
     )
 
-    // Wait for initial load
+    // Wait for initial load and verify file_hash was sent
     await waitFor(() => {
       expect(capturedBody).not.toBeNull()
-    })
-
-    // Wait for controls to be visible
-    await waitFor(() => {
-      expect(screen.getByText(/Refresh Preview/i)).toBeInTheDocument()
-    })
-
-    // Refresh to send new request
-    const refreshButton = screen.getByRole('button', { name: /refresh/i })
-    await user.click(refreshButton)
-
-    await waitFor(() => {
-      // Default chunk_size should be in the body
-      expect(capturedBody.chunk_size).toBeDefined()
+      expect(capturedBody.file_hash).toBe('abc123')
     })
   })
 
-  it('clicking chunk in sidebar updates selection state', async () => {
+  it('clicking chunk in preview panel updates selection state', async () => {
     const user = userEvent.setup()
 
     render(
@@ -336,18 +332,18 @@ describe('DocumentPreviewModal', () => {
       </TestWrapper>
     )
 
-    // Wait for content to load - check for sidebar chunk
+    // Wait for content to load - check for preview panel chunk
     await waitFor(() => {
-      expect(screen.getByTestId('sidebar-chunk-0')).toBeInTheDocument()
+      expect(screen.getByTestId('chunk-0')).toBeInTheDocument()
     }, { timeout: 5000 })
 
-    // Click chunk in sidebar
-    const sidebarChunk = screen.getByTestId('sidebar-chunk-1')
-    await user.click(sidebarChunk)
+    // Click chunk in preview panel
+    const chunk = screen.getByTestId('chunk-1')
+    await user.click(chunk)
 
-    // Verify sidebar chunk gets selected styling
+    // Verify chunk gets selected styling (ring-2 class for selection)
     await waitFor(() => {
-      expect(sidebarChunk).toHaveClass('bg-blue-100')
+      expect(chunk).toHaveClass('ring-2')
     })
   })
 })
@@ -378,7 +374,10 @@ describe('DocumentPreviewModal - Statistics Display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/Chunks: 3/)).toBeInTheDocument()
+      const statsPanel = screen.getByTestId('preview-stats')
+      // Implementation shows "3 chunks" with the number in strong
+      expect(statsPanel).toHaveTextContent('3')
+      expect(statsPanel).toHaveTextContent('chunks')
     })
   })
 
@@ -390,13 +389,13 @@ describe('DocumentPreviewModal - Statistics Display', () => {
     )
 
     await waitFor(() => {
-      // Look within the stats panel
+      // Look within the stats panel - implementation shows "Avg: 20 chars"
       const statsPanel = screen.getByTestId('preview-stats')
-      expect(within(statsPanel).getByText(/Avg Size: 20 chars/)).toBeInTheDocument()
+      expect(statsPanel).toHaveTextContent(/Avg:.*20.*chars/)
     })
   })
 
-  it('displays total size with overlaps', async () => {
+  it('displays chunk strategy', async () => {
     render(
       <TestWrapper>
         <DocumentPreviewModal {...defaultProps} />
@@ -404,7 +403,8 @@ describe('DocumentPreviewModal - Statistics Display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/Total with overlaps: 60/)).toBeInTheDocument()
+      const statsPanel = screen.getByTestId('preview-stats')
+      expect(statsPanel).toHaveTextContent(/Strategy:.*characters/)
     })
   })
 
@@ -416,7 +416,8 @@ describe('DocumentPreviewModal - Statistics Display', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/Parser: TextParser_Python/)).toBeInTheDocument()
+      const statsPanel = screen.getByTestId('preview-stats')
+      expect(statsPanel).toHaveTextContent(/Parser:.*TextParser_Python/)
     })
   })
 })

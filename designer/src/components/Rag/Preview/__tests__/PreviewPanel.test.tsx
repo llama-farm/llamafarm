@@ -68,9 +68,9 @@ describe('PreviewPanel', () => {
     const firstChunk = screen.getByTestId('chunk-0')
     const secondChunk = screen.getByTestId('chunk-1')
 
-    // Chunks should have background color classes
-    expect(firstChunk).toHaveClass('bg-yellow-200/60')
-    expect(secondChunk).toHaveClass('bg-green-200/60')
+    // Chunks should have background color classes (purple/pink/indigo alternating)
+    expect(firstChunk).toHaveClass('bg-purple-200/60')
+    expect(secondChunk).toHaveClass('bg-pink-200/60')
   })
 
   it('renders overlap regions with distinct styling', () => {
@@ -117,10 +117,10 @@ describe('PreviewPanel', () => {
       />
     )
 
-    // Check for chunk index labels
-    expect(screen.getByText('[1]')).toBeInTheDocument()
-    expect(screen.getByText('[2]')).toBeInTheDocument()
-    expect(screen.getByText('[3]')).toBeInTheDocument()
+    // Check for chunk index labels (1-indexed, displayed as plain numbers)
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
   })
 
   it('handles empty chunks array', () => {
@@ -193,7 +193,7 @@ describe('PreviewPanel', () => {
     expect(selectedChunk).toHaveClass('ring-2')
   })
 
-  it('applies correct styling to overlap icon', () => {
+  it('applies correct styling to overlap region', () => {
     const chunksWithOverlap = [
       {
         chunk_index: 0,
@@ -221,10 +221,9 @@ describe('PreviewPanel', () => {
       />
     )
 
-    // Check for overlap indicator icon
-    const overlapIcon = screen.getByText('↻')
-    expect(overlapIcon).toBeInTheDocument()
-    expect(overlapIcon).toHaveClass('text-orange-600')
+    // Check for overlap region with title tooltip
+    const overlapRegion = screen.getByTestId('overlap-0-1')
+    expect(overlapRegion).toHaveAttribute('title', 'Overlap between chunk 1 and 2')
   })
 })
 
@@ -291,7 +290,7 @@ describe('PreviewPanel - Edge Cases', () => {
     expect(panel).toHaveClass('whitespace-pre-wrap')
   })
 
-  it('handles very long text with horizontal scrolling', () => {
+  it('handles very long text with wrapping', () => {
     const longText = 'A'.repeat(10000)
     const longChunks = [
       {
@@ -312,8 +311,8 @@ describe('PreviewPanel - Edge Cases', () => {
       />
     )
 
-    // Panel should have overflow handling
+    // Panel should have whitespace wrapping for long content
     const panel = screen.getByTestId('preview-panel')
-    expect(panel).toHaveClass('overflow-auto')
+    expect(panel).toHaveClass('whitespace-pre-wrap')
   })
 })

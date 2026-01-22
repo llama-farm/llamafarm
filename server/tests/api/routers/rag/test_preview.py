@@ -37,6 +37,10 @@ class TestPreviewEndpoint:
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
 
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
+
         # Mock the preview handler - must match PreviewResult.to_dict() format
         mock_preview_response = {
             "original_text": "This is the document content.",
@@ -90,6 +94,10 @@ class TestPreviewEndpoint:
         mock_project_service = mocker.patch("api.routers.rag.preview.ProjectService")
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
+
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
 
         mock_preview_response = {
             "original_text": "Test content for preview.",
@@ -156,6 +164,10 @@ class TestPreviewEndpoint:
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
 
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
+
         mock_preview_response = {
             "original_text": "Uploaded content",
             "chunks": [
@@ -217,6 +229,10 @@ class TestPreviewEndpoint:
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
 
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
+
         # Response with overridden settings
         mock_preview_response = {
             "original_text": "Test",
@@ -258,6 +274,8 @@ class TestPreviewEndpoint:
 
     def test_preview_invalid_database_404(self, mocker):
         """Non-existent database returns 404."""
+        from api.errors import DatabaseNotFoundError
+
         mock_database = Mock()
         mock_database.name = "existing_db"
 
@@ -270,6 +288,10 @@ class TestPreviewEndpoint:
         mock_project_service = mocker.patch("api.routers.rag.preview.ProjectService")
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
+
+        # Mock DatabaseService.get_database to raise DatabaseNotFoundError
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.side_effect = DatabaseNotFoundError("nonexistent_db")
 
         client = _client()
         resp = client.post(
@@ -294,6 +316,10 @@ class TestPreviewEndpoint:
         mock_project_service = mocker.patch("api.routers.rag.preview.ProjectService")
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
+
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
 
         # Mock preview handler to raise an error for invalid file
         mock_handle_preview = mocker.patch("api.routers.rag.preview.handle_preview")
@@ -379,6 +405,10 @@ class TestPreviewEndpoint:
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
 
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
+
         mock_preview_response = {
             "original_text": "A" * 100 + "B" * 100 + "C" * 100,
             "chunks": [
@@ -439,6 +469,10 @@ class TestPreviewRequestValidation:
         mock_project_service = mocker.patch("api.routers.rag.preview.ProjectService")
         mock_project_service.get_project.return_value = mock_project
         mock_project_service.get_project_dir.return_value = "/fake/path"
+
+        # Mock DatabaseService.get_database to return the mock database
+        mock_db_service = mocker.patch("api.routers.rag.preview.DatabaseService")
+        mock_db_service.get_database.return_value = mock_database
 
         mock_preview_response = {
             "original_text": "Test",

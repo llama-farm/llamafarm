@@ -5,22 +5,7 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { cn } from '../../../lib/utils'
 import type { PreviewChunk } from '../../../hooks/useDocumentPreview'
-
-// Chunk background colors (alternating, dark mode aware)
-const CHUNK_COLORS = [
-  'bg-purple-200/60 dark:bg-purple-500/40',
-  'bg-pink-200/60 dark:bg-pink-500/40',
-  'bg-indigo-200/60 dark:bg-indigo-500/40',
-]
-
-interface Segment {
-  type: 'chunk' | 'overlap' | 'gap'
-  index?: number
-  fromChunk?: number
-  toChunk?: number
-  text: string
-  color?: string
-}
+import { buildSegmentsFromChunks } from './utils'
 
 interface PreviewPanelProps {
   originalText: string
@@ -53,55 +38,10 @@ export function PreviewPanel({
   }, [selectedChunkIndex, onChunkRef])
 
   // Build segments for rendering
-  const segments = useMemo(() => {
-    if (!chunks.length) return []
-
-    const result: Segment[] = []
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]
-      const nextChunk = chunks[i + 1]
-
-      // Skip chunks not found in text
-      if (chunk.start_position < 0) {
-        result.push({
-          type: 'chunk',
-          index: i,
-          text: chunk.content,
-          color: CHUNK_COLORS[i % CHUNK_COLORS.length],
-        })
-        continue
-      }
-
-      // Calculate non-overlap portion
-      const nonOverlapEnd =
-        nextChunk && chunkOverlap > 0
-          ? Math.max(chunk.start_position, chunk.end_position - chunkOverlap)
-          : chunk.end_position
-
-      // Add non-overlap portion of chunk
-      if (nonOverlapEnd > chunk.start_position) {
-        result.push({
-          type: 'chunk',
-          index: i,
-          text: originalText.slice(chunk.start_position, nonOverlapEnd),
-          color: CHUNK_COLORS[i % CHUNK_COLORS.length],
-        })
-      }
-
-      // Add overlap region (if exists)
-      if (nextChunk && chunkOverlap > 0 && nonOverlapEnd < chunk.end_position) {
-        result.push({
-          type: 'overlap',
-          fromChunk: i,
-          toChunk: i + 1,
-          text: originalText.slice(nonOverlapEnd, chunk.end_position),
-        })
-      }
-    }
-
-    return result
-  }, [originalText, chunks, chunkOverlap])
+  const segments = useMemo(
+    () => buildSegmentsFromChunks(originalText, chunks, chunkOverlap, true),
+    [originalText, chunks, chunkOverlap]
+  )
 
   return (
     <div

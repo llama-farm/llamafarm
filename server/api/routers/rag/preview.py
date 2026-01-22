@@ -9,9 +9,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from api.errors import DatabaseNotFoundError
 from core.celery.rag_client import preview_document
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService
+from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -39,6 +41,64 @@ def _sanitize_path_component(value: str, field_name: str) -> str:
     if sanitized != value:
         raise ValueError(f"Invalid {field_name}: contains path separators")
     return sanitized
+
+
+def _resolve_file_path(
+    project_dir: str,
+    file_hash: str | None,
+    dataset_id: str | None,
+    file_content: str | None,
+    filename: str | None,
+) -> tuple[Path, str | None, str | None, bool]:
+    """Resolve file path from request parameters.
+
+    Args:
+        project_dir: Project directory path
+        file_hash: Hash of file in dataset
+        dataset_id: Dataset ID containing the file
+        file_content: Base64-encoded file content
+        filename: Filename for uploaded content
+
+    Returns:
+        Tuple of (file_path, original_filename, dataset_id, is_temp_file)
+
+    Raises:
+        ValueError: If file cannot be found or parameters are invalid
+    """
+    if file_hash and dataset_id:
+        # File from dataset
+        file_path = (
+            Path(project_dir)
+            / "lf_data"
+            / "datasets"
+            / dataset_id
+            / "raw"
+            / file_hash
+        )
+        if not file_path.exists():
+            raise ValueError(f"File not found: {file_hash}")
+        return file_path, None, dataset_id, False
+
+    if file_content:
+        # Uploaded content - save to temp file
+        content = base64.b64decode(file_content)
+        # Sanitize filename suffix to prevent path manipulation
+        safe_suffix = f"_{Path(filename or 'upload').name}"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=safe_suffix) as tmp:
+            tmp.write(content)
+            return Path(tmp.name), filename, dataset_id, True
+
+    if file_hash:
+        # Just file_hash, search in all datasets
+        datasets_dir = Path(project_dir) / "lf_data" / "datasets"
+        if datasets_dir.exists():
+            for dataset_dir in datasets_dir.iterdir():
+                potential_path = dataset_dir / "raw" / file_hash
+                if potential_path.exists():
+                    return potential_path, None, dataset_dir.name, False
+        raise ValueError(f"File not found: {file_hash}")
+
+    raise ValueError("Must provide either file_hash or file_content")
 
 
 class DocumentPreviewRequest(BaseModel):
@@ -132,48 +192,14 @@ async def handle_preview(
     if request.dataset_id:
         _sanitize_path_component(request.dataset_id, "dataset_id")
 
-    # Determine file path and original filename
-    original_filename: str | None = None
-    dataset_id: str | None = request.dataset_id
-
-    if request.file_hash and request.dataset_id:
-        # File from dataset
-        file_path = (
-            Path(project_dir)
-            / "lf_data"
-            / "datasets"
-            / request.dataset_id
-            / "raw"
-            / request.file_hash
-        )
-        if not file_path.exists():
-            raise ValueError(f"File not found: {request.file_hash}")
-    elif request.file_content:
-        # Uploaded content - save to temp file
-        content = base64.b64decode(request.file_content)
-        original_filename = request.filename
-        # Sanitize filename suffix to prevent path manipulation
-        safe_suffix = f"_{Path(request.filename or 'upload').name}"
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=safe_suffix
-        ) as tmp:
-            tmp.write(content)
-            file_path = Path(tmp.name)
-    elif request.file_hash:
-        # Just file_hash, search in all datasets
-        datasets_dir = Path(project_dir) / "lf_data" / "datasets"
-        file_path = None
-        if datasets_dir.exists():
-            for dataset_dir in datasets_dir.iterdir():
-                potential_path = dataset_dir / "raw" / request.file_hash
-                if potential_path.exists():
-                    file_path = potential_path
-                    dataset_id = dataset_dir.name
-                    break
-        if not file_path:
-            raise ValueError(f"File not found: {request.file_hash}")
-    else:
-        raise ValueError("Must provide either file_hash or file_content")
+    # Resolve file path
+    file_path, original_filename, dataset_id, is_temp_file = _resolve_file_path(
+        project_dir,
+        request.file_hash,
+        request.dataset_id,
+        request.file_content,
+        request.filename,
+    )
 
     # Look up original filename from dataset metadata if we have a file_hash
     if request.file_hash and dataset_id and not original_filename:
@@ -199,9 +225,6 @@ async def handle_preview(
             # If we can't look up the dataset config, fall back to default behavior
             pass
 
-    # Track temp file for cleanup
-    temp_file_path: Path | None = file_path if request.file_content else None
-
     try:
         # Call preview task
         result = await asyncio.to_thread(
@@ -218,9 +241,9 @@ async def handle_preview(
         return result
     finally:
         # Clean up temp file if created (even on exception)
-        if temp_file_path:
+        if is_temp_file:
             try:
-                temp_file_path.unlink()
+                file_path.unlink()
             except Exception:
                 pass
 
@@ -261,16 +284,12 @@ async def preview_document_endpoint(
         )
 
     # Validate database exists
-    database_exists = False
-    for db in project_obj.config.rag.databases or []:
-        if db.name == database_name:
-            database_exists = True
-            break
-
-    if not database_exists:
+    try:
+        DatabaseService.get_database(namespace, project, database_name)
+    except DatabaseNotFoundError:
         raise HTTPException(
             status_code=404, detail=f"Database '{database_name}' not found"
-        )
+        ) from None
 
     # Validate request
     if not request.file_hash and not request.file_content:
@@ -290,16 +309,7 @@ async def preview_document_endpoint(
 
         # Transform to response model
         chunks = [
-            ChunkPreviewInfo(
-                chunk_index=c["chunk_index"],
-                content=c["content"],
-                start_position=c["start_position"],
-                end_position=c["end_position"],
-                char_count=c["char_count"],
-                word_count=c["word_count"],
-                metadata=c.get("metadata", {}),
-            )
-            for c in result.get("chunks", [])
+            ChunkPreviewInfo.model_validate(c) for c in result.get("chunks", [])
         ]
 
         return DocumentPreviewResponse(
