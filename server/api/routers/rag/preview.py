@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import contextlib
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -133,9 +134,12 @@ class DocumentPreviewRequest(BaseModel):
     @field_validator("chunk_overlap")
     @classmethod
     def validate_overlap(cls, v, info):
-        if v is not None and info.data.get("chunk_size") is not None:
-            if v >= info.data["chunk_size"]:
-                raise ValueError("chunk_overlap must be less than chunk_size")
+        if (
+            v is not None
+            and info.data.get("chunk_size") is not None
+            and v >= info.data["chunk_size"]
+        ):
+            raise ValueError("chunk_overlap must be less than chunk_size")
         return v
 
 
@@ -242,10 +246,8 @@ async def handle_preview(
     finally:
         # Clean up temp file if created (even on exception)
         if is_temp_file:
-            try:
+            with contextlib.suppress(Exception):
                 file_path.unlink()
-            except Exception:
-                pass
 
 
 @router.post(
