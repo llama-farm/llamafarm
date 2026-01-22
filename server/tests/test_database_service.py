@@ -182,6 +182,87 @@ class TestDatabaseService:
         assert result.name == "new_db"
         mock_save_config.assert_called_once()
 
+    @patch("services.database_service.ComponentResolver")
+    @patch.object(ProjectService, "save_config")
+    @patch.object(ProjectService, "load_config")
+    def test_create_database_preserves_component_references(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
+        """Creating a new database should not flatten existing references."""
+        existing_db = Database(
+            name="existing_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "existing"},
+            embedding_strategy="fast_embed",
+            retrieval_strategy="fast_retrieve",
+        )
+
+        mock_rag_config = Mock()
+        mock_rag_config.databases = [existing_db]
+        mock_project_config = Mock()
+        mock_project_config.rag = mock_rag_config
+
+        new_db = Database(
+            name="new_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "new_collection"},
+            embedding_strategy="fast_embed",
+            retrieval_strategy="fast_retrieve",
+        )
+
+        resolved_db = Database(
+            name="new_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "new_collection"},
+            embedding_strategies=[
+                DatabaseEmbeddingStrategy(
+                    name="fast_embed",
+                    type=DatabaseEmbeddingType.OllamaEmbedder,
+                    config={"model": "nomic-embed-text"},
+                )
+            ],
+            retrieval_strategies=[
+                DatabaseRetrievalStrategy(
+                    name="fast_retrieve",
+                    type=DatabaseRetrievalType.BasicSimilarityStrategy,
+                    config={"top_k": 10},
+                    default=True,
+                )
+            ],
+            default_embedding_strategy="fast_embed",
+            default_retrieval_strategy="fast_retrieve",
+        )
+
+        temp_config = Mock()
+        temp_config.rag = Mock()
+        temp_config.rag.databases = [new_db]
+        mock_project_config.model_copy.return_value = temp_config
+
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [resolved_db]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
+
+        mock_load_config.return_value = mock_project_config
+
+        result = DatabaseService.create_database("test_ns", "test_proj", new_db)
+
+        assert result == resolved_db
+        mock_save_config.assert_called_once()
+
+        saved_config = mock_save_config.call_args.args[2]
+        saved_existing = next(
+            db for db in saved_config.rag.databases if db.name == "existing_db"
+        )
+        assert saved_existing.embedding_strategy == "fast_embed"
+        assert saved_existing.embedding_strategies is None
+        assert saved_existing.retrieval_strategy == "fast_retrieve"
+        assert saved_existing.retrieval_strategies is None
+
+        saved_new = next(db for db in saved_config.rag.databases if db.name == "new_db")
+        assert saved_new.embedding_strategies
+        assert saved_new.retrieval_strategies
+
     @patch.object(ProjectService, "load_config")
     def test_create_database_raises_on_duplicate(self, mock_load_config):
         """Test that create_database raises ValueError for duplicate name."""

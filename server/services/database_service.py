@@ -80,21 +80,17 @@ class DatabaseService:
             if db.name == database.name:
                 raise ValueError(f"Database '{database.name}' already exists")
 
-        # Build a working copy to resolve references and defaults
-        working_config = project_config.model_copy(deep=True)
-        working_databases = working_config.rag.databases or []
+        # Build a temporary config to resolve only the new database
+        temp_config = project_config.model_copy(deep=True)
+        temp_config.rag.databases = [database]
 
-        # Append the incoming database (may include references)
-        working_databases.append(database)
-        working_config.rag.databases = working_databases
-
-        # Resolve components to inline definitions
-        resolver = ComponentResolver(working_config)
-        resolved_config = resolver.resolve_config(working_config)
+        # Resolve components to inline definitions for the new database only
+        resolver = ComponentResolver(temp_config)
+        resolved_temp = resolver.resolve_config(temp_config)
 
         # Extract the resolved database we just added
         resolved_db = next(
-            (db for db in resolved_config.rag.databases or [] if db.name == database.name),
+            (db for db in resolved_temp.rag.databases or [] if db.name == database.name),
             None,
         )
         if resolved_db is None:
@@ -112,17 +108,19 @@ class DatabaseService:
                 "retrieval_strategies inline, or define a default in components.defaults."
             )
 
-        # Persist the fully resolved config
-        ProjectService.save_config(namespace, project, resolved_config)
+        # Persist the original config with the resolved database appended
+        existing_databases.append(resolved_db)
+        project_config.rag.databases = existing_databases
+        ProjectService.save_config(namespace, project, project_config)
 
         logger.info(
             "Created database",
             namespace=namespace,
             project=project,
             database=database.name,
-            type=database.type.value
-            if hasattr(database.type, "value")
-            else str(database.type),
+            type=resolved_db.type.value
+            if hasattr(resolved_db.type, "value")
+            else str(resolved_db.type),
         )
 
         return resolved_db
@@ -213,18 +211,18 @@ class DatabaseService:
         if default_retrieval_strategy is not None:
             db.default_retrieval_strategy = default_retrieval_strategy
 
-        # Build working config for component resolution
+        # Build a temporary config to resolve only the updated database
         existing_databases[db_index] = db
-        working_config = project_config.model_copy(deep=True)
-        working_config.rag.databases = existing_databases
+        temp_config = project_config.model_copy(deep=True)
+        temp_config.rag.databases = [db]
 
-        # Resolve components to inline definitions (same as create_database)
-        resolver = ComponentResolver(working_config)
-        resolved_config = resolver.resolve_config(working_config)
+        # Resolve components to inline definitions for the updated database only
+        resolver = ComponentResolver(temp_config)
+        resolved_temp = resolver.resolve_config(temp_config)
 
         # Extract the resolved database
         resolved_db = next(
-            (db for db in resolved_config.rag.databases or [] if db.name == name),
+            (db for db in resolved_temp.rag.databases or [] if db.name == name),
             None,
         )
         if resolved_db is None:
@@ -249,8 +247,10 @@ class DatabaseService:
                     f"Available: {strategy_names}"
                 )
 
-        # Persist the fully resolved config
-        ProjectService.save_config(namespace, project, resolved_config)
+        # Persist the original config with the resolved database updated
+        existing_databases[db_index] = resolved_db
+        project_config.rag.databases = existing_databases
+        ProjectService.save_config(namespace, project, project_config)
 
         logger.info(
             "Updated database",
