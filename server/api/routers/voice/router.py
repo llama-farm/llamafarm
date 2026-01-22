@@ -163,6 +163,7 @@ async def voice_chat_websocket(
         - Binary: Audio data (PCM 16kHz 16-bit mono, or WebM/Opus)
         - {"type": "interrupt"}: Stop current TTS (barge-in)
         - {"type": "end"}: Force processing (optional - VAD auto-detects end of speech)
+        - {"type": "text", "text": "..."}: Direct text input (bypasses STT)
         - {"type": "config", ...}: Update session settings
 
     Server → Client Messages:
@@ -434,6 +435,13 @@ async def voice_chat_websocket(
                         if session.has_audio():
                             audio_bytes = session.get_audio_buffer()
                             await service.process_turn(websocket, audio_bytes)
+
+                    elif msg_type == "text":
+                        # Direct text input (bypasses STT)
+                        text = data.get("text", "").strip()
+                        if text:
+                            logger.info(f"Processing text input: '{text[:50]}...'")
+                            await service.process_text_turn(websocket, text)
 
                     elif msg_type == "config":
                         # Update session configuration

@@ -37,8 +37,16 @@ export interface UseVoiceChatOptions {
   language?: string
   speed?: number
   systemPrompt?: string
-  silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
-  enableLLM?: boolean // When false, only STT is performed (transcription-only mode with VAD)
+  // Turn detection settings (replaces simple silence threshold)
+  turnDetectionEnabled?: boolean
+  baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
+  thinkingSilenceDuration?: number // For incomplete utterances (0.3-5.0s, default 1.2)
+  maxSilenceDuration?: number     // Hard timeout (0.5-10.0s, default 2.5)
+  // Barge-in settings
+  bargeInEnabled?: boolean
+  // Emotion detection callbacks
+  onEmotion?: (emotion: string, confidence: number, allScores: Record<string, number>) => void
+  onToolCall?: (toolCallId: string, functionName: string, args: string) => void
   autoConnect?: boolean
   onError?: (error: string) => void
 }
@@ -85,8 +93,13 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     language,
     speed,
     systemPrompt,
-    silenceDuration,
-    enableLLM = true,
+    turnDetectionEnabled,
+    baseSilenceDuration,
+    thinkingSilenceDuration,
+    maxSilenceDuration,
+    bargeInEnabled,
+    onEmotion,
+    onToolCall,
     autoConnect = false,
     onError,
   } = options
@@ -216,8 +229,11 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       language,
       speed,
       systemPrompt,
-      silenceDuration,
-      enableLLM,
+      turnDetectionEnabled,
+      baseSilenceDuration,
+      thinkingSilenceDuration,
+      maxSilenceDuration,
+      bargeInEnabled,
     }
 
     const ws = createVoiceChatConnection(namespace, project, config, {
@@ -225,10 +241,6 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         hasConnectedRef.current = true // Mark as successfully connected
         setSessionId(id)
         setIsConnected(true)
-        // Send VAD config after connection established
-        if (silenceDuration !== undefined && ws.readyState === WebSocket.OPEN) {
-          sendConfigUpdate(ws, { silence_duration: silenceDuration })
-        }
       },
       onStateChange: (state) => {
         setVoiceState(state)
@@ -307,10 +319,16 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         setSessionId(null)
         setVoiceState('idle')
       },
+      onEmotion: (emotion, confidence, allScores) => {
+        onEmotion?.(emotion, confidence, allScores)
+      },
+      onToolCall: (toolCallId, functionName, args) => {
+        onToolCall?.(toolCallId, functionName, args)
+      },
     })
 
     wsRef.current = ws
-  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, silenceDuration, enableLLM, onError, processAudioQueue])
+  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, turnDetectionEnabled, baseSilenceDuration, thinkingSilenceDuration, maxSilenceDuration, bargeInEnabled, onError, onEmotion, onToolCall, processAudioQueue])
 
   // Disconnect from voice chat
   const disconnect = useCallback(() => {
@@ -511,7 +529,19 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         language: config.language,
         speed: config.speed,
         sentence_boundary_only: config.sentenceBoundaryOnly,
-        silence_duration: config.silenceDuration,
+        // Turn detection settings
+        turn_detection_enabled: config.turnDetectionEnabled,
+        base_silence_duration: config.baseSilenceDuration,
+        thinking_silence_duration: config.thinkingSilenceDuration,
+        max_silence_duration: config.maxSilenceDuration,
+        // Barge-in settings
+        barge_in_enabled: config.bargeInEnabled,
+        barge_in_noise_filter: config.bargeInNoiseFilter,
+        barge_in_min_chunks: config.bargeInMinChunks,
+        // Emotion detection settings
+        emotion_detection_enabled: config.emotionDetectionEnabled,
+        emotion_model: config.emotionModel,
+        emotion_confidence_threshold: config.emotionConfidenceThreshold,
       })
     }
   }, [])

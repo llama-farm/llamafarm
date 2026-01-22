@@ -3,14 +3,13 @@ import { Mic, Send, MicOff, StopCircle, Volume2, AlertCircle, ChevronDown, Chevr
 import { Button } from '../ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
-import { VADSettings } from './VADSettings'
+import { TurnDetectionSettings } from './TurnDetectionSettings'
 import { VoiceCloning } from './VoiceCloning'
 import { ConversationView } from './ConversationView'
 import { TranscriptionOutput } from './TranscriptionOutput'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
 import { Waveform } from './Waveform'
 import { Selector } from '../ui/selector'
-import { Switch } from '../ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   STT_MODELS,
@@ -65,9 +64,11 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const [ttsVoice, setTtsVoice] = useState('alba')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
 
-  // VAD Config State
-  const [vadEnabled, setVadEnabled] = useState(true)
-  const [silenceDuration, setSilenceDuration] = useState(0.4)
+  // Turn Detection Config State
+  const [turnDetectionEnabled, setTurnDetectionEnabled] = useState(true)
+  const [baseSilenceDuration, setBaseSilenceDuration] = useState(0.4)
+  const [thinkingSilenceDuration, setThinkingSilenceDuration] = useState(1.2)
+  const [maxSilenceDuration, setMaxSilenceDuration] = useState(2.5)
 
   // Available voices from backend (fetched but used for validation)
   const [, setAvailableVoices] = useState<VoiceInfo[]>([])
@@ -123,7 +124,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   )
   const availableLLMModels = projectModelsData?.models || []
   const [selectedLLMModel, setSelectedLLMModel] = useState<string>('')
-  const [llmEnabled, setLlmEnabled] = useState(true) // User toggle for LLM
 
   // Set default LLM model when models are loaded
   useEffect(() => {
@@ -135,9 +135,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   }, [availableLLMModels, selectedLLMModel])
 
   // Voice chat hook for LLM conversation
-  // Effective silence duration: use 999s when VAD is disabled to effectively disable auto-detection
-  const effectiveSilenceDuration = vadEnabled ? silenceDuration : 999
-
   const voiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
@@ -147,27 +144,32 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     ttsVoice,
     language: sttLanguage,
     speed: ttsSpeed,
-    silenceDuration: effectiveSilenceDuration,
-    enableLLM: true, // Full conversation mode
+    turnDetectionEnabled,
+    baseSilenceDuration,
+    thinkingSilenceDuration,
+    maxSilenceDuration,
     autoConnect: false,
     onError: (error) => setTranscriptionError(error),
   })
 
-  // Voice chat hook for STT-only mode with VAD (no LLM responses)
+  // Voice chat hook for STT-only mode (no LLM responses)
+  // Note: In STT-only mode, we still use turn detection for auto-stopping
   const sttOnlyVoiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
-    llmModel: selectedLLMModel, // Still needed for backend validation, but won't be used
+    llmModel: selectedLLMModel, // Still needed for backend validation
     sttModel,
     language: sttLanguage,
-    silenceDuration: effectiveSilenceDuration,
-    enableLLM: false, // STT-only mode - no LLM, no TTS
+    turnDetectionEnabled,
+    baseSilenceDuration,
+    thinkingSilenceDuration,
+    maxSilenceDuration,
     autoConnect: false,
     onError: (error) => setTranscriptionError(error),
   })
 
-  // LLM is available when we have a project with models, and user has it enabled
-  const llmAvailable = availableLLMModels.length > 0 && !!activeProject && llmEnabled
+  // LLM is available when we have a project with models
+  const llmAvailable = availableLLMModels.length > 0 && !!activeProject
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -349,9 +351,9 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord])
 
-  // Sync STT-only voice chat state with local state (for VAD-based transcription)
+  // Sync STT-only voice chat state with local state (for turn detection-based transcription)
   useEffect(() => {
-    if (mode === 'stt' && vadEnabled) {
+    if (mode === 'stt' && turnDetectionEnabled) {
       // Update recording state based on sttOnlyVoiceChat
       if (sttOnlyVoiceChat.isRecording) {
         setRecordingState('recording')
@@ -381,7 +383,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         setTranscriptionError(sttOnlyVoiceChat.error)
       }
     }
-  }, [mode, vadEnabled, sttOnlyVoiceChat.isRecording, sttOnlyVoiceChat.activeStream, sttOnlyVoiceChat.voiceState, sttOnlyVoiceChat.currentTranscription, sttOnlyVoiceChat.error, recordingState, pendingSttOnlyRecord, sttLanguage])
+  }, [mode, turnDetectionEnabled, sttOnlyVoiceChat.isRecording, sttOnlyVoiceChat.activeStream, sttOnlyVoiceChat.voiceState, sttOnlyVoiceChat.currentTranscription, sttOnlyVoiceChat.error, recordingState, pendingSttOnlyRecord, sttLanguage])
 
   // Fetch available voices from backend
   useEffect(() => {
@@ -510,8 +512,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       return
     }
 
-    // Use STT-only voice chat for VAD-based transcription (no LLM)
-    if (mode === 'stt' && vadEnabled) {
+    // Use STT-only voice chat for turn detection-based transcription (no LLM)
+    if (mode === 'stt' && turnDetectionEnabled) {
       if (sttOnlyVoiceChat.isConnected) {
         // Already connected, start recording
         await sttOnlyVoiceChat.startRecording()
@@ -582,8 +584,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       return
     }
 
-    // If using STT-only voice chat for VAD-based transcription
-    if (mode === 'stt' && vadEnabled && sttOnlyVoiceChat.isRecording) {
+    // If using STT-only voice chat for turn detection-based transcription
+    if (mode === 'stt' && turnDetectionEnabled && sttOnlyVoiceChat.isRecording) {
       sttOnlyVoiceChat.stopRecording()
       setRecordingState('processing')
       setActiveStream(null)
@@ -595,7 +597,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       mediaRecorderRef.current.stop()
       setRecordingState('processing')
     }
-  }, [mode, llmAvailable, vadEnabled, voiceChat, sttOnlyVoiceChat])
+  }, [mode, llmAvailable, turnDetectionEnabled, voiceChat, sttOnlyVoiceChat])
 
   // Process transcription using real backend
   const processTranscription = useCallback(async (audioBlob: Blob) => {
@@ -1111,14 +1113,14 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
               />
             )}
 
-            {/* LLM Model Selection + VAD Settings - always visible, grayed out when irrelevant */}
+            {/* LLM Model Selection + Turn Detection Settings - always visible, grayed out when irrelevant */}
             <div className="grid grid-cols-2 gap-2">
-              {/* LLM Response Card */}
+              {/* LLM Model Card */}
               <div className={`rounded-lg border border-border bg-card/40 p-3 ${!sttEnabled && !ttsEnabled ? 'opacity-50' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">LLM Response</span>
+                    <span className="text-sm font-medium">LLM Model</span>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1127,41 +1129,24 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                         <TooltipContent side="top" className="max-w-[200px]">
                           <p>{!sttEnabled && !ttsEnabled
                             ? 'Enable STT or TTS to use LLM responses.'
-                            : 'Enable for two-way conversation. When off, speech is only echoed back.'}</p>
+                            : 'Select the language model for generating responses.'}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-                    {/* Connection status inline with header */}
-                    {activeProject && availableLLMModels.length > 0 && llmEnabled && (sttEnabled || ttsEnabled) && (
-                      <span className="text-xs text-muted-foreground">
-                        {voiceChat.isConnected ? (
-                          <span className="text-green-600">• Connected</span>
-                        ) : (
-                          '• Connects on first message'
-                        )}
-                      </span>
-                    )}
                   </div>
-                  <div className={`flex items-center gap-2 ${!sttEnabled && !ttsEnabled ? 'pointer-events-none' : ''}`}>
-                    <Switch
-                      checked={llmEnabled}
-                      onCheckedChange={(enabled) => {
-                        setLlmEnabled(enabled)
-                        // Disconnect when turning off LLM while connected
-                        if (!enabled && voiceChat.isConnected) {
-                          voiceChat.disconnect()
-                        }
-                      }}
-                      disabled={!activeProject || availableLLMModels.length === 0 || (!sttEnabled && !ttsEnabled)}
-                      aria-label="Enable LLM responses"
-                    />
+                  {/* Connection status */}
+                  {activeProject && availableLLMModels.length > 0 && (sttEnabled || ttsEnabled) && (
                     <span className="text-xs text-muted-foreground">
-                      {llmEnabled ? 'Enabled' : 'Disabled'}
+                      {voiceChat.isConnected ? (
+                        <span className="text-green-600">• Connected</span>
+                      ) : (
+                        '• Connects on first message'
+                      )}
                     </span>
-                  </div>
+                  )}
                 </div>
                 {activeProject && availableLLMModels.length > 0 ? (
-                  <div className={!llmEnabled || (!sttEnabled && !ttsEnabled) ? 'opacity-50 pointer-events-none' : ''}>
+                  <div className={!sttEnabled && !ttsEnabled ? 'opacity-50 pointer-events-none' : ''}>
                     <Selector
                       value={selectedLLMModel}
                       options={availableLLMModels.map(m => ({
@@ -1170,7 +1155,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                         description: m.model,
                       }))}
                       onChange={setSelectedLLMModel}
-                      disabled={!llmEnabled || voiceChat.isConnected || (!sttEnabled && !ttsEnabled)}
+                      disabled={voiceChat.isConnected || (!sttEnabled && !ttsEnabled)}
                     />
                   </div>
                 ) : (
@@ -1182,23 +1167,42 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                 )}
               </div>
 
-              {/* VAD Settings Card - always visible, grayed out when STT is disabled */}
-              <VADSettings
-                enabled={vadEnabled}
-                onEnabledChange={setVadEnabled}
-                silenceDuration={silenceDuration}
-                onSilenceDurationChange={(duration) => {
-                  setSilenceDuration(duration)
+              {/* Turn Detection Settings Card - always visible, grayed out when STT is disabled */}
+              <TurnDetectionSettings
+                enabled={turnDetectionEnabled}
+                onEnabledChange={setTurnDetectionEnabled}
+                baseSilenceDuration={baseSilenceDuration}
+                onBaseSilenceDurationChange={(duration) => {
+                  setBaseSilenceDuration(duration)
                   // Update the connected session if already connected
                   if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ silenceDuration: duration })
+                    voiceChat.updateConfig({ baseSilenceDuration: duration })
                   }
                   if (sttOnlyVoiceChat.isConnected) {
-                    sttOnlyVoiceChat.updateConfig({ silenceDuration: duration })
+                    sttOnlyVoiceChat.updateConfig({ baseSilenceDuration: duration })
+                  }
+                }}
+                thinkingSilenceDuration={thinkingSilenceDuration}
+                onThinkingSilenceDurationChange={(duration) => {
+                  setThinkingSilenceDuration(duration)
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ thinkingSilenceDuration: duration })
+                  }
+                  if (sttOnlyVoiceChat.isConnected) {
+                    sttOnlyVoiceChat.updateConfig({ thinkingSilenceDuration: duration })
+                  }
+                }}
+                maxSilenceDuration={maxSilenceDuration}
+                onMaxSilenceDurationChange={(duration) => {
+                  setMaxSilenceDuration(duration)
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ maxSilenceDuration: duration })
+                  }
+                  if (sttOnlyVoiceChat.isConnected) {
+                    sttOnlyVoiceChat.updateConfig({ maxSilenceDuration: duration })
                   }
                 }}
                 sttDisabled={!sttEnabled}
-                vadNotAvailable={false}
               />
             </div>
           </div>
@@ -1388,8 +1392,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                       color="rgb(156, 163, 175)"
                       className="w-full"
                     />
-                    {/* Show helper text when VAD is off (manual mode) */}
-                    {!vadEnabled && (
+                    {/* Show helper text when turn detection is off (manual mode) */}
+                    {!turnDetectionEnabled && (
                       <span className="text-xs text-muted-foreground">
                         Tap stop when done speaking
                       </span>

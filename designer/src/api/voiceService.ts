@@ -107,6 +107,21 @@ export interface VoiceClosed {
   type: 'closed'
 }
 
+// New message types from feat-audio-processing-2
+export interface VoiceEmotion {
+  type: 'emotion'
+  emotion: string
+  confidence: number
+  all_scores: Record<string, number>
+}
+
+export interface VoiceToolCall {
+  type: 'tool_call'
+  tool_call_id: string
+  function_name: string
+  arguments: string
+}
+
 export type VoiceMessage =
   | VoiceSessionInfo
   | VoiceStatus
@@ -116,6 +131,8 @@ export type VoiceMessage =
   | VoiceTTSDone
   | VoiceError
   | VoiceClosed
+  | VoiceEmotion
+  | VoiceToolCall
 
 export interface VoiceChatConfig {
   sessionId?: string
@@ -127,8 +144,19 @@ export interface VoiceChatConfig {
   speed?: number
   systemPrompt?: string
   sentenceBoundaryOnly?: boolean
-  silenceDuration?: number // VAD silence duration in seconds (0.2-2.0, default 0.4)
-  enableLLM?: boolean // When false, only STT is performed (transcription-only mode with VAD)
+  // Turn detection settings (replaces silenceDuration)
+  turnDetectionEnabled?: boolean
+  baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
+  thinkingSilenceDuration?: number // For incomplete utterances (0.3-5.0s, default 1.2)
+  maxSilenceDuration?: number     // Hard timeout (0.5-10.0s, default 2.5)
+  // Barge-in settings
+  bargeInEnabled?: boolean
+  bargeInNoiseFilter?: boolean
+  bargeInMinChunks?: number
+  // Emotion detection settings
+  emotionDetectionEnabled?: boolean
+  emotionModel?: string
+  emotionConfidenceThreshold?: number
 }
 
 // =============================================================================
@@ -254,6 +282,9 @@ export interface VoiceChatCallbacks {
   onAudio?: (audioData: ArrayBuffer) => void
   onError?: (message: string) => void
   onClose?: () => void
+  // New callbacks for emotion and tool calls
+  onEmotion?: (emotion: string, confidence: number, allScores: Record<string, number>) => void
+  onToolCall?: (toolCallId: string, functionName: string, args: string) => void
 }
 
 /**
@@ -282,9 +313,7 @@ export function createVoiceChatConnection(
   if (config.sentenceBoundaryOnly !== undefined) {
     url.searchParams.set('sentence_boundary_only', String(config.sentenceBoundaryOnly))
   }
-  if (config.enableLLM !== undefined) {
-    url.searchParams.set('enable_llm', String(config.enableLLM))
-  }
+  // Note: enable_llm removed - LLM is now always enabled
 
   const ws = new WebSocket(url.toString())
   ws.binaryType = 'arraybuffer'
@@ -318,6 +347,12 @@ export function createVoiceChatConnection(
           break
         case 'tts_done':
           callbacks.onTTSDone?.(message.phrase_index, message.duration)
+          break
+        case 'emotion':
+          callbacks.onEmotion?.(message.emotion, message.confidence, message.all_scores)
+          break
+        case 'tool_call':
+          callbacks.onToolCall?.(message.tool_call_id, message.function_name, message.arguments)
           break
         case 'error':
           callbacks.onError?.(message.message)
@@ -392,7 +427,19 @@ export function sendConfigUpdate(
     language: string
     speed: number
     sentence_boundary_only: boolean
-    silence_duration: number
+    // Turn detection settings
+    turn_detection_enabled: boolean
+    base_silence_duration: number
+    thinking_silence_duration: number
+    max_silence_duration: number
+    // Barge-in settings
+    barge_in_enabled: boolean
+    barge_in_noise_filter: boolean
+    barge_in_min_chunks: number
+    // Emotion detection settings
+    emotion_detection_enabled: boolean
+    emotion_model: string
+    emotion_confidence_threshold: number
   }>
 ): void {
   if (ws.readyState === WebSocket.OPEN) {
