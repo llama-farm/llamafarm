@@ -1806,22 +1806,14 @@ export default function TestChat({
 
   // Voice input state is set up after updateInput is defined below
 
-  // Check runtime health when speech mode is selected
+  // Check runtime health once when speech mode is selected
   useEffect(() => {
     if (modelType !== 'speech') {
       setSpeechRuntimeConnected(null)
       return
     }
 
-    const checkConnection = async () => {
-      const connected = await checkRuntimeHealth()
-      setSpeechRuntimeConnected(connected)
-    }
-
-    checkConnection()
-    // Recheck periodically while in speech mode
-    const interval = setInterval(checkConnection, 10000)
-    return () => clearInterval(interval)
+    checkRuntimeHealth().then(setSpeechRuntimeConnected)
   }, [modelType])
 
   // Project chat streaming session management

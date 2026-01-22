@@ -2,13 +2,12 @@
  * Voice Service - API client for speech-to-text and text-to-speech endpoints
  *
  * Endpoints:
- * - REST: Universal Runtime for TTS and STT
+ * - REST: Universal Runtime for TTS and STT (via runtimeClient)
  * - WebSocket: Server voice chat for full-duplex conversation
  */
 
-// Universal Runtime URL for direct TTS/STT calls
-const UNIVERSAL_RUNTIME_URL =
-  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+import { runtimeClient } from './client'
+import { devToolsEmitter } from '../utils/devToolsEmitter'
 
 // Server URL for voice WebSocket (goes through API gateway)
 const API_HOST = (import.meta.env as Record<string, string>).VITE_APP_API_URL || 'http://localhost:8000'
@@ -169,44 +168,29 @@ export interface VoiceChatConfig {
  * List available TTS voices
  */
 export async function listVoices(model?: string): Promise<VoiceInfo[]> {
-  const url = new URL(`${UNIVERSAL_RUNTIME_URL}/v1/audio/voices`)
-  if (model) {
-    url.searchParams.set('model', model)
-  }
-
-  const response = await fetch(url.toString())
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP ${response.status}`)
-  }
-
-  const data: VoiceListResponse = await response.json()
-  return data.data
+  const response = await runtimeClient.get<VoiceListResponse>('/v1/audio/voices', {
+    params: model ? { model } : undefined,
+  })
+  return response.data.data
 }
 
 /**
  * Synthesize speech from text (non-streaming)
  */
 export async function synthesizeSpeech(request: SpeechRequest): Promise<Blob> {
-  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/audio/speech`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const response = await runtimeClient.post<Blob>(
+    '/v1/audio/speech',
+    {
       model: request.model || 'kokoro',
       input: request.input,
       voice: request.voice || 'af_heart',
       response_format: request.response_format || 'mp3',
       speed: request.speed || 1.0,
       stream: false,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP ${response.status}`)
-  }
-
-  return response.blob()
+    },
+    { responseType: 'blob' }
+  )
+  return response.data
 }
 
 // =============================================================================
@@ -218,11 +202,8 @@ export async function synthesizeSpeech(request: SpeechRequest): Promise<Blob> {
  */
 export async function checkRuntimeHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/health`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(3000),
-    })
-    return response.ok
+    const response = await runtimeClient.get('/health', { timeout: 3000 })
+    return response.status === 200
   } catch {
     return false
   }
@@ -257,17 +238,12 @@ export async function transcribeAudio(
   formData.append('response_format', options.responseFormat || 'verbose_json')
   formData.append('temperature', String(options.temperature || 0))
 
-  const response = await fetch(`${UNIVERSAL_RUNTIME_URL}/v1/audio/transcriptions`, {
-    method: 'POST',
-    body: formData,
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP ${response.status}`)
-  }
-
-  return response.json()
+  const response = await runtimeClient.post<TranscriptionResponse>(
+    '/v1/audio/transcriptions',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  )
+  return response.data
 }
 
 // =============================================================================
@@ -332,12 +308,39 @@ export function createVoiceChatConnection(
     url.searchParams.set('max_silence_duration', String(config.maxSilenceDuration))
   }
 
+  // Generate a unique connection ID for DevTools tracking
+  const connectionId = crypto.randomUUID
+    ? crypto.randomUUID()
+    : `ws-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
   const ws = new WebSocket(url.toString())
   ws.binaryType = 'arraybuffer'
+
+  // Emit WebSocket open event to DevTools
+  ws.onopen = () => {
+    if (devToolsEmitter.hasSubscribers()) {
+      devToolsEmitter.emit({
+        type: 'ws_open',
+        id: connectionId,
+        url: url.toString(),
+      })
+    }
+  }
 
   ws.onmessage = (event) => {
     // Handle binary audio data
     if (event.data instanceof ArrayBuffer) {
+      // Emit binary message to DevTools (just indicate size, not full data)
+      if (devToolsEmitter.hasSubscribers()) {
+        devToolsEmitter.emit({
+          type: 'ws_message',
+          connectionId,
+          direction: 'receive',
+          data: `[Audio: ${event.data.byteLength} bytes]`,
+          isBinary: true,
+          size: event.data.byteLength,
+        })
+      }
       callbacks.onAudio?.(event.data)
       return
     }
@@ -345,6 +348,18 @@ export function createVoiceChatConnection(
     // Handle JSON messages
     try {
       const message: VoiceMessage = JSON.parse(event.data)
+
+      // Emit JSON message to DevTools
+      if (devToolsEmitter.hasSubscribers()) {
+        devToolsEmitter.emit({
+          type: 'ws_message',
+          connectionId,
+          direction: 'receive',
+          data: message,
+          isBinary: false,
+          size: event.data.length,
+        })
+      }
 
       switch (message.type) {
         case 'session_info':
@@ -385,11 +400,65 @@ export function createVoiceChatConnection(
 
   ws.onerror = (event) => {
     console.error('Voice WebSocket error:', event)
+    // Emit close with error to DevTools
+    if (devToolsEmitter.hasSubscribers()) {
+      devToolsEmitter.emit({
+        type: 'ws_close',
+        id: connectionId,
+        error: 'WebSocket connection error',
+      })
+    }
     callbacks.onError?.('WebSocket connection error')
   }
 
   ws.onclose = () => {
+    // Emit close to DevTools
+    if (devToolsEmitter.hasSubscribers()) {
+      devToolsEmitter.emit({
+        type: 'ws_close',
+        id: connectionId,
+      })
+    }
     callbacks.onClose?.()
+  }
+
+  // Wrap the send method to capture outgoing messages
+  const originalSend = ws.send.bind(ws)
+  ws.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+    if (devToolsEmitter.hasSubscribers()) {
+      if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+        const size = data instanceof ArrayBuffer ? data.byteLength : data.byteLength
+        devToolsEmitter.emit({
+          type: 'ws_message',
+          connectionId,
+          direction: 'send',
+          data: `[Audio: ${size} bytes]`,
+          isBinary: true,
+          size,
+        })
+      } else if (typeof data === 'string') {
+        try {
+          devToolsEmitter.emit({
+            type: 'ws_message',
+            connectionId,
+            direction: 'send',
+            data: JSON.parse(data),
+            isBinary: false,
+            size: data.length,
+          })
+        } catch {
+          devToolsEmitter.emit({
+            type: 'ws_message',
+            connectionId,
+            direction: 'send',
+            data,
+            isBinary: false,
+            size: data.length,
+          })
+        }
+      }
+    }
+    return originalSend(data)
   }
 
   return ws

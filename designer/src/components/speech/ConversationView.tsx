@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Volume2, StopCircle, Trash2 } from 'lucide-react'
+import { Volume2, StopCircle } from 'lucide-react'
 import type { SpeechMessage } from '../../types/ml'
 
 interface ConversationViewProps {
@@ -41,8 +41,8 @@ export function ConversationView({
 
   if (messages.length === 0) {
     return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
-        <div className="text-center px-6 py-10">
+      <div className={`flex flex-col items-center justify-center h-full min-h-0 ${className}`}>
+        <div className="text-center px-6">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
             <Volume2 className="w-5 h-5 text-primary" />
           </div>
@@ -62,17 +62,6 @@ export function ConversationView({
 
   return (
     <div className={`relative flex-1 overflow-hidden ${className}`}>
-      {/* Clear button in top-right corner */}
-      {messages.length > 0 && onClear && (
-        <button
-          onClick={onClear}
-          className="absolute top-2 right-2 z-10 p-2 rounded-lg bg-background/80 backdrop-blur-sm border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          aria-label="Clear conversation"
-          title="Clear conversation"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      )}
       <div ref={scrollRef} className="h-full overflow-y-auto p-4 space-y-5">
         {messages.map((message) => (
           <MessageBubble

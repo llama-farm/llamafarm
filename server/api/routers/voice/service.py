@@ -1150,29 +1150,37 @@ class VoiceChatService:
             thinking_filter = StreamingThinkingFilter()
             full_response = ""
 
-            async for token in self.stream_llm_response(text):
+            async for output in self.stream_llm_response(text):
                 # Check for interrupt
                 if self.session.is_interrupted():
                     logger.info("Turn interrupted by user")
                     break
 
-                # Filter thinking content at token level
-                filtered_token = thinking_filter.filter_token(token)
-                full_response += token
-
-                if not filtered_token:
+                # Skip tool calls in text input mode (for now)
+                if isinstance(output, LLMToolCall):
                     continue
 
-                # Detect phrase boundaries
-                phrase = phrase_detector.add_token(filtered_token)
-                if phrase:
-                    await websocket.send_json(
-                        LLMTextMessage(text=phrase, is_final=False).model_dump()
-                    )
-                    await self._synthesize_and_stream_phrase(websocket, phrase)
+                # Handle regular content tokens
+                if isinstance(output, LLMContent):
+                    token = output.text
 
-                    if self.session.is_interrupted():
-                        break
+                    # Filter thinking content at token level
+                    filtered_token = thinking_filter.filter_token(token)
+                    full_response += token
+
+                    if not filtered_token:
+                        continue
+
+                    # Detect phrase boundaries
+                    phrase = phrase_detector.add_token(filtered_token)
+                    if phrase:
+                        await websocket.send_json(
+                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(websocket, phrase)
+
+                        if self.session.is_interrupted():
+                            break
 
             # Flush remaining text
             if not self.session.is_interrupted():

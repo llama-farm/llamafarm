@@ -381,6 +381,20 @@ class VoiceSession:
         """Check if audio buffer has data."""
         return len(self._audio_buffer) > 0
 
+    def discard_audio(self) -> None:
+        """Discard accumulated audio without returning it.
+
+        Used after barge-in to clear any buffered audio that arrived
+        during TTS playback. This prevents stale/echo audio from being
+        processed in the next utterance.
+        """
+        self._audio_buffer.clear()
+        self._vad.reset()
+        self._format_detect_buffer.clear()
+        if self._turn_detector is not None:
+            self._turn_detector.reset()
+        self._partial_transcript = ""
+
     def flush_and_check_vad(self) -> bool:
         """Flush decoder and do final VAD check.
 
