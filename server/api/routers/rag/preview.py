@@ -19,6 +19,28 @@ logger = FastAPIStructLogger()
 router = APIRouter()
 
 
+def _sanitize_path_component(value: str, field_name: str) -> str:
+    """Ensure path components don't contain traversal characters.
+
+    Args:
+        value: The path component to sanitize
+        field_name: Name of the field for error messages
+
+    Returns:
+        The sanitized value (unchanged if valid)
+
+    Raises:
+        ValueError: If the value contains path separators or traversal patterns
+    """
+    if not value:
+        return value
+    # Path.name strips any directory components, so if it differs, traversal was attempted
+    sanitized = Path(value).name
+    if sanitized != value:
+        raise ValueError(f"Invalid {field_name}: contains path separators")
+    return sanitized
+
+
 class DocumentPreviewRequest(BaseModel):
     """Request model for document preview."""
 
@@ -104,6 +126,12 @@ async def handle_preview(
     project: str,
 ) -> dict[str, Any]:
     """Handle preview request by dispatching to RAG worker."""
+    # Validate path components to prevent directory traversal attacks
+    if request.file_hash:
+        _sanitize_path_component(request.file_hash, "file_hash")
+    if request.dataset_id:
+        _sanitize_path_component(request.dataset_id, "dataset_id")
+
     # Determine file path and original filename
     original_filename: str | None = None
     dataset_id: str | None = request.dataset_id
@@ -124,8 +152,10 @@ async def handle_preview(
         # Uploaded content - save to temp file
         content = base64.b64decode(request.file_content)
         original_filename = request.filename
+        # Sanitize filename suffix to prevent path manipulation
+        safe_suffix = f"_{Path(request.filename or 'upload').name}"
         with tempfile.NamedTemporaryFile(
-            delete=False, suffix=f"_{request.filename or 'upload'}"
+            delete=False, suffix=safe_suffix
         ) as tmp:
             tmp.write(content)
             file_path = Path(tmp.name)
@@ -169,27 +199,30 @@ async def handle_preview(
             # If we can't look up the dataset config, fall back to default behavior
             pass
 
-    # Call preview task
-    result = await asyncio.to_thread(
-        preview_document,
-        project_dir=project_dir,
-        file_path=str(file_path),
-        database=database_name,
-        data_processing_strategy_name=data_processing_strategy_name,
-        chunk_size=request.chunk_size,
-        chunk_overlap=request.chunk_overlap,
-        chunk_strategy=request.chunk_strategy,
-        original_filename=original_filename,
-    )
+    # Track temp file for cleanup
+    temp_file_path: Path | None = file_path if request.file_content else None
 
-    # Clean up temp file if created
-    if request.file_content:
-        try:
-            file_path.unlink()
-        except Exception:
-            pass
-
-    return result
+    try:
+        # Call preview task
+        result = await asyncio.to_thread(
+            preview_document,
+            project_dir=project_dir,
+            file_path=str(file_path),
+            database=database_name,
+            data_processing_strategy_name=data_processing_strategy_name,
+            chunk_size=request.chunk_size,
+            chunk_overlap=request.chunk_overlap,
+            chunk_strategy=request.chunk_strategy,
+            original_filename=original_filename,
+        )
+        return result
+    finally:
+        # Clean up temp file if created (even on exception)
+        if temp_file_path:
+            try:
+                temp_file_path.unlink()
+            except Exception:
+                pass
 
 
 @router.post(
@@ -289,4 +322,7 @@ async def preview_document_endpoint(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Preview failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail="Preview generation failed. Check server logs for details.",
+        ) from e

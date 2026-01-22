@@ -2,7 +2,7 @@
  * Modal for document preview with all controls and panels.
  */
 
-import React, { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -86,13 +86,14 @@ export function DocumentPreviewModal({
     chunkSize,
     chunkOverlap,
     chunkStrategy,
-    preview,
+    preview.mutate, // Use stable mutate reference instead of full preview object
   ])
 
   useEffect(() => {
     if (isOpen && fileHash) {
       fetchPreview()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPreview intentionally omitted to prevent re-fetch on strategy/override changes
   }, [isOpen, fileHash])
 
   const handleStrategyChange = (value: string) => {
@@ -100,18 +101,11 @@ export function DocumentPreviewModal({
     setSelectedStrategy(value === '__default__' ? undefined : value)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose()
-    }
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent
         data-testid="preview-modal"
         className="max-w-6xl max-h-[90vh] overflow-hidden"
-        onKeyDown={handleKeyDown}
       >
         <DialogHeader>
           <DialogTitle>
