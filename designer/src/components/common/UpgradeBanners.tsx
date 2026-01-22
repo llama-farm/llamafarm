@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useUpgradeAvailability } from '@/hooks/useUpgradeAvailability'
 import UpgradeModal from '@/components/common/UpgradeModal'
+import { useOnboardingContext } from '@/contexts/OnboardingContext'
 
 export function HomeUpgradeBanner() {
   const [open, setOpen] = useState(false)
@@ -69,6 +70,10 @@ export function ProjectUpgradeBanner() {
     _dismissCounter,
   } = useUpgradeAvailability()
 
+  // Check if onboarding wizard is open - hide banner during onboarding
+  const onboarding = useOnboardingContext()
+  const isOnboardingWizardOpen = onboarding?.state?.wizardOpen ?? false
+
   // Auto-dismiss when user is up to date (e.g., after successful upgrade)
   // Also close the modal if it's open.
   useEffect(() => {
@@ -80,8 +85,9 @@ export function ProjectUpgradeBanner() {
 
   const shouldShow = useMemo(() => {
     if (!upgradeAvailable) return false
+    if (isOnboardingWizardOpen) return false // Hide during onboarding
     return !isDismissedFor('project')
-  }, [upgradeAvailable, isDismissedFor, _dismissCounter])
+  }, [upgradeAvailable, isDismissedFor, _dismissCounter, isOnboardingWizardOpen])
 
   if (!shouldShow || !latestVersion) return null
 

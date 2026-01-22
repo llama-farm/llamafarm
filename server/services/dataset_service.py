@@ -13,7 +13,11 @@ from pydantic import BaseModel
 
 from api.errors import DatasetNotFoundError
 from core.celery import app
-from core.celery.rag_client import build_ingest_signature, delete_file_from_rag
+from core.celery.rag_client import (
+    build_ingest_signature,
+    delete_file_from_rag,
+    list_rag_documents,
+)
 from core.logging import FastAPIStructLogger
 from services.data_service import DataService, MetadataFileContent
 from services.project_service import ProjectService
@@ -53,14 +57,53 @@ class DatasetService:
     ) -> list[DatasetWithFileDetails]:
         """
         List all datasets for a given project with file details including original filenames
+        and chunk counts from vector database.
         """
         datasets = cls.list_datasets(namespace, project)
         datasets_with_details: list[DatasetWithFileDetails] = []
+
+        # Build a map of database -> {file_hash -> chunk_count} for all databases used by datasets
+        project_dir = ProjectService.get_project_dir(namespace, project)
+        database_chunk_counts: dict[str, dict[str, int]] = {}
+
+        # Get unique databases from datasets
+        unique_databases = {d.database for d in datasets}
+
+        for database in unique_databases:
+            try:
+                # Fetch documents from the database (with a high limit to get all)
+                result = list_rag_documents(
+                    project_dir=str(project_dir),
+                    database=database,
+                    limit=10000,  # High limit to get all documents
+                    offset=0,
+                )
+                # Build hash -> chunk_count map
+                # The document id is typically the file hash
+                chunk_map: dict[str, int] = {}
+                for doc in result.get("documents", []):
+                    doc_id = doc.get("id", "")
+                    chunk_count = doc.get("chunk_count", 0)
+                    if doc_id:
+                        chunk_map[doc_id] = chunk_count
+                database_chunk_counts[database] = chunk_map
+            except Exception as e:
+                logger.warning(
+                    "Failed to fetch chunk counts for database",
+                    database=database,
+                    error=str(e),
+                )
+                database_chunk_counts[database] = {}
 
         for dataset in datasets:
             files_with_details = cls.list_dataset_files(
                 namespace, project, dataset.name
             )
+
+            # Enrich files with chunk counts from the database
+            chunk_map = database_chunk_counts.get(dataset.database, {})
+            for file_meta in files_with_details:
+                file_meta.chunk_count = chunk_map.get(file_meta.hash)
 
             dataset_with_details = DatasetWithFileDetails(
                 name=dataset.name,

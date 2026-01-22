@@ -10,6 +10,7 @@ import {
   getProjectsForUI,
   filterProjectsBySearch,
 } from '../../utils/projectConstants'
+import { setActiveProject } from '../../utils/projectUtils'
 import Loader from '../../common/Loader'
 
 const Projects = () => {
@@ -61,7 +62,7 @@ const Projects = () => {
   }, [projects, search])
 
   const openProject = (name: string) => {
-    localStorage.setItem('activeProject', name)
+    setActiveProject(name) // This dispatches lf-active-project event
     navigate('/chat/dashboard')
   }
 

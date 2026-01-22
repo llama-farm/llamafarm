@@ -1,21 +1,32 @@
 import FontIcon from '../../common/FontIcon'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageActions from '../common/PageActions'
 import DataCards from './DataCards'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useProjectModalContext } from '../../contexts/ProjectModalContext'
+import { useOnboardingContext } from '../../contexts/OnboardingContext'
 import { useProject } from '../../hooks/useProjects'
-// import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { useActiveProject } from '../../hooks/useActiveProject'
-import { useListDatasets } from '../../hooks/useDatasets'
+import { useListDatasets, useUploadFileToDataset, useCreateDataset, useAvailableStrategies } from '../../hooks/useDatasets'
+import { useTrainAndSaveClassifier, useTrainAndSaveAnomaly } from '../../hooks/useMLModels'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
+import {
+  GettingStartedChecklist,
+  OnboardingWizard,
+  RestartOnboardingBanner,
+  CollapsedChecklist,
+} from '../Onboarding'
+import { useToast } from '../ui/toast'
+import { getDemoById, isModelBasedDemo, isFileBasedDemo, type FileBasedDemo } from '../../config/demos'
+import { CLASSIFIER_SAMPLE_DATASETS, ANOMALY_SAMPLE_DATASETS } from '../Models/sampleDatasets'
+import { parseNumericTrainingData } from '../../types/ml'
 
 const Dashboard = () => {
   const navigate = useNavigate()
-  // const namespace = getCurrentNamespace()
+  const { toast } = useToast()
   const activeProject = useActiveProject()
 
   // All state declarations first
@@ -23,7 +34,7 @@ const Dashboard = () => {
   const [showValidationDetails, setShowValidationDetails] = useState(false)
   const [projectName, setProjectName] = useState<string>('Dashboard')
   // Datasets list for Data card
-  const { data: apiDatasets, isLoading: isDatasetsLoading } = useListDatasets(
+  const { data: apiDatasets, isLoading: isDatasetsLoading, refetch: refetchDatasets } = useListDatasets(
     activeProject?.namespace || '',
     activeProject?.project || '',
     { enabled: !!activeProject?.namespace && !!activeProject?.project }
@@ -46,18 +57,6 @@ const Dashboard = () => {
     config: projectConfig,
     getLocation: getRootLocation,
   })
-
-  const { brief } = useMemo(() => {
-    const cfg = (projectDetail?.project?.config || {}) as Record<string, any>
-    const project_brief = (cfg?.project_brief || {}) as Record<string, any>
-    return {
-      brief: {
-        what: project_brief?.what || '',
-        goals: project_brief?.goals || '',
-        audience: project_brief?.audience || '',
-      },
-    }
-  }, [projectDetail])
 
   const datasets = useMemo(() => {
     // Only return datasets from the API, no localStorage fallback
@@ -91,8 +90,453 @@ const Dashboard = () => {
     return Array.isArray(models) ? models.length : 0
   }, [projectDetail])
 
+  // Upload mutation for onboarding files
+  const uploadMutation = useUploadFileToDataset()
+  const createDatasetMutation = useCreateDataset()
+
+  // Get available strategies and databases for dataset creation
+  const { data: strategiesData } = useAvailableStrategies(
+    activeProject?.namespace || '',
+    activeProject?.project || '',
+    { enabled: !!activeProject?.namespace && !!activeProject?.project }
+  )
+
   // Shared modal hook
   const projectModal = useProjectModalContext()
+
+  // Onboarding state
+  const onboarding = useOnboardingContext()
+  const onboardingRef = useRef(onboarding)
+  onboardingRef.current = onboarding
+
+  // Determine if we should show onboarding components
+  const showWizard = onboarding.state.wizardOpen
+  const showChecklist =
+    onboarding.state.onboardingCompleted && !onboarding.state.checklistDismissed
+  // Show collapsed checklist when onboarding completed but checklist was dismissed
+  const showCollapsedChecklist =
+    onboarding.state.onboardingCompleted && onboarding.state.checklistDismissed
+  // Show restart banner when onboarding was never completed (skipped before finishing)
+  const showRestartBanner =
+    !onboarding.state.wizardOpen &&
+    !onboarding.state.onboardingCompleted &&
+    !showChecklist
+
+  // Show loading state while we're about to open the wizard (prevents dashboard flash)
+  const isWaitingForWizard =
+    !onboarding.state.onboardingCompleted &&
+    !onboarding.state.wizardOpen &&
+    !onboarding.state.checklistDismissed &&
+    !onboarding.isDemo &&
+    (isDatasetsLoading || filesProcessed === 0)
+
+  // Auto-open wizard on first visit to an empty project (but NOT for demo projects)
+  useEffect(() => {
+    // Only auto-open if:
+    // 1. Onboarding not completed
+    // 2. Wizard not already open
+    // 3. No datasets loaded (empty project)
+    // 4. Datasets finished loading
+    // 5. NOT a demo project (demos skip the wizard entirely)
+    if (
+      !onboarding.state.onboardingCompleted &&
+      !onboarding.state.wizardOpen &&
+      !onboarding.state.checklistDismissed &&
+      filesProcessed === 0 &&
+      !isDatasetsLoading &&
+      !onboarding.isDemo
+    ) {
+      // Small delay to prevent flash
+      const timer = setTimeout(() => {
+        onboarding.openWizard()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [
+    onboarding.state.onboardingCompleted,
+    onboarding.state.wizardOpen,
+    onboarding.state.checklistDismissed,
+    filesProcessed,
+    isDatasetsLoading,
+    onboarding.openWizard,
+    onboarding.isDemo,
+  ])
+
+  // Training mutations for auto-training classifier/anomaly models
+  const trainClassifierMutation = useTrainAndSaveClassifier()
+  const trainAnomalyMutation = useTrainAndSaveAnomaly()
+  const trainClassifierMutationRef = useRef(trainClassifierMutation)
+  const trainAnomalyMutationRef = useRef(trainAnomalyMutation)
+  trainClassifierMutationRef.current = trainClassifierMutation
+  trainAnomalyMutationRef.current = trainAnomalyMutation
+
+  // State for pending model training
+  const [pendingModelTraining, setPendingModelTraining] = useState<{
+    demoId: string
+    modelType: 'classifier' | 'anomaly'
+    sampleDataId: string
+  } | null>(null)
+
+  // State for pending file-based demo import (RAG/doc-qa demos)
+  const [pendingFileBasedDemo, setPendingFileBasedDemo] = useState<FileBasedDemo | null>(null)
+
+  // Listen for onboarding sample import event and navigate appropriately
+  useEffect(() => {
+    const handleImportSample = (event: Event) => {
+      const demoId = (event as CustomEvent<{ demoId: string }>).detail?.demoId
+      if (demoId) {
+        const demo = getDemoById(demoId)
+        if (demo && isModelBasedDemo(demo)) {
+          // For classifier/anomaly demos, queue auto-training
+          setPendingModelTraining({
+            demoId,
+            modelType: demo.modelType,
+            sampleDataId: demo.sampleDataId,
+          })
+        } else if (demo && isFileBasedDemo(demo)) {
+          // For RAG/doc-qa demos, queue import in background (don't navigate away)
+          // This lets user see their checklist first
+          setPendingFileBasedDemo(demo)
+        }
+      }
+    }
+
+    window.addEventListener('lf-onboarding-import-sample', handleImportSample)
+    return () => {
+      window.removeEventListener('lf-onboarding-import-sample', handleImportSample)
+    }
+  }, [navigate])
+
+  // Process pending model training
+  useEffect(() => {
+    if (!pendingModelTraining) return
+
+    const { modelType, sampleDataId } = pendingModelTraining
+    setPendingModelTraining(null)
+
+    // Set training flag to disable the checklist button
+    onboardingRef.current.setIsTrainingSampleModel(true)
+
+    if (modelType === 'classifier') {
+      // Find the classifier sample dataset
+      const dataset = CLASSIFIER_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (!dataset?.data) {
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Sample dataset not found.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Generate model name from sample ID
+      const modelName = `sample-${sampleDataId}`
+
+      toast({
+        message: `Training ${dataset.name} classifier...`,
+      })
+
+      // Train the classifier
+      trainClassifierMutationRef.current.mutate(
+        {
+          model: modelName,
+          training_data: dataset.data,
+          description: `Sample classifier trained from ${dataset.name} dataset`,
+        },
+        {
+          onSuccess: result => {
+            toast({
+              message: `${dataset.name} classifier trained successfully!`,
+              icon: 'checkmark-filled',
+            })
+            // Store the trained model name in onboarding state
+            // This updates the checklist link to point to the trained model
+            onboardingRef.current.setTrainedModel(result.fitResult.versioned_name, 'classifier')
+            // Don't auto-complete the step - let user click to view it first
+          },
+          onError: (error: Error) => {
+            onboardingRef.current.setIsTrainingSampleModel(false)
+            toast({
+              message: error.message || 'Failed to train classifier.',
+              variant: 'destructive',
+              icon: 'alert-triangle',
+            })
+          },
+        }
+      )
+    } else if (modelType === 'anomaly') {
+      // Find the anomaly sample dataset
+      const dataset = ANOMALY_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (!dataset?.data) {
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Sample dataset not found.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Generate model name from sample ID
+      const modelName = `sample-${sampleDataId}`
+
+      toast({
+        message: `Training ${dataset.name} detector...`,
+      })
+
+      // Parse the data based on type
+      let parsedData: number[][] | null = null
+      if (dataset.type === 'numeric') {
+        parsedData = parseNumericTrainingData(dataset.data)
+      } else {
+        // For text data, we need to convert to hash encoding
+        // This matches how AnomalyModel.tsx handles text data
+        const lines = dataset.data.split('\n').map(line => line.trim()).filter(Boolean)
+        // Simple hash function for text -> numeric conversion
+        parsedData = lines.map(line => {
+          const values = line.split(',').map(v => v.trim())
+          return values.map(v => {
+            // Simple hash: sum of char codes
+            let hash = 0
+            for (let i = 0; i < v.length; i++) {
+              hash = ((hash << 5) - hash) + v.charCodeAt(i)
+              hash = hash & hash // Convert to 32-bit integer
+            }
+            return Math.abs(hash) % 10000 // Normalize to reasonable range
+          })
+        })
+      }
+
+      if (!parsedData) {
+        onboardingRef.current.setIsTrainingSampleModel(false)
+        toast({
+          message: 'Failed to parse training data.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+        return
+      }
+
+      // Train the anomaly detector
+      trainAnomalyMutationRef.current.mutate(
+        {
+          model: modelName,
+          data: parsedData,
+          backend: 'isolation_forest',
+          description: `Sample detector trained from ${dataset.name} dataset`,
+        },
+        {
+          onSuccess: result => {
+            toast({
+              message: `${dataset.name} detector trained successfully!`,
+              icon: 'checkmark-filled',
+            })
+            // Store the trained model name in onboarding state
+            // This updates the checklist link to point to the trained model
+            onboardingRef.current.setTrainedModel(result.fitResult.versioned_name, 'anomaly')
+            // Don't auto-complete the step - let user click to view it first
+          },
+          onError: (error: Error) => {
+            onboardingRef.current.setIsTrainingSampleModel(false)
+            toast({
+              message: error.message || 'Failed to train detector.',
+              variant: 'destructive',
+              icon: 'alert-triangle',
+            })
+          },
+        }
+      )
+    }
+  }, [pendingModelTraining, toast])
+
+  // Process pending file-based demo import when we have active project
+  useEffect(() => {
+    if (!pendingFileBasedDemo) {
+      return
+    }
+    if (!activeProject?.namespace || !activeProject?.project) {
+      return
+    }
+
+    const demo = pendingFileBasedDemo
+    setPendingFileBasedDemo(null)
+
+    const importDemo = async () => {
+      try {
+        toast({
+          message: `Importing "${demo.displayName}"...`,
+        })
+
+        // Always use the project's available strategies and databases
+        // Demo configs have their own database names that won't exist in the user's project
+        const processingStrategy = strategiesData?.data_processing_strategies?.[0] || 'universal_processor'
+        const database = strategiesData?.databases?.[0] || 'main_database'
+
+        // Create dataset
+        try {
+          await createDatasetMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            name: demo.datasetName,
+            data_processing_strategy: processingStrategy,
+            database: database,
+          })
+        } catch (error: any) {
+          // If dataset already exists, that's fine - continue with upload
+          if (!(error?.response?.status === 409 || error?.message?.includes('already exists'))) {
+            throw error
+          }
+        }
+
+        // Upload each demo file
+        for (const file of demo.files) {
+          const fileResponse = await fetch(file.path)
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch ${file.filename}`)
+          }
+          const blob = await fileResponse.blob()
+          const fileObj = new File([blob], file.filename, { type: file.type })
+
+          await uploadMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            dataset: demo.datasetName,
+            file: fileObj,
+          })
+        }
+
+        toast({
+          message: `"${demo.displayName}" imported successfully!`,
+          icon: 'checkmark-filled',
+        })
+
+        // Refresh datasets list
+        refetchDatasets()
+      } catch (error) {
+        toast({
+          message: `Failed to import demo: ${error}`,
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      }
+    }
+
+    importDemo()
+  }, [pendingFileBasedDemo, activeProject, toast, createDatasetMutation, uploadMutation, refetchDatasets, strategiesData])
+
+  // State for pending file upload from onboarding
+  const [pendingFileUpload, setPendingFileUpload] = useState<{
+    files: File[]
+    datasetName: string
+  } | null>(null)
+
+  // Listen for onboarding file upload event
+  useEffect(() => {
+    const handleUploadFiles = (event: Event) => {
+      const detail = (event as CustomEvent<{ files: File[]; datasetName: string }>).detail
+      if (detail?.files && detail.files.length > 0) {
+        setPendingFileUpload({
+          files: detail.files,
+          datasetName: detail.datasetName,
+        })
+      }
+    }
+
+    window.addEventListener('lf-onboarding-upload-files', handleUploadFiles)
+    return () => {
+      window.removeEventListener('lf-onboarding-upload-files', handleUploadFiles)
+    }
+  }, [])
+
+  // Process pending file upload when we have active project
+  useEffect(() => {
+    if (!pendingFileUpload) {
+      return
+    }
+    if (!activeProject?.namespace || !activeProject?.project) {
+      return
+    }
+
+    const { files, datasetName } = pendingFileUpload
+    setPendingFileUpload(null)
+
+    // Create dataset first, then upload files
+    const createAndUploadFiles = async () => {
+      toast({
+        message: `Creating dataset "${datasetName}"...`,
+      })
+
+      // First, create the dataset
+      // Use the first available strategy and database from the project config
+      const strategy = strategiesData?.data_processing_strategies?.[0] || 'universal_processor'
+      const database = strategiesData?.databases?.[0] || 'main_database'
+
+      try {
+        await createDatasetMutation.mutateAsync({
+          namespace: activeProject.namespace,
+          project: activeProject.project,
+          name: datasetName,
+          data_processing_strategy: strategy,
+          database: database,
+        })
+      } catch (error: any) {
+        // If dataset already exists, that's fine - continue with upload
+        if (!(error?.response?.status === 409 || error?.message?.includes('already exists'))) {
+          toast({
+            message: `Failed to create dataset: ${error?.message || 'Unknown error'}`,
+            variant: 'destructive',
+            icon: 'alert-triangle',
+          })
+          return
+        }
+      }
+
+      // Now upload files
+      toast({
+        message: `Uploading ${files.length} file${files.length > 1 ? 's' : ''}...`,
+      })
+
+      let successCount = 0
+      for (const file of files) {
+        try {
+          await uploadMutation.mutateAsync({
+            namespace: activeProject.namespace,
+            project: activeProject.project,
+            dataset: datasetName,
+            file,
+          })
+          successCount++
+        } catch {
+          // Continue with other files even if one fails
+        }
+      }
+
+      if (successCount === files.length) {
+        toast({
+          message: `Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''} to "${datasetName}".`,
+          icon: 'checkmark-filled',
+        })
+      } else if (successCount > 0) {
+        toast({
+          message: `Uploaded ${successCount} of ${files.length} files. Some uploads failed.`,
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      } else {
+        toast({
+          message: 'Failed to upload files.',
+          variant: 'destructive',
+          icon: 'alert-triangle',
+        })
+      }
+
+      // Refresh datasets list
+      refetchDatasets()
+    }
+
+    createAndUploadFiles()
+  }, [pendingFileUpload, activeProject, toast, uploadMutation, createDatasetMutation, refetchDatasets, strategiesData])
 
   useEffect(() => {
     const refresh = () => {
@@ -144,30 +588,46 @@ const Dashboard = () => {
     return def
   }, [projectDetail])
 
+  // Show loading screen while waiting for wizard to open
+  if (isWaitingForWizard) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="text-4xl">🦙</div>
+          <div className="text-lg font-medium text-foreground">Setting up your project...</div>
+          <div className="text-sm text-muted-foreground">Just a moment</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="w-full h-full flex flex-col">
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl break-words ">
-              {mode === 'designer' ? projectName : 'Config editor'}
-            </h2>
-            {mode === 'designer' && (
-              <button
-                className="rounded-sm hover:opacity-80"
-                onClick={() => {
-                  projectModal.openEditModal(projectName)
-                }}
-              >
-                <FontIcon type="edit" className="w-5 h-5 text-primary" />
-              </button>
-            )}
+        {/* Hide header when wizard is open */}
+        {!showWizard && (
+          <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl break-words ">
+                {mode === 'designer' ? projectName : 'Config editor'}
+              </h2>
+              {mode === 'designer' && (
+                <button
+                  className="rounded-sm hover:opacity-80"
+                  onClick={() => {
+                    projectModal.openEditModal(projectName)
+                  }}
+                >
+                  <FontIcon type="edit" className="w-5 h-5 text-primary" />
+                </button>
+              )}
+            </div>
+            <PageActions mode={mode} onModeChange={handleModeChange} />
           </div>
-          <PageActions mode={mode} onModeChange={handleModeChange} />
-        </div>
+        )}
 
-        {/* Validation Error Banner */}
-        {projectDetail?.project?.validation_error &&
+        {/* Validation Error Banner - also hide when wizard is open */}
+        {!showWizard && projectDetail?.project?.validation_error &&
           (() => {
             // Parse actual error count from validation messages
             const errorText = projectDetail.project.validation_error
@@ -233,61 +693,32 @@ const Dashboard = () => {
             )
           })()}
 
-        {mode !== 'designer' ? (
+        {/* Onboarding Wizard - takes over entire dashboard area */}
+        {showWizard ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <OnboardingWizard className="h-full" />
+          </div>
+        ) : mode !== 'designer' ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-6">
             <ConfigEditor className="h-full" initialPointer={configPointer} />
           </div>
         ) : (
           <>
-            {/* Project details card */}
-            <div className="w-full flex flex-col mb-4">
-              <div className="h-[40px] px-2 flex items-center justify-between rounded-tl-lg rounded-tr-lg bg-card border-b border-border">
-                <div className="flex flex-row gap-2 items-center text-foreground pl-2">
-                  Project details
-                </div>
-                <button
-                  className="text-xs text-primary flex flex-row gap-1 items-center pr-3"
-                  onClick={() => projectModal.openEditModal(projectName)}
-                >
-                  <FontIcon type="edit" className="w-4 h-4" />
-                  Edit
-                </button>
-              </div>
-              <div className="p-6 flex flex-col gap-4 rounded-b-lg bg-card">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      What are you building?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.what && brief.what.trim().length > 0
-                        ? brief.what
-                        : '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      What do you hope to achieve?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.goals && brief.goals.trim().length > 0
-                        ? brief.goals
-                        : '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      Who will use this?
-                    </div>
-                    <div className="text-foreground break-words">
-                      {brief.audience && brief.audience.trim().length > 0
-                        ? brief.audience
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Onboarding: Getting Started Checklist - full width top */}
+            {showChecklist && (
+              <GettingStartedChecklist className="mb-4" />
+            )}
+
+            {/* Onboarding: Collapsed checklist when dismissed */}
+            {showCollapsedChecklist && (
+              <CollapsedChecklist className="mb-4" />
+            )}
+
+            {/* Onboarding: Restart banner when skipped/dismissed */}
+            {showRestartBanner && (
+              <RestartOnboardingBanner className="mb-4" />
+            )}
+
             <DataCards
               filesProcessed={filesProcessed}
               databaseCount={databaseCount}

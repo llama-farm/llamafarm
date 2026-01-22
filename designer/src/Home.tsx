@@ -16,6 +16,7 @@ import {
   parseTimestamp,
 } from './utils/projectHelpers'
 import { getCurrentNamespace } from './utils/namespaceUtils'
+import { setActiveProject } from './utils/projectUtils'
 import projectService from './api/projectService'
 import { mergeProjectConfig } from './utils/projectConfigUtils'
 import {
@@ -27,13 +28,17 @@ import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
 import { Textarea } from './components/ui/textarea'
 import { useDemoModal } from './contexts/DemoModalContext'
-import { AVAILABLE_DEMOS } from './config/demos'
+import { getFileBasedDemos } from './config/demos'
 import { useGitHubStars } from './hooks/useGitHubStars'
 import { Star } from 'lucide-react'
 
 function Home() {
   // Demo modal context
   const demoModal = useDemoModal()
+
+  // Get file-based demos (for the demo section)
+  const fileBasedDemos = getFileBasedDemos()
+  const llamaDemo = fileBasedDemos[0] // First demo is Llama & Alpaca
 
   // Form state
   const [projectName, setProjectName] = useState('')
@@ -235,7 +240,7 @@ function Home() {
       }
 
       // 3) Activate and navigate to dashboard
-      localStorage.setItem('activeProject', sanitizedName)
+      setActiveProject(sanitizedName)
 
       // Optimistically update caches
       try {
@@ -274,13 +279,12 @@ function Home() {
   }
 
   const openProject = (name: string) => {
-    localStorage.setItem('activeProject', name)
+    setActiveProject(name)
     navigate('/chat/dashboard')
   }
 
   // Start the llama demo directly - modal will auto-start it and show progress
   const handleStartLlamaDemo = () => {
-    const llamaDemo = AVAILABLE_DEMOS[0] // First demo is Llama & Alpaca
     if (llamaDemo) {
       // Open modal with auto-start demo ID
       demoModal.openModal(llamaDemo.id)
@@ -396,10 +400,10 @@ function Home() {
                 </div>
 
                 {/* Llama Demo Card */}
-                {AVAILABLE_DEMOS[0] && (
+                {llamaDemo && (
                   <div className="mb-6 rounded-lg border border-input bg-accent/50 p-6">
                     <div className="flex flex-col items-center text-center gap-3">
-                      <div className="text-5xl">{AVAILABLE_DEMOS[0].icon}</div>
+                      <div className="text-5xl">{llamaDemo.icon}</div>
                       <div className="flex flex-col gap-1">
                         <h3 className="font-semibold text-foreground text-base">
                           Llama & Alpaca Care

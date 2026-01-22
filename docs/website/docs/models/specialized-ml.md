@@ -31,6 +31,19 @@ LF_RUNTIME_PORT=8080 nx start universal-runtime
 
 The server runs on `http://localhost:11540` by default.
 
+### Model Caching
+
+The Universal Runtime caches loaded models in memory for faster inference on repeated requests:
+
+- **Default TTL:** 5 minutes (300 seconds) of inactivity before unloading
+- **Environment variable:** Set `MODEL_UNLOAD_TIMEOUT` to customize (in seconds)
+- **Flash Attention 2:** Automatically enabled on CUDA devices for compatible models
+
+```bash
+# Keep models loaded for 30 minutes
+MODEL_UNLOAD_TIMEOUT=1800 nx start universal-runtime
+```
+
 ---
 
 ## OCR (Text Extraction)
@@ -234,6 +247,10 @@ Use **pre-trained HuggingFace models** for common classification tasks like sent
 | `facebook/bart-large-mnli` | Zero-shot classification |
 | `cardiffnlp/twitter-roberta-base-sentiment-latest` | Social media sentiment |
 
+:::tip Model Quantization
+You can use quantized models for faster inference by appending a quantization suffix: `model:Q4_K_M`. For example: `distilbert-base-uncased-finetuned-sst-2-english:Q4_K_M`
+:::
+
 ### Basic Classification
 
 ```bash
@@ -245,9 +262,18 @@ curl -X POST http://localhost:11540/v1/classify \
       "I love this product!",
       "This is terrible and broken.",
       "It works okay I guess."
-    ]
+    ],
+    "max_length": 512
   }'
 ```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | Yes | - | HuggingFace model ID |
+| `texts` | array | Yes | - | Texts to classify |
+| `max_length` | int | No | auto | Max sequence length (auto-detects: 8192 for ModernBERT, 512 for classic BERT) |
 
 ### Response Format
 
@@ -294,7 +320,6 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
 The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the Universal Runtime with added features:
 - **Model Versioning**: Automatic timestamped versions when `overwrite: false`
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
-- **File Upload Support**: Direct file handling without base64 encoding
 
 ```bash
 # Via LlamaFarm API (port 8000)
@@ -303,6 +328,11 @@ curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
 ```
+:::
+
+:::warning Server vs Universal Runtime
+- **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
+- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 8000) and proxies to Universal Runtime.
 :::
 
 ### Step 1: Train Your Classifier
@@ -390,6 +420,14 @@ curl -X POST http://localhost:11540/v1/classifier/save \
   "status": "saved"
 }
 ```
+
+:::note Storage Structure
+SetFit classifiers are stored as **directories** (not files) under `~/.llamafarm/models/classifier/`. Each directory contains:
+- Model weights and config
+- `labels.txt` - Class labels for the classifier
+
+**Note:** Models are auto-saved immediately after fitting, so explicit save is optional but recommended for adding descriptions.
+:::
 
 ### Loading Saved Models
 
