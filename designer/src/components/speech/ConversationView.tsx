@@ -14,8 +14,6 @@ interface ConversationViewProps {
   isSpeaking?: boolean
   /** Callback to stop speaking */
   onStopSpeaking?: () => void
-  /** Callback to clear conversation */
-  onClear?: () => void
   className?: string
 }
 
@@ -27,7 +25,6 @@ export function ConversationView({
   streamingAssistantText,
   isSpeaking,
   onStopSpeaking,
-  onClear,
   className = '',
 }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)

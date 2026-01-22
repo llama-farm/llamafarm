@@ -1052,7 +1052,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   setTtsVoice(newVoice)
                   // Update the connected session if already connected
                   if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ tts_model: model, tts_voice: newVoice })
+                    voiceChat.updateConfig({ ttsModel: model, ttsVoice: newVoice })
                   }
                 }}
                 selectedVoice={ttsVoice}
@@ -1060,7 +1060,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   setTtsVoice(voice)
                   // Update the connected session if already connected
                   if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ tts_voice: voice })
+                    voiceChat.updateConfig({ ttsVoice: voice })
                   }
                 }}
                 speed={ttsSpeed}
@@ -1227,7 +1227,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                 streamingAssistantText={llmAvailable ? voiceChat.currentLLMText : undefined}
                 isSpeaking={llmAvailable && (voiceChat.voiceState === 'speaking' || voiceChat.isPlayingAudio)}
                 onStopSpeaking={() => voiceChat.interrupt()}
-                onClear={handleClearConversation}
                 className="flex-1"
               />
             </div>

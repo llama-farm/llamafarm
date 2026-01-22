@@ -17,7 +17,24 @@ from dataclasses import dataclass
 
 import httpx
 import websockets
+from config.datamodel import Model
 from fastapi import WebSocket
+
+from core.settings import settings
+from services.universal_runtime_service import UniversalRuntimeService
+
+from .phrase_detector import PhraseBoundaryDetector
+from .session import VoiceSession
+from .types import (
+    ErrorMessage,
+    LLMTextMessage,
+    StatusMessage,
+    ToolCallMessage,
+    TranscriptionMessage,
+    TTSDoneMessage,
+    TTSStartMessage,
+    VoiceState,
+)
 
 
 @dataclass
@@ -38,23 +55,6 @@ class LLMContent:
 
 # Type alias for stream output
 LLMStreamOutput = LLMContent | LLMToolCall
-
-from config.datamodel import Model
-from core.settings import settings
-from services.universal_runtime_service import UniversalRuntimeService
-
-from .phrase_detector import PhraseBoundaryDetector
-from .session import VoiceSession
-from .types import (
-    ErrorMessage,
-    LLMTextMessage,
-    StatusMessage,
-    ToolCallMessage,
-    TranscriptionMessage,
-    TTSDoneMessage,
-    TTSStartMessage,
-    VoiceState,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +390,7 @@ class VoiceChatService:
                 logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
 
                 # Pre-warm HTTP connection pool with a lightweight request
-                client = self.get_http_client()
+                self.get_http_client()
                 # Just establish the TCP connection, don't make a full request
                 logger.debug("HTTP client pool pre-warmed")
             else:
@@ -802,7 +802,7 @@ class VoiceChatService:
                         self._tts_ws = None
                         break
 
-        except websockets.exceptions.ConnectionClosed as e:
+        except websockets.exceptions.ConnectionClosed:
             logger.warning(f"TTS WebSocket closed for phrase {phrase_index}")
             self._tts_ws = None
         except Exception as e:
@@ -1091,7 +1091,7 @@ class VoiceChatService:
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
-            logger.info(f"⏱️ TIMING SUMMARY for turn:")
+            logger.info("⏱️ TIMING SUMMARY for turn:")
             logger.info(f"  Total turn duration: {(t_end - t_start)*1000:.1f}ms")
             if t_first_stt_segment:
                 logger.info(f"  First STT segment: {(t_first_stt_segment - t_start)*1000:.1f}ms")
