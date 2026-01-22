@@ -125,23 +125,23 @@ def analyze_completeness(text: str) -> TurnCompleteness:
     # even if the beginning of the sentence looks like a question/command
     for pattern in _incomplete_re:
         if pattern.search(text):
-            logger.debug(f"Turn analysis: INCOMPLETE (matched incomplete pattern)")
+            logger.debug("Turn analysis: INCOMPLETE (matched incomplete pattern)")
             return TurnCompleteness.INCOMPLETE
 
     # Check for explicit completeness markers
     for pattern in _complete_re:
         if pattern.search(text):
-            logger.debug(f"Turn analysis: COMPLETE (matched complete pattern)")
+            logger.debug("Turn analysis: COMPLETE (matched complete pattern)")
             return TurnCompleteness.COMPLETE
 
     # Heuristic: very short text without punctuation is likely incomplete
     words = text.split()
     if len(words) <= 2 and not re.search(r"[.!?]$", text):
-        logger.debug(f"Turn analysis: INCOMPLETE (very short, no punctuation)")
+        logger.debug("Turn analysis: INCOMPLETE (very short, no punctuation)")
         return TurnCompleteness.INCOMPLETE
 
     # Default: ambiguous
-    logger.debug(f"Turn analysis: AMBIGUOUS (no patterns matched)")
+    logger.debug("Turn analysis: AMBIGUOUS (no patterns matched)")
     return TurnCompleteness.AMBIGUOUS
 
 

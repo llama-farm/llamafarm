@@ -309,7 +309,7 @@ class EmotionModel(BaseModel):
 
         # Build results
         results = []
-        for i, (audio, probs) in enumerate(
+        for _i, (audio, probs) in enumerate(
             zip(audio_segments, all_probs, strict=True)
         ):
             all_scores = {
