@@ -16,6 +16,18 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from utils.context_calculator import get_default_context_size
+from utils.context_manager import ContextBudget, ContextManager, ContextUsage
+from utils.model_format import get_gguf_file_path
+from utils.token_counter import TokenCounter
+
+from .base import BaseModel
+
+if TYPE_CHECKING:
+    from llamafarm_llama import Llama
+
+logger = logging.getLogger(__name__)
+
 
 @lru_cache(maxsize=1)
 def _is_unified_memory_gpu() -> bool:
@@ -38,15 +50,13 @@ def _is_unified_memory_gpu() -> bool:
     Returns:
         True if synchronous inference should be used (unified memory or override)
     """
-    log = logging.getLogger(__name__)
-
     # Check for environment variable override first
     override = os.environ.get("LLAMAFARM_SYNC_INFERENCE", "").lower()
     if override in ("1", "true", "yes"):
-        log.info("Sync inference ENABLED via LLAMAFARM_SYNC_INFERENCE=1")
+        logger.info("Sync inference ENABLED via LLAMAFARM_SYNC_INFERENCE=1")
         return True
     if override in ("0", "false", "no"):
-        log.info("Sync inference DISABLED via LLAMAFARM_SYNC_INFERENCE=0")
+        logger.info("Sync inference DISABLED via LLAMAFARM_SYNC_INFERENCE=0")
         return False
 
     # Auto-detect: NVIDIA Tegra/Jetson (unified memory iGPU)
@@ -55,13 +65,13 @@ def _is_unified_memory_gpu() -> bool:
             with open("/proc/device-tree/compatible", "rb") as f:
                 compatible = f.read().decode("utf-8", errors="ignore").lower()
                 if "tegra" in compatible or "jetson" in compatible:
-                    log.info("Unified memory GPU detected: NVIDIA Jetson/Tegra (sync inference enabled)")
+                    logger.info("Unified memory GPU detected: NVIDIA Jetson/Tegra (sync inference enabled)")
                     return True
         # Fallback: check kernel version string
         if os.path.exists("/proc/version"):
             with open("/proc/version") as f:
                 if "tegra" in f.read().lower():
-                    log.info("Unified memory GPU detected: NVIDIA Tegra kernel (sync inference enabled)")
+                    logger.info("Unified memory GPU detected: NVIDIA Tegra kernel (sync inference enabled)")
                     return True
     except Exception:
         pass
@@ -70,23 +80,11 @@ def _is_unified_memory_gpu() -> bool:
     if sys.platform == "darwin":
         import platform
         if platform.machine() == "arm64":
-            log.info("Unified memory GPU detected: Apple Silicon (sync inference enabled)")
+            logger.info("Unified memory GPU detected: Apple Silicon (sync inference enabled)")
             return True
 
-    log.info("Discrete GPU or CPU-only detected (async inference via ThreadPoolExecutor)")
+    logger.info("Discrete GPU or CPU-only detected (async inference via ThreadPoolExecutor)")
     return False
-
-from utils.context_calculator import get_default_context_size
-from utils.context_manager import ContextBudget, ContextManager, ContextUsage
-from utils.model_format import get_gguf_file_path
-from utils.token_counter import TokenCounter
-
-from .base import BaseModel
-
-if TYPE_CHECKING:
-    from llamafarm_llama import Llama
-
-logger = logging.getLogger(__name__)
 
 
 class GGUFLanguageModel(BaseModel):
