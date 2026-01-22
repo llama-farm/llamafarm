@@ -186,7 +186,10 @@ class TTSSynthesisService:
                 })
 
                 if is_final:
+                    logger.info("TTS WebSocket: final=True, closing connection")
                     break
+                else:
+                    logger.info("TTS WebSocket: final=False, waiting for next phrase")
 
         except WebSocketDisconnect:
             logger.info("WebSocket client disconnected")

@@ -8,6 +8,7 @@ anomaly detection, text classification, and speech-to-text.
 from .anomaly_model import AnomalyModel
 from .base import BaseModel
 from .classifier_model import ClassifierModel
+from .emotion_model import EmotionModel, EmotionResult
 from .document_model import DocumentModel
 from .encoder_model import EncoderModel
 from .gguf_encoder_model import GGUFEncoderModel
@@ -33,6 +34,8 @@ __all__ = [
     "DocumentModel",
     "AnomalyModel",
     "ClassifierModel",
+    "EmotionModel",
+    "EmotionResult",
     "SpeechModel",
     "TTSModel",
     "VoiceProfile",

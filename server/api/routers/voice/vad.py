@@ -198,6 +198,51 @@ class VoiceActivityDetector:
         """Get duration of current speech in seconds."""
         return self._samples_to_seconds(self._speech_samples)
 
+    def get_silence_duration(self) -> float:
+        """Get duration of current silence in seconds (after speech)."""
+        return self._samples_to_seconds(self._silence_samples)
+
+    def is_in_silence_window(self) -> bool:
+        """Check if we're in the silence window after speech.
+
+        This is the window where we might be waiting for the user to
+        continue speaking (thinking pause) or for end-of-turn.
+        """
+        return self.state == VADState.SILENCE
+
+    def check_end_of_turn(self, required_silence: float) -> bool:
+        """Check if end-of-turn should trigger with dynamic threshold.
+
+        Unlike process_chunk which uses the fixed config threshold,
+        this method checks against a dynamically calculated threshold
+        (e.g., based on linguistic analysis of partial transcription).
+
+        Args:
+            required_silence: Required silence duration in seconds.
+
+        Returns:
+            True if silence has exceeded the required duration and
+            speech was long enough to be valid.
+        """
+        if self.state != VADState.SILENCE:
+            return False
+
+        silence_duration = self.get_silence_duration()
+        speech_duration = self.get_speech_duration()
+
+        if (
+            silence_duration >= required_silence
+            and speech_duration >= self.config.min_speech_duration
+        ):
+            logger.info(
+                f"VAD: Dynamic end-of-turn triggered "
+                f"(silence={silence_duration:.2f}s >= {required_silence:.2f}s, "
+                f"speech={speech_duration:.2f}s)"
+            )
+            return True
+
+        return False
+
     def get_average_energy(self) -> float:
         """Get average energy from recent history."""
         if not self._energy_history:
