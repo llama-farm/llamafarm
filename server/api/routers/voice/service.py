@@ -742,6 +742,15 @@ class VoiceChatService:
             await self._tts_ws.close()
             self._tts_ws = None
 
+    async def invalidate_tts_connection(self) -> None:
+        """Invalidate TTS WebSocket connection.
+
+        Call this when TTS config (voice or model) changes to force
+        recreation with new parameters on next synthesis.
+        """
+        await self._close_tts_websocket()
+        logger.info("TTS WebSocket invalidated due to config change")
+
     async def synthesize_phrase_stream(
         self, phrase: str, phrase_index: int
     ) -> AsyncGenerator[bytes, None]:

@@ -136,7 +136,7 @@ function WebSocketListItem({
       )}
     >
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">
           WS
         </span>
         <span className={cn('h-2 w-2 rounded-full', statusColor)} title={ws.status} />
@@ -176,13 +176,13 @@ function WebSocketMessageItem({ message }: { message: CapturedWebSocketMessage }
     )}>
       <div className="flex items-center gap-2 mb-1">
         {message.direction === 'send' ? (
-          <ArrowUp className="w-3 h-3 text-blue-400" />
+          <ArrowUp className="w-3 h-3 text-blue-600 dark:text-blue-300" />
         ) : (
-          <ArrowDown className="w-3 h-3 text-green-400" />
+          <ArrowDown className="w-3 h-3 text-green-600 dark:text-green-400" />
         )}
         <span className={cn(
           'text-[10px] font-medium',
-          message.direction === 'send' ? 'text-blue-400' : 'text-green-400'
+          message.direction === 'send' ? 'text-blue-600 dark:text-blue-300' : 'text-green-600 dark:text-green-400'
         )}>
           {message.direction === 'send' ? 'SEND' : 'RECV'}
         </span>
@@ -227,14 +227,14 @@ function WebSocketDetail({ ws }: { ws: CapturedWebSocket }) {
       {/* WebSocket Info Header */}
       <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-medium px-2 py-1 rounded bg-purple-500/20 text-purple-400">
+          <span className="text-xs font-medium px-2 py-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">
             WebSocket
           </span>
           <span className={cn(
             'text-xs px-2 py-1 rounded',
-            ws.status === 'open' ? 'bg-green-500/20 text-green-400' :
-            ws.status === 'error' ? 'bg-red-500/20 text-red-400' :
-            'bg-gray-500/20 text-gray-400'
+            ws.status === 'open' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
+            ws.status === 'error' ? 'bg-red-500/20 text-red-600 dark:text-red-400' :
+            'bg-gray-500/20 text-gray-600 dark:text-gray-400'
           )}>
             {ws.status}
           </span>

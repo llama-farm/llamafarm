@@ -1048,10 +1048,21 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   setTtsModel(model)
                   // Reset voice to first available for new model
                   const modelVoices = getVoicesForModel(model)
-                  setTtsVoice(modelVoices[0]?.id || 'af_heart')
+                  const newVoice = modelVoices[0]?.id || 'af_heart'
+                  setTtsVoice(newVoice)
+                  // Update the connected session if already connected
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ tts_model: model, tts_voice: newVoice })
+                  }
                 }}
                 selectedVoice={ttsVoice}
-                onVoiceChange={setTtsVoice}
+                onVoiceChange={(voice) => {
+                  setTtsVoice(voice)
+                  // Update the connected session if already connected
+                  if (voiceChat.isConnected) {
+                    voiceChat.updateConfig({ tts_voice: voice })
+                  }
+                }}
                 speed={ttsSpeed}
                 onSpeedChange={(speed) => {
                   setTtsSpeed(speed)

@@ -469,6 +469,12 @@ async def voice_chat_websocket(
                             await service.process_text_turn(websocket, text)
 
                     elif msg_type == "config":
+                        # Check if TTS config is changing (voice or model)
+                        tts_config_changed = (
+                            data.get("tts_voice") is not None or
+                            data.get("tts_model") is not None
+                        )
+
                         # Update session configuration
                         session.update_config(
                             stt_model=data.get("stt_model"),
@@ -486,6 +492,12 @@ async def voice_chat_websocket(
                             thinking_silence_duration=data.get("thinking_silence_duration"),
                             max_silence_duration=data.get("max_silence_duration"),
                         )
+
+                        # If TTS config changed, invalidate the TTS WebSocket
+                        # so next synthesis uses updated voice/model
+                        if tts_config_changed:
+                            await service.invalidate_tts_connection()
+
                         logger.debug(f"Session config updated: {session.session_id}")
 
                 except json.JSONDecodeError:

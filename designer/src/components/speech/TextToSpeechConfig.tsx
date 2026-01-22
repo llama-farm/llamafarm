@@ -192,7 +192,7 @@ export function TextToSpeechConfig({
 
         {/* Speed slider - inline with model info */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1">
+          <div className={`flex items-center gap-2 flex-1 ${!currentModel?.supportsSpeed ? 'opacity-50' : ''}`}>
             <label className="text-xs text-muted-foreground whitespace-nowrap">Speed</label>
             <input
               type="range"
@@ -201,7 +201,7 @@ export function TextToSpeechConfig({
               step={0.1}
               value={speed}
               onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
-              disabled={!enabled}
+              disabled={!enabled || !currentModel?.supportsSpeed}
               className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer
                 [&::-webkit-slider-thumb]:appearance-none
                 [&::-webkit-slider-thumb]:h-2.5

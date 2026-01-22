@@ -90,7 +90,7 @@ export function ConversationView({
       {(streamingAssistantText || isSpeaking) && (
         <div className="w-full flex justify-start">
           <div className="flex flex-col items-start max-w-[80%] md:max-w-[70%]">
-            <div className="flex items-start gap-2">
+            <div className="flex items-center gap-2">
               {/* Stop button when speaking */}
               {isSpeaking && onStopSpeaking && (
                 <button
