@@ -898,8 +898,8 @@ class VoiceChatService:
             )
 
             # STT-only mode: skip LLM and TTS, return to idle
-            if not self.session.config.enable_llm:
-                logger.debug("STT-only mode (enable_llm=False), skipping LLM/TTS")
+            if self.session.config.stt_only:
+                logger.debug("STT-only mode, skipping LLM/TTS")
                 self.session.set_state(VoiceState.IDLE)
                 await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
                 return
@@ -1126,6 +1126,13 @@ class VoiceChatService:
             await websocket.send_json(
                 TranscriptionMessage(text=text, is_final=True).model_dump()
             )
+
+            # STT-only mode: skip LLM and TTS, return to idle
+            if self.session.config.stt_only:
+                logger.debug("STT-only mode, skipping LLM/TTS for text input")
+                self.session.set_state(VoiceState.IDLE)
+                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+                return
 
             # Go directly to LLM + TTS
             self.session.set_state(VoiceState.SPEAKING)

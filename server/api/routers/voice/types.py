@@ -157,8 +157,12 @@ class VoiceSessionConfig(BaseModel):
     stt_model: str = Field(default="base", description="Whisper model size")
     tts_model: str = Field(default="kokoro", description="TTS model ID")
     tts_voice: str = Field(default="af_heart", description="TTS voice ID")
-    llm_model: str = Field(default="", description="LLM model ID (required)")
+    llm_model: str = Field(default="", description="LLM model ID (required unless stt_only)")
     language: str = Field(default="en", description="STT language code")
+    stt_only: bool = Field(
+        default=False,
+        description="STT-only mode - skip LLM and TTS, only return transcriptions.",
+    )
     speed: float = Field(default=0.95, ge=0.5, le=2.0, description="TTS speed (0.95 for natural pace)")
     system_prompt: str | None = Field(
         default=None, description="System prompt for LLM"

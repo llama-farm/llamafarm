@@ -37,6 +37,8 @@ export interface UseVoiceChatOptions {
   language?: string
   speed?: number
   systemPrompt?: string
+  // STT-only mode (skip LLM and TTS)
+  sttOnly?: boolean
   // Turn detection settings (replaces simple silence threshold)
   turnDetectionEnabled?: boolean
   baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
@@ -93,6 +95,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     language,
     speed,
     systemPrompt,
+    sttOnly,
     turnDetectionEnabled,
     baseSilenceDuration,
     thinkingSilenceDuration,
@@ -229,6 +232,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       language,
       speed,
       systemPrompt,
+      sttOnly,
       turnDetectionEnabled,
       baseSilenceDuration,
       thinkingSilenceDuration,
@@ -328,7 +332,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     })
 
     wsRef.current = ws
-  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, turnDetectionEnabled, baseSilenceDuration, thinkingSilenceDuration, maxSilenceDuration, bargeInEnabled, onError, onEmotion, onToolCall, processAudioQueue])
+  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, sttOnly, turnDetectionEnabled, baseSilenceDuration, thinkingSilenceDuration, maxSilenceDuration, bargeInEnabled, onError, onEmotion, onToolCall, processAudioQueue])
 
   // Disconnect from voice chat
   const disconnect = useCallback(() => {

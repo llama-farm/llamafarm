@@ -144,6 +144,8 @@ export interface VoiceChatConfig {
   speed?: number
   systemPrompt?: string
   sentenceBoundaryOnly?: boolean
+  // STT-only mode (skip LLM and TTS)
+  sttOnly?: boolean
   // Turn detection settings (replaces silenceDuration)
   turnDetectionEnabled?: boolean
   baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
@@ -313,7 +315,9 @@ export function createVoiceChatConnection(
   if (config.sentenceBoundaryOnly !== undefined) {
     url.searchParams.set('sentence_boundary_only', String(config.sentenceBoundaryOnly))
   }
-  // Note: enable_llm removed - LLM is now always enabled
+  if (config.sttOnly) {
+    url.searchParams.set('stt_only', 'true')
+  }
 
   const ws = new WebSocket(url.toString())
   ws.binaryType = 'arraybuffer'
@@ -379,15 +383,6 @@ export function createVoiceChatConnection(
 }
 
 /**
- * Send audio data to voice chat WebSocket
- */
-export function sendAudioData(ws: WebSocket, audioData: ArrayBuffer | Blob): void {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(audioData)
-  }
-}
-
-/**
  * Send interrupt signal to stop TTS (barge-in)
  */
 export function sendInterrupt(ws: WebSocket): void {
@@ -445,95 +440,4 @@ export function sendConfigUpdate(
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'config', ...config }))
   }
-}
-
-// =============================================================================
-// WebSocket - Streaming Transcription (standalone)
-// =============================================================================
-
-export interface StreamingTranscriptionCallbacks {
-  onSegment?: (segment: {
-    id: number
-    start: number
-    end: number
-    text: string
-    isFinal: boolean
-  }) => void
-  onError?: (message: string) => void
-  onClose?: () => void
-}
-
-/**
- * Create a WebSocket connection for streaming transcription
- */
-export function createStreamingTranscription(
-  options: {
-    model?: string
-    language?: string
-    wordTimestamps?: boolean
-    chunkInterval?: number
-  } = {},
-  callbacks: StreamingTranscriptionCallbacks
-): WebSocket {
-  const url = new URL(`${UNIVERSAL_RUNTIME_URL}/v1/audio/transcriptions/stream`)
-
-  if (options.model) url.searchParams.set('model', options.model)
-  if (options.language) url.searchParams.set('language', options.language)
-  if (options.wordTimestamps) url.searchParams.set('word_timestamps', 'true')
-  if (options.chunkInterval) url.searchParams.set('chunk_interval', String(options.chunkInterval))
-
-  const ws = new WebSocket(url.toString())
-  ws.binaryType = 'arraybuffer'
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
-
-      if (data.type === 'segment') {
-        callbacks.onSegment?.({
-          id: data.id,
-          start: data.start,
-          end: data.end,
-          text: data.text,
-          isFinal: data.is_final,
-        })
-      } else if (data.type === 'error') {
-        callbacks.onError?.(data.message)
-      } else if (data.type === 'closed' || data.type === 'done') {
-        callbacks.onClose?.()
-      }
-    } catch (e) {
-      console.error('Failed to parse transcription message:', e)
-    }
-  }
-
-  ws.onerror = () => {
-    callbacks.onError?.('WebSocket connection error')
-  }
-
-  ws.onclose = () => {
-    callbacks.onClose?.()
-  }
-
-  return ws
-}
-
-// =============================================================================
-// Default Export
-// =============================================================================
-
-export default {
-  // TTS
-  listVoices,
-  synthesizeSpeech,
-  // STT
-  transcribeAudio,
-  // Voice Chat
-  createVoiceChatConnection,
-  sendAudioData,
-  sendInterrupt,
-  sendEndSignal,
-  sendConfigUpdate,
-  // Streaming Transcription
-  createStreamingTranscription,
 }

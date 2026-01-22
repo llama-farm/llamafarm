@@ -134,32 +134,20 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [availableLLMModels, selectedLLMModel])
 
-  // Voice chat hook for LLM conversation
+  // Determine which mode we're in (calculated early for hook config)
+  const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
+
+  // Single voice chat hook - uses sttOnly mode when TTS is disabled
   const voiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
     llmModel: selectedLLMModel,
     sttModel,
-    ttsModel,
-    ttsVoice,
+    ttsModel: mode === 'stt' ? undefined : ttsModel,
+    ttsVoice: mode === 'stt' ? undefined : ttsVoice,
     language: sttLanguage,
-    speed: ttsSpeed,
-    turnDetectionEnabled,
-    baseSilenceDuration,
-    thinkingSilenceDuration,
-    maxSilenceDuration,
-    autoConnect: false,
-    onError: (error) => setTranscriptionError(error),
-  })
-
-  // Voice chat hook for STT-only mode (no LLM responses)
-  // Note: In STT-only mode, we still use turn detection for auto-stopping
-  const sttOnlyVoiceChat = useVoiceChat({
-    namespace: activeProject?.namespace || '',
-    project: activeProject?.project || '',
-    llmModel: selectedLLMModel, // Still needed for backend validation
-    sttModel,
-    language: sttLanguage,
+    speed: mode === 'stt' ? undefined : ttsSpeed,
+    sttOnly: mode === 'stt',
     turnDetectionEnabled,
     baseSilenceDuration,
     thinkingSilenceDuration,
@@ -176,9 +164,6 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
-
-  // Determine which mode we're in
-  const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
 
   // Handlers for STT/TTS toggles with mutual exclusivity (at least one must be enabled)
   const handleSttEnabledChange = useCallback((enabled: boolean) => {

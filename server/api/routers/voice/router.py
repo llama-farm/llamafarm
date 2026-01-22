@@ -129,6 +129,7 @@ async def voice_chat_websocket(
     speed: float | None = None,
     system_prompt: str | None = None,
     sentence_boundary_only: bool | None = None,
+    stt_only: bool = False,
 ):
     """Real-time voice chat WebSocket endpoint.
 
@@ -217,8 +218,8 @@ async def voice_chat_websocket(
     effective_thinking_silence_duration = defaults["thinking_silence_duration"]
     effective_max_silence_duration = defaults["max_silence_duration"]
 
-    # Validate required parameters
-    if not effective_llm_model:
+    # Validate required parameters (LLM not required in stt_only mode)
+    if not stt_only and not effective_llm_model:
         await websocket.send_json(
             ErrorMessage(
                 message="llm_model is required (via query param or voice.llm_model in config)"
@@ -237,19 +238,21 @@ async def voice_chat_websocket(
         await websocket.close(code=1008, reason="Voice chat disabled")
         return
 
-    # Resolve LLM model name to actual model configuration
+    # Resolve LLM model name to actual model configuration (skip in stt_only mode)
     # This converts e.g., "conversational" to the actual model ID and base_url
-    try:
-        llm_model_config = ModelService.get_model(project_config, effective_llm_model)
-        logger.debug(
-            f"Resolved LLM model '{effective_llm_model}' to '{llm_model_config.model}'"
-        )
-    except ValueError as e:
-        await websocket.send_json(
-            ErrorMessage(message=f"Invalid LLM model: {e}").model_dump()
-        )
-        await websocket.close(code=1008, reason="Invalid LLM model")
-        return
+    llm_model_config = None
+    if not stt_only and effective_llm_model:
+        try:
+            llm_model_config = ModelService.get_model(project_config, effective_llm_model)
+            logger.debug(
+                f"Resolved LLM model '{effective_llm_model}' to '{llm_model_config.model}'"
+            )
+        except ValueError as e:
+            await websocket.send_json(
+                ErrorMessage(message=f"Invalid LLM model: {e}").model_dump()
+            )
+            await websocket.close(code=1008, reason="Invalid LLM model")
+            return
 
     # Create or resume session
     session_manager = get_session_manager()
@@ -260,9 +263,10 @@ async def voice_chat_websocket(
         stt_model=effective_stt_model,
         tts_model=effective_tts_model,
         tts_voice=effective_tts_voice,
-        llm_model=effective_llm_model,
+        llm_model=effective_llm_model or "",
         language=effective_language,
         speed=effective_speed,
+        stt_only=stt_only,
         system_prompt=None,  # Handled below
         enable_thinking=effective_enable_thinking,
         sentence_boundary_only=effective_sentence_boundary_only,
