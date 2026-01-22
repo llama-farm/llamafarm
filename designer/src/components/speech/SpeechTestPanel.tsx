@@ -139,17 +139,17 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   // Determine which mode we're in (calculated early for hook config)
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
 
-  // Single voice chat hook - uses sttOnly mode when TTS is disabled
+  // Single voice chat hook - uses sttOnly mode when TTS is disabled OR LLM is disabled
   const voiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
     llmModel: selectedLLMModel,
     sttModel,
-    ttsModel: mode === 'stt' ? undefined : ttsModel,
-    ttsVoice: mode === 'stt' ? undefined : ttsVoice,
+    ttsModel: mode === 'stt' || !llmEnabled ? undefined : ttsModel,
+    ttsVoice: mode === 'stt' || !llmEnabled ? undefined : ttsVoice,
     language: sttLanguage,
-    speed: mode === 'stt' ? undefined : ttsSpeed,
-    sttOnly: mode === 'stt',
+    speed: mode === 'stt' || !llmEnabled ? undefined : ttsSpeed,
+    sttOnly: mode === 'stt' || !llmEnabled,
     turnDetectionEnabled,
     baseSilenceDuration,
     thinkingSilenceDuration,

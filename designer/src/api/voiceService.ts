@@ -318,6 +318,19 @@ export function createVoiceChatConnection(
   if (config.sttOnly) {
     url.searchParams.set('stt_only', 'true')
   }
+  // Turn detection settings
+  if (config.turnDetectionEnabled !== undefined) {
+    url.searchParams.set('turn_detection_enabled', String(config.turnDetectionEnabled))
+  }
+  if (config.baseSilenceDuration !== undefined) {
+    url.searchParams.set('base_silence_duration', String(config.baseSilenceDuration))
+  }
+  if (config.thinkingSilenceDuration !== undefined) {
+    url.searchParams.set('thinking_silence_duration', String(config.thinkingSilenceDuration))
+  }
+  if (config.maxSilenceDuration !== undefined) {
+    url.searchParams.set('max_silence_duration', String(config.maxSilenceDuration))
+  }
 
   const ws = new WebSocket(url.toString())
   ws.binaryType = 'arraybuffer'

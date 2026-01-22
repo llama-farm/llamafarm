@@ -130,6 +130,11 @@ async def voice_chat_websocket(
     system_prompt: str | None = None,
     sentence_boundary_only: bool | None = None,
     stt_only: bool = False,
+    # Turn detection settings
+    turn_detection_enabled: bool | None = None,
+    base_silence_duration: float | None = None,
+    thinking_silence_duration: float | None = None,
+    max_silence_duration: float | None = None,
 ):
     """Real-time voice chat WebSocket endpoint.
 
@@ -212,11 +217,23 @@ async def voice_chat_websocket(
         else defaults["sentence_boundary_only"]
     )
 
-    # Turn detection settings (from config only, no query param override)
-    effective_turn_detection_enabled = defaults["turn_detection_enabled"]
-    effective_base_silence_duration = defaults["base_silence_duration"]
-    effective_thinking_silence_duration = defaults["thinking_silence_duration"]
-    effective_max_silence_duration = defaults["max_silence_duration"]
+    # Turn detection settings (query params override config defaults)
+    effective_turn_detection_enabled = (
+        turn_detection_enabled if turn_detection_enabled is not None
+        else defaults["turn_detection_enabled"]
+    )
+    effective_base_silence_duration = (
+        base_silence_duration if base_silence_duration is not None
+        else defaults["base_silence_duration"]
+    )
+    effective_thinking_silence_duration = (
+        thinking_silence_duration if thinking_silence_duration is not None
+        else defaults["thinking_silence_duration"]
+    )
+    effective_max_silence_duration = (
+        max_silence_duration if max_silence_duration is not None
+        else defaults["max_silence_duration"]
+    )
 
     # Validate required parameters (LLM not required in stt_only mode)
     if not stt_only and not effective_llm_model:
