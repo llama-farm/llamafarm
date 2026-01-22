@@ -65,9 +65,9 @@ def _get_voice_config_defaults(
         "sentence_boundary_only": True,  # Natural speech by default
         # Turn detection defaults (enabled by default)
         "turn_detection_enabled": True,
-        "base_silence_duration": 0.4,
-        "thinking_silence_duration": 1.2,
-        "max_silence_duration": 2.5,
+        "base_silence_duration": 0.1,
+        "thinking_silence_duration": 0.7,
+        "max_silence_duration": 1.5,
     }
 
     if project_config and hasattr(project_config, 'voice') and project_config.voice:

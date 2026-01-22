@@ -67,9 +67,9 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
 
   // Turn Detection Config State
   const [turnDetectionEnabled, setTurnDetectionEnabled] = useState(true)
-  const [baseSilenceDuration, setBaseSilenceDuration] = useState(0.4)
-  const [thinkingSilenceDuration, setThinkingSilenceDuration] = useState(1.2)
-  const [maxSilenceDuration, setMaxSilenceDuration] = useState(2.5)
+  const [baseSilenceDuration, setBaseSilenceDuration] = useState(0.1)
+  const [thinkingSilenceDuration, setThinkingSilenceDuration] = useState(0.7)
+  const [maxSilenceDuration, setMaxSilenceDuration] = useState(1.5)
 
   // Available voices from backend (fetched but used for validation)
   const [, setAvailableVoices] = useState<VoiceInfo[]>([])
