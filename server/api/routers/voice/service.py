@@ -1181,6 +1181,11 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal LLM response complete
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -1370,6 +1375,11 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal LLM response complete
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             # Log what the model heard from the audio (captured from <input> tags)
             heard_text = input_filter.get_captured()

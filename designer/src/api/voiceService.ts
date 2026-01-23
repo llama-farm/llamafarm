@@ -143,9 +143,7 @@ export interface VoiceChatConfig {
   speed?: number
   systemPrompt?: string
   sentenceBoundaryOnly?: boolean
-  // STT-only mode (skip LLM and TTS)
-  sttOnly?: boolean
-  // Turn detection settings (replaces silenceDuration)
+  // Turn detection settings (sent via config message after connect)
   turnDetectionEnabled?: boolean
   baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
   thinkingSilenceDuration?: number // For incomplete utterances (0.3-5.0s, default 1.2)
@@ -284,29 +282,17 @@ export function createVoiceChatConnection(
   if (config.sttModel) url.searchParams.set('stt_model', config.sttModel)
   if (config.ttsModel) url.searchParams.set('tts_model', config.ttsModel)
   if (config.ttsVoice) url.searchParams.set('tts_voice', config.ttsVoice)
-  url.searchParams.set('llm_model', config.llmModel)
+  // Only set llm_model if it's not empty (backend requires this)
+  if (config.llmModel) {
+    url.searchParams.set('llm_model', config.llmModel)
+  }
   if (config.language) url.searchParams.set('language', config.language)
   if (config.speed !== undefined) url.searchParams.set('speed', String(config.speed))
   if (config.systemPrompt) url.searchParams.set('system_prompt', config.systemPrompt)
   if (config.sentenceBoundaryOnly !== undefined) {
     url.searchParams.set('sentence_boundary_only', String(config.sentenceBoundaryOnly))
   }
-  if (config.sttOnly) {
-    url.searchParams.set('stt_only', 'true')
-  }
-  // Turn detection settings
-  if (config.turnDetectionEnabled !== undefined) {
-    url.searchParams.set('turn_detection_enabled', String(config.turnDetectionEnabled))
-  }
-  if (config.baseSilenceDuration !== undefined) {
-    url.searchParams.set('base_silence_duration', String(config.baseSilenceDuration))
-  }
-  if (config.thinkingSilenceDuration !== undefined) {
-    url.searchParams.set('thinking_silence_duration', String(config.thinkingSilenceDuration))
-  }
-  if (config.maxSilenceDuration !== undefined) {
-    url.searchParams.set('max_silence_duration', String(config.maxSilenceDuration))
-  }
+  // Note: Turn detection settings are sent via config message after connect, not query params
 
   // Generate a unique connection ID for DevTools tracking
   const connectionId = crypto.randomUUID
@@ -479,15 +465,6 @@ export function sendInterrupt(ws: WebSocket): void {
 export function sendEndSignal(ws: WebSocket): void {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'end' }))
-  }
-}
-
-/**
- * Send text message directly (bypasses STT)
- */
-export function sendTextMessage(ws: WebSocket, text: string): void {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'text', text }))
   }
 }
 

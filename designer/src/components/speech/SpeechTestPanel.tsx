@@ -28,6 +28,7 @@ import {
   listVoices,
   type VoiceInfo,
 } from '../../api/voiceService'
+import { sendChatCompletion } from '../../api/chatCompletionsService'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useVoiceChat, type VoiceMessage } from '../../hooks/useVoiceChat'
@@ -65,11 +66,11 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const [ttsVoice, setTtsVoice] = useState('alba')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
 
-  // Turn Detection Config State
+  // Turn Detection Config State (defaults aligned with backend)
   const [turnDetectionEnabled, setTurnDetectionEnabled] = useState(true)
   const [baseSilenceDuration, setBaseSilenceDuration] = useState(0.1)
   const [thinkingSilenceDuration, setThinkingSilenceDuration] = useState(0.7)
-  const [maxSilenceDuration, setMaxSilenceDuration] = useState(1.5)
+  const [maxSilenceDuration, setMaxSilenceDuration] = useState(1.0)
 
   // Available voices from backend (fetched but used for validation)
   const [, setAvailableVoices] = useState<VoiceInfo[]>([])
@@ -114,8 +115,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   // UI State
   const [configExpanded, setConfigExpanded] = useState(true)
   const [pendingVoiceChatRecord, setPendingVoiceChatRecord] = useState(false) // Waiting for connection to start recording
-  // pendingSttOnlyRecord removed - now using single voiceChat hook with sttOnly mode
-  const [pendingTextMessage, setPendingTextMessage] = useState<string | null>(null) // Waiting for connection to send text
+  // Text messages now use REST API (not WebSocket), no pending state needed
 
   // LLM Integration State
   const activeProject = useActiveProject()
@@ -139,7 +139,10 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   // Determine which mode we're in (calculated early for hook config)
   const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
 
-  // Single voice chat hook - uses sttOnly mode when TTS is disabled OR LLM is disabled
+  // Default voice system prompt for concise responses
+  const voiceSystemPrompt = 'You are a helpful voice assistant. Keep responses brief and conversational - aim for 1-3 sentences unless more detail is explicitly requested. Speak naturally as if having a conversation.'
+
+  // Single voice chat hook - llmEnabled controls frontend display of LLM responses
   const voiceChat = useVoiceChat({
     namespace: activeProject?.namespace || '',
     project: activeProject?.project || '',
@@ -149,7 +152,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     ttsVoice: mode === 'stt' || !llmEnabled ? undefined : ttsVoice,
     language: sttLanguage,
     speed: mode === 'stt' || !llmEnabled ? undefined : ttsSpeed,
-    sttOnly: mode === 'stt' || !llmEnabled,
+    systemPrompt: voiceSystemPrompt,
+    llmEnabled: mode !== 'stt' && llmEnabled,
     turnDetectionEnabled,
     baseSilenceDuration,
     thinkingSilenceDuration,
@@ -261,23 +265,16 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
 
-  // Send pending text message when voice chat connects
-  useEffect(() => {
-    if (pendingTextMessage && voiceChat.isConnected) {
-      voiceChat.sendTextMessage(pendingTextMessage)
-      setPendingTextMessage(null)
-    }
-  }, [pendingTextMessage, voiceChat.isConnected, voiceChat])
+  // Note: Text messages now use REST API, so no pending message handling needed
 
   // Handle voice chat connection errors
   useEffect(() => {
-    if ((pendingVoiceChatRecord || pendingTextMessage) && voiceChat.error) {
+    if (pendingVoiceChatRecord && voiceChat.error) {
       setPendingVoiceChatRecord(false)
-      setPendingTextMessage(null)
       setRecordingState('idle')
       setTranscriptionError(voiceChat.error)
     }
-  }, [pendingVoiceChatRecord, pendingTextMessage, voiceChat.error])
+  }, [pendingVoiceChatRecord, voiceChat.error])
 
   // Sync voiceChat state with local state
   // IMPORTANT: voiceChat.isRecording reflects whether the MediaRecorder is active.
@@ -758,15 +755,60 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       const inputText = textInput
       setTextInput('')
 
-      // If LLM is available, use voice chat to send text (LLM → TTS)
-      if (llmAvailable) {
-        // Connect if not already connected
-        if (!voiceChat.isConnected) {
-          voiceChat.connect()
-          // Store pending message - effect will send when connected
-          setPendingTextMessage(inputText)
-        } else {
-          voiceChat.sendTextMessage(inputText)
+      // If LLM is available, use REST API for text input
+      if (llmAvailable && activeProject) {
+        // Add user message immediately
+        const userMessage: SpeechMessage = {
+          id: `msg-${Date.now()}`,
+          role: 'user',
+          text: inputText,
+          timestamp: new Date(),
+        }
+        setMessages(prev => [...prev, userMessage])
+
+        // Send via REST API
+        try {
+          const result = await sendChatCompletion(
+            activeProject.namespace,
+            activeProject.project,
+            {
+              messages: [{ role: 'user', content: inputText }],
+              model: selectedLLMModel,
+            }
+          )
+
+          // Add assistant response
+          const assistantText = result.response.choices?.[0]?.message?.content || ''
+          if (assistantText) {
+            const assistantMessage: SpeechMessage = {
+              id: `msg-${Date.now() + 1}`,
+              role: 'assistant',
+              text: assistantText,
+              timestamp: new Date(),
+            }
+            setMessages(prev => [...prev, assistantMessage])
+
+            // If TTS is enabled, synthesize and play the response
+            if (ttsEnabled) {
+              try {
+                const audioBlob = await synthesizeSpeech({
+                  model: ttsModel,
+                  input: assistantText,
+                  voice: ttsVoice,
+                  speed: ttsSpeed,
+                  response_format: 'mp3',
+                })
+                const audioUrl = URL.createObjectURL(audioBlob)
+                const audio = new Audio(audioUrl)
+                audio.play().catch(console.error)
+              } catch (ttsErr) {
+                console.error('TTS synthesis failed:', ttsErr)
+              }
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Chat request failed'
+          setTranscriptionError(message)
         }
         return
       }
@@ -1422,7 +1464,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                       size="icon"
                       className="h-10 w-10 rounded-full flex-shrink-0"
                       onClick={startRecording}
-                      disabled={recordingState === 'processing'}
+                      disabled={recordingState === 'processing' || (llmAvailable && !selectedLLMModel)}
                       aria-label="Start recording"
                     >
                       {recordingState === 'processing' ? (

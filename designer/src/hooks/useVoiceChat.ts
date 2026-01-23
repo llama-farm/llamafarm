@@ -14,7 +14,6 @@ import {
   sendInterrupt,
   sendEndSignal,
   sendConfigUpdate,
-  sendTextMessage as sendTextToWs,
   type VoiceState,
   type VoiceChatConfig,
 } from '../api/voiceService'
@@ -37,9 +36,9 @@ export interface UseVoiceChatOptions {
   language?: string
   speed?: number
   systemPrompt?: string
-  // STT-only mode (skip LLM and TTS)
-  sttOnly?: boolean
-  // Turn detection settings (replaces simple silence threshold)
+  // LLM enabled flag - when false, transcription works but LLM response is filtered (frontend-only)
+  llmEnabled?: boolean
+  // Turn detection settings (sent via config message after connect)
   turnDetectionEnabled?: boolean
   baseSilenceDuration?: number    // For complete utterances (0.1-2.0s, default 0.4)
   thinkingSilenceDuration?: number // For incomplete utterances (0.3-5.0s, default 1.2)
@@ -77,7 +76,6 @@ export interface UseVoiceChatReturn {
   disconnect: () => void
   startRecording: () => Promise<void>
   stopRecording: () => void
-  sendTextMessage: (text: string) => void
   interrupt: () => void
   stopAudio: () => void
   clearMessages: () => void
@@ -95,7 +93,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     language,
     speed,
     systemPrompt,
-    sttOnly,
+    llmEnabled = true,
     turnDetectionEnabled,
     baseSilenceDuration,
     thinkingSilenceDuration,
@@ -137,6 +135,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   const currentAssistantTextRef = useRef('')
   const currentAssistantAudioRef = useRef<ArrayBuffer[]>([])
   const hasConnectedRef = useRef(false) // Track if we ever successfully connected
+  const errorReceivedRef = useRef(false) // Track if we received an error message from server
 
   // Get or create audio context
   const getAudioContext = useCallback(() => {
@@ -223,6 +222,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
 
     setError(null)
     hasConnectedRef.current = false // Reset connection tracking
+    errorReceivedRef.current = false // Reset error tracking
 
     const config: VoiceChatConfig = {
       llmModel,
@@ -232,7 +232,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       language,
       speed,
       systemPrompt,
-      sttOnly,
+      // Note: turn detection is sent via config message after connect
       turnDetectionEnabled,
       baseSilenceDuration,
       thinkingSilenceDuration,
@@ -245,6 +245,15 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         hasConnectedRef.current = true // Mark as successfully connected
         setSessionId(id)
         setIsConnected(true)
+        // Send turn detection config via config message (backend ignores query params)
+        if (ws.readyState === WebSocket.OPEN) {
+          sendConfigUpdate(ws, {
+            turn_detection_enabled: turnDetectionEnabled,
+            base_silence_duration: baseSilenceDuration,
+            thinking_silence_duration: thinkingSilenceDuration,
+            max_silence_duration: maxSilenceDuration,
+          })
+        }
       },
       onStateChange: (state) => {
         setVoiceState(state)
@@ -256,6 +265,23 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         }
       },
       onLLMText: (text, isFinal) => {
+        // When LLM is disabled (frontend-only), skip LLM response display
+        // but still add user message to conversation
+        if (!llmEnabled) {
+          if (currentUserTextRef.current) {
+            const userMessage: VoiceMessage = {
+              id: `user-${Date.now()}`,
+              role: 'user',
+              text: currentUserTextRef.current,
+              timestamp: new Date(),
+            }
+            setMessages((prev) => [...prev, userMessage])
+            currentUserTextRef.current = ''
+            setCurrentTranscription('')
+          }
+          return // Skip LLM response display
+        }
+
         // Add user message on FIRST LLM text received (before any assistant content)
         // This ensures proper message ordering: user message appears before assistant response
         if (currentUserTextRef.current && currentAssistantTextRef.current === '') {
@@ -309,12 +335,14 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         processAudioQueue()
       },
       onError: (message) => {
+        errorReceivedRef.current = true // Mark that we received a server error
         setError(message)
         onError?.(message)
       },
       onClose: () => {
         // If we never got connected (no session_id), this is a connection failure
-        if (!hasConnectedRef.current) {
+        // Only show generic error if we didn't receive a specific error from server
+        if (!hasConnectedRef.current && !errorReceivedRef.current) {
           const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 8000?'
           setError(errorMsg)
           onError?.(errorMsg)
@@ -332,7 +360,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     })
 
     wsRef.current = ws
-  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, sttOnly, turnDetectionEnabled, baseSilenceDuration, thinkingSilenceDuration, maxSilenceDuration, bargeInEnabled, onError, onEmotion, onToolCall, processAudioQueue])
+  }, [namespace, project, llmModel, sttModel, ttsModel, ttsVoice, language, speed, systemPrompt, llmEnabled, turnDetectionEnabled, baseSilenceDuration, thinkingSilenceDuration, maxSilenceDuration, bargeInEnabled, onError, onEmotion, onToolCall, processAudioQueue])
 
   // Disconnect from voice chat
   const disconnect = useCallback(() => {
@@ -480,28 +508,6 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     setIsPlayingAudio(false)
   }, [])
 
-  // Send text message (bypasses STT)
-  const sendTextMessage = useCallback((text: string) => {
-    if (!isConnected || !wsRef.current) {
-      setError('Not connected to voice chat')
-      return
-    }
-    if (!text.trim()) {
-      return
-    }
-    // If currently speaking/playing, interrupt first
-    if (voiceState === 'speaking' || isPlayingRef.current) {
-      // Stop frontend audio playback immediately
-      stopAudio()
-      // Tell backend to stop generating
-      sendInterrupt(wsRef.current)
-    }
-    // Store the user text so it can be added to messages when LLM response is final
-    // This ensures the user message is captured even if server transcription echo is delayed
-    currentUserTextRef.current = text.trim()
-    sendTextToWs(wsRef.current, text.trim())
-  }, [isConnected, voiceState, stopAudio])
-
   // Interrupt TTS (barge-in) - stops both backend generation and frontend playback
   const interrupt = useCallback(() => {
     // Stop frontend audio playback
@@ -576,7 +582,6 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     disconnect,
     startRecording,
     stopRecording,
-    sendTextMessage,
     interrupt,
     stopAudio,
     clearMessages,

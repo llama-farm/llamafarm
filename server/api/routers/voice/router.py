@@ -128,7 +128,7 @@ def _get_voice_config_defaults(
         "max_silence_duration": 2.5,
     }
 
-    if project_config and project_config.voice:
+    if project_config and hasattr(project_config, 'voice') and project_config.voice:
         voice = project_config.voice
 
         # LLM model from voice config
@@ -242,7 +242,7 @@ async def voice_chat_websocket(
         project_config = ProjectService.load_config(namespace, project)
         logger.info(
             f"Loaded voice config from project {namespace}/{project}",
-            extra={"has_voice_config": project_config.voice is not None},
+            extra={"has_voice_config": hasattr(project_config, 'voice') and project_config.voice is not None},
         )
     except Exception as e:
         logger.warning(
@@ -285,7 +285,7 @@ async def voice_chat_websocket(
         return
 
     # Check if voice is explicitly disabled in config
-    if project_config and project_config.voice and project_config.voice.enabled is False:
+    if project_config and hasattr(project_config, 'voice') and project_config.voice and project_config.voice.enabled is False:
         await websocket.send_json(
             ErrorMessage(
                 message="Voice chat is disabled for this project (voice.enabled=false)"

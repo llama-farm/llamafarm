@@ -58,8 +58,8 @@ export function ConversationView({
   }
 
   return (
-    <div className={`relative flex-1 overflow-hidden ${className}`}>
-      <div ref={scrollRef} className="h-full overflow-y-auto p-4 space-y-5">
+    <div className={`relative flex-1 overflow-hidden flex flex-col ${className}`}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-5">
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -83,40 +83,40 @@ export function ConversationView({
         </div>
       )}
 
-      {/* Streaming assistant response OR stop button while audio plays */}
-      {(streamingAssistantText || isSpeaking) && (
+      {/* Streaming assistant response */}
+      {streamingAssistantText && (
         <div className="w-full flex justify-start">
           <div className="flex flex-col items-start max-w-[80%] md:max-w-[70%]">
-            <div className="flex items-center gap-2">
-              {/* Stop button when speaking */}
-              {isSpeaking && onStopSpeaking && (
-                <button
-                  onClick={onStopSpeaking}
-                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-red-500/20 text-red-600 hover:bg-red-500/30"
-                  aria-label="Stop speaking"
-                >
-                  <StopCircle className="w-4 h-4" />
-                </button>
-              )}
-              {streamingAssistantText && (
-                <div className="text-[15px] md:text-base leading-relaxed text-foreground/90">
-                  <p className="text-base leading-relaxed">
-                    {streamingAssistantText}
-                    <span className="animate-pulse ml-0.5">▊</span>
-                  </p>
-                </div>
-              )}
-              {/* Show "Playing audio..." when audio is playing but text is done */}
-              {!streamingAssistantText && isSpeaking && (
-                <div className="text-sm text-muted-foreground italic">
-                  Playing audio...
-                </div>
-              )}
+            <div className="flex items-start gap-2">
+              {/* Placeholder play button - disabled until audio is ready */}
+              <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted/50 text-muted-foreground/40">
+                <Volume2 className="w-3 h-3" />
+              </div>
+              <div className="text-[15px] md:text-base leading-relaxed text-foreground/90">
+                <p className="text-base leading-relaxed">
+                  {streamingAssistantText}
+                  <span className="animate-pulse ml-0.5">▊</span>
+                </p>
+              </div>
             </div>
           </div>
         </div>
       )}
       </div>
+
+      {/* Stop button fixed at bottom when speaking */}
+      {isSpeaking && onStopSpeaking && (
+        <div className="flex-shrink-0 border-t border-border/50 bg-background/80 backdrop-blur-sm p-3 flex justify-center">
+          <button
+            onClick={onStopSpeaking}
+            className="flex items-center gap-2 px-4 py-2 rounded-full transition-colors bg-red-500/10 text-red-600 hover:bg-red-500/20"
+            aria-label="Stop speaking"
+          >
+            <StopCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">Stop Audio</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -140,24 +140,24 @@ function MessageBubble({ message, isPlaying, onPlayAudio }: MessageBubbleProps) 
   return (
     <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[80%] md:max-w-[70%]`}>
-        {/* Message row with optional play button */}
-        <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
+        {/* Message row with play button and content */}
+        <div className={`flex items-start ${!isUser && message.audioUrl ? 'gap-2' : ''}`}>
           {/* Audio play button for assistant messages */}
           {!isUser && message.audioUrl && (
             <button
               onClick={onPlayAudio}
-              className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+              className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
                 isPlaying
-                  ? 'bg-primary/20 text-primary'
-                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
               aria-label={isPlaying ? 'Playing audio' : 'Play audio'}
             >
-              <Volume2 className={`w-4 h-4 ${isPlaying ? 'animate-pulse' : ''}`} />
+              <Volume2 className={`w-3 h-3 ${isPlaying ? 'animate-pulse' : ''}`} />
             </button>
           )}
 
-          {/* Message bubble */}
+          {/* Message content */}
           <div
             className={
               isUser
@@ -171,12 +171,8 @@ function MessageBubble({ message, isPlaying, onPlayAudio }: MessageBubbleProps) 
           </div>
         </div>
 
-        {/* Footer with time */}
-        <div
-          className={`flex items-center gap-2 mt-1.5 ${
-            isUser ? 'pr-1' : !isUser && message.audioUrl ? 'ml-10' : ''
-          }`}
-        >
+        {/* Footer with time - aligned with text content */}
+        <div className={`flex items-center gap-2 mt-1.5 ${isUser ? 'pr-1' : !isUser && message.audioUrl ? 'ml-8' : ''}`}>
           <span className="text-xs text-muted-foreground">
             {formatTime(message.timestamp)}
           </span>
