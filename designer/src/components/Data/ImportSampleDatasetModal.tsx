@@ -10,7 +10,7 @@ import {
 } from '../ui/dialog'
 import { Badge } from '../ui/badge'
 import { type SuggestedDataset } from '../../data/sampleProjects'
-import { AVAILABLE_DEMOS } from '../../config/demos'
+import { getFileBasedDemos } from '../../config/demos'
 
 type Kind = NonNullable<SuggestedDataset['kind']>
 
@@ -48,9 +48,10 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
     }
   }, [open])
 
-  // Transform AVAILABLE_DEMOS into dataset entries (no API needed!)
+  // Transform file-based demos into dataset entries (no API needed!)
   const allDatasets: FlattenedDataset[] = useMemo(() => {
-    return AVAILABLE_DEMOS.map(demo => {
+    const fileBasedDemos = getFileBasedDemos()
+    return fileBasedDemos.map(demo => {
       // Infer kind from file types
       let kind: Kind | undefined = undefined
       if (demo.files.length > 0) {
@@ -113,9 +114,10 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
         <DialogHeader>
           <DialogTitle>Import sample dataset</DialogTitle>
           <p className="text-sm text-muted-foreground pt-1">
-            Choose a dataset from a demo project to import
+            Choose a sample dataset to import
           </p>
         </DialogHeader>
+
         {/* Middle scrollable region */}
         <div className="grid grid-rows-[auto_1fr] gap-3 min-h-0">
           <Input
@@ -125,8 +127,6 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
             aria-label="Search datasets or projects"
             className="text-sm focus-visible:ring-1 focus-visible:ring-primary"
           />
-          {/* Filters temporarily hidden */}
-          <div className="hidden" aria-hidden="true" />
           {/* Scroll region: always reserve scrollbar space to avoid layout jump */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 overflow-y-scroll items-stretch">
             {filtered.length === 0 ? (

@@ -70,6 +70,7 @@ import {
   loadReprocessingFileHash,
   clearReprocessingFileHash,
 } from '../../utils/datasetStorage'
+import { DocumentPreviewModal } from '../Rag/Preview'
 
 type Dataset = {
   id: string
@@ -144,6 +145,11 @@ function DatasetView() {
   const [reprocessingFileHash, setReprocessingFileHash] = useState<
     string | null
   >(null)
+  // Track which file to preview
+  const [previewFile, setPreviewFile] = useState<{
+    hash: string
+    filename: string
+  } | null>(null)
   const [pendingProcessing, setPendingProcessing] = useState<boolean>(
     Boolean(navigationState?.pendingProcessing)
   )
@@ -540,6 +546,7 @@ function DatasetView() {
           lastModified: new Date(fileObj.timestamp * 1000).toLocaleString(),
           type: fileObj.mime_type,
           fullHash: fileObj.hash, // Store full hash for operations
+          chunkCount: fileObj.chunk_count ?? null, // Chunk count from vector DB
         }
       }
 
@@ -1206,43 +1213,59 @@ function DatasetView() {
 
   // Helper function to get processing status for a file
   const getFileProcessingStatus = (fileHash: string | undefined): boolean => {
-    if (!fileHash || !processingResult?.details) {
-      return false // Not processed if no hash or no processing data
+    if (!fileHash) {
+      return false // Not processed if no hash
     }
 
-    const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) =>
-        detail.hash === fileHash || (detail as any).file_hash === fileHash
-    )
+    // First check localStorage processing result
+    if (processingResult?.details) {
+      const fileDetail = processingResult.details.find(
+        (detail: FileProcessingDetail) =>
+          detail.hash === fileHash || (detail as any).file_hash === fileHash
+      )
 
-    if (!fileDetail) {
-      return false // Not processed if not in results
+      if (fileDetail) {
+        // Check if file was successfully processed or skipped
+        const isSkipped = fileDetail.status === 'skipped'
+        const isProcessed = fileDetail.success === true
+        return isProcessed || isSkipped
+      }
     }
 
-    // Check if file was successfully processed or skipped
-    const isSkipped = fileDetail.status === 'skipped'
-    const isProcessed = fileDetail.success === true
+    // Fallback: check chunk_count from API data (persisted in vector DB)
+    const fileFromApi = files.find(f => f.fullHash === fileHash)
+    if (fileFromApi && typeof fileFromApi.chunkCount === 'number' && fileFromApi.chunkCount > 0) {
+      return true // Has chunks in vector DB = processed
+    }
 
-    return isProcessed || isSkipped
+    return false // Not processed
   }
 
   // Helper function to get chunk count for a file
   const getFileChunkCount = (fileHash: string | undefined): number | null => {
-    if (!fileHash || !processingResult?.details) {
-      return null // No chunk count available if no hash or no processing data
+    if (!fileHash) {
+      return null // No chunk count available if no hash
     }
 
-    const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) =>
-        detail.hash === fileHash || (detail as any).file_hash === fileHash
-    )
+    // First check localStorage processing result for detailed chunks info
+    if (processingResult?.details) {
+      const fileDetail = processingResult.details.find(
+        (detail: FileProcessingDetail) =>
+          detail.hash === fileHash || (detail as any).file_hash === fileHash
+      )
 
-    if (!fileDetail) {
-      return null // No chunk count if not in results
+      if (fileDetail && fileDetail.chunks != null) {
+        return fileDetail.chunks
+      }
     }
 
-    // Return chunk count if available
-    return fileDetail.chunks ?? null
+    // Fallback: check chunk_count from API data (persisted in vector DB)
+    const fileFromApi = files.find(f => f.fullHash === fileHash)
+    if (fileFromApi && typeof fileFromApi.chunkCount === 'number') {
+      return fileFromApi.chunkCount
+    }
+
+    return null // No chunk count available
   }
 
   const handleDeleteFile = (fileHash: string) => {
@@ -3017,6 +3040,17 @@ function DatasetView() {
                                         <DropdownMenuItem
                                           onClick={() =>
                                             f.fullHash &&
+                                            setPreviewFile({
+                                              hash: f.fullHash,
+                                              filename: f.name,
+                                            })
+                                          }
+                                        >
+                                          Preview Chunking
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            f.fullHash &&
                                             handleReprocessFile(f.fullHash)
                                           }
                                           disabled={isReprocessing || !!currentTaskId}
@@ -3054,6 +3088,18 @@ function DatasetView() {
           )}
         </div>
       )}
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        namespace={activeProject?.namespace || ''}
+        project={activeProject?.project || ''}
+        database={(currentApiDataset as any)?.database || 'default'}
+        fileHash={previewFile?.hash}
+        filename={previewFile?.filename}
+        datasetId={datasetId}
+      />
     </div>
   )
 }

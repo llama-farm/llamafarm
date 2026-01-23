@@ -25,7 +25,7 @@ class ClassifierFitRequest(BaseModel):
     num_iterations: int = 20
     batch_size: int = 16
     overwrite: bool = (
-        False  # If False, version with timestamp; if True, overwrite existing
+        True  # If True, overwrite existing; if False, version with timestamp
     )
     description: str | None = None  # Optional model description
 
@@ -83,7 +83,7 @@ class AnomalyFitRequest(BaseModel):
     epochs: int = 100  # Training epochs (autoencoder only)
     batch_size: int = 32  # Batch size (autoencoder only)
     overwrite: bool = (
-        False  # If False, version with timestamp; if True, overwrite existing
+        True  # If True, overwrite existing; if False, version with timestamp
     )
     description: str | None = None  # Optional model description
 

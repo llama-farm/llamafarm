@@ -242,7 +242,9 @@ User: {{ message.content }}
             {"role": "system", "content": "You are helpful."},
             {"role": "user", "content": "Hello"},
         ]
-        result = render_chat_with_tools(template=template, messages=messages_with_system)
+        result = render_chat_with_tools(
+            template=template, messages=messages_with_system
+        )
         assert "System: You are helpful." in result
         assert "User: Hello" in result
         assert "(No system message)" not in result

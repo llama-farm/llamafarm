@@ -153,8 +153,13 @@ class MLModelService:
                     if match:
                         versions.append((match.group(1), item.name))
                     elif item.name == base_name:
-                        # Non-versioned (overwrite=True) version
-                        versions.append(("00000000_000000", item.name))
+                        # Non-versioned (overwrite=True) version - use actual mtime
+                        # Format as timestamp so it sorts correctly with versioned models
+                        from datetime import datetime
+
+                        mtime = datetime.fromtimestamp(item.stat().st_mtime)
+                        ts = mtime.strftime("%Y%m%d_%H%M%S")
+                        versions.append((ts, item.name))
         else:
             # Anomaly models are files like: {model}_{backend}.joblib
             # or versioned: {model}_{YYYYMMDD_HHMMSS}_{backend}.joblib
@@ -181,7 +186,12 @@ class MLModelService:
                     if match:
                         versions.append((match.group(1), model_part))
                     elif model_part == base_name:
-                        versions.append(("00000000_000000", model_part))
+                        # Non-versioned (overwrite=True) version - use actual mtime
+                        from datetime import datetime
+
+                        mtime = datetime.fromtimestamp(item.stat().st_mtime)
+                        ts = mtime.strftime("%Y%m%d_%H%M%S")
+                        versions.append((ts, model_part))
 
         # Sort by timestamp and return just the names
         versions.sort(key=lambda x: x[0])

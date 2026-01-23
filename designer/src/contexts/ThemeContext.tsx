@@ -58,12 +58,16 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   useEffect(() => {
     // Apply theme to document using Tailwind's class-based dark mode
+    // Add to both html and body to ensure portals (which render to body) inherit dark mode
     const html = document.documentElement
+    const body = document.body
 
     if (theme === 'dark') {
       html.classList.add('dark')
+      body.classList.add('dark')
     } else {
       html.classList.remove('dark')
+      body.classList.remove('dark')
     }
   }, [theme])
 
