@@ -103,16 +103,23 @@ export function Waveform({
 
     // Sample frequency data into bar count
     const newLevels: number[] = []
-    const step = Math.floor(dataArray.length / barCount)
+    // Guard against barCount exceeding array length to prevent step=0 and NaN levels
+    const effectiveBarCount = Math.min(barCount, dataArray.length)
+    const step = Math.max(1, Math.floor(dataArray.length / effectiveBarCount))
 
-    for (let i = 0; i < barCount; i++) {
+    for (let i = 0; i < effectiveBarCount; i++) {
       // Average a range of frequencies for each bar
       let sum = 0
-      for (let j = 0; j < step; j++) {
-        sum += dataArray[i * step + j]
+      const endIdx = Math.min(i * step + step, dataArray.length)
+      for (let j = i * step; j < endIdx; j++) {
+        sum += dataArray[j]
       }
       const avg = sum / step / 255 // Normalize to 0-1
       newLevels.push(avg)
+    }
+    // Pad with zeros if barCount > effectiveBarCount
+    while (newLevels.length < barCount) {
+      newLevels.push(0)
     }
 
     setLevels(newLevels)

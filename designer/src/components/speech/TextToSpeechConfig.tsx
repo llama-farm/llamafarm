@@ -38,6 +38,7 @@ export function TextToSpeechConfig({
   const [isLoading, setIsLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioUrlRef = useRef<string | null>(null)
   const currentModel = models.find(m => m.id === selectedModel)
 
   // Get voices for the selected model + custom voices
@@ -57,10 +58,14 @@ export function TextToSpeechConfig({
 
   const handlePreview = useCallback(async () => {
     if (isPreviewing) {
-      // Stop preview
+      // Stop preview and revoke object URL to prevent memory leak
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.currentTime = 0
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+        audioUrlRef.current = null
       }
       setIsPreviewing(false)
       return
@@ -85,17 +90,20 @@ export function TextToSpeechConfig({
 
       // Create audio element and play
       const audioUrl = URL.createObjectURL(audioBlob)
+      audioUrlRef.current = audioUrl
       const audio = new Audio(audioUrl)
       audioRef.current = audio
 
       audio.onended = () => {
         setIsPreviewing(false)
         URL.revokeObjectURL(audioUrl)
+        audioUrlRef.current = null
       }
 
       audio.onerror = () => {
         setIsPreviewing(false)
         URL.revokeObjectURL(audioUrl)
+        audioUrlRef.current = null
       }
 
       setIsPreviewing(true)

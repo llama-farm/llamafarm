@@ -866,7 +866,7 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         }
       }
     }
-  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, voiceChat, stopAudioPlayback])
+  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, activeProject, selectedLLMModel, messages, voiceChat, stopAudioPlayback])
 
   // Handle key press in textarea
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

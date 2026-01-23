@@ -29,6 +29,7 @@ export function VoiceRecorder({
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<number | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const animationRef = useRef<number | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -41,6 +42,11 @@ export function VoiceRecorder({
       if (recordedUrl) URL.revokeObjectURL(recordedUrl)
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop())
+      }
+      // Close AudioContext to prevent resource leak
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+        audioContextRef.current = null
       }
     }
   }, [recordedUrl])
@@ -68,7 +74,12 @@ export function VoiceRecorder({
       streamRef.current = stream
 
       // Set up audio analyser for waveform
+      // Close any existing context to prevent leaks
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+      }
       const audioContext = new AudioContext()
+      audioContextRef.current = audioContext
       const source = audioContext.createMediaStreamSource(stream)
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 256

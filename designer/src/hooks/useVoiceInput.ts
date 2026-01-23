@@ -87,6 +87,12 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
 
   // Start recording
   const startRecording = useCallback(async () => {
+    // Prevent starting if already recording - avoids leaking previous mic tracks
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.warn('Recording already in progress')
+      return
+    }
+
     setError(null)
 
     try {

@@ -820,8 +820,8 @@ class VoiceChatService:
                             pending_tool_calls.clear()
 
                     except json.JSONDecodeError as e:
-                        # Log malformed JSON for debugging (truncate to avoid log spam)
-                        logger.debug(f"LLM stream: malformed JSON skipped: {data[:100]}... error: {e}")
+                        # Log malformed JSON for debugging (sanitized to avoid exposing user content)
+                        logger.debug(f"LLM stream: malformed JSON skipped (length={len(data)}), error: {e}")
                         continue
 
             # Yield any remaining tool calls that weren't finalized with finish_reason

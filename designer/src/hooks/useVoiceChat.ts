@@ -107,6 +107,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
 
   // WebSocket connection
   const wsRef = useRef<WebSocket | null>(null)
+  const disconnectRef = useRef<(() => void) | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
@@ -398,6 +399,9 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     setIsRecording(false)
   }, [activeStream])
 
+  // Keep disconnect ref updated for cleanup effect
+  disconnectRef.current = disconnect
+
   // Start recording using AudioWorklet for raw PCM capture
   const startRecording = useCallback(async () => {
     if (!isConnected) {
@@ -569,9 +573,10 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
     }
 
     return () => {
-      disconnect()
+      // Use ref to get latest disconnect callback (avoids stale closure)
+      disconnectRef.current?.()
     }
-  }, [autoConnect, namespace, project, llmModel]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoConnect, namespace, project, llmModel, connect])
 
   return {
     isConnected,
