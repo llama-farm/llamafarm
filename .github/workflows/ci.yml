@@ -233,7 +233,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          uv run pytest -v --cov=. --cov-report=term-missing
+          # Exclude e2e tests (they require running services)
+          uv run pytest -v -m "not e2e" --cov=. --cov-report=term-missing
 
       - name: Skip tests (no tests found)
         if: steps.check-tests.outputs.has_tests == 'false'
