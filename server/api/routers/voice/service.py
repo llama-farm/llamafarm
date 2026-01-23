@@ -30,6 +30,16 @@ from services.universal_runtime_service import UniversalRuntimeService
 
 from .phrase_detector import PhraseBoundaryDetector
 from .session import VoiceSession
+from .types import (
+    ErrorMessage,
+    LLMTextMessage,
+    StatusMessage,
+    ToolCallMessage,
+    TranscriptionMessage,
+    TTSDoneMessage,
+    TTSStartMessage,
+    VoiceState,
+)
 
 
 @dataclass
@@ -50,16 +60,6 @@ class LLMContent:
 
 # Type alias for stream output
 LLMStreamOutput = LLMContent | LLMToolCall
-from .types import (
-    ErrorMessage,
-    LLMTextMessage,
-    StatusMessage,
-    ToolCallMessage,
-    TranscriptionMessage,
-    TTSDoneMessage,
-    TTSStartMessage,
-    VoiceState,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -464,7 +464,7 @@ class VoiceChatService:
             logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
 
             # Pre-warm HTTP connection pool with a lightweight request
-            client = self.get_http_client()
+            self.get_http_client()
             # Just establish the TCP connection, don't make a full request
             logger.debug("HTTP client pool pre-warmed")
         except Exception as e:
