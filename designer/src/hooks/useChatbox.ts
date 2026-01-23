@@ -1209,7 +1209,7 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       await classifyAndSetError(err)
       return false
     }
-  }, [isStreaming, streamingChat, nonStreamingChat, useProjectSessionMode, projectSession, simpleSession])
+  }, [isStreaming, cancelStreaming, streamingChat, nonStreamingChat, useProjectSessionMode, projectSession, simpleSession])
 
   // Handle input change
   const updateInput = useCallback((value: string) => {
