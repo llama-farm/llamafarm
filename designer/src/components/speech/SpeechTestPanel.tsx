@@ -34,8 +34,9 @@ import { useProjectModels } from '../../hooks/useProjectModels'
 import { useVoiceChat, type VoiceMessage } from '../../hooks/useVoiceChat'
 
 // Universal Runtime URL for health checks
+// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
 const UNIVERSAL_RUNTIME_URL =
-  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+  import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://127.0.0.1:11540'
 
 interface SpeechTestPanelProps {
   className?: string

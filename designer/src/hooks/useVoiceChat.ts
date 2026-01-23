@@ -567,16 +567,27 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   }, [])
 
   // Auto-connect on mount if enabled
+  // Use a ref for connect to avoid triggering cleanup on every callback recreation
+  const connectRef = useRef<(() => void) | null>(null)
+  connectRef.current = connect
+
   useEffect(() => {
+    let didAutoConnect = false
     if (autoConnect && namespace && project && llmModel) {
-      connect()
+      didAutoConnect = true
+      connectRef.current?.()
     }
 
     return () => {
-      // Use ref to get latest disconnect callback (avoids stale closure)
-      disconnectRef.current?.()
+      // Only disconnect if we auto-connected in this effect instance
+      // Manual connections (via connect() call) are managed separately
+      if (didAutoConnect) {
+        disconnectRef.current?.()
+      }
     }
-  }, [autoConnect, namespace, project, llmModel, connect])
+    // Note: connectRef is used instead of connect to avoid cleanup running
+    // on every callback recreation (which would disconnect manual connections)
+  }, [autoConnect, namespace, project, llmModel])
 
   return {
     isConnected,

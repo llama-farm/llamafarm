@@ -16,7 +16,8 @@ const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 const API_HOST = (import.meta.env as any).VITE_APP_API_URL as string | undefined
 
 // Universal Runtime URL for direct TTS/STT calls
-const RUNTIME_BASE_URL = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://localhost:11540'
+// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+const RUNTIME_BASE_URL = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://127.0.0.1:11540'
 
 function resolveBaseUrl(): string {
   // 1) Explicit host from env
@@ -28,7 +29,8 @@ function resolveBaseUrl(): string {
       typeof window !== 'undefined' &&
       window.location.hostname === 'localhost'
     ) {
-      base = `http://localhost:8000/${API_VERSION}`
+      // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+      base = `http://127.0.0.1:8000/${API_VERSION}`
     }
     return base
   }
@@ -38,7 +40,8 @@ function resolveBaseUrl(): string {
     typeof window !== 'undefined' &&
     window.location.hostname === 'localhost'
   ) {
-    return `http://localhost:8000/${API_VERSION}`
+    // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+    return `http://127.0.0.1:8000/${API_VERSION}`
   }
 
   // 3) Default to vite proxy
@@ -296,6 +299,15 @@ setupDevToolsInterceptors(runtimeClient)
 apiClient.interceptors.response.use(
   response => response,
   (error: AxiosError) => {
+    // Silently ignore canceled requests (e.g., from AbortController in React's StrictMode cleanup)
+    // These are intentional cancellations, not actual errors
+    if (error.code === 'ERR_CANCELED') {
+      // Re-throw as a special canceled error that callers can detect
+      const canceledError = new Error('Request was canceled')
+      ;(canceledError as any).isCanceled = true
+      throw canceledError
+    }
+
     if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') {
       throw new NetworkError('Network error occurred', error)
     }
