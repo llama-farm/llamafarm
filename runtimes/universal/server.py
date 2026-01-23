@@ -23,7 +23,7 @@ import asyncio
 import base64
 import os
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -555,7 +555,7 @@ async def health_check():
         "status": "healthy",
         "device": device_info,
         "loaded_models": list(_models.keys()),
-        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "pid": os.getpid(),
     }
 
