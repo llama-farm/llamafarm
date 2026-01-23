@@ -1180,47 +1180,6 @@ export function useChatbox(options: UseChatboxOptions = {}) {
     ]
   )
 
-  // Handle clear chat
-  const clearChat = useCallback(async () => {
-    try {
-      // Cancel any ongoing streaming request first to reset isStreaming state
-      if (isStreaming) {
-        cancelStreaming()
-      }
-
-      streamingChat.reset()
-      nonStreamingChat.reset()
-
-      if (useProjectSessionMode) {
-        projectSession.clearHistory()
-        setStreamingMessages([])
-      } else {
-        setLocalMessages([])
-        setHasInitialSync(false)
-        simpleSession.createNewSession()
-      }
-      setError(null)
-      return true
-    } catch (error) {
-      console.error('Clear chat error:', error)
-      const err = error instanceof Error 
-        ? error 
-        : new Error('Failed to clear chat')
-      await classifyAndSetError(err)
-      return false
-    }
-  }, [isStreaming, cancelStreaming, streamingChat, nonStreamingChat, useProjectSessionMode, projectSession, simpleSession])
-
-  // Handle input change
-  const updateInput = useCallback((value: string) => {
-    setInputValue(value)
-  }, [])
-
-  // Clear error
-  const clearError = useCallback(() => {
-    setError(null)
-  }, [])
-
   // Cancel streaming
   const cancelStreaming = useCallback(() => {
     if (streamingAbortControllerRef.current && isStreaming) {
@@ -1255,6 +1214,47 @@ export function useChatbox(options: UseChatboxOptions = {}) {
       }
     }
   }, [isStreaming, useProjectSessionMode])
+
+  // Handle clear chat
+  const clearChat = useCallback(async () => {
+    try {
+      // Cancel any ongoing streaming request first to reset isStreaming state
+      if (isStreaming) {
+        cancelStreaming()
+      }
+
+      streamingChat.reset()
+      nonStreamingChat.reset()
+
+      if (useProjectSessionMode) {
+        projectSession.clearHistory()
+        setStreamingMessages([])
+      } else {
+        setLocalMessages([])
+        setHasInitialSync(false)
+        simpleSession.createNewSession()
+      }
+      setError(null)
+      return true
+    } catch (error) {
+      console.error('Clear chat error:', error)
+      const err = error instanceof Error
+        ? error
+        : new Error('Failed to clear chat')
+      await classifyAndSetError(err)
+      return false
+    }
+  }, [isStreaming, cancelStreaming, streamingChat, nonStreamingChat, useProjectSessionMode, projectSession, simpleSession])
+
+  // Handle input change
+  const updateInput = useCallback((value: string) => {
+    setInputValue(value)
+  }, [])
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
 
   // Reset to new session
   const resetSession = useCallback(() => {
