@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -195,10 +196,8 @@ class TTSSynthesisService:
             logger.info("WebSocket client disconnected")
         except Exception as e:
             logger.error(f"WebSocket TTS error: {e}")
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.send_json({"type": "error", "message": str(e)})
-            except Exception:
-                pass
 
     def list_voices(self, model_id: str | None = None) -> list[dict]:
         """List available TTS voices.

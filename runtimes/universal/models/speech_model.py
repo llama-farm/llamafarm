@@ -19,9 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    import numpy as np
 
 logger = logging.getLogger(__name__)
 

@@ -6,6 +6,7 @@ Accepts raw PCM audio bytes, transcribes via STT, and streams text responses.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 import wave
@@ -149,12 +150,10 @@ class AudioChatService:
             logger.info("Audio chat WebSocket disconnected")
         except Exception as e:
             logger.error(f"Audio chat WebSocket error: {e}", exc_info=True)
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.send_json(
                     ErrorMessage(message=str(e), code="internal_error").model_dump()
                 )
-            except Exception:
-                pass
 
     async def _process_audio(
         self,
