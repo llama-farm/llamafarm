@@ -57,6 +57,59 @@ CUDA graphs provide performance benefits on discrete GPUs but cause stability is
 | TX2 | `-DCMAKE_CUDA_ARCHITECTURES="62"` |
 | Nano | `-DCMAKE_CUDA_ARCHITECTURES="53"` |
 
+## Docker Container Setup (Recommended)
+
+The easiest way to run LlamaFarm on Jetson is using NVIDIA's PyTorch container which includes CUDA-enabled PyTorch:
+
+```bash
+docker run -it --rm --runtime=nvidia --network host \
+  -v /home/$USER/.cache:/root/.cache \
+  -v /path/to/llamafarm:/data/llamafarm \
+  dustynv/l4t-pytorch:r36.2.0 \
+  bash
+```
+
+### Install UV Package Manager
+
+Inside the container:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.cargo/env
+```
+
+### Setup Universal Runtime with CUDA PyTorch
+
+The container has CUDA-enabled PyTorch (Python 3.10), but the venv must be configured to use it:
+
+```bash
+cd /data/llamafarm/runtimes/universal
+
+# Create venv with system site packages (inherits CUDA torch)
+uv venv .venv --python /usr/local/bin/python3 --system-site-packages
+
+# Install dependencies (this pulls CPU torch from PyPI)
+uv pip install -r pyproject.toml --python .venv/bin/python
+
+# Remove CPU torch, fall back to system CUDA torch
+uv pip uninstall torch torchvision --python .venv/bin/python
+
+# Downgrade numpy (system torch needs numpy 1.x)
+uv pip install "numpy<2" --python .venv/bin/python
+```
+
+### Verify CUDA PyTorch
+
+```bash
+.venv/bin/python -c "import torch; print('CUDA:', torch.cuda.is_available())"
+# Should print: CUDA: True
+```
+
+This enables GPU acceleration for:
+- **llama.cpp inference** (GGUF models) - 35+ tok/s
+- **Transformers models** (classifiers, embeddings) - GPU accelerated
+- **Anomaly detection** (sklearn) - CPU only
+
 ## Installing Built Libraries
 
 Copy the built libraries to LlamaFarm's cache:
