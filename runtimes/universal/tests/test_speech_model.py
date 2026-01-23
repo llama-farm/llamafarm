@@ -6,7 +6,6 @@ For integration tests with real audio files, install the speech dependencies
 and run tests with: pytest tests/test_speech_model.py -v
 """
 
-
 import pytest
 
 # Check if we can import the speech model (requires torch)
@@ -341,11 +340,11 @@ class TestAudioConversion:
 
 
 class TestTimestampFormatting:
-    """Tests for timestamp formatting utilities from server.py."""
+    """Tests for timestamp formatting utilities from audio router."""
 
     def test_format_timestamp_srt(self):
         """Test SRT timestamp formatting using production function."""
-        from server import _format_timestamp_srt
+        from routers.audio.router import _format_timestamp_srt
 
         assert _format_timestamp_srt(0.0) == "00:00:00,000"
         assert _format_timestamp_srt(1.5) == "00:00:01,500"
@@ -355,7 +354,7 @@ class TestTimestampFormatting:
 
     def test_format_timestamp_vtt(self):
         """Test VTT timestamp formatting using production function."""
-        from server import _format_timestamp_vtt
+        from routers.audio.router import _format_timestamp_vtt
 
         assert _format_timestamp_vtt(0.0) == "00:00:00.000"
         assert _format_timestamp_vtt(1.5) == "00:00:01.500"

@@ -348,17 +348,55 @@ class AnomalyModel(BaseModel):
             raise ValueError(f"Unsupported backend: {self.backend}")
 
         # Initialize scaler for data normalization
-        from sklearn.preprocessing import StandardScaler
+        # Using RobustScaler instead of StandardScaler because:
+        # - StandardScaler uses mean and std, which are sensitive to outliers
+        # - In anomaly detection, training data often contains outliers
+        # - RobustScaler uses median and IQR, making it resilient to outliers
+        from sklearn.preprocessing import RobustScaler
 
-        self._scaler = StandardScaler()
+        self._scaler = RobustScaler()
 
     async def fit(
         self,
         data: list[list[float]] | np.ndarray,
         epochs: int = 100,
         batch_size: int = 32,
+        use_executor: bool = True,
     ) -> FitResult:
         """Fit the anomaly detector on normal data.
+
+        This method offloads CPU-bound training to a thread pool to avoid
+        blocking the async event loop.
+
+        Args:
+            data: Training data (assumed to be mostly normal)
+            epochs: Training epochs (autoencoder only)
+            batch_size: Batch size (autoencoder only)
+            use_executor: If True, run training in thread pool (default: True)
+
+        Returns:
+            FitResult with training statistics
+        """
+        if use_executor and self.backend != "autoencoder":
+            # Offload sklearn training to thread pool
+            from services.training_executor import run_in_executor
+
+            return await run_in_executor(self._fit_sync, data, epochs, batch_size)
+        else:
+            # Autoencoder uses torch which has its own threading
+            # or user explicitly requested no executor
+            return self._fit_sync(data, epochs, batch_size)
+
+    def _fit_sync(
+        self,
+        data: list[list[float]] | np.ndarray,
+        epochs: int = 100,
+        batch_size: int = 32,
+    ) -> FitResult:
+        """Synchronous fit method for thread pool execution.
+
+        This is the actual training logic, separated from the async wrapper
+        to allow execution in a thread pool.
 
         Args:
             data: Training data (assumed to be mostly normal)
@@ -384,16 +422,17 @@ class AnomalyModel(BaseModel):
         X_scaled = self._scaler.fit_transform(X)
 
         if self.backend == "autoencoder":
-            await self._fit_autoencoder(X_scaled, epochs, batch_size)
+            # Autoencoder uses PyTorch - synchronous CPU/GPU-bound
+            self._fit_autoencoder(X_scaled, epochs, batch_size)
         else:
-            # Sklearn models
+            # Sklearn models - CPU-bound synchronous fitting
             self._detector.fit(X_scaled)
 
         self._is_fitted = True
 
         # Compute and store normalization statistics from training data
         # These are used during scoring to ensure consistent normalization
-        raw_scores = await self._compute_raw_scores(X_scaled)
+        raw_scores = self._compute_raw_scores_sync(X_scaled)
 
         # Statistics for standardization (sigmoid) method
         self._norm_median = float(np.median(raw_scores))
@@ -432,10 +471,48 @@ class AnomalyModel(BaseModel):
             },
         )
 
-    async def _fit_autoencoder(
-        self, X: np.ndarray, epochs: int, batch_size: int
+    def _compute_raw_scores_sync(self, X: np.ndarray) -> np.ndarray:
+        """Synchronous version of _compute_raw_scores for thread pool execution."""
+        if self.backend == "autoencoder":
+            # Autoencoder scoring is synchronous PyTorch
+            return self._autoencoder_scores_sync(X)
+
+        elif self.backend == "isolation_forest":
+            # IsolationForest: negative score = more anomalous
+            return -self._detector.score_samples(X)
+
+        elif self.backend == "one_class_svm":
+            # OneClassSVM: negative distance = more anomalous
+            return -self._detector.decision_function(X)
+
+        elif self.backend == "local_outlier_factor":
+            # LOF: negative score = more anomalous
+            return -self._detector.score_samples(X)
+
+        else:
+            raise ValueError(f"Unsupported backend: {self.backend}")
+
+    def _fit_autoencoder(
+        self,
+        X: np.ndarray,
+        epochs: int,
+        batch_size: int,
+        patience: int = 10,
+        validation_split: float = 0.1,
     ) -> None:
-        """Fit autoencoder model."""
+        """Fit autoencoder model with early stopping.
+
+        This is a synchronous method because PyTorch operations don't benefit
+        from async - they're CPU/GPU-bound. The method is called from _fit_sync
+        which may be running in a thread pool.
+
+        Args:
+            X: Scaled training data
+            epochs: Maximum training epochs
+            batch_size: Batch size for training
+            patience: Number of epochs to wait for improvement before stopping (default: 10)
+            validation_split: Fraction of data to use for validation (default: 0.1)
+        """
         import torch
         import torch.nn as nn
         from torch.utils.data import DataLoader, TensorDataset
@@ -463,24 +540,52 @@ class AnomalyModel(BaseModel):
         self._encoder = self._encoder.to(self.device)
         self._decoder = self._decoder.to(self.device)
 
-        # Prepare data
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        dataset = TensorDataset(X_tensor)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        # Split data into training and validation sets
+        # Ensure we have at least 2 samples for validation split
+        n_samples = X.shape[0]
+        if n_samples < 2:
+            # With only 1 sample, skip validation and use all data for training
+            X_train = X
+            X_val = X  # Use same data for validation (no early stopping benefit)
+            use_validation = False
+        else:
+            # Ensure at least 1 training sample remains after validation split
+            n_val = min(max(1, int(n_samples * validation_split)), n_samples - 1)
+            indices = np.random.permutation(n_samples)
+            val_indices = indices[:n_val]
+            train_indices = indices[n_val:]
+            X_train = X[train_indices]
+            X_val = X[val_indices]
+            use_validation = True
 
-        # Training
+        # Prepare data loaders
+        X_train_tensor = torch.FloatTensor(X_train).to(self.device)
+        X_val_tensor = torch.FloatTensor(X_val).to(self.device)
+        train_dataset = TensorDataset(X_train_tensor)
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
+
+        # Training setup
         optimizer = torch.optim.Adam(
             list(self._encoder.parameters()) + list(self._decoder.parameters()),
             lr=0.001,
         )
         criterion = nn.MSELoss()
 
+        # Early stopping state
+        best_val_loss = float("inf")
+        epochs_without_improvement = 0
+        best_encoder_state = None
+        best_decoder_state = None
+
         self._encoder.train()
         self._decoder.train()
 
         for epoch in range(epochs):
+            # Training phase
             epoch_loss = 0.0
-            for (batch,) in dataloader:
+            for (batch,) in train_dataloader:
                 optimizer.zero_grad()
                 encoded = self._encoder(batch)
                 decoded = self._decoder(encoded)
@@ -489,10 +594,61 @@ class AnomalyModel(BaseModel):
                 optimizer.step()
                 epoch_loss += loss.item()
 
-            if (epoch + 1) % 20 == 0:
-                logger.debug(
-                    f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss / len(dataloader):.4f}"
-                )
+            train_loss = epoch_loss / len(train_dataloader)
+
+            # Validation phase (only if we have proper validation data)
+            if use_validation:
+                self._encoder.eval()
+                self._decoder.eval()
+                with torch.no_grad():
+                    val_encoded = self._encoder(X_val_tensor)
+                    val_decoded = self._decoder(val_encoded)
+                    val_loss = criterion(val_decoded, X_val_tensor).item()
+                self._encoder.train()
+                self._decoder.train()
+
+                # Check for improvement
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    epochs_without_improvement = 0
+                    # Save best model state
+                    best_encoder_state = {
+                        k: v.clone() for k, v in self._encoder.state_dict().items()
+                    }
+                    best_decoder_state = {
+                        k: v.clone() for k, v in self._decoder.state_dict().items()
+                    }
+                else:
+                    epochs_without_improvement += 1
+
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"Epoch {epoch + 1}/{epochs}, "
+                        f"Train Loss: {train_loss:.4f}, "
+                        f"Val Loss: {val_loss:.4f}, "
+                        f"Patience: {patience - epochs_without_improvement}/{patience}"
+                    )
+
+                # Early stopping check
+                if epochs_without_improvement >= patience:
+                    logger.info(
+                        f"Early stopping at epoch {epoch + 1}: "
+                        f"no improvement for {patience} epochs. "
+                        f"Best val loss: {best_val_loss:.4f}"
+                    )
+                    break
+            else:
+                # Without validation, just log training progress
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}"
+                    )
+
+        # Restore best model state
+        if best_encoder_state is not None:
+            self._encoder.load_state_dict(best_encoder_state)
+        if best_decoder_state is not None:
+            self._decoder.load_state_dict(best_decoder_state)
 
         self._encoder.eval()
         self._decoder.eval()
@@ -570,8 +726,11 @@ class AnomalyModel(BaseModel):
         else:
             raise ValueError(f"Unsupported backend: {self.backend}")
 
-    async def _autoencoder_scores(self, X: np.ndarray) -> np.ndarray:
-        """Compute reconstruction error scores for autoencoder."""
+    def _autoencoder_scores_sync(self, X: np.ndarray) -> np.ndarray:
+        """Compute reconstruction error scores for autoencoder (synchronous).
+
+        This is the actual implementation used by both async and sync code paths.
+        """
         import torch
 
         X_tensor = torch.FloatTensor(X).to(self.device)
@@ -583,6 +742,14 @@ class AnomalyModel(BaseModel):
             reconstruction_error = torch.mean((X_tensor - decoded) ** 2, dim=1)
 
         return reconstruction_error.cpu().numpy()
+
+    async def _autoencoder_scores(self, X: np.ndarray) -> np.ndarray:
+        """Compute reconstruction error scores for autoencoder (async wrapper).
+
+        This async wrapper exists for API compatibility. The actual work
+        is done synchronously since PyTorch operations don't benefit from async.
+        """
+        return self._autoencoder_scores_sync(X)
 
     def _normalize_scores(self, scores: np.ndarray) -> np.ndarray:
         """Normalize scores based on the configured normalization method.

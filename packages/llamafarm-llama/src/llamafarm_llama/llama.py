@@ -478,7 +478,12 @@ class Llama:
         bitmap = self.create_audio_bitmap(audio_data, audio_format)
 
         # Tokenize messages with audio
-        chunks = self._tokenize_with_media(messages, [bitmap])
+        # Guard against tokenization errors to avoid leaking the bitmap
+        try:
+            chunks = self._tokenize_with_media(messages, [bitmap])
+        except Exception:
+            self.free_bitmap(bitmap)
+            raise
 
         # Process chunks and generate response
         if stream:
@@ -857,6 +862,11 @@ class Llama:
             if self._mtmd_lib is not None:
                 self._mtmd_lib.mtmd_free(self._mtmd_ctx)
             self._mtmd_ctx = ffi.NULL
+            # Reset multimodal flags to prevent use-after-free
+            # If these remain True, callers checking supports_audio/supports_vision
+            # would attempt to use the freed multimodal context
+            self._supports_audio = False
+            self._supports_vision = False
 
         if hasattr(self, "_ctx") and self._ctx is not None and self._ctx != ffi.NULL:
             self._lib.llama_free(self._ctx)

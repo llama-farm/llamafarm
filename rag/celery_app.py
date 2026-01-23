@@ -62,6 +62,7 @@ if celery_broker_url and celery_result_backend:
             "tasks.query_tasks",
             "tasks.health_tasks",
             "tasks.stats_tasks",
+            "tasks.preview_tasks",
         ),
     )
 else:
@@ -105,6 +106,7 @@ else:
             "tasks.query_tasks",
             "tasks.health_tasks",
             "tasks.stats_tasks",
+            "tasks.preview_tasks",
         ),
     )
 
@@ -149,6 +151,7 @@ try:
     # Import all task modules to register them with the Celery app
     import tasks.health_tasks  # noqa: F401
     import tasks.ingest_tasks  # noqa: F401
+    import tasks.preview_tasks  # noqa: F401
     import tasks.query_tasks  # noqa: F401
     import tasks.search_tasks  # noqa: F401
     import tasks.stats_tasks  # noqa: F401

@@ -1,0 +1,74 @@
+name: Build llama.cpp Binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-llama-cpp:
+    name: Build llama.cpp
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: aarch64
+            artifact_name: llama-b7376-bin-linux-arm64.zip
+            lib_name: libllama.so
+            cmake_args: "-DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8-a"
+
+    steps:
+      - name: Checkout llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: b7376
+          path: llama.cpp
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Configure CMake
+        run: |
+          cd llama.cpp
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: |
+          cd llama.cpp
+          cmake --build build --config Release -j $(nproc)
+
+      - name: Prepare Artifact
+        run: |
+          cd llama.cpp
+          mkdir -p dist/bin
+          cp build/bin/${{ matrix.lib_name }} dist/bin/
+          # Copy dependencies (like libggml.so) if they exist
+          find build/bin -name "*.so*" -not -name "${{ matrix.lib_name }}" -exec cp {} dist/bin/ \;
+          
+          cd dist
+          zip -r ../${{ matrix.artifact_name }} .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: llama.cpp/${{ matrix.artifact_name }}
+
+      - name: Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: llama.cpp/${{ matrix.artifact_name }}

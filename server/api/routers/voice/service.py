@@ -63,6 +63,35 @@ LLMStreamOutput = LLMContent | LLMToolCall
 
 logger = logging.getLogger(__name__)
 
+# Security limits for audio processing
+MAX_NATIVE_AUDIO_SIZE = 10 * 1024 * 1024  # 10MB max for native audio input (~5 minutes at 16kHz mono)
+MAX_TTS_TEXT_LENGTH = 5000  # 5000 chars max for TTS input (prevent resource exhaustion)
+
+# Connection timeouts
+TTS_WEBSOCKET_CONNECT_TIMEOUT = 10.0  # 10 seconds to establish TTS WebSocket connection
+TTS_WEBSOCKET_CLOSE_TIMEOUT = 5.0  # 5 seconds to gracefully close connection
+
+
+def _sanitize_for_logging(text: str, max_length: int = 50) -> str:
+    """Sanitize text for logging to avoid PII exposure.
+
+    Truncates long text and replaces it with a summary to prevent
+    personally identifiable information from appearing in logs.
+
+    Args:
+        text: Text to sanitize.
+        max_length: Maximum characters to show (default 50).
+
+    Returns:
+        Sanitized text suitable for logging.
+    """
+    if not text:
+        return "[empty]"
+    # Show only first part with length indicator
+    if len(text) > max_length:
+        return f"[{len(text)} chars: {text[:max_length]}...]"
+    return f"[{len(text)} chars]"
+
 
 def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, bits_per_sample: int = 16) -> bytes:
     """Convert raw PCM audio data to WAV format by adding a WAV header.
@@ -843,7 +872,11 @@ class VoiceChatService:
             f"&voice={self.session.config.tts_voice}"
             f"&response_format=pcm"
         )
-        self._tts_ws = await websockets.connect(ws_url)
+        # Use timeout to prevent hanging indefinitely on connection
+        self._tts_ws = await asyncio.wait_for(
+            websockets.connect(ws_url, close_timeout=TTS_WEBSOCKET_CLOSE_TIMEOUT),
+            timeout=TTS_WEBSOCKET_CONNECT_TIMEOUT,
+        )
         return self._tts_ws
 
     async def _close_tts_websocket(self) -> None:
@@ -1208,8 +1241,11 @@ class VoiceChatService:
 
         except Exception as e:
             logger.error(f"Error processing turn: {e}", exc_info=True)
+            # Send sanitized error to client - don't expose internal details
             await websocket.send_json(
-                ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
+                ErrorMessage(
+                    message="An error occurred while processing your request. Please try again."
+                ).model_dump()
             )
             self.session.set_state(VoiceState.IDLE)
 
@@ -1413,8 +1449,11 @@ class VoiceChatService:
 
         except Exception as e:
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
+            # Send sanitized error to client - don't expose internal details
             await websocket.send_json(
-                ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
+                ErrorMessage(
+                    message="An error occurred while processing your audio. Please try again."
+                ).model_dump()
             )
             self.session.set_state(VoiceState.IDLE)
 
@@ -1431,7 +1470,17 @@ class VoiceChatService:
 
         Yields:
             LLMContent for regular text tokens, LLMToolCall for tool calls.
+
+        Raises:
+            ValueError: If audio_bytes exceeds MAX_NATIVE_AUDIO_SIZE.
         """
+        # Validate audio size to prevent DoS via memory exhaustion
+        if len(audio_bytes) > MAX_NATIVE_AUDIO_SIZE:
+            raise ValueError(
+                f"Audio size ({len(audio_bytes)} bytes) exceeds maximum allowed "
+                f"({MAX_NATIVE_AUDIO_SIZE} bytes). Please use shorter audio clips."
+            )
+
         t_start = time.perf_counter()
         first_token_logged = False
 
@@ -1589,6 +1638,13 @@ class VoiceChatService:
         Returns:
             Time of first audio chunk if track_first_audio is True, None otherwise.
         """
+        # Validate text length to prevent resource exhaustion
+        if len(phrase) > MAX_TTS_TEXT_LENGTH:
+            logger.warning(
+                f"TTS text truncated from {len(phrase)} to {MAX_TTS_TEXT_LENGTH} chars"
+            )
+            phrase = phrase[:MAX_TTS_TEXT_LENGTH]
+
         # Filter thinking tags and preprocess for natural speech
         original_phrase = phrase
         phrase = self._filter_thinking_tags(phrase)
@@ -1597,10 +1653,10 @@ class VoiceChatService:
             # Skip empty phrases (e.g., if it was all thinking/markdown content)
             return None
 
-        # DEBUG: Log what's being sent to TTS
-        logger.info(f"🔊 TTS INPUT: {repr(phrase[:200])}{'...' if len(phrase) > 200 else ''}")
+        # DEBUG: Log what's being sent to TTS (sanitized to avoid PII in logs)
+        logger.info(f"🔊 TTS INPUT: {_sanitize_for_logging(phrase)}")
         if phrase != original_phrase:
-            logger.debug(f"🔊 TTS (original was): {repr(original_phrase[:200])}")
+            logger.debug(f"🔊 TTS (original was): {_sanitize_for_logging(original_phrase)}")
 
         phrase_index = self.session.next_phrase_index()
         t_first_audio = None

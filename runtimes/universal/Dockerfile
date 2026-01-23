@@ -33,7 +33,10 @@ ENV LLAMAFARM_CACHE_DIR=/var/lib/llamafarm/llama-cache
 # Pass LLAMA_BACKEND build arg to runtime environment (if specified)
 ENV LLAMAFARM_BACKEND=${LLAMA_BACKEND}
 
-RUN apt update && apt install -y curl unzip && rm -rf /var/lib/apt/lists/*
+RUN apt update \
+    && apt install -y curl unzip \
+    && if [ "$(dpkg --print-architecture)" = "arm64" ]; then apt install -y build-essential cmake; fi \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create UV cache and virtual environment directories with proper permissions for any user
 RUN mkdir -p /tmp/uv-cache && chmod 777 /tmp/uv-cache \

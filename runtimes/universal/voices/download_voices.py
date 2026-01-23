@@ -13,10 +13,15 @@ Or from the CLI:
 
 import logging
 import os
+import ssl
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+
+# Security: Create SSL context with certificate verification enabled
+# This prevents MITM attacks when downloading voice samples
+_SSL_CONTEXT = ssl.create_default_context()
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -156,18 +161,27 @@ def download_librispeech_sample(
     with tempfile.TemporaryDirectory() as tmpdir:
         tar_path = Path(tmpdir) / "dev-clean.tar.gz"
 
-        # Download with progress
-        def report_progress(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0:
-                percent = min(100, downloaded * 100 // total_size)
-                mb_downloaded = downloaded / (1024 * 1024)
-                mb_total = total_size / (1024 * 1024)
-                print(f"\r  Downloaded {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)", end="", flush=True)
-
+        # Download with SSL certificate verification for security
         try:
-            urllib.request.urlretrieve(url, tar_path, reporthook=report_progress)
-            print()  # Newline after progress
+            logger.info("  Connecting to server (with SSL verification)...")
+            with urllib.request.urlopen(url, context=_SSL_CONTEXT) as response:
+                total_size = int(response.headers.get("Content-Length", 0))
+                downloaded = 0
+                block_size = 8192
+
+                with open(tar_path, "wb") as f:
+                    while True:
+                        block = response.read(block_size)
+                        if not block:
+                            break
+                        f.write(block)
+                        downloaded += len(block)
+                        if total_size > 0:
+                            percent = min(100, downloaded * 100 // total_size)
+                            mb_downloaded = downloaded / (1024 * 1024)
+                            mb_total = total_size / (1024 * 1024)
+                            print(f"\r  Downloaded {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)", end="", flush=True)
+                print()  # Newline after progress
         except Exception as e:
             logger.error(f"  Failed to download: {e}")
             return False
@@ -213,19 +227,26 @@ def download_all_voices(force: bool = False) -> dict[str, bool]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tar_path = Path(tmpdir) / "dev-clean.tar.gz"
 
-        # Download with progress
-        def report_progress(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0:
-                percent = min(100, downloaded * 100 // total_size)
-                mb_downloaded = downloaded / (1024 * 1024)
-                mb_total = total_size / (1024 * 1024)
-                print(f"\r  Downloaded {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)", end="", flush=True)
-
-        logger.info("Downloading LibriSpeech dev-clean...")
+        logger.info("Downloading LibriSpeech dev-clean (with SSL verification)...")
         try:
-            urllib.request.urlretrieve(url, tar_path, reporthook=report_progress)
-            print()  # Newline after progress
+            with urllib.request.urlopen(url, context=_SSL_CONTEXT) as response:
+                total_size = int(response.headers.get("Content-Length", 0))
+                downloaded = 0
+                block_size = 8192
+
+                with open(tar_path, "wb") as f:
+                    while True:
+                        block = response.read(block_size)
+                        if not block:
+                            break
+                        f.write(block)
+                        downloaded += len(block)
+                        if total_size > 0:
+                            percent = min(100, downloaded * 100 // total_size)
+                            mb_downloaded = downloaded / (1024 * 1024)
+                            mb_total = total_size / (1024 * 1024)
+                            print(f"\r  Downloaded {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)", end="", flush=True)
+                print()  # Newline after progress
         except Exception as e:
             logger.error(f"  Failed to download LibriSpeech: {e}")
             # Mark all as failed

@@ -101,13 +101,25 @@ class GGUFLanguageModel(BaseModel):
         self.requested_n_ctx = self.n_ctx = n_ctx  # Store requested value
         self.actual_n_ctx: int | None = None  # Will be computed during load()
         self.requested_n_batch = n_batch  # Store requested value (None = default 2048)
-        self.requested_n_gpu_layers = n_gpu_layers  # Store requested value (None = auto)
+        self.requested_n_gpu_layers = (
+            n_gpu_layers  # Store requested value (None = auto)
+        )
         self.requested_n_threads = n_threads  # Store requested value (None = auto)
-        self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
-        self.requested_use_mmap = use_mmap  # Store requested value (None = default True)
-        self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
-        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
-        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
+        self.requested_flash_attn = (
+            flash_attn  # Store requested value (None = default True)
+        )
+        self.requested_use_mmap = (
+            use_mmap  # Store requested value (None = default True)
+        )
+        self.requested_use_mlock = (
+            use_mlock  # Store requested value (None = default False)
+        )
+        self.requested_cache_type_k = (
+            cache_type_k  # Store requested value (None = default f16)
+        )
+        self.requested_cache_type_v = (
+            cache_type_v  # Store requested value (None = default f16)
+        )
         self.preferred_quantization = preferred_quantization
         self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
         self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
@@ -237,15 +249,21 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Using configured n_threads: {n_threads}")
 
         # Configure flash attention (default True for faster inference)
-        flash_attn = self.requested_flash_attn if self.requested_flash_attn is not None else True
+        flash_attn = (
+            self.requested_flash_attn if self.requested_flash_attn is not None else True
+        )
         logger.info(f"Using flash_attn: {flash_attn}")
 
         # Configure memory mapping (default True for efficient memory management)
-        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else True
+        use_mmap = (
+            self.requested_use_mmap if self.requested_use_mmap is not None else True
+        )
         logger.info(f"Using use_mmap: {use_mmap}")
 
         # Configure memory locking (default False to allow OS memory management)
-        use_mlock = self.requested_use_mlock if self.requested_use_mlock is not None else False
+        use_mlock = (
+            self.requested_use_mlock if self.requested_use_mlock is not None else False
+        )
         logger.info(f"Using use_mlock: {use_mlock}")
 
         # Configure KV cache quantization (None = default f16, use q4_0 for memory savings)
@@ -594,7 +612,9 @@ class GGUFLanguageModel(BaseModel):
         # Inject tools into messages using prompt-based approach
         from utils.tool_calling import inject_tools_into_messages
 
-        logger.debug(f"Using prompt-based tool injection with tool_choice={tool_choice}")
+        logger.debug(
+            f"Using prompt-based tool injection with tool_choice={tool_choice}"
+        )
         return inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
 
     async def _generate_from_prompt(
@@ -721,7 +741,9 @@ class GGUFLanguageModel(BaseModel):
                 )
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+        prepared_messages = self._prepare_messages_with_tools(
+            messages, tools, tool_choice
+        )
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):
@@ -929,7 +951,9 @@ class GGUFLanguageModel(BaseModel):
                 return
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+        prepared_messages = self._prepare_messages_with_tools(
+            messages, tools, tool_choice
+        )
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):
@@ -1164,6 +1188,12 @@ class GGUFLanguageModel(BaseModel):
 
         # Clear llama-cpp instance
         self.llama = None
+
+        # Reset multimodal flags to prevent use-after-free
+        # If these remain True after unload, callers checking supports_audio/supports_vision
+        # would see stale values and might attempt to use the freed model
+        self._supports_audio = False
+        self._supports_vision = False
 
         # Shutdown thread pool executor
         if hasattr(self, "_executor"):

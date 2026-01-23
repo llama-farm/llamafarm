@@ -94,7 +94,7 @@ class TestToolCallingE2E:
         """Test that a tool call in model output is detected and returned correctly."""
         # Model generates a response with a tool call
         model_response = (
-            'I\'ll calculate that for you. '
+            "I'll calculate that for you. "
             '<tool_call>{"name": "calculator", "arguments": {"expression": "2+2"}}</tool_call>'
         )
         mock_gguf_model.generate = AsyncMock(return_value=model_response)
@@ -112,14 +112,18 @@ class TestToolCallingE2E:
         choice = response["choices"][0]
         assert choice["finish_reason"] == "tool_calls"
         assert choice["message"]["role"] == "assistant"
-        assert choice["message"]["content"] is None  # Content is null when tool calls present
+        assert (
+            choice["message"]["content"] is None
+        )  # Content is null when tool calls present
 
         # Verify tool call structure
         tool_calls = choice["message"]["tool_calls"]
         assert len(tool_calls) == 1
         assert tool_calls[0]["type"] == "function"
         assert tool_calls[0]["function"]["name"] == "calculator"
-        assert json.loads(tool_calls[0]["function"]["arguments"]) == {"expression": "2+2"}
+        assert json.loads(tool_calls[0]["function"]["arguments"]) == {
+            "expression": "2+2"
+        }
         assert tool_calls[0]["id"].startswith("call_")
 
     @pytest.mark.asyncio
@@ -127,7 +131,7 @@ class TestToolCallingE2E:
         """Test that multiple tool calls are detected and returned correctly."""
         # Model generates a response with multiple tool calls
         model_response = (
-            'I\'ll get that information for you. '
+            "I'll get that information for you. "
             '<tool_call>{"name": "get_weather", "arguments": {"location": "New York, NY"}}</tool_call> '
             '<tool_call>{"name": "get_weather", "arguments": {"location": "Los Angeles, CA"}}</tool_call>'
         )
@@ -144,11 +148,17 @@ class TestToolCallingE2E:
         assert len(tool_calls) == 2
         assert tool_calls[0]["function"]["name"] == "get_weather"
         assert tool_calls[1]["function"]["name"] == "get_weather"
-        assert json.loads(tool_calls[0]["function"]["arguments"]) == {"location": "New York, NY"}
-        assert json.loads(tool_calls[1]["function"]["arguments"]) == {"location": "Los Angeles, CA"}
+        assert json.loads(tool_calls[0]["function"]["arguments"]) == {
+            "location": "New York, NY"
+        }
+        assert json.loads(tool_calls[1]["function"]["arguments"]) == {
+            "location": "Los Angeles, CA"
+        }
 
     @pytest.mark.asyncio
-    async def test_non_streaming_no_tool_call_when_not_needed(self, service, mock_gguf_model):
+    async def test_non_streaming_no_tool_call_when_not_needed(
+        self, service, mock_gguf_model
+    ):
         """Test that regular responses without tool calls work correctly."""
         # Model generates a normal response without tool call
         model_response = "2+2 equals 4."
@@ -170,7 +180,9 @@ class TestToolCallingE2E:
     async def test_non_streaming_no_tools_provided(self, service, mock_gguf_model):
         """Test that tool call syntax in response is ignored when no tools provided."""
         # Model generates a response with tool call syntax, but no tools were provided
-        model_response = '<tool_call>{"name": "calculator", "arguments": {}}</tool_call>'
+        model_response = (
+            '<tool_call>{"name": "calculator", "arguments": {}}</tool_call>'
+        )
         mock_gguf_model.generate = AsyncMock(return_value=model_response)
 
         messages = [{"role": "user", "content": "Hello"}]
@@ -248,8 +260,12 @@ class TestToolCallingE2E:
         assert tool_call["id"].startswith("call_")
 
         # Verify finish_reason is tool_calls
-        final_events = [e for e in events if e["choices"][0].get("finish_reason") == "tool_calls"]
-        assert len(final_events) == 1, "Should have one chunk with finish_reason=tool_calls"
+        final_events = [
+            e for e in events if e["choices"][0].get("finish_reason") == "tool_calls"
+        ]
+        assert len(final_events) == 1, (
+            "Should have one chunk with finish_reason=tool_calls"
+        )
 
     @pytest.mark.asyncio
     async def test_tool_call_with_complex_arguments(self, service, mock_gguf_model):
@@ -336,11 +352,15 @@ class TestToolCallingOpenAICompatibility:
         return model
 
     @pytest.mark.asyncio
-    async def test_response_can_be_parsed_by_openai_types(self, service, mock_gguf_model):
+    async def test_response_can_be_parsed_by_openai_types(
+        self, service, mock_gguf_model
+    ):
         """Test that responses can be parsed by OpenAI SDK types."""
         from openai.types.chat import ChatCompletion
 
-        model_response = '<tool_call>{"name": "test", "arguments": {"key": "value"}}</tool_call>'
+        model_response = (
+            '<tool_call>{"name": "test", "arguments": {"key": "value"}}</tool_call>'
+        )
         mock_gguf_model.generate = AsyncMock(return_value=model_response)
 
         request = ChatCompletionRequest(
@@ -385,7 +405,9 @@ class TestToolCallingOpenAICompatibility:
     @pytest.mark.asyncio
     async def test_arguments_are_json_string(self, service, mock_gguf_model):
         """Test that arguments are returned as JSON string, not parsed object."""
-        model_response = '<tool_call>{"name": "test", "arguments": {"foo": "bar"}}</tool_call>'
+        model_response = (
+            '<tool_call>{"name": "test", "arguments": {"foo": "bar"}}</tool_call>'
+        )
         mock_gguf_model.generate = AsyncMock(return_value=model_response)
 
         request = ChatCompletionRequest(
@@ -398,7 +420,9 @@ class TestToolCallingOpenAICompatibility:
         with patch.object(service, "load_language", return_value=mock_gguf_model):
             response = await service.chat_completions(request)
 
-        arguments = response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+        arguments = response["choices"][0]["message"]["tool_calls"][0]["function"][
+            "arguments"
+        ]
         # Arguments should be a JSON string, not a dict
         assert isinstance(arguments, str)
         # And parseable as JSON

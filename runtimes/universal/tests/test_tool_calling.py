@@ -88,7 +88,9 @@ class TestInjectToolsIntoMessages:
             {"role": "system", "content": "Original content"},
             {"role": "user", "content": "Hello"},
         ]
-        tools = [{"type": "function", "function": {"name": "test", "description": "Test"}}]
+        tools = [
+            {"type": "function", "function": {"name": "test", "description": "Test"}}
+        ]
 
         original_content = messages[0]["content"]
         _ = inject_tools_into_messages(messages, tools)

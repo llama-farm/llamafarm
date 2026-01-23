@@ -94,43 +94,15 @@ VERSIONED_MODEL=$(echo "$FIT_RESPONSE" | python3 -c "import sys, json; print(jso
 echo "   Versioned model: $VERSIONED_MODEL"
 echo ""
 
-# ============================================================================
-# Test 2: Save Model (Production Workflow)
-# ============================================================================
-echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}  Test 2: Save Model for Production${NC}"
-echo -e "${BLUE}============================================${NC}"
-echo ""
-
-echo -e "${YELLOW}Saving trained model to disk...${NC}"
-echo "   This allows the model to persist across server restarts"
-echo ""
-
-SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/anomaly/save" \
-    -H "Content-Type: application/json" \
-    --max-time 60 \
-    -d '{
-        "model": "'"$VERSIONED_MODEL"'",
-        "backend": "isolation_forest",
-        "normalization": "standardization"
-    }')
-
-echo "Save Response:"
-echo "$SAVE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$SAVE_RESPONSE"
-echo ""
-
-if echo "$SAVE_RESPONSE" | grep -q '"saved"'; then
-    echo -e "${GREEN}✓ Model saved to disk!${NC}"
-else
-    echo -e "${YELLOW}Save may have failed${NC}"
-fi
+# Note: Models now autosave during fit, no explicit save endpoint needed
+echo -e "${GREEN}✓ Model autosaved during training!${NC}"
 echo ""
 
 # ============================================================================
-# Test 3: List Saved Models
+# Test 2: List Saved Models
 # ============================================================================
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}  Test 3: List Saved Models${NC}"
+echo -e "${BLUE}  Test 2: List Saved Models${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
@@ -143,10 +115,10 @@ echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE
 echo ""
 
 # ============================================================================
-# Test 4: Detect Anomalies (using model still in memory from training)
+# Test 3: Detect Anomalies (using model still in memory from training)
 # ============================================================================
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}  Test 4: Detect Anomalies${NC}"
+echo -e "${BLUE}  Test 3: Detect Anomalies${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
@@ -200,10 +172,10 @@ fi
 echo ""
 
 # ============================================================================
-# Test 5: Score Anomalies (returns all points with scores)
+# Test 4: Score Anomalies (returns all points with scores)
 # ============================================================================
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}  Test 5: Score Anomalies (all points)${NC}"
+echo -e "${BLUE}  Test 4: Score Anomalies (all points)${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
@@ -227,10 +199,10 @@ echo "$SCORE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$SCORE_RESPON
 echo ""
 
 # ============================================================================
-# Test 6: Load Saved Model (Production Workflow)
+# Test 5: Load Saved Model (Production Workflow)
 # ============================================================================
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}  Test 6: Load Saved Model (Production)${NC}"
+echo -e "${BLUE}  Test 5: Load Saved Model (Production)${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
@@ -288,10 +260,9 @@ echo -e "${BLUE}  Test Complete!${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 echo "Production Workflow Summary (via LlamaFarm API):"
-echo "  1. POST /v1/ml/anomaly/fit     - Train model on normal data"
-echo "  2. POST /v1/ml/anomaly/save    - Save model to disk"
-echo "  3. GET  /v1/ml/anomaly/models  - List saved models"
-echo "  4. POST /v1/ml/anomaly/load    - Load model (after restart)"
-echo "  5. POST /v1/ml/anomaly/detect  - Detect anomalies"
-echo "  6. POST /v1/ml/anomaly/score   - Score all points"
+echo "  1. POST /v1/ml/anomaly/fit     - Train model (autosaves)"
+echo "  2. GET  /v1/ml/anomaly/models  - List saved models"
+echo "  3. POST /v1/ml/anomaly/load    - Load model (after restart)"
+echo "  4. POST /v1/ml/anomaly/detect  - Detect anomalies"
+echo "  5. POST /v1/ml/anomaly/score   - Score all points"
 echo ""

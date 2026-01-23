@@ -124,8 +124,8 @@ def download_builtin_voices(force: bool = False) -> dict[str, bool]:
         >>> print(results)
         {'cb_male_calm': True, 'cb_female_warm': True, ...}
     """
+    import importlib.util
     import os
-    import sys
 
     voices_dir = _get_builtin_voices_dir()
     download_script = os.path.join(voices_dir, "download_voices.py")
@@ -136,13 +136,16 @@ def download_builtin_voices(force: bool = False) -> dict[str, bool]:
             "Please ensure the voices directory is intact."
         )
 
-    # Import and run the download module
-    sys.path.insert(0, voices_dir)
-    try:
-        from download_voices import download_all_voices
-        return download_all_voices(force=force)
-    finally:
-        sys.path.pop(0)
+    # Use importlib.util for safer module loading without sys.path manipulation
+    # This prevents potential code injection from malicious modules on the path
+    spec = importlib.util.spec_from_file_location("download_voices", download_script)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load module from {download_script}")
+
+    download_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(download_module)
+
+    return download_module.download_all_voices(force=force)
 
 
 def check_builtin_voices() -> dict[str, bool]:
@@ -263,9 +266,13 @@ class TTSBackend(ABC):
         pass
 
     def shutdown(self) -> None:
-        """Shutdown the thread pool."""
+        """Shutdown the thread pool.
+
+        Uses wait=True to ensure all pending tasks complete before shutdown,
+        preventing task cancellation and potential resource leaks.
+        """
         if self._executor is not None:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor = None
 
 
@@ -648,7 +655,10 @@ class ChatterboxTurboBackend(TTSBackend):
         Priority:
         1. Built-in voices (cb_male_calm, etc.)
         2. User-defined voice profiles
-        3. Direct file path
+        3. Direct file path (with path traversal protection)
+
+        Raises:
+            ValueError: If path traversal is detected in direct file paths.
         """
         import os
 
@@ -666,9 +676,33 @@ class ChatterboxTurboBackend(TTSBackend):
 
         # Check user-defined voice profiles
         if voice in self._voice_profiles:
-            return self._voice_profiles[voice].audio_path
+            profile_path = self._voice_profiles[voice].audio_path
+            # Validate user-defined profile paths against traversal
+            resolved = os.path.realpath(profile_path)
+            if ".." in profile_path or not os.path.isabs(resolved):
+                raise ValueError(
+                    f"Invalid voice profile path: {profile_path}. "
+                    "Path traversal is not allowed."
+                )
+            return profile_path
 
-        # Assume it's a direct path
+        # Direct file path - validate against path traversal attacks
+        # Resolve the path and check for traversal attempts
+        resolved_path = os.path.realpath(voice)
+
+        # Check for path traversal indicators
+        if ".." in voice:
+            raise ValueError(
+                f"Path traversal detected in voice path: {voice}. "
+                "Use absolute paths or built-in voice names."
+            )
+
+        # Ensure the path exists and is a file (not a directory)
+        if os.path.exists(resolved_path) and not os.path.isfile(resolved_path):
+            raise ValueError(
+                f"Voice path must be a file, not a directory: {voice}"
+            )
+
         return voice
 
     async def load(self, device: str) -> None:
