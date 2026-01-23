@@ -299,6 +299,11 @@ func (m *SourceManager) DownloadSource(version string) error {
 				if version == "main" || version == "dev" {
 					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/main.tar.gz",
 						githubOwner, githubRepo)
+				} else if strings.HasPrefix(version, "refs/") {
+					// Already a full ref path (e.g., refs/pull/123/merge, refs/tags/v1.0.0)
+					// Use as-is without prepending refs/heads/
+					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
+						githubOwner, githubRepo, version)
 				} else {
 					downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.tar.gz",
 						githubOwner, githubRepo, version)
@@ -307,6 +312,12 @@ func (m *SourceManager) DownloadSource(version string) error {
 			}
 		} else if len(version) == 40 {
 			// Looks like a full commit SHA (40 hex characters)
+			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
+				githubOwner, githubRepo, version)
+			usePackagedArchive = false
+		} else if strings.HasPrefix(version, "refs/") {
+			// Already a full ref path (e.g., refs/pull/123/merge, refs/tags/v1.0.0)
+			// Use as-is without prepending refs/heads/
 			downloadURL = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz",
 				githubOwner, githubRepo, version)
 			usePackagedArchive = false
