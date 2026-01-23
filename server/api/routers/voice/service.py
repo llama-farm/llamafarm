@@ -1015,6 +1015,9 @@ class VoiceChatService:
                             break
             except TimeoutError:
                 logger.debug("STT streaming timeout, using collected segments")
+            except websockets.exceptions.ConnectionClosed:
+                # Expected when breaking early from STT loop - generator cleanup closes WebSocket
+                logger.debug("STT WebSocket closed during early exit (expected when starting LLM early)")
 
             # If no segments received, fall back to non-streaming HTTP endpoint
             # This is faster for short utterances where streaming overhead dominates

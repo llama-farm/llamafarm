@@ -753,7 +753,8 @@ class UniversalRuntimeService:
                         break
 
         except websockets.exceptions.ConnectionClosed:
-            logger.warning("STT WebSocket closed unexpectedly")
+            # This can happen when consumer breaks early from the generator (e.g., to start LLM early)
+            logger.debug("STT WebSocket closed (may be expected during early exit)")
             raise
         except Exception as e:
             logger.error(f"STT streaming error: {e}")
