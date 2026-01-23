@@ -1203,8 +1203,11 @@ class VoiceChatService:
 
         except Exception as e:
             logger.error(f"Error processing turn: {e}", exc_info=True)
+            # Send sanitized error to client - don't expose internal details
             await websocket.send_json(
-                ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
+                ErrorMessage(
+                    message="An error occurred while processing your request. Please try again."
+                ).model_dump()
             )
             self.session.set_state(VoiceState.IDLE)
 
@@ -1403,8 +1406,11 @@ class VoiceChatService:
 
         except Exception as e:
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
+            # Send sanitized error to client - don't expose internal details
             await websocket.send_json(
-                ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
+                ErrorMessage(
+                    message="An error occurred while processing your audio. Please try again."
+                ).model_dump()
             )
             self.session.set_state(VoiceState.IDLE)
 

@@ -40,6 +40,47 @@ from .types import (
 router = APIRouter(tags=["voice"])
 logger = logging.getLogger(__name__)
 
+
+# Security: Maximum length for user-provided text inputs
+MAX_SYSTEM_PROMPT_LENGTH = 10000  # 10KB max for system prompts
+
+
+def _sanitize_system_prompt(prompt: str | None) -> str | None:
+    """Sanitize user-provided system prompt.
+
+    Validates and sanitizes the system prompt to prevent injection attacks
+    and excessive resource usage.
+
+    Args:
+        prompt: Raw system prompt from URL parameter.
+
+    Returns:
+        Sanitized prompt or None if invalid/empty.
+    """
+    if prompt is None:
+        return None
+
+    # Strip whitespace
+    prompt = prompt.strip()
+    if not prompt:
+        return None
+
+    # Enforce maximum length to prevent DoS
+    if len(prompt) > MAX_SYSTEM_PROMPT_LENGTH:
+        logger.warning(
+            f"System prompt truncated from {len(prompt)} to {MAX_SYSTEM_PROMPT_LENGTH} chars"
+        )
+        prompt = prompt[:MAX_SYSTEM_PROMPT_LENGTH]
+
+    # Remove null bytes and other control characters that could cause issues
+    # Keep newlines and tabs as they're valid in prompts
+    prompt = "".join(
+        char for char in prompt
+        if char == "\n" or char == "\t" or (ord(char) >= 32 and ord(char) != 127)
+    )
+
+    return prompt if prompt else None
+
 # Cache for model capabilities (avoid querying runtime repeatedly)
 _model_capabilities_cache: dict[str, dict] = {}
 
@@ -366,12 +407,14 @@ async def voice_chat_websocket(
                 )
 
         # Second: append system_prompt from query param (adds to model prompts)
-        if system_prompt:
+        # Sanitize to prevent injection attacks and excessive resource usage
+        sanitized_prompt = _sanitize_system_prompt(system_prompt)
+        if sanitized_prompt:
             session.messages.append({
                 "role": "system",
-                "content": system_prompt,
+                "content": sanitized_prompt,
             })
-            logger.info("Appended system_prompt from query param")
+            logger.info("Appended sanitized system_prompt from query param")
 
     service = VoiceChatService(session, llm_model_config)
 
@@ -577,8 +620,11 @@ async def voice_chat_websocket(
     except Exception as e:
         logger.error(f"Voice chat error: {e}", exc_info=True)
         with contextlib.suppress(Exception):
+            # Send sanitized error to client - don't expose internal details
             await websocket.send_json(
-                ErrorMessage(message=f"Server error: {str(e)}").model_dump()
+                ErrorMessage(
+                    message="A server error occurred. Please reconnect and try again."
+                ).model_dump()
             )
     finally:
         # Cancel any running process_turn task

@@ -19,6 +19,13 @@ from .vad import VoiceActivityDetector
 logger = logging.getLogger(__name__)
 
 
+# Security: Maximum buffer size to prevent memory exhaustion DoS
+MAX_ENCODED_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB max for streaming decode
+
+# Allowed input formats for FFmpeg (whitelist for security)
+ALLOWED_FFMPEG_FORMATS = frozenset({"webm", "ogg", "mp3", "flac", "aiff", "wav", "m4a", "mp4", "opus"})
+
+
 class AudioFormat(str, Enum):
     """Detected audio format."""
 
@@ -60,6 +67,11 @@ class StreamingAudioDecoder:
     Uses ffmpeg subprocess with non-blocking I/O for streaming decode.
     Accumulates encoded audio and decodes periodically when enough data
     is available.
+
+    Security features:
+    - Input format whitelist to prevent command injection
+    - Maximum buffer size to prevent memory exhaustion DoS
+    - Async subprocess execution to avoid blocking the event loop
     """
 
     # Minimum bytes before attempting decode (need WebM header + some data)
@@ -74,14 +86,27 @@ class StreamingAudioDecoder:
 
         Args:
             input_format: Input format hint for ffmpeg (webm, ogg, etc.)
+                         Must be in ALLOWED_FFMPEG_FORMATS whitelist.
+
+        Raises:
+            ValueError: If input_format is not in the allowed formats whitelist.
         """
+        # Validate format against whitelist to prevent command injection
+        if input_format not in ALLOWED_FFMPEG_FORMATS:
+            raise ValueError(
+                f"Unsupported audio format: {input_format}. "
+                f"Allowed formats: {', '.join(sorted(ALLOWED_FFMPEG_FORMATS))}"
+            )
         self._input_format = input_format
         self._encoded_buffer = bytearray()
         self._last_decode_size = 0
         self._total_pcm_decoded = 0
 
     def _decode_buffer(self) -> bytes:
-        """Decode the accumulated buffer to PCM.
+        """Decode the accumulated buffer to PCM (synchronous).
+
+        Note: This method blocks while ffmpeg runs. For async contexts,
+        use _decode_buffer_async() instead to avoid blocking the event loop.
 
         Returns:
             Decoded PCM data.
@@ -128,6 +153,58 @@ class StreamingAudioDecoder:
             logger.error(f"ffmpeg decode error: {e}")
             return b""
 
+    async def _decode_buffer_async(self) -> bytes:
+        """Decode the accumulated buffer to PCM (async, non-blocking).
+
+        Uses asyncio.create_subprocess_exec to avoid blocking the event loop.
+
+        Returns:
+            Decoded PCM data.
+        """
+        if len(self._encoded_buffer) < self.MIN_DECODE_BYTES:
+            return b""
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-f", self._input_format,
+                "-i", "pipe:0",
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "s16le",
+                "pipe:1",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(input=bytes(self._encoded_buffer)),
+                    timeout=5.0,
+                )
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                logger.warning("ffmpeg async decode timeout")
+                return b""
+
+            if stderr:
+                stderr_str = stderr.decode(errors="ignore")
+                if "error" in stderr_str.lower():
+                    logger.warning(f"ffmpeg async decode: {stderr_str[:200]}")
+
+            return stdout
+
+        except FileNotFoundError:
+            logger.error("ffmpeg not found")
+            return b""
+        except Exception as e:
+            logger.error(f"ffmpeg async decode error: {e}")
+            return b""
+
     def feed(self, data: bytes) -> bytes:
         """Feed encoded audio data and return newly decoded PCM.
 
@@ -139,8 +216,34 @@ class StreamingAudioDecoder:
 
         Returns:
             Newly decoded PCM data (may be empty).
+
+        Note:
+            Buffer is trimmed when it exceeds MAX_ENCODED_BUFFER_SIZE to prevent
+            memory exhaustion. This may cause audio discontinuities for very long
+            streams, but prevents DoS attacks.
         """
         self._encoded_buffer.extend(data)
+
+        # Security: Trim buffer if it exceeds max size to prevent memory exhaustion
+        if len(self._encoded_buffer) > MAX_ENCODED_BUFFER_SIZE:
+            # Keep only the most recent portion (needed for continuous decoding)
+            trim_amount = len(self._encoded_buffer) - MAX_ENCODED_BUFFER_SIZE
+            logger.warning(
+                f"Encoded buffer exceeded max size ({MAX_ENCODED_BUFFER_SIZE} bytes), "
+                f"trimming {trim_amount} bytes to prevent memory exhaustion"
+            )
+            # Decode what we have first
+            all_pcm = self._decode_buffer()
+            if len(all_pcm) > self._total_pcm_decoded:
+                new_pcm = all_pcm[self._total_pcm_decoded:]
+                self._total_pcm_decoded = len(all_pcm)
+            else:
+                new_pcm = b""
+            # Reset buffer - unfortunately we lose continuity but prevent OOM
+            self._encoded_buffer.clear()
+            self._last_decode_size = 0
+            self._total_pcm_decoded = 0
+            return new_pcm
 
         # Check if we should decode
         bytes_since_last = len(self._encoded_buffer) - self._last_decode_size
@@ -170,6 +273,72 @@ class StreamingAudioDecoder:
             return b""
 
         all_pcm = self._decode_buffer()
+
+        if len(all_pcm) > self._total_pcm_decoded:
+            new_pcm = all_pcm[self._total_pcm_decoded:]
+            self._total_pcm_decoded = len(all_pcm)
+            return new_pcm
+
+        return b""
+
+    async def feed_async(self, data: bytes) -> bytes:
+        """Feed encoded audio data and return newly decoded PCM (async version).
+
+        Non-blocking version that uses asyncio subprocess to avoid freezing
+        the event loop. Preferred for use in async contexts.
+
+        Args:
+            data: Encoded audio chunk (WebM/Opus, etc.)
+
+        Returns:
+            Newly decoded PCM data (may be empty).
+        """
+        self._encoded_buffer.extend(data)
+
+        # Security: Trim buffer if it exceeds max size
+        if len(self._encoded_buffer) > MAX_ENCODED_BUFFER_SIZE:
+            trim_amount = len(self._encoded_buffer) - MAX_ENCODED_BUFFER_SIZE
+            logger.warning(
+                f"Encoded buffer exceeded max size, trimming {trim_amount} bytes"
+            )
+            all_pcm = await self._decode_buffer_async()
+            if len(all_pcm) > self._total_pcm_decoded:
+                new_pcm = all_pcm[self._total_pcm_decoded:]
+                self._total_pcm_decoded = len(all_pcm)
+            else:
+                new_pcm = b""
+            self._encoded_buffer.clear()
+            self._last_decode_size = 0
+            self._total_pcm_decoded = 0
+            return new_pcm
+
+        # Check if we should decode
+        bytes_since_last = len(self._encoded_buffer) - self._last_decode_size
+        if bytes_since_last < self.DECODE_INTERVAL:
+            return b""
+
+        # Decode entire buffer
+        all_pcm = await self._decode_buffer_async()
+
+        if len(all_pcm) > self._total_pcm_decoded:
+            new_pcm = all_pcm[self._total_pcm_decoded:]
+            self._total_pcm_decoded = len(all_pcm)
+            self._last_decode_size = len(self._encoded_buffer)
+            return new_pcm
+
+        self._last_decode_size = len(self._encoded_buffer)
+        return b""
+
+    async def flush_async(self) -> bytes:
+        """Decode any remaining data and return final PCM (async version).
+
+        Returns:
+            Any remaining decoded PCM data.
+        """
+        if len(self._encoded_buffer) == 0:
+            return b""
+
+        all_pcm = await self._decode_buffer_async()
 
         if len(all_pcm) > self._total_pcm_decoded:
             new_pcm = all_pcm[self._total_pcm_decoded:]

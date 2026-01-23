@@ -478,7 +478,12 @@ class Llama:
         bitmap = self.create_audio_bitmap(audio_data, audio_format)
 
         # Tokenize messages with audio
-        chunks = self._tokenize_with_media(messages, [bitmap])
+        # Guard against tokenization errors to avoid leaking the bitmap
+        try:
+            chunks = self._tokenize_with_media(messages, [bitmap])
+        except Exception:
+            self.free_bitmap(bitmap)
+            raise
 
         # Process chunks and generate response
         if stream:

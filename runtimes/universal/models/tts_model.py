@@ -263,9 +263,13 @@ class TTSBackend(ABC):
         pass
 
     def shutdown(self) -> None:
-        """Shutdown the thread pool."""
+        """Shutdown the thread pool.
+
+        Uses wait=True to ensure all pending tasks complete before shutdown,
+        preventing task cancellation and potential resource leaks.
+        """
         if self._executor is not None:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor = None
 
 
@@ -648,7 +652,10 @@ class ChatterboxTurboBackend(TTSBackend):
         Priority:
         1. Built-in voices (cb_male_calm, etc.)
         2. User-defined voice profiles
-        3. Direct file path
+        3. Direct file path (with path traversal protection)
+
+        Raises:
+            ValueError: If path traversal is detected in direct file paths.
         """
         import os
 
@@ -666,9 +673,33 @@ class ChatterboxTurboBackend(TTSBackend):
 
         # Check user-defined voice profiles
         if voice in self._voice_profiles:
-            return self._voice_profiles[voice].audio_path
+            profile_path = self._voice_profiles[voice].audio_path
+            # Validate user-defined profile paths against traversal
+            resolved = os.path.realpath(profile_path)
+            if ".." in profile_path or not os.path.isabs(resolved):
+                raise ValueError(
+                    f"Invalid voice profile path: {profile_path}. "
+                    "Path traversal is not allowed."
+                )
+            return profile_path
 
-        # Assume it's a direct path
+        # Direct file path - validate against path traversal attacks
+        # Resolve the path and check for traversal attempts
+        resolved_path = os.path.realpath(voice)
+
+        # Check for path traversal indicators
+        if ".." in voice:
+            raise ValueError(
+                f"Path traversal detected in voice path: {voice}. "
+                "Use absolute paths or built-in voice names."
+            )
+
+        # Ensure the path exists and is a file (not a directory)
+        if os.path.exists(resolved_path) and not os.path.isfile(resolved_path):
+            raise ValueError(
+                f"Voice path must be a file, not a directory: {voice}"
+            )
+
         return voice
 
     async def load(self, device: str) -> None:
