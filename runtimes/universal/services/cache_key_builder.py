@@ -41,6 +41,12 @@ class CacheKeyBuilder:
         max_batch_size: int | None = None,
         use_flash_attn: bool = False,
         gguf_quantization: str | None = None,
+        n_gpu_layers: int | None = None,
+        n_threads: int | None = None,
+        use_mmap: bool | None = None,
+        use_mlock: bool | None = None,
+        cache_type_k: str | None = None,
+        cache_type_v: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate cache key for a language model.
@@ -51,6 +57,12 @@ class CacheKeyBuilder:
             max_batch_size: Optional max batch size
             use_flash_attn: Whether using flash attention
             gguf_quantization: Optional GGUF quantization type
+            n_gpu_layers: Number of layers to offload to GPU (GGUF)
+            n_threads: Number of CPU threads (GGUF)
+            use_mmap: Whether to use memory mapping (GGUF)
+            use_mlock: Whether to lock memory (GGUF)
+            cache_type_k: KV cache type for keys (GGUF)
+            cache_type_v: KV cache type for values (GGUF)
 
         Returns:
             Cache key string
@@ -58,8 +70,22 @@ class CacheKeyBuilder:
         ctx_key = cls._normalize_value(context_length)
         batch_key = cls._normalize_value(max_batch_size)
         quant_key = cls._normalize_value(gguf_quantization)
+        gpu_key = cls._normalize_value(n_gpu_layers)
+        threads_key = cls._normalize_value(n_threads)
+        mmap_key = cls._normalize_value(use_mmap)
+        mlock_key = cls._normalize_value(use_mlock)
+        cachek_key = cls._normalize_value(cache_type_k)
+        cachev_key = cls._normalize_value(cache_type_v)
 
-        return f"language:{model_id}:ctx{ctx_key}:batch{batch_key}:flash{use_flash_attn}:quant{quant_key}"
+        return (
+            f"language:{model_id}:"
+            f"ctx{ctx_key}:batch{batch_key}:"
+            f"gpu{gpu_key}:threads{threads_key}:"
+            f"flash{use_flash_attn}:"
+            f"mmap{mmap_key}:mlock{mlock_key}:"
+            f"cachek{cachek_key}:cachev{cachev_key}:"
+            f"quant{quant_key}"
+        )
 
     @classmethod
     def encoder_model(
@@ -171,6 +197,12 @@ def make_language_cache_key(
     max_batch_size: int | None = None,
     use_flash_attn: bool = False,
     gguf_quantization: str | None = None,
+    n_gpu_layers: int | None = None,
+    n_threads: int | None = None,
+    use_mmap: bool | None = None,
+    use_mlock: bool | None = None,
+    cache_type_k: str | None = None,
+    cache_type_v: str | None = None,
     **kwargs: Any,
 ) -> str:
     """Generate cache key for a language model (backward compatible function)."""
@@ -180,6 +212,12 @@ def make_language_cache_key(
         max_batch_size=max_batch_size,
         use_flash_attn=use_flash_attn,
         gguf_quantization=gguf_quantization,
+        n_gpu_layers=n_gpu_layers,
+        n_threads=n_threads,
+        use_mmap=use_mmap,
+        use_mlock=use_mlock,
+        cache_type_k=cache_type_k,
+        cache_type_v=cache_type_v,
         **kwargs,
     )
 

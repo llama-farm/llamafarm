@@ -62,6 +62,11 @@ def set_anomaly_loader(
     _load_anomaly_fn = load_anomaly_fn
 
 
+def get_anomaly_loader() -> Callable[..., Coroutine[Any, Any, Any]] | None:
+    """Get the current anomaly loader function (for testing purposes)."""
+    return _load_anomaly_fn
+
+
 def set_models_dir(models_dir: Path) -> None:
     """Set the models directory for saving/loading models.
 

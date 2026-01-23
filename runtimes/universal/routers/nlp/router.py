@@ -110,7 +110,9 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
 
     except Exception as e:
         logger.error(f"Error in create_embeddings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="An error occurred while generating embeddings"
+        ) from e
 
 
 @router.post("/v1/rerank", response_model=RerankResponse)
@@ -154,7 +156,9 @@ async def rerank_documents(request: RerankRequest) -> RerankResponse:
 
     except Exception as e:
         logger.error(f"Error in rerank_documents: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="An error occurred while reranking documents"
+        ) from e
 
 
 @router.post("/v1/classify", response_model=ClassifyResponse)
@@ -206,7 +210,9 @@ async def classify_texts(request: ClassifyRequest) -> ClassifyResponse:
 
     except Exception as e:
         logger.error(f"Error in classify_texts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="An error occurred while classifying text"
+        ) from e
 
 
 @router.post("/v1/ner", response_model=NERResponse)
@@ -264,4 +270,6 @@ async def extract_entities(request: NERRequest) -> NERResponse:
 
     except Exception as e:
         logger.error(f"Error in extract_entities: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="An error occurred while extracting entities"
+        ) from e

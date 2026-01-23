@@ -207,5 +207,6 @@ class TestRouterInitialization:
             json={"model": "test", "input": "hello"},
         )
 
+        # Should return 500 error (internal details hidden for security)
         assert response.status_code == 500
-        assert "not initialized" in response.json()["detail"]
+        assert "error" in response.json()["detail"].lower()

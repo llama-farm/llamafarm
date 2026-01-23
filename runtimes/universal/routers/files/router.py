@@ -21,6 +21,10 @@ router = APIRouter(tags=["files"])
 MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 100 * 1024 * 1024))
 
 
+# Chunk size for streaming uploads (64KB)
+UPLOAD_CHUNK_SIZE = 64 * 1024
+
+
 @router.post("/v1/files")
 async def upload_file(
     file: UploadFile,
@@ -52,13 +56,21 @@ async def upload_file(
         ```
     """
     try:
-        # Read file with size limit to prevent memory exhaustion
-        content = await file.read()
-        if len(content) > MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
-            )
+        # Stream file in chunks to enforce size limit without loading entire file
+        chunks = []
+        total_size = 0
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
+                )
+            chunks.append(chunk)
+        content = b"".join(chunks)
         stored = await store_file(
             content=content,
             filename=file.filename or "unknown",
@@ -85,7 +97,9 @@ async def upload_file(
         raise
     except Exception as e:
         logger.error(f"Error uploading file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500, detail="An error occurred while uploading the file"
+        ) from e
 
 
 @router.get("/v1/files")

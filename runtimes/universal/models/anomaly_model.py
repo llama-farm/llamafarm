@@ -541,14 +541,22 @@ class AnomalyModel(BaseModel):
         self._decoder = self._decoder.to(self.device)
 
         # Split data into training and validation sets
+        # Ensure we have at least 2 samples for validation split
         n_samples = X.shape[0]
-        n_val = max(1, int(n_samples * validation_split))
-        indices = np.random.permutation(n_samples)
-        val_indices = indices[:n_val]
-        train_indices = indices[n_val:]
-
-        X_train = X[train_indices]
-        X_val = X[val_indices]
+        if n_samples < 2:
+            # With only 1 sample, skip validation and use all data for training
+            X_train = X
+            X_val = X  # Use same data for validation (no early stopping benefit)
+            use_validation = False
+        else:
+            # Ensure at least 1 training sample remains after validation split
+            n_val = min(max(1, int(n_samples * validation_split)), n_samples - 1)
+            indices = np.random.permutation(n_samples)
+            val_indices = indices[:n_val]
+            train_indices = indices[n_val:]
+            X_train = X[train_indices]
+            X_val = X[val_indices]
+            use_validation = True
 
         # Prepare data loaders
         X_train_tensor = torch.FloatTensor(X_train).to(self.device)
@@ -588,46 +596,53 @@ class AnomalyModel(BaseModel):
 
             train_loss = epoch_loss / len(train_dataloader)
 
-            # Validation phase
-            self._encoder.eval()
-            self._decoder.eval()
-            with torch.no_grad():
-                val_encoded = self._encoder(X_val_tensor)
-                val_decoded = self._decoder(val_encoded)
-                val_loss = criterion(val_decoded, X_val_tensor).item()
-            self._encoder.train()
-            self._decoder.train()
+            # Validation phase (only if we have proper validation data)
+            if use_validation:
+                self._encoder.eval()
+                self._decoder.eval()
+                with torch.no_grad():
+                    val_encoded = self._encoder(X_val_tensor)
+                    val_decoded = self._decoder(val_encoded)
+                    val_loss = criterion(val_decoded, X_val_tensor).item()
+                self._encoder.train()
+                self._decoder.train()
 
-            # Check for improvement
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                epochs_without_improvement = 0
-                # Save best model state
-                best_encoder_state = {
-                    k: v.clone() for k, v in self._encoder.state_dict().items()
-                }
-                best_decoder_state = {
-                    k: v.clone() for k, v in self._decoder.state_dict().items()
-                }
+                # Check for improvement
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    epochs_without_improvement = 0
+                    # Save best model state
+                    best_encoder_state = {
+                        k: v.clone() for k, v in self._encoder.state_dict().items()
+                    }
+                    best_decoder_state = {
+                        k: v.clone() for k, v in self._decoder.state_dict().items()
+                    }
+                else:
+                    epochs_without_improvement += 1
+
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"Epoch {epoch + 1}/{epochs}, "
+                        f"Train Loss: {train_loss:.4f}, "
+                        f"Val Loss: {val_loss:.4f}, "
+                        f"Patience: {patience - epochs_without_improvement}/{patience}"
+                    )
+
+                # Early stopping check
+                if epochs_without_improvement >= patience:
+                    logger.info(
+                        f"Early stopping at epoch {epoch + 1}: "
+                        f"no improvement for {patience} epochs. "
+                        f"Best val loss: {best_val_loss:.4f}"
+                    )
+                    break
             else:
-                epochs_without_improvement += 1
-
-            if (epoch + 1) % 20 == 0:
-                logger.debug(
-                    f"Epoch {epoch + 1}/{epochs}, "
-                    f"Train Loss: {train_loss:.4f}, "
-                    f"Val Loss: {val_loss:.4f}, "
-                    f"Patience: {patience - epochs_without_improvement}/{patience}"
-                )
-
-            # Early stopping check
-            if epochs_without_improvement >= patience:
-                logger.info(
-                    f"Early stopping at epoch {epoch + 1}: "
-                    f"no improvement for {patience} epochs. "
-                    f"Best val loss: {best_val_loss:.4f}"
-                )
-                break
+                # Without validation, just log training progress
+                if (epoch + 1) % 20 == 0:
+                    logger.debug(
+                        f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}"
+                    )
 
         # Restore best model state
         if best_encoder_state is not None:

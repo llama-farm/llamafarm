@@ -3,7 +3,7 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -55,10 +55,8 @@ def mock_anomaly_model():
 
     model.detect = mock_detect
 
-    async def mock_save(*args, **kwargs):
-        pass
-
-    model.save = mock_save
+    # Use AsyncMock for save to enable call tracking
+    model.save = AsyncMock()
 
     async def mock_load(*args, **kwargs):
         model.is_fitted = True
@@ -136,6 +134,9 @@ class TestAnomalyFitEndpoint:
 
     def test_fit_autosaves_model(self, client, mock_anomaly_model, temp_models_dir):
         """Test that fit automatically saves model to disk."""
+        # Reset the save mock to track this specific test
+        mock_anomaly_model.save.reset_mock()
+
         response = client.post(
             "/v1/anomaly/fit",
             json={
@@ -147,7 +148,7 @@ class TestAnomalyFitEndpoint:
 
         assert response.status_code == 200
         # Verify save was called (auto-save)
-        # The mock_anomaly_model.save would be called by _auto_save_anomaly_model
+        assert mock_anomaly_model.save.called, "Model.save() should be called after fit"
 
     def test_fit_overwrite_default_is_true(self, client):
         """Test that overwrite defaults to True in fit request."""
@@ -337,19 +338,30 @@ class TestRouterInitialization:
 
     def test_anomaly_loader_not_set_raises_error(self):
         """Test that calling endpoints without setting anomaly loader raises error."""
-        from routers.anomaly import router, set_anomaly_loader
-
-        # Reset the loader
-        set_anomaly_loader(None)
-
-        app = FastAPI()
-        app.include_router(router)
-        client = TestClient(app)
-
-        response = client.post(
-            "/v1/anomaly/score",
-            json={"model": "test", "data": [[1.0, 2.0]]},
+        from routers.anomaly import (
+            get_anomaly_loader,
+            router,
+            set_anomaly_loader,
         )
 
-        assert response.status_code == 500
-        assert "not initialized" in response.json()["detail"].lower()
+        # Store original loader to restore later
+        original_loader = get_anomaly_loader()
+
+        try:
+            # Reset the loader
+            set_anomaly_loader(None)
+
+            app = FastAPI()
+            app.include_router(router)
+            client = TestClient(app)
+
+            response = client.post(
+                "/v1/anomaly/score",
+                json={"model": "test", "data": [[1.0, 2.0]]},
+            )
+
+            assert response.status_code == 500
+            assert "not initialized" in response.json()["detail"].lower()
+        finally:
+            # Restore original loader to prevent test pollution
+            set_anomaly_loader(original_loader)

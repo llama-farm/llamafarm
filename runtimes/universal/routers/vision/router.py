@@ -199,11 +199,14 @@ async def extract_text_from_images(request: OCRRequest):
         logger.error(f"OCR backend not installed: {e}")
         raise HTTPException(
             status_code=400,
-            detail=f"OCR backend '{request.model}' not installed. {str(e)}",
+            detail=f"OCR backend '{request.model}' not installed. Install the required dependencies.",
         ) from e
     except Exception as e:
         logger.error(f"Error in extract_text_from_images: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while extracting text from images",
+        ) from e
 
 
 # =============================================================================
@@ -329,4 +332,7 @@ async def extract_from_documents(request: DocumentExtractRequest):
         raise
     except Exception as e:
         logger.error(f"Error in extract_from_documents: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while extracting from documents",
+        ) from e
