@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 from .model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
     get_gguf_file_path,
+    get_mmproj_file_path,
     list_gguf_files,
     parse_model_with_quantization,
     parse_quantization_from_filename,
@@ -19,6 +20,7 @@ from .model_utils import (
 __all__ = [
     "GGUF_QUANTIZATION_PREFERENCE_ORDER",
     "get_gguf_file_path",
+    "get_mmproj_file_path",
     "list_gguf_files",
     "parse_model_with_quantization",
     "parse_quantization_from_filename",

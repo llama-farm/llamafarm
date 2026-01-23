@@ -57,6 +57,8 @@ class GGUFLanguageModel(BaseModel):
         cache_type_k: str | None = None,
         cache_type_v: str | None = None,
         preferred_quantization: str | None = None,
+        mmproj_path: str | None = None,
+        auto_detect_mmproj: bool = True,
     ):
         """Initialize GGUF language model.
 
@@ -86,6 +88,11 @@ class GGUFLanguageModel(BaseModel):
             preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
                                     If None, defaults to Q4_K_M. Only downloads the specified
                                     quantization to save disk space.
+            mmproj_path: Optional path to multimodal projector file for audio/vision models.
+                         If None and auto_detect_mmproj is True, will try to find mmproj
+                         file in the same repository.
+            auto_detect_mmproj: If True (default), automatically detect and download mmproj
+                                files for multimodal models like Qwen2.5-Omni.
         """
         super().__init__(model_id, device, token=token)
         self.model_type = "language"
@@ -102,6 +109,8 @@ class GGUFLanguageModel(BaseModel):
         self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
         self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
         self.preferred_quantization = preferred_quantization
+        self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
+        self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
         self._executor = ThreadPoolExecutor(max_workers=1)
 
         # Context management (initialized during load())
@@ -111,6 +120,10 @@ class GGUFLanguageModel(BaseModel):
         # Cached GGUF metadata (extracted once during load())
         self._chat_template: str | None = None
         self._special_tokens: dict[str, str] | None = None
+
+        # Multimodal support (set during load() if mmproj is loaded)
+        self._supports_audio: bool = False
+        self._supports_vision: bool = False
 
     def _get_available_memory_mb(self) -> int | None:
         """Get available system memory in MB for Memory Guard check.
@@ -243,6 +256,18 @@ class GGUFLanguageModel(BaseModel):
         if cache_type_v is not None:
             logger.info(f"Using cache_type_v: {cache_type_v}")
 
+        # Detect or use explicit mmproj path for multimodal models
+        mmproj_path = self.requested_mmproj_path
+        if mmproj_path is None and self.auto_detect_mmproj:
+            try:
+                from llamafarm_common import get_mmproj_file_path
+
+                mmproj_path = get_mmproj_file_path(self.model_id, self.token)
+                if mmproj_path:
+                    logger.info(f"Auto-detected mmproj file: {mmproj_path}")
+            except Exception as e:
+                logger.debug(f"mmproj auto-detection failed: {e}")
+
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
@@ -270,6 +295,7 @@ class GGUFLanguageModel(BaseModel):
             try:
                 return Llama(
                     model_path=gguf_path,
+                    mmproj_path=mmproj_path,  # Multimodal projector for audio/vision
                     n_ctx=self.actual_n_ctx,  # Use computed context size
                     n_batch=n_batch,  # Batch size for prompt processing
                     n_gpu_layers=n_gpu_layers,  # GPU layer offloading
@@ -334,6 +360,16 @@ class GGUFLanguageModel(BaseModel):
                 self._chat_template = None
                 self._special_tokens = None
 
+            # Check multimodal capabilities
+            if self.llama and hasattr(self.llama, "supports_audio"):
+                self._supports_audio = self.llama.supports_audio
+                self._supports_vision = getattr(self.llama, "supports_vision", False)
+                if self._supports_audio or self._supports_vision:
+                    logger.info(
+                        f"Multimodal capabilities: audio={self._supports_audio}, "
+                        f"vision={self._supports_vision}"
+                    )
+
             logger.info(
                 f"GGUF model loaded successfully on {self.device} "
                 f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
@@ -343,6 +379,24 @@ class GGUFLanguageModel(BaseModel):
             if hasattr(self, "_executor"):
                 self._executor.shutdown(wait=False)
             raise
+
+    @property
+    def supports_audio(self) -> bool:
+        """Whether this model supports direct audio input.
+
+        Returns True if the model was loaded with a multimodal projector
+        that supports audio processing (e.g., Qwen2.5-Omni).
+        """
+        return self._supports_audio
+
+    @property
+    def supports_vision(self) -> bool:
+        """Whether this model supports direct image/vision input.
+
+        Returns True if the model was loaded with a multimodal projector
+        that supports vision processing.
+        """
+        return self._supports_vision
 
     def format_messages(self, messages: list[dict]) -> str:
         """Format chat messages into a prompt string.
@@ -946,6 +1000,155 @@ class GGUFLanguageModel(BaseModel):
         loop.run_in_executor(self._executor, _generate_stream)
 
         # Yield tokens as they arrive, propagate exceptions
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            elif isinstance(item, Exception):
+                raise item
+            else:
+                yield item
+
+    async def generate_with_audio(
+        self,
+        messages: list[dict],
+        audio_data: bytes,
+        audio_format: str = "wav",
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> str:
+        """Generate chat completion with audio input (non-streaming).
+
+        This method uses the model's native multimodal capabilities to process
+        audio input directly without STT transcription, enabling audio-to-text
+        generation for models like Qwen2.5-Omni.
+
+        Args:
+            messages: List of message dicts. Audio marker in user message content
+                      will be replaced with encoded audio embeddings.
+            audio_data: Raw audio bytes (WAV, MP3, or PCM format)
+            audio_format: Format of audio_data ("wav", "mp3", or "pcm")
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+
+        Returns:
+            Generated text as a string
+
+        Raises:
+            RuntimeError: If model doesn't support audio input
+            AssertionError: If model not loaded
+        """
+        if not self._supports_audio:
+            raise RuntimeError(
+                f"Model {self.model_id} does not support audio input. "
+                "Load with mmproj_path for audio-capable models like Qwen2.5-Omni."
+            )
+
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+        loop = asyncio.get_running_loop()
+
+        def _generate():
+            try:
+                return self.llama.create_chat_completion_with_audio(
+                    messages=messages,
+                    audio_data=audio_data,
+                    audio_format=audio_format,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                )
+            except Exception as e:
+                logger.error(f"Error during audio chat completion: {e}", exc_info=True)
+                raise RuntimeError(f"Audio chat completion failed: {e}") from e
+
+        try:
+            result = await loop.run_in_executor(self._executor, _generate)
+            content = result["choices"][0]["message"]["content"]
+            return content.strip() if content else ""
+        except Exception as e:
+            logger.error(f"Error extracting audio completion result: {e}", exc_info=True)
+            raise ValueError(f"Unexpected result from audio completion: {e}") from e
+
+    async def generate_stream_with_audio(
+        self,
+        messages: list[dict],
+        audio_data: bytes,
+        audio_format: str = "wav",
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Generate chat completion with audio input (streaming).
+
+        This method uses the model's native multimodal capabilities to process
+        audio input directly and streams the response token by token.
+
+        Args:
+            messages: List of message dicts with audio markers
+            audio_data: Raw audio bytes (WAV, MP3, or PCM format)
+            audio_format: Format of audio_data ("wav", "mp3", or "pcm")
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+
+        Yields:
+            Generated text tokens as strings
+
+        Raises:
+            RuntimeError: If model doesn't support audio input
+            AssertionError: If model not loaded
+        """
+        if not self._supports_audio:
+            raise RuntimeError(
+                f"Model {self.model_id} does not support audio input. "
+                "Load with mmproj_path for audio-capable models like Qwen2.5-Omni."
+            )
+
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _generate_stream():
+            try:
+                for chunk in self.llama.create_chat_completion_with_audio(
+                    messages=messages,
+                    audio_data=audio_data,
+                    audio_format=audio_format,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    stream=True,
+                ):
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        future = asyncio.run_coroutine_threadsafe(
+                            queue.put(content), loop
+                        )
+                        future.result()
+            except Exception as e:
+                logger.error(f"Error in audio chat stream: {e}", exc_info=True)
+                future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)
+                future.result()
+            finally:
+                future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+                future.result()
+
+        loop.run_in_executor(self._executor, _generate_stream)
+
         while True:
             item = await queue.get()
             if item is None:

@@ -17,7 +17,9 @@ import contextlib
 import json
 import logging
 
+import httpx
 from config.datamodel import LlamaFarmConfig
+from core.settings import settings
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from services.model_service import ModelService
@@ -38,6 +40,9 @@ from .types import (
 router = APIRouter(tags=["voice"])
 logger = logging.getLogger(__name__)
 
+# Cache for model capabilities (avoid querying runtime repeatedly)
+_model_capabilities_cache: dict[str, dict] = {}
+
 
 # Default values when no config is provided
 DEFAULT_STT_MODEL = "base"
@@ -45,6 +50,59 @@ DEFAULT_TTS_MODEL = "kokoro"
 DEFAULT_TTS_VOICE = "af_heart"
 DEFAULT_LANGUAGE = "en"
 DEFAULT_SPEED = 0.95  # Slightly slower for more natural speech
+
+
+async def _check_model_native_audio(model_id: str, base_url: str | None = None) -> bool:
+    """Check if a model supports native audio input by querying the runtime.
+
+    Queries the runtime's capabilities endpoint to determine if the loaded
+    model supports direct audio input (for models like Qwen2.5-Omni).
+
+    Results are cached to avoid repeated queries.
+
+    Args:
+        model_id: The model identifier (e.g., "ggml-org/Qwen2.5-Omni-3B-GGUF")
+        base_url: Optional base URL for the runtime. If None, uses default runtime.
+
+    Returns:
+        True if the model supports native audio input.
+    """
+    # Check cache first
+    if model_id in _model_capabilities_cache:
+        return _model_capabilities_cache[model_id].get("native_audio", False)
+
+    # Build runtime URL
+    if base_url:
+        runtime_url = base_url.rstrip("/")
+    else:
+        runtime_url = f"http://{settings.universal_host}:{settings.universal_port}"
+
+    # Query capabilities endpoint
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"{runtime_url}/v1/models/{model_id}/capabilities"
+            )
+            if response.status_code == 200:
+                data = response.json()
+                capabilities = data.get("capabilities", {})
+                # Cache the result
+                _model_capabilities_cache[model_id] = capabilities
+                native_audio = capabilities.get("native_audio", False)
+                if native_audio:
+                    logger.info(f"Runtime reports model supports native audio: {model_id}")
+                return native_audio
+            else:
+                logger.debug(f"Capabilities query failed: {response.status_code}")
+    except Exception as e:
+        logger.debug(f"Failed to query model capabilities: {e}")
+
+    # Fall back to name-based detection as last resort
+    model_lower = model_id.lower()
+    native_audio = "omni" in model_lower
+    if native_audio:
+        logger.info(f"Using name-based detection for native audio: {model_id}")
+    return native_audio
 
 
 def _get_voice_config_defaults(
@@ -250,6 +308,18 @@ async def voice_chat_websocket(
         await websocket.close(code=1008, reason="Invalid LLM model")
         return
 
+    # Detect if model supports native audio input (e.g., Qwen2.5-Omni)
+    # Query the runtime to check capabilities (falls back to name-based detection)
+    use_native_audio = await _check_model_native_audio(
+        llm_model_config.model,
+        base_url=llm_model_config.base_url,
+    )
+    if use_native_audio:
+        logger.info(
+            f"Native audio mode enabled for model: {llm_model_config.model} "
+            "(STT will be skipped, audio sent directly to LLM)"
+        )
+
     # Create or resume session
     session_manager = get_session_manager()
     # Don't pass system_prompt to config - we handle prompt injection manually
@@ -270,6 +340,8 @@ async def voice_chat_websocket(
         base_silence_duration=effective_base_silence_duration,
         thinking_silence_duration=effective_thinking_silence_duration,
         max_silence_duration=effective_max_silence_duration,
+        # Native audio for Omni models
+        use_native_audio=use_native_audio,
     )
 
     session = await session_manager.get_or_create_session(session_id, config)
@@ -320,10 +392,29 @@ async def voice_chat_websocket(
             "llm_model_name": effective_llm_model,
             "llm_model_id": llm_model_config.model,
             "tts_voice": effective_tts_voice,
-            "stt_model": effective_stt_model,
+            "stt_model": effective_stt_model if not use_native_audio else "(native audio)",
+            "native_audio": use_native_audio,
             "project": f"{namespace}/{project}" if namespace and project else None,
         },
     )
+
+    # Track background task for process_turn so we can receive audio during TTS
+    current_turn_task: asyncio.Task | None = None
+
+    async def run_process_turn(audio_bytes: bytes, native_audio: bool) -> None:
+        """Run process_turn in background, allowing receive loop to continue."""
+        nonlocal current_turn_task
+        try:
+            if native_audio:
+                await service.process_turn_native_audio(websocket, audio_bytes)
+            else:
+                await service.process_turn(websocket, audio_bytes)
+        except asyncio.CancelledError:
+            logger.info("process_turn cancelled by interrupt")
+        except Exception as e:
+            logger.error(f"process_turn error: {e}", exc_info=True)
+        finally:
+            current_turn_task = None
 
     try:
         while True:
@@ -341,10 +432,16 @@ async def voice_chat_websocket(
                 # Assumes client handles echo cancellation, so detected speech
                 # is genuine user input, not TTS playback feedback.
                 if session.state == VoiceState.SPEAKING:
+                    logger.info(f"Received audio during SPEAKING: {len(audio_data)} bytes")
                     if session.detect_barge_in(audio_data):
                         logger.info("Auto-interrupt triggered by barge-in detection")
+                        # Cancel the background task if running
+                        if current_turn_task and not current_turn_task.done():
+                            current_turn_task.cancel()
                         await service.handle_interrupt(websocket)
                     continue
+                else:
+                    logger.info(f"Received audio during {session.state.value}: {len(audio_data)} bytes (not SPEAKING)")
 
                 # Update state to listening if idle
                 if session.state == VoiceState.IDLE:
@@ -380,30 +477,35 @@ async def voice_chat_websocket(
                 should_process = False
 
                 if session.config.turn_detection_enabled and session.is_in_silence_window():
-                    # Smart turn detection: analyze linguistic completeness
-                    # Only do transcription when we have significant silence
                     silence_dur = session.get_silence_duration()
                     base_silence = session.config.base_silence_duration
 
-                    # Once we hit base silence threshold, do partial transcription
-                    # to determine if we should wait longer (thinking pause)
-                    if silence_dur >= base_silence and not session.get_partial_transcript():
-                        # Do partial transcription for linguistic analysis
-                        try:
-                            audio_so_far = bytes(session._audio_buffer)
-                            if len(audio_so_far) > 0:
-                                partial_text = await service.transcribe_audio(audio_so_far)
-                                session.set_partial_transcript(partial_text)
-                                logger.info(
-                                    f"Partial transcription for turn detection: "
-                                    f"'{partial_text[:100]}...' "
-                                    f"(silence={silence_dur:.2f}s)"
-                                )
-                        except Exception as e:
-                            logger.warning(f"Partial transcription failed: {e}")
+                    # For native audio models, skip STT-based linguistic analysis
+                    # Just use silence duration threshold
+                    if session.config.use_native_audio:
+                        # Simple silence-based turn detection for native audio
+                        if silence_dur >= base_silence:
+                            should_process = True
+                    else:
+                        # Smart turn detection: Use STT to analyze linguistic completeness
+                        # Only do transcription when we have significant silence
+                        if silence_dur >= base_silence and not session.get_partial_transcript():
+                            # Do partial transcription for linguistic analysis
+                            try:
+                                audio_so_far = bytes(session._audio_buffer)
+                                if len(audio_so_far) > 0:
+                                    partial_text = await service.transcribe_audio(audio_so_far)
+                                    session.set_partial_transcript(partial_text)
+                                    logger.info(
+                                        f"Partial transcription for turn detection: "
+                                        f"'{partial_text[:100]}...' "
+                                        f"(silence={silence_dur:.2f}s)"
+                                    )
+                            except Exception as e:
+                                logger.warning(f"Partial transcription failed: {e}")
 
-                    # Check if turn should end using linguistic analysis
-                    should_process = session.check_end_of_turn_with_analysis()
+                        # Check if turn should end using linguistic analysis
+                        should_process = session.check_end_of_turn_with_analysis()
 
                 elif vad_speech_ended:
                     # Fallback: use default VAD behavior when turn detection disabled
@@ -414,10 +516,15 @@ async def voice_chat_websocket(
                     logger.info(
                         f"End of turn detected "
                         f"(turn_detection={session.config.turn_detection_enabled}, "
+                        f"native_audio={session.config.use_native_audio}, "
                         f"silence={session.get_silence_duration():.2f}s), processing..."
                     )
                     audio_bytes = session.get_audio_buffer()
-                    await service.process_turn(websocket, audio_bytes)
+                    # Run process_turn as background task so we can receive audio during TTS
+                    # This enables barge-in detection while TTS is streaming
+                    current_turn_task = asyncio.create_task(
+                        run_process_turn(audio_bytes, session.config.use_native_audio)
+                    )
 
             # Handle JSON messages
             elif "text" in message:
@@ -427,13 +534,17 @@ async def voice_chat_websocket(
 
                     if msg_type == "interrupt":
                         # Barge-in: stop current TTS
+                        if current_turn_task and not current_turn_task.done():
+                            current_turn_task.cancel()
                         await service.handle_interrupt(websocket)
 
                     elif msg_type == "end":
-                        # Process accumulated audio
+                        # Process accumulated audio as background task
                         if session.has_audio():
                             audio_bytes = session.get_audio_buffer()
-                            await service.process_turn(websocket, audio_bytes)
+                            current_turn_task = asyncio.create_task(
+                                run_process_turn(audio_bytes, session.config.use_native_audio)
+                            )
 
                     elif msg_type == "config":
                         # Update session configuration
@@ -470,6 +581,12 @@ async def voice_chat_websocket(
                 ErrorMessage(message=f"Server error: {str(e)}").model_dump()
             )
     finally:
+        # Cancel any running process_turn task
+        if current_turn_task and not current_turn_task.done():
+            current_turn_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await current_turn_task
+
         # Clean up TTS WebSocket connection
         with contextlib.suppress(Exception):
             await service.cleanup()

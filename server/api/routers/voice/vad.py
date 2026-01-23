@@ -142,7 +142,7 @@ class VoiceActivityDetector:
 
         # Log when we see very low energy (potential silence)
         if energy < 0.001:
-            logger.info(f"VAD: Low energy chunk detected (energy={energy:.6f}, state={self.state.value})")
+            logger.debug(f"VAD: Low energy chunk (energy={energy:.6f}, state={self.state.value})")
 
         if self.state == VADState.IDLE:
             if is_speech:
@@ -150,7 +150,8 @@ class VoiceActivityDetector:
                 self.state = VADState.SPEAKING
                 self._speech_samples = num_samples
                 self._silence_samples = 0
-                logger.info(f"VAD: Speech started (energy={energy:.4f}, threshold={self.config.speech_threshold})")
+                logger.info("VAD: State changed to \"speaking\"")
+                logger.debug(f"VAD: Speech started (energy={energy:.4f}, threshold={self.config.speech_threshold})")
 
         elif self.state == VADState.SPEAKING:
             # Accumulate speech samples
@@ -160,7 +161,8 @@ class VoiceActivityDetector:
                 # Speech might be ending, start silence counter
                 self.state = VADState.SILENCE
                 self._silence_samples = num_samples
-                logger.info(f"VAD: Silence detected after {self._samples_to_seconds(self._speech_samples):.2f}s speech (energy={energy:.4f})")
+                logger.info("VAD: State changed to \"silence\"")
+                logger.debug(f"VAD: Silence detected after {self._samples_to_seconds(self._speech_samples):.2f}s speech (energy={energy:.4f})")
 
         elif self.state == VADState.SILENCE:
             if is_speech:
@@ -168,7 +170,8 @@ class VoiceActivityDetector:
                 self.state = VADState.SPEAKING
                 self._speech_samples += self._silence_samples + num_samples
                 self._silence_samples = 0
-                logger.info(f"VAD: Speech resumed (energy={energy:.4f})")
+                logger.info("VAD: State changed to \"speaking\"")
+                logger.debug(f"VAD: Speech resumed (energy={energy:.4f})")
             else:
                 # Accumulate silence samples
                 self._silence_samples += num_samples
@@ -182,7 +185,8 @@ class VoiceActivityDetector:
                     and speech_duration >= self.config.min_speech_duration
                 ):
                     # Speech has ended
-                    logger.info(
+                    logger.info("VAD: State changed to \"idle\" (end of speech)")
+                    logger.debug(
                         f"VAD: Speech ended after {speech_duration:.2f}s speech, "
                         f"{silence_duration:.2f}s silence (thresholds: speech>{self.config.min_speech_duration}s, silence>{self.config.silence_duration}s)"
                     )
@@ -234,7 +238,8 @@ class VoiceActivityDetector:
             silence_duration >= required_silence
             and speech_duration >= self.config.min_speech_duration
         ):
-            logger.info(
+            logger.info("VAD: State changed to \"idle\" (dynamic end-of-turn)")
+            logger.debug(
                 f"VAD: Dynamic end-of-turn triggered "
                 f"(silence={silence_duration:.2f}s >= {required_silence:.2f}s, "
                 f"speech={speech_duration:.2f}s)"

@@ -101,6 +101,9 @@ def inject_thinking_control(
     Qwen3 models support /think and /no_think soft switches in prompts
     to control whether the model uses thinking mode.
 
+    Handles both text-only messages (content is string) and multimodal
+    messages (content is list of content parts).
+
     Args:
         messages: List of chat messages
         enable_thinking: True to force thinking, False to disable
@@ -111,19 +114,44 @@ def inject_thinking_control(
 
     # Make a copy to avoid modifying the original
     messages = [dict(m) for m in messages]
+    control_token = "/think" if enable_thinking else "/no_think"
 
     # Find the last user message and append the control
     for i in range(len(messages) - 1, -1, -1):
         if messages[i].get("role") == "user":
             content = messages[i].get("content", "")
-            if enable_thinking:
-                # Only add /think if not already present
+
+            # Check for simple string content FIRST (most common case)
+            # This avoids triggering iteration/validation on complex types
+            if isinstance(content, str):
                 if "/think" not in content and "/no_think" not in content:
-                    messages[i]["content"] = f"{content} /think"
+                    messages[i]["content"] = f"{content} {control_token}"
             else:
-                # Only add /no_think if not already present
-                if "/think" not in content and "/no_think" not in content:
-                    messages[i]["content"] = f"{content} /no_think"
+                # Handle multimodal messages (content is a list/iterable of parts)
+                # Convert to list to safely iterate without triggering pydantic validation
+                try:
+                    content_list = list(content) if not isinstance(content, list) else content
+                except Exception:
+                    # If we can't convert to list, just append control as new content
+                    messages[i]["content"] = [
+                        {"type": "text", "text": control_token}
+                    ]
+                    break
+
+                # Check if any text parts already contain control tokens
+                has_control = False
+                for part in content_list:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text = part.get("text", "")
+                        if "/think" in text or "/no_think" in text:
+                            has_control = True
+                            break
+
+                if not has_control:
+                    # Append control token as a new text part
+                    content_list = list(content_list)  # Make a copy
+                    content_list.append({"type": "text", "text": control_token})
+                    messages[i]["content"] = content_list
             break
 
     return messages
