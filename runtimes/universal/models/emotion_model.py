@@ -28,13 +28,18 @@ logger = logging.getLogger(__name__)
 
 # Pre-trained emotion recognition models
 # These are Wav2Vec2 models fine-tuned on emotion datasets
+# IMPORTANT: All models must have a classification head trained for emotion recognition.
+# Base pre-trained models (like facebook/wav2vec2-large-xlsr-53) will NOT work.
 EMOTION_MODELS = {
     # English speech emotion - 8 classes (RAVDESS dataset)
     "wav2vec2-lg-xlsr-en": "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition",
-    # Alternative: superb emotion recognition
+    # Alternative: superb emotion recognition (4 classes: ang, hap, neu, sad)
     "wav2vec2-base-superb": "superb/wav2vec2-base-superb-er",
-    # Multilingual emotion recognition
-    "wav2vec2-xlsr-multilingual": "facebook/wav2vec2-large-xlsr-53",
+    # Large SUPERB emotion recognition model (better accuracy, more compute)
+    "wav2vec2-large-superb": "superb/wav2vec2-large-superb-er",
+    # Robust emotion model fine-tuned on MSP-Podcast (valence/arousal/dominance dimensions)
+    # Note: This model outputs dimensional emotions, not categorical
+    "wav2vec2-robust-emotion": "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim",
 }
 
 # Default model - good balance of accuracy and speed
@@ -168,9 +173,9 @@ class EmotionModel(BaseModel):
 
         self._labels = []
 
-        # Shutdown thread pool
+        # Shutdown thread pool - wait for pending tasks to complete
         if self._executor is not None:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor = None
 
         # Call parent cleanup for CUDA/MPS cache clearing

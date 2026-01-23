@@ -43,6 +43,11 @@ def detect_audio_format(data: bytes) -> AudioFormat:
 
     Returns:
         Detected AudioFormat.
+
+    Note:
+        Returns UNKNOWN for unsupported formats (MP3, MP4, FLAC, etc.)
+        which should be explicitly rejected by callers rather than
+        defaulting to PCM processing.
     """
     if len(data) < 4:
         return AudioFormat.UNKNOWN
@@ -54,6 +59,32 @@ def detect_audio_format(data: bytes) -> AudioFormat:
     # Ogg starts with "OggS"
     if data[:4] == b"OggS":
         return AudioFormat.OGG
+
+    # Explicitly detect and reject unsupported formats
+    # MP3: ID3 tag or frame sync
+    if data[:3] == b"ID3" or (data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
+        logger.warning("MP3 format detected but not supported for streaming input")
+        return AudioFormat.UNKNOWN
+
+    # MP4/M4A: ftyp box
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        logger.warning("MP4/M4A format detected but not supported for streaming input")
+        return AudioFormat.UNKNOWN
+
+    # FLAC: fLaC magic
+    if data[:4] == b"fLaC":
+        logger.warning("FLAC format detected but not supported for streaming input")
+        return AudioFormat.UNKNOWN
+
+    # AIFF: FORM header
+    if data[:4] == b"FORM":
+        logger.warning("AIFF format detected but not supported for streaming input")
+        return AudioFormat.UNKNOWN
+
+    # WAV: RIFF header - actually supported, treat as PCM after stripping header
+    if data[:4] == b"RIFF" and len(data) >= 12 and data[8:12] == b"WAVE":
+        # WAV files contain PCM data, we can treat them as PCM
+        return AudioFormat.PCM
 
     # If first bytes look like typical PCM values (not a magic number),
     # assume raw PCM. PCM doesn't have a header, so we heuristically check

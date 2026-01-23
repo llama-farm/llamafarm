@@ -28,6 +28,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Queue size limit to prevent unbounded memory growth during streaming
+MAX_SEGMENT_QUEUE_SIZE = 100
+
+# Allowed file extensions for temp files (security: prevent arbitrary file creation)
+ALLOWED_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".ogg", ".flac", ".aiff", ".mp4", ".opus"
+})
+
 # Model size to HuggingFace model ID mapping
 MODEL_SIZES = {
     "tiny": "tiny",
@@ -155,9 +163,9 @@ class SpeechModel(BaseModel):
             del self._whisper_model
             self._whisper_model = None
 
-        # Shutdown thread pool
+        # Shutdown thread pool - wait for pending tasks to complete
         if self._executor is not None:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=True)
             self._executor = None
 
         # Call parent cleanup for CUDA/MPS cache clearing
@@ -296,7 +304,10 @@ class SpeechModel(BaseModel):
 
         # Queue for streaming segments from thread to async generator
         # Can contain: TranscriptionSegment, None (completion), or Exception (error)
-        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue()
+        # Use maxsize to prevent unbounded memory growth
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue(
+            maxsize=MAX_SEGMENT_QUEUE_SIZE
+        )
 
         def _sync_transcribe_stream():
             """Run transcription in thread and put segments in queue immediately."""
@@ -499,7 +510,10 @@ class SpeechModel(BaseModel):
 
         # Queue for streaming segments from thread to async generator
         # Can contain: TranscriptionSegment, None (completion), or Exception (error)
-        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue()
+        # Use maxsize to prevent unbounded memory growth
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue(
+            maxsize=MAX_SEGMENT_QUEUE_SIZE
+        )
 
         def _sync_transcribe_stream():
             """Run transcription in thread and put segments in queue immediately."""
@@ -580,18 +594,29 @@ class SpeechModel(BaseModel):
 
         Args:
             audio_bytes: Raw audio file bytes
-            file_extension: File extension hint for format detection
+            file_extension: File extension hint for format detection (must be in ALLOWED_AUDIO_EXTENSIONS)
             **kwargs: Additional arguments passed to transcribe()
 
         Returns:
             TranscriptionResult
+
+        Raises:
+            ValueError: If file_extension is not in ALLOWED_AUDIO_EXTENSIONS.
         """
+        # Validate file extension to prevent arbitrary file creation
+        ext_lower = file_extension.lower()
+        if ext_lower not in ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file extension: {file_extension}. "
+                f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}"
+            )
+
         # Write to temporary file (faster-whisper requires file path)
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
+                suffix=ext_lower, delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
                 tmp_file.write(audio_bytes)
@@ -612,18 +637,29 @@ class SpeechModel(BaseModel):
 
         Args:
             audio_bytes: Raw audio file bytes
-            file_extension: File extension hint
+            file_extension: File extension hint (must be in ALLOWED_AUDIO_EXTENSIONS)
             **kwargs: Additional arguments passed to transcribe_stream()
 
         Yields:
             TranscriptionSegment objects
+
+        Raises:
+            ValueError: If file_extension is not in ALLOWED_AUDIO_EXTENSIONS.
         """
+        # Validate file extension to prevent arbitrary file creation
+        ext_lower = file_extension.lower()
+        if ext_lower not in ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file extension: {file_extension}. "
+                f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}"
+            )
+
         # Write to temporary file
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
+                suffix=ext_lower, delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
                 tmp_file.write(audio_bytes)

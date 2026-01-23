@@ -124,8 +124,8 @@ def download_builtin_voices(force: bool = False) -> dict[str, bool]:
         >>> print(results)
         {'cb_male_calm': True, 'cb_female_warm': True, ...}
     """
+    import importlib.util
     import os
-    import sys
 
     voices_dir = _get_builtin_voices_dir()
     download_script = os.path.join(voices_dir, "download_voices.py")
@@ -136,13 +136,16 @@ def download_builtin_voices(force: bool = False) -> dict[str, bool]:
             "Please ensure the voices directory is intact."
         )
 
-    # Import and run the download module
-    sys.path.insert(0, voices_dir)
-    try:
-        from download_voices import download_all_voices
-        return download_all_voices(force=force)
-    finally:
-        sys.path.pop(0)
+    # Use importlib.util for safer module loading without sys.path manipulation
+    # This prevents potential code injection from malicious modules on the path
+    spec = importlib.util.spec_from_file_location("download_voices", download_script)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load module from {download_script}")
+
+    download_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(download_module)
+
+    return download_module.download_all_voices(force=force)
 
 
 def check_builtin_voices() -> dict[str, bool]:

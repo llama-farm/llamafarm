@@ -1165,6 +1165,12 @@ class GGUFLanguageModel(BaseModel):
         # Clear llama-cpp instance
         self.llama = None
 
+        # Reset multimodal flags to prevent use-after-free
+        # If these remain True after unload, callers checking supports_audio/supports_vision
+        # would see stale values and might attempt to use the freed model
+        self._supports_audio = False
+        self._supports_vision = False
+
         # Shutdown thread pool executor
         if hasattr(self, "_executor"):
             self._executor.shutdown(wait=True, cancel_futures=True)

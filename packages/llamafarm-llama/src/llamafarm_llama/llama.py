@@ -862,6 +862,11 @@ class Llama:
             if self._mtmd_lib is not None:
                 self._mtmd_lib.mtmd_free(self._mtmd_ctx)
             self._mtmd_ctx = ffi.NULL
+            # Reset multimodal flags to prevent use-after-free
+            # If these remain True, callers checking supports_audio/supports_vision
+            # would attempt to use the freed multimodal context
+            self._supports_audio = False
+            self._supports_vision = False
 
         if hasattr(self, "_ctx") and self._ctx is not None and self._ctx != ffi.NULL:
             self._lib.llama_free(self._ctx)
