@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 # Pin to specific llama.cpp release
-LLAMA_CPP_VERSION = "b7376"
+LLAMA_CPP_VERSION = "b7693"
 LLAMA_CPP_REPO = "ggml-org/llama.cpp"
 
 # Binary URLs from llama.cpp GitHub releases
