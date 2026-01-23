@@ -137,7 +137,8 @@ def pcm_to_opus(
         # Interleaved stereo: reshape to (samples, channels) then transpose
         samples_reshaped = samples.reshape(-1, channels).T
 
-    frame = av.AudioFrame.from_ndarray(samples_reshaped, format="s16", layout="mono")
+    layout = "mono" if channels == 1 else "stereo"
+    frame = av.AudioFrame.from_ndarray(samples_reshaped, format="s16", layout=layout)
     frame.sample_rate = sample_rate
 
     # Encode audio
@@ -226,7 +227,8 @@ def pcm_to_aac(
     else:
         samples_reshaped = samples.reshape(-1, channels).T
 
-    frame = av.AudioFrame.from_ndarray(samples_reshaped, format="s16", layout="mono")
+    layout = "mono" if channels == 1 else "stereo"
+    frame = av.AudioFrame.from_ndarray(samples_reshaped, format="s16", layout=layout)
     frame.sample_rate = sample_rate
 
     for packet in stream.encode(frame):

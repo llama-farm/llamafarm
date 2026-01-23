@@ -3204,7 +3204,12 @@ async def create_translation(
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="Empty audio file")
 
-        file_extension = Path(file.filename).suffix if file.filename else ".wav"
+        # Sanitize file extension against whitelist (same as transcription endpoint)
+        if file.filename:
+            ext = Path(file.filename).suffix.lower()
+            file_extension = ext if ext in SAFE_AUDIO_EXTENSIONS else ".wav"
+        else:
+            file_extension = ".wav"
 
         # Detect actual audio format from content (don't trust file extension)
         format_name, is_compressed = detect_audio_format(audio_bytes)
