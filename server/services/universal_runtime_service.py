@@ -480,6 +480,42 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/anomaly/models/{filename}")
 
     # =========================================================================
+    # Streaming Anomaly Detection
+    # =========================================================================
+
+    @classmethod
+    async def anomaly_stream(cls, request: dict) -> dict[str, Any]:
+        """Process streaming data for real-time anomaly detection.
+
+        Args:
+            request: Streaming request with model, data, and config
+
+        Returns:
+            Streaming result with scores and status
+        """
+        return await cls._make_request("POST", "/v1/anomaly/stream", json=request)
+
+    @classmethod
+    async def anomaly_stream_list_detectors(cls) -> dict[str, Any]:
+        """List all active streaming detectors."""
+        return await cls._make_request("GET", "/v1/anomaly/stream/detectors")
+
+    @classmethod
+    async def anomaly_stream_get_detector(cls, model_id: str) -> dict[str, Any]:
+        """Get statistics for a specific streaming detector."""
+        return await cls._make_request("GET", f"/v1/anomaly/stream/{model_id}")
+
+    @classmethod
+    async def anomaly_stream_delete_detector(cls, model_id: str) -> dict[str, Any]:
+        """Delete a streaming detector."""
+        return await cls._make_request("DELETE", f"/v1/anomaly/stream/{model_id}")
+
+    @classmethod
+    async def anomaly_stream_reset_detector(cls, model_id: str) -> dict[str, Any]:
+        """Reset a streaming detector to initial state."""
+        return await cls._make_request("POST", f"/v1/anomaly/stream/{model_id}/reset")
+
+    # =========================================================================
     # Speech-to-Text
     # =========================================================================
 

@@ -236,3 +236,133 @@ class AnomalyBackendsResponse(BaseModel):
     data: list[AnomalyBackendInfo]
     total: int
     categories: list[str]  # Available categories
+
+
+# =============================================================================
+# Streaming Anomaly Detection Types
+# =============================================================================
+
+
+class AnomalyStreamRequest(BaseModel):
+    """Streaming anomaly detection request.
+
+    Process data through an auto-rolling detector that:
+    - Uses Polars internally as the data substrate (automatic)
+    - Computes rolling features if configured
+    - Auto-retrains after retrain_interval samples
+    - Maintains a sliding window of window_size samples
+
+    The detector handles cold start automatically - collecting min_samples
+    before the first model training.
+
+    Data format:
+    - Single point: data = {"amount": 100.0, "count": 5}
+    - Batch: data = [{"amount": 100.0}, {"amount": 200.0}]
+    """
+
+    model: str = Field(
+        default="default-stream",
+        description="Unique identifier for this streaming detector",
+    )
+    data: dict | list[dict] = Field(
+        ...,
+        description="Single data point or batch of data points",
+    )
+    backend: AnomalyBackendType = Field(
+        default="ecod",
+        description="PyOD backend (ecod recommended for streaming)",
+    )
+    min_samples: int = Field(
+        default=50,
+        ge=10,
+        description="Minimum samples before first model training (cold start)",
+    )
+    retrain_interval: int = Field(
+        default=100,
+        ge=10,
+        description="Retrain model after this many new samples",
+    )
+    window_size: int = Field(
+        default=1000,
+        ge=50,
+        description="Sliding window size (keeps most recent N samples)",
+    )
+    contamination: float = Field(
+        default=0.1,
+        gt=0,
+        le=0.5,
+        description="Expected proportion of anomalies",
+    )
+    threshold: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Anomaly score threshold",
+    )
+    # Optional rolling feature configuration
+    rolling_windows: list[int] | None = Field(
+        default=None,
+        description="Rolling window sizes for automatic feature computation (e.g., [5, 10, 20])",
+    )
+    include_lags: bool = Field(
+        default=False,
+        description="Include lag features in rolling computation",
+    )
+    lag_periods: list[int] | None = Field(
+        default=None,
+        description="Lag periods if include_lags is True (e.g., [1, 2, 3])",
+    )
+
+
+class AnomalyStreamResultItem(BaseModel):
+    """Single streaming result item."""
+
+    index: int
+    score: float | None = None  # None during cold start
+    is_anomaly: bool | None = None  # None during cold start
+    raw_score: float | None = None
+    samples_until_ready: int
+
+
+class AnomalyStreamResponse(BaseModel):
+    """Streaming anomaly detection response.
+
+    Status values:
+    - collecting: Cold start phase, collecting min_samples
+    - ready: Model trained and scoring data
+    - retraining: Background retraining in progress (still scoring)
+    """
+
+    object: Literal["streaming_result"] = "streaming_result"
+    model: str
+    status: Literal["collecting", "ready", "retraining"]
+    results: list[AnomalyStreamResultItem]
+    model_version: int
+    samples_collected: int
+    samples_until_ready: int
+    threshold: float
+
+
+class AnomalyStreamDetectorInfo(BaseModel):
+    """Information about a streaming detector."""
+
+    model_id: str
+    backend: str
+    status: Literal["collecting", "ready", "retraining"]
+    model_version: int
+    samples_collected: int
+    total_processed: int
+    samples_since_retrain: int
+    min_samples: int
+    retrain_interval: int
+    window_size: int
+    threshold: float
+    is_ready: bool
+
+
+class AnomalyStreamDetectorsResponse(BaseModel):
+    """List of active streaming detectors."""
+
+    object: Literal["list"] = "list"
+    data: list[AnomalyStreamDetectorInfo]
+    total: int

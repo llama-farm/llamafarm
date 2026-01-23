@@ -631,3 +631,199 @@ async def delete_anomaly_model(filename: str):
         "filename": safe_filename,
         "deleted": True,
     }
+
+
+# =============================================================================
+# Streaming Anomaly Detection Endpoints
+# =============================================================================
+
+
+@router.post("/v1/anomaly/stream")
+@handle_endpoint_errors("anomaly_stream")
+async def anomaly_stream(request: dict) -> dict:
+    """Process streaming data for real-time anomaly detection.
+
+    This endpoint implements the Tick-Tock pattern:
+    - Cold start: Collects min_samples before first model training
+    - Ready: Returns anomaly scores for each data point
+    - Retraining: Background retraining after retrain_interval samples
+
+    Request body:
+        model: str - Unique identifier for the streaming detector
+        data: list[dict] | dict - Single data point or batch
+        backend: str = "ecod" - PyOD backend for new detectors
+        min_samples: int = 50 - Samples before first training
+        retrain_interval: int = 100 - Samples between retraining
+        window_size: int = 1000 - Sliding window size
+        threshold: float = 0.5 - Anomaly score threshold
+        contamination: float = 0.1 - Expected outlier proportion
+
+    Response:
+        object: "streaming_result"
+        model: str - Detector ID
+        status: str - "collecting" | "ready" | "retraining"
+        results: list - Score results for each data point
+        model_version: int - Current model version
+        samples_collected: int - Total samples in buffer
+    """
+    from api_types.anomaly import AnomalyStreamRequest, AnomalyStreamResponse
+    from models.streaming_anomaly import get_streaming_manager
+
+    # Parse request
+    parsed = AnomalyStreamRequest(**request)
+
+    # Get or create detector
+    manager = get_streaming_manager()
+    detector = await manager.get_or_create(
+        model_id=parsed.model,
+        backend=parsed.backend,
+        min_samples=parsed.min_samples,
+        retrain_interval=parsed.retrain_interval,
+        window_size=parsed.window_size,
+        contamination=parsed.contamination,
+        threshold=parsed.threshold,
+    )
+
+    # Process data
+    if isinstance(parsed.data, dict):
+        # Single data point
+        result = await detector.process(parsed.data)
+        results = [result]
+    else:
+        # Batch
+        batch_result = await detector.process_batch(parsed.data)
+        results = batch_result.results
+
+    # Format response
+    return AnomalyStreamResponse(
+        object="streaming_result",
+        model=parsed.model,
+        status=detector.status.value,
+        results=[
+            {
+                "index": r.index,
+                "score": r.score,
+                "is_anomaly": r.is_anomaly,
+                "raw_score": r.raw_score,
+                "samples_until_ready": r.samples_until_ready,
+            }
+            for r in results
+        ],
+        model_version=detector.model_version,
+        samples_collected=detector.samples_collected,
+        samples_until_ready=max(0, detector.min_samples - detector.samples_collected),
+        threshold=detector.threshold,
+    ).model_dump()
+
+
+@router.get("/v1/anomaly/stream/detectors")
+@handle_endpoint_errors("list_streaming_detectors")
+async def list_streaming_detectors() -> dict:
+    """List all active streaming detectors.
+
+    Returns:
+        object: "list"
+        data: list of detector statistics
+        total: number of active detectors
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detectors = await manager.list_detectors()
+
+    return {
+        "object": "list",
+        "data": detectors,
+        "total": len(detectors),
+    }
+
+
+@router.get("/v1/anomaly/stream/{model_id}")
+@handle_endpoint_errors("get_streaming_detector")
+async def get_streaming_detector(model_id: str) -> dict:
+    """Get statistics for a specific streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Detector statistics including status, model version, samples collected
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detector = await manager.get(model_id)
+
+    if detector is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    return {
+        "object": "streaming_detector",
+        **detector.get_stats(),
+    }
+
+
+@router.delete("/v1/anomaly/stream/{model_id}")
+@handle_endpoint_errors("delete_streaming_detector")
+async def delete_streaming_detector(model_id: str) -> dict:
+    """Delete a streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    deleted = await manager.delete(model_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    return {
+        "object": "delete_result",
+        "model": model_id,
+        "deleted": True,
+    }
+
+
+@router.post("/v1/anomaly/stream/{model_id}/reset")
+@handle_endpoint_errors("reset_streaming_detector")
+async def reset_streaming_detector(model_id: str) -> dict:
+    """Reset a streaming detector to initial state.
+
+    Clears all data and resets to cold start phase.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Reset confirmation with new status
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detector = await manager.get(model_id)
+
+    if detector is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    detector.reset()
+
+    return {
+        "object": "reset_result",
+        "model": model_id,
+        "status": detector.status.value,
+        "reset": True,
+    }

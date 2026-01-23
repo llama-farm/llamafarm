@@ -495,3 +495,109 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
 
     return await UniversalRuntimeService.anomaly_delete_model(filename)
+
+
+# =============================================================================
+# Streaming Anomaly Detection Endpoints
+# =============================================================================
+
+
+@router.post("/anomaly/stream")
+async def anomaly_stream(request: dict[str, Any]) -> dict[str, Any]:
+    """Process streaming data for real-time anomaly detection.
+
+    This endpoint implements the Tick-Tock pattern:
+    - Cold start: Collects min_samples before first model training
+    - Ready: Returns anomaly scores for each data point
+    - Retraining: Background retraining after retrain_interval samples
+
+    Polars is used internally as the data substrate (automatic):
+    - Data is stored in a high-performance Polars DataFrame
+    - Rolling features are computed automatically if configured
+    - Sliding window maintains the most recent window_size samples
+
+    Request body:
+        model: str - Unique identifier for the streaming detector
+        data: dict | list[dict] - Single data point or batch
+        backend: str = "ecod" - PyOD backend for new detectors
+        min_samples: int = 50 - Samples before first training
+        retrain_interval: int = 100 - Samples between retraining
+        window_size: int = 1000 - Sliding window size
+        threshold: float = 0.5 - Anomaly score threshold
+        contamination: float = 0.1 - Expected outlier proportion
+        rolling_windows: list[int] | None - Optional rolling feature windows
+        include_lags: bool = False - Include lag features
+
+    Response:
+        object: "streaming_result"
+        model: str - Detector ID
+        status: str - "collecting" | "ready" | "retraining"
+        results: list - Score results for each data point
+        model_version: int - Current model version
+        samples_collected: int - Total samples in buffer
+
+    Example:
+    ```json
+    {
+        "model": "fraud-detector",
+        "data": {"amount": 100.0, "count": 5},
+        "backend": "ecod",
+        "min_samples": 50,
+        "retrain_interval": 100
+    }
+    ```
+    """
+    return await UniversalRuntimeService.anomaly_stream(request)
+
+
+@router.get("/anomaly/stream/detectors")
+async def list_streaming_detectors() -> dict[str, Any]:
+    """List all active streaming detectors.
+
+    Returns:
+        object: "list"
+        data: list of detector statistics
+        total: number of active detectors
+    """
+    return await UniversalRuntimeService.anomaly_stream_list_detectors()
+
+
+@router.get("/anomaly/stream/{model_id}")
+async def get_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Get statistics for a specific streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Detector statistics including status, model version, samples collected
+    """
+    return await UniversalRuntimeService.anomaly_stream_get_detector(model_id)
+
+
+@router.delete("/anomaly/stream/{model_id}")
+async def delete_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Delete a streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    return await UniversalRuntimeService.anomaly_stream_delete_detector(model_id)
+
+
+@router.post("/anomaly/stream/{model_id}/reset")
+async def reset_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Reset a streaming detector to initial state.
+
+    Clears all data and resets to cold start phase.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Reset confirmation with new status
+    """
+    return await UniversalRuntimeService.anomaly_stream_reset_detector(model_id)
