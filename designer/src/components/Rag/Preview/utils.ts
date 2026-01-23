@@ -5,9 +5,11 @@
 import type { PreviewChunk } from '../../../hooks/useDocumentPreview'
 
 // Chunk background colors (alternating, dark mode aware)
+// Uses teal, pink, purple, and indigo for variety and accessibility
 export const CHUNK_COLORS = [
-  'bg-purple-200/60 dark:bg-purple-500/40',
+  'bg-teal-200/60 dark:bg-teal-600/40',
   'bg-pink-200/60 dark:bg-pink-500/40',
+  'bg-purple-200/60 dark:bg-purple-500/40',
   'bg-indigo-200/60 dark:bg-indigo-500/40',
 ]
 

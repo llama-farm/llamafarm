@@ -65,13 +65,15 @@ export function PreviewPanel({
               }
               className={cn(
                 seg.color,
-                'relative [box-decoration-break:clone]',
-                isSelected && 'ring-2 ring-primary',
+                'relative [box-decoration-break:clone] outline-none',
+                isSelected
+                  ? 'ring-2 ring-teal-500 dark:ring-teal-400'
+                  : 'ring-0',
                 seg.index !== undefined &&
                   chunks[seg.index]?.start_position < 0 &&
                   'opacity-50',
                 onChunkClick &&
-                  'cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow'
+                  'cursor-pointer hover:ring-2 hover:ring-slate-400 dark:hover:ring-slate-500/60 transition-shadow'
               )}
             >
               <span className="absolute -left-7 text-xs text-muted-foreground font-bold select-none">

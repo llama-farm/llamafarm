@@ -77,18 +77,6 @@ export function OriginalDocumentPanel({
 
   return (
     <div className="flex flex-col">
-      {isBinary && (
-        <div
-          data-testid="binary-file-banner"
-          className="flex items-center gap-2 p-3 mb-2 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-800"
-        >
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm">
-            This is a binary file ({filename.split('.').pop()?.toUpperCase()}). The text shown below was extracted from the document.
-          </span>
-        </div>
-      )}
-
       <div
         data-testid="original-document-panel"
         className="font-mono text-sm leading-6 whitespace-pre-wrap p-4 pl-8 bg-muted rounded-lg border border-border relative"
@@ -121,6 +109,18 @@ export function OriginalDocumentPanel({
           </div>
         )}
       </div>
+
+      {isBinary && (
+        <div
+          data-testid="binary-file-banner"
+          className="flex items-center gap-2 p-3 mt-2 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-800"
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="text-sm">
+            This is a binary file ({filename.split('.').pop()?.toUpperCase()}). The text shown above was extracted from the document.
+          </span>
+        </div>
+      )}
     </div>
   )
 }

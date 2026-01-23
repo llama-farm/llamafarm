@@ -105,7 +105,7 @@ export function DocumentPreviewModal({
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent
         data-testid="preview-modal"
-        className="max-w-6xl max-h-[90vh] overflow-hidden"
+        className="max-w-6xl h-[85vh] max-h-[85vh] overflow-hidden flex flex-col"
       >
         <DialogHeader>
           <DialogTitle>
@@ -121,7 +121,7 @@ export function DocumentPreviewModal({
         {preview.isPending && (
           <div
             data-testid="preview-loading"
-            className="flex items-center justify-center p-8"
+            className="flex-1 flex items-center justify-center"
           >
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <span className="ml-2">Loading preview...</span>
@@ -131,14 +131,16 @@ export function DocumentPreviewModal({
         {preview.isError && (
           <div
             data-testid="preview-error"
-            className="p-4 bg-destructive/10 text-destructive rounded"
+            className="flex-1 flex items-center justify-center p-4"
           >
-            Error loading preview: {preview.error?.message || 'Unknown error'}
+            <div className="bg-destructive/10 text-destructive rounded p-4">
+              Error loading preview: {preview.error?.message || 'Unknown error'}
+            </div>
           </div>
         )}
 
         {preview.isSuccess && preview.data && (
-          <div className="flex flex-col gap-4 h-[600px]">
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
             {/* Controls and Statistics Row */}
             <div className="flex items-start gap-4 flex-wrap">
               {/* Strategy Selector */}
