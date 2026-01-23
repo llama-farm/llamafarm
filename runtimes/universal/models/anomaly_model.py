@@ -316,10 +316,11 @@ class AnomalyModel(BaseModel):
         if self.backend == "isolation_forest":
             from sklearn.ensemble import IsolationForest
 
+            # n_jobs=1 to avoid multiprocessing segfaults on ARM64/Jetson with Python 3.13
             self._detector = IsolationForest(
                 contamination=self.contamination,
                 random_state=42,
-                n_jobs=-1,
+                n_jobs=1,
             )
 
         elif self.backend == "one_class_svm":
@@ -334,10 +335,11 @@ class AnomalyModel(BaseModel):
         elif self.backend == "local_outlier_factor":
             from sklearn.neighbors import LocalOutlierFactor
 
+            # n_jobs=1 to avoid multiprocessing segfaults on ARM64/Jetson with Python 3.13
             self._detector = LocalOutlierFactor(
                 contamination=self.contamination,
                 novelty=True,  # Enable predict() for new data
-                n_jobs=-1,
+                n_jobs=1,
             )
 
         elif self.backend == "autoencoder":
