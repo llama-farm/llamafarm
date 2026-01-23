@@ -176,27 +176,17 @@ else
     fi
 fi
 
-# Save the model
-echo ""
-echo "5. Saving classifier model..."
-SAVE_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/save" \
-    -H "Content-Type: application/json" \
-    -d '{
-        "model": "'"$MODEL_NAME"'"
-    }')
-
-echo "   Save response:"
-echo "$SAVE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$SAVE_RESPONSE"
+# Note: Models now autosave during fit, no explicit save endpoint needed
 
 # List saved models
 echo ""
-echo "6. Listing saved classifier models..."
+echo "5. Listing saved classifier models..."
 LIST_RESPONSE=$(curl -sf "$BASE_URL/v1/classifier/models")
 echo "$LIST_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LIST_RESPONSE"
 
 # Test loading the model (simulating server restart)
 echo ""
-echo "7. Testing model load (simulating restart)..."
+echo "6. Testing model load (simulating restart)..."
 LOAD_RESPONSE=$(curl -sf -X POST "$BASE_URL/v1/classifier/load" \
     -H "Content-Type: application/json" \
     -d '{
@@ -208,7 +198,7 @@ echo "$LOAD_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$LOAD_RESPONSE
 
 # Test prediction after load
 echo ""
-echo "8. Testing prediction after reload..."
+echo "7. Testing prediction after reload..."
 RELOAD_TEST=$(curl -sf -X POST "$BASE_URL/v1/classifier/predict" \
     -H "Content-Type: application/json" \
     -d '{
@@ -221,7 +211,7 @@ echo "$RELOAD_TEST" | python3 -m json.tool 2>/dev/null || echo "$RELOAD_TEST"
 
 # Cleanup - delete the test model
 echo ""
-echo "9. Cleaning up test model..."
+echo "8. Cleaning up test model..."
 DELETE_RESPONSE=$(curl -sf -X DELETE "$BASE_URL/v1/classifier/models/$MODEL_NAME")
 echo "   Delete response:"
 echo "$DELETE_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$DELETE_RESPONSE"

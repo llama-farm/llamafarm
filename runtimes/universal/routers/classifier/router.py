@@ -24,54 +24,14 @@ from api_types.classifier import (
     ClassifierLoadRequest,
     ClassifierPredictRequest,
 )
+from services.error_handler import handle_endpoint_errors
+from services.path_validator import (
+    PathValidationError,
+    sanitize_model_name,
+    validate_path_within_directory,
+)
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Validation Helpers
-# =============================================================================
-
-
-def _sanitize_model_name(name: str) -> str:
-    """Sanitize a model name to prevent path traversal and other attacks.
-
-    Args:
-        name: Raw model name from user input
-
-    Returns:
-        Sanitized model name safe for use in file paths
-    """
-    import re
-
-    # Remove any path separators and dangerous characters
-    safe_name = re.sub(r"[/\\:*?\"<>|]", "_", name)
-    # Remove any leading/trailing dots or spaces
-    safe_name = safe_name.strip(". ")
-    # Collapse multiple underscores
-    safe_name = re.sub(r"_+", "_", safe_name)
-    return safe_name or "unnamed"
-
-
-def _validate_path_within_directory(path: Path, safe_dir: Path) -> Path:
-    """Validate that a path is within the safe directory after resolution.
-
-    Args:
-        path: Path to validate
-        safe_dir: Safe base directory that path must be within
-
-    Returns:
-        Resolved path if valid
-
-    Raises:
-        ValueError: If path is outside safe directory
-    """
-    resolved = path.resolve()
-    safe_resolved = safe_dir.resolve()
-
-    if not str(resolved).startswith(str(safe_resolved)):
-        raise ValueError(f"Path {path} resolves outside safe directory")
-
-    return resolved
 
 
 # Router with classifier prefix
@@ -157,7 +117,7 @@ def _get_classifier_path(model_name: str) -> Path:
 
     The path is always within CLASSIFIER_MODELS_DIR - users cannot control it.
     """
-    safe_name = _sanitize_model_name(model_name)
+    safe_name = sanitize_model_name(model_name)
     return _get_models_dir() / safe_name
 
 
@@ -195,6 +155,7 @@ async def _auto_save_classifier_model(
 
 
 @router.post("/fit")
+@handle_endpoint_errors("fit_classifier")
 async def fit_classifier(request: ClassifierFitRequest):
     """
     Fit a text classifier using few-shot learning (SetFit).
@@ -220,63 +181,57 @@ async def fit_classifier(request: ClassifierFitRequest):
     After fitting, use /v1/classifier/predict to classify new texts.
     Models are automatically saved to disk after fitting.
     """
-    try:
-        # Extract texts and labels from training data
-        texts = [item["text"] for item in request.training_data]
-        labels = [item["label"] for item in request.training_data]
+    # Extract texts and labels from training data
+    texts = [item["text"] for item in request.training_data]
+    labels = [item["label"] for item in request.training_data]
 
-        if len(texts) < 2:
-            raise HTTPException(
-                status_code=400,
-                detail="At least 2 training examples required",
-            )
-
-        load_classifier = _get_classifier_loader()
-        model = await load_classifier(
-            model_id=request.model,
-            base_model=request.base_model,
+    if len(texts) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="At least 2 training examples required",
         )
 
-        # Add model to cache (the loader may or may not do this)
-        if _classifiers is not None:
-            cache_key = _make_classifier_cache_key(request.model)
-            _classifiers[cache_key] = model
+    load_classifier = _get_classifier_loader()
+    model = await load_classifier(
+        model_id=request.model,
+        base_model=request.base_model,
+    )
 
-        # Fit the classifier
-        result = await model.fit(
-            texts=texts,
-            labels=labels,
-            num_iterations=request.num_iterations,
-            batch_size=request.batch_size,
-        )
+    # Add model to cache (the loader may or may not do this)
+    if _classifiers is not None:
+        cache_key = _make_classifier_cache_key(request.model)
+        _classifiers[cache_key] = model
 
-        # Auto-save model to prevent data loss on restart
-        saved_paths = await _auto_save_classifier_model(
-            model=model,
-            model_name=request.model,
-        )
+    # Fit the classifier
+    result = await model.fit(
+        texts=texts,
+        labels=labels,
+        num_iterations=request.num_iterations,
+        batch_size=request.batch_size,
+    )
 
-        return {
-            "object": "fit_result",
-            "model": request.model,
-            "base_model": result.base_model,
-            "samples_fitted": result.samples_fitted,
-            "num_classes": result.num_classes,
-            "labels": result.labels,
-            "training_time_ms": result.training_time_ms,
-            "status": "fitted",
-            "auto_saved": saved_paths["model_path"] is not None,
-            "saved_path": saved_paths["model_path"],
-        }
+    # Auto-save model to prevent data loss on restart
+    saved_paths = await _auto_save_classifier_model(
+        model=model,
+        model_name=request.model,
+    )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in fit_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "fit_result",
+        "model": request.model,
+        "base_model": result.base_model,
+        "samples_fitted": result.samples_fitted,
+        "num_classes": result.num_classes,
+        "labels": result.labels,
+        "training_time_ms": result.training_time_ms,
+        "status": "fitted",
+        "auto_saved": saved_paths["model_path"] is not None,
+        "saved_path": saved_paths["model_path"],
+    }
 
 
 @router.post("/predict")
+@handle_endpoint_errors("predict_classifier")
 async def predict_classifier(request: ClassifierPredictRequest):
     """
     Classify texts using a fitted classifier.
@@ -291,55 +246,49 @@ async def predict_classifier(request: ClassifierPredictRequest):
 
     Returns predictions with confidence scores for each text.
     """
-    try:
-        if _classifiers is None:
-            raise HTTPException(
-                status_code=500,
-                detail="Classifier state not initialized. Server configuration error.",
-            )
+    if _classifiers is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Classifier state not initialized. Server configuration error.",
+        )
 
-        cache_key = _make_classifier_cache_key(request.model)
+    cache_key = _make_classifier_cache_key(request.model)
 
-        # get() refreshes TTL automatically
-        model = _classifiers.get(cache_key)
-        if model is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Classifier '{request.model}' not found. "
-                "Fit with /v1/classifier/fit or load with /v1/classifier/load first.",
-            )
+    # get() refreshes TTL automatically
+    model = _classifiers.get(cache_key)
+    if model is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Classifier '{request.model}' not found. "
+            "Fit with /v1/classifier/fit or load with /v1/classifier/load first.",
+        )
 
-        if not model.is_fitted:
-            raise HTTPException(
-                status_code=400,
-                detail="Model not fitted. Call /v1/classifier/fit first.",
-            )
+    if not model.is_fitted:
+        raise HTTPException(
+            status_code=400,
+            detail="Model not fitted. Call /v1/classifier/fit first.",
+        )
 
-        results = await model.classify(request.texts)
+    results = await model.classify(request.texts)
 
-        return {
-            "object": "list",
-            "data": [
-                {
-                    "text": r.text,
-                    "label": r.label,
-                    "score": r.score,
-                    "all_scores": r.all_scores,
-                }
-                for r in results
-            ],
-            "total_count": len(results),
-            "model": request.model,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in predict_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "list",
+        "data": [
+            {
+                "text": r.text,
+                "label": r.label,
+                "score": r.score,
+                "all_scores": r.all_scores,
+            }
+            for r in results
+        ],
+        "total_count": len(results),
+        "model": request.model,
+    }
 
 
 @router.post("/load")
+@handle_endpoint_errors("load_classifier")
 async def load_classifier_endpoint(request: ClassifierLoadRequest):
     """
     Load a pre-trained classifier from disk.
@@ -358,71 +307,65 @@ async def load_classifier_endpoint(request: ClassifierLoadRequest):
     The model will be loaded from the classifier models directory and cached
     for subsequent /v1/classifier/predict calls.
     """
-    try:
-        if _classifiers is None or _model_load_lock is None:
-            raise HTTPException(
-                status_code=500,
-                detail="Classifier state not initialized. Server configuration error.",
-            )
+    if _classifiers is None or _model_load_lock is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Classifier state not initialized. Server configuration error.",
+        )
 
-        # Generate path from model name (no user-controlled paths)
-        model_path = _get_classifier_path(request.model)
-        models_dir = _get_models_dir()
+    # Generate path from model name (no user-controlled paths)
+    model_path = _get_classifier_path(request.model)
+    models_dir = _get_models_dir()
 
-        if not model_path.exists():
-            available = (
-                [f.name for f in models_dir.glob("*") if f.is_dir()]
-                if models_dir.exists()
-                else []
-            )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Classifier '{request.model}' not found. "
-                f"Available classifiers: {available}",
-            )
+    if not model_path.exists():
+        available = (
+            [f.name for f in models_dir.glob("*") if f.is_dir()]
+            if models_dir.exists()
+            else []
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Classifier '{request.model}' not found. "
+            f"Available classifiers: {available}",
+        )
 
-        # Import here to avoid circular imports (only after existence check passes)
-        from models import ClassifierModel
-        from utils.device import get_optimal_device
+    # Import here to avoid circular imports (only after existence check passes)
+    from models import ClassifierModel
+    from utils.device import get_optimal_device
 
-        cache_key = _make_classifier_cache_key(request.model)
+    cache_key = _make_classifier_cache_key(request.model)
 
-        # Remove existing model from cache if present
-        if cache_key in _classifiers:
-            existing = _classifiers.pop(cache_key)
-            if existing:
-                await existing.unload()
+    # Remove existing model from cache if present
+    if cache_key in _classifiers:
+        existing = _classifiers.pop(cache_key)
+        if existing:
+            await existing.unload()
 
-        async with _model_load_lock:
-            logger.info(f"Loading pre-trained classifier: {model_path}")
-            device = get_optimal_device()
+    async with _model_load_lock:
+        logger.info(f"Loading pre-trained classifier: {model_path}")
+        device = get_optimal_device()
 
-            model = ClassifierModel(
-                model_id=str(model_path),  # Pass path as model_id for loading
-                device=device,
-            )
+        model = ClassifierModel(
+            model_id=str(model_path),  # Pass path as model_id for loading
+            device=device,
+        )
 
-            await model.load()
-            _classifiers[cache_key] = model
+        await model.load()
+        _classifiers[cache_key] = model
 
-        return {
-            "object": "load_result",
-            "model": request.model,
-            "path": str(model_path),
-            "is_fitted": model.is_fitted,
-            "labels": model.labels,
-            "num_classes": len(model.labels),
-            "status": "loaded",
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in load_classifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "load_result",
+        "model": request.model,
+        "path": str(model_path),
+        "is_fitted": model.is_fitted,
+        "labels": model.labels,
+        "num_classes": len(model.labels),
+        "status": "loaded",
+    }
 
 
 @router.get("/models")
+@handle_endpoint_errors("list_classifier_models")
 async def list_classifier_models():
     """
     List all saved classifier models available for loading.
@@ -434,88 +377,77 @@ async def list_classifier_models():
     - path: Full path to the model directory
     - labels: Class labels (if labels.txt exists)
     """
-    try:
-        models_dir = _get_models_dir()
-        models_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = _get_models_dir()
+    models_dir.mkdir(parents=True, exist_ok=True)
 
-        models = []
-        for path in models_dir.glob("*"):
-            if path.is_dir():
-                # Try to read labels
-                labels = []
-                labels_file = path / "labels.txt"
-                if labels_file.exists():
-                    labels = labels_file.read_text().strip().split("\n")
+    models = []
+    for path in models_dir.glob("*"):
+        if path.is_dir():
+            # Try to read labels
+            labels = []
+            labels_file = path / "labels.txt"
+            if labels_file.exists():
+                labels = labels_file.read_text().strip().split("\n")
 
-                stat = path.stat()
-                models.append(
-                    {
-                        "name": path.name,
-                        "path": str(path),
-                        "labels": labels,
-                        "num_classes": len(labels),
-                        "modified": stat.st_mtime,
-                    }
-                )
+            stat = path.stat()
+            models.append(
+                {
+                    "name": path.name,
+                    "path": str(path),
+                    "labels": labels,
+                    "num_classes": len(labels),
+                    "modified": stat.st_mtime,
+                }
+            )
 
-        # Sort by modification time (newest first)
-        models.sort(key=lambda x: x["modified"], reverse=True)
+    # Sort by modification time (newest first)
+    models.sort(key=lambda x: x["modified"], reverse=True)
 
-        return {
-            "object": "list",
-            "data": models,
-            "models_dir": str(models_dir),
-            "total": len(models),
-        }
-
-    except Exception as e:
-        logger.error(f"Error in list_classifier_models: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "list",
+        "data": models,
+        "models_dir": str(models_dir),
+        "total": len(models),
+    }
 
 
 @router.delete("/models/{model_name}")
+@handle_endpoint_errors("delete_classifier_model")
 async def delete_classifier_model(model_name: str):
     """
     Delete a saved classifier model.
 
     Removes the model directory from disk. Does not affect cached models.
     """
+    models_dir = _get_models_dir()
+
+    # Reject any path separators to prevent traversal attempts
+    if "/" in model_name or "\\" in model_name or ".." in model_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid model name: path separators not allowed",
+        )
+
+    # _get_classifier_path already sanitizes via sanitize_model_name
+    model_path = _get_classifier_path(model_name)
+
+    # Validate the resolved path is still within the safe directory
     try:
-        models_dir = _get_models_dir()
+        resolved_path = validate_path_within_directory(model_path, models_dir)
+    except PathValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-        # Reject any path separators to prevent traversal attempts
-        if "/" in model_name or "\\" in model_name or ".." in model_name:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid model name: path separators not allowed",
-            )
+    if not resolved_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Classifier model not found: {model_name}",
+        )
 
-        # _get_classifier_path already sanitizes via _sanitize_model_name
-        model_path = _get_classifier_path(model_name)
+    # Remove directory and contents
+    shutil.rmtree(resolved_path)
 
-        # Validate the resolved path is still within the safe directory
-        try:
-            resolved_path = _validate_path_within_directory(model_path, models_dir)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-
-        if not resolved_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Classifier model not found: {model_name}",
-            )
-
-        # Remove directory and contents
-        shutil.rmtree(resolved_path)
-
-        return {
-            "object": "delete_result",
-            "model": model_name,
-            "deleted": True,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in delete_classifier_model: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "delete_result",
+        "model": model_name,
+        "deleted": True,
+    }

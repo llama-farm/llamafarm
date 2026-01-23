@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from core.logging import UniversalRuntimeLogger
+from services.error_handler import handle_endpoint_errors
 from utils.file_handler import (
     delete_file,
     get_file,
@@ -26,6 +27,7 @@ UPLOAD_CHUNK_SIZE = 64 * 1024
 
 
 @router.post("/v1/files")
+@handle_endpoint_errors("upload_file")
 async def upload_file(
     file: UploadFile,
     convert_pdf: bool = Form(default=True),
@@ -55,51 +57,42 @@ async def upload_file(
             -F "pdf_dpi=150"
         ```
     """
-    try:
-        # Stream file in chunks to enforce size limit without loading entire file
-        chunks = []
-        total_size = 0
-        while True:
-            chunk = await file.read(UPLOAD_CHUNK_SIZE)
-            if not chunk:
-                break
-            total_size += len(chunk)
-            if total_size > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
-                )
-            chunks.append(chunk)
-        content = b"".join(chunks)
-        stored = await store_file(
-            content=content,
-            filename=file.filename or "unknown",
-            content_type=file.content_type,
-            convert_pdf_to_images=convert_pdf,
-            pdf_dpi=pdf_dpi,
-        )
+    # Stream file in chunks to enforce size limit without loading entire file
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = await file.read(UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    stored = await store_file(
+        content=content,
+        filename=file.filename or "unknown",
+        content_type=file.content_type,
+        convert_pdf_to_images=convert_pdf,
+        pdf_dpi=pdf_dpi,
+    )
 
-        return {
-            "id": stored.id,
-            "object": "file",
-            "filename": stored.filename,
-            "content_type": stored.content_type,
-            "size": stored.size,
-            "created_at": stored.created_at,
-            "has_images": stored.page_images is not None
-            or stored.filename.lower().endswith(
-                (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif")
-            ),
-            "page_count": len(stored.page_images) if stored.page_images else None,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error uploading file: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail="An error occurred while uploading the file"
-        ) from e
+    return {
+        "id": stored.id,
+        "object": "file",
+        "filename": stored.filename,
+        "content_type": stored.content_type,
+        "size": stored.size,
+        "created_at": stored.created_at,
+        "has_images": stored.page_images is not None
+        or stored.filename.lower().endswith(
+            (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif")
+        ),
+        "page_count": len(stored.page_images) if stored.page_images else None,
+    }
 
 
 @router.get("/v1/files")

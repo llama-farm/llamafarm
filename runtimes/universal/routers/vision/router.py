@@ -15,6 +15,7 @@ from api_types.vision import (
     DocumentExtractRequest,
     OCRRequest,
 )
+from services.error_handler import handle_endpoint_errors
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ def _get_file_images(file_id: str) -> list[str]:
 
 
 @router.post("/v1/ocr")
+@handle_endpoint_errors("extract_text_from_images")
 async def extract_text_from_images(request: OCRRequest):
     """
     OCR endpoint for text extraction from images.
@@ -137,76 +139,60 @@ async def extract_text_from_images(request: OCRRequest):
     }
     ```
     """
-    try:
-        # Resolve images from file_id or direct base64
-        images = request.images
-        if request.file_id:
-            images = _get_file_images(request.file_id)
-        elif not images:
-            raise HTTPException(
-                status_code=400,
-                detail="Either 'images' or 'file_id' must be provided",
-            )
-
-        # Load OCR model
-        load_ocr = _get_ocr_loader()
-        model = await load_ocr(
-            backend=request.model,
-            languages=request.languages,
-        )
-
-        # Run OCR
-        results = await model.recognize(
-            images=images,
-            languages=request.languages,
-            return_boxes=request.return_boxes,
-        )
-
-        # Format response
-        data = []
-        for idx, result in enumerate(results):
-            item = {
-                "index": idx,
-                "text": result.text,
-                "confidence": result.confidence,
-            }
-            if request.return_boxes and result.boxes:
-                item["boxes"] = [
-                    {
-                        "x1": box.x1,
-                        "y1": box.y1,
-                        "x2": box.x2,
-                        "y2": box.y2,
-                        "text": box.text,
-                        "confidence": box.confidence,
-                    }
-                    for box in result.boxes
-                ]
-            data.append(item)
-
-        return {
-            "object": "list",
-            "data": data,
-            "model": request.model,
-            "usage": {
-                "images_processed": len(images),
-            },
-        }
-
-    except HTTPException:
-        raise
-    except ImportError as e:
-        logger.error(f"OCR backend not installed: {e}")
+    # Resolve images from file_id or direct base64
+    images = request.images
+    if request.file_id:
+        images = _get_file_images(request.file_id)
+    elif not images:
         raise HTTPException(
             status_code=400,
-            detail=f"OCR backend '{request.model}' not installed. Install the required dependencies.",
-        ) from e
-    except Exception as e:
-        logger.error(f"Error in extract_text_from_images: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while extracting text from images",
-        ) from e
+            detail="Either 'images' or 'file_id' must be provided",
+        )
+
+    # Load OCR model
+    load_ocr = _get_ocr_loader()
+    model = await load_ocr(
+        backend=request.model,
+        languages=request.languages,
+    )
+
+    # Run OCR
+    results = await model.recognize(
+        images=images,
+        languages=request.languages,
+        return_boxes=request.return_boxes,
+    )
+
+    # Format response
+    data = []
+    for idx, result in enumerate(results):
+        item = {
+            "index": idx,
+            "text": result.text,
+            "confidence": result.confidence,
+        }
+        if request.return_boxes and result.boxes:
+            item["boxes"] = [
+                {
+                    "x1": box.x1,
+                    "y1": box.y1,
+                    "x2": box.x2,
+                    "y2": box.y2,
+                    "text": box.text,
+                    "confidence": box.confidence,
+                }
+                for box in result.boxes
+            ]
+        data.append(item)
+
+    return {
+        "object": "list",
+        "data": data,
+        "model": request.model,
+        "usage": {
+            "images_processed": len(images),
+        },
+    }
 
 
 # =============================================================================
@@ -215,6 +201,7 @@ async def extract_text_from_images(request: OCRRequest):
 
 
 @router.post("/v1/documents/extract")
+@handle_endpoint_errors("extract_from_documents")
 async def extract_from_documents(request: DocumentExtractRequest):
     """
     Document understanding endpoint.
@@ -263,76 +250,66 @@ async def extract_from_documents(request: DocumentExtractRequest):
     }
     ```
     """
-    try:
-        # Resolve images from file_id or direct base64
-        images = request.images
-        if request.file_id:
-            images = _get_file_images(request.file_id)
-        elif not images:
-            raise HTTPException(
-                status_code=400,
-                detail="Either 'images' or 'file_id' must be provided",
-            )
-
-        # Load document model
-        load_document = _get_document_loader()
-        model = await load_document(
-            model_id=request.model,
-            task=request.task,
+    # Resolve images from file_id or direct base64
+    images = request.images
+    if request.file_id:
+        images = _get_file_images(request.file_id)
+    elif not images:
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'images' or 'file_id' must be provided",
         )
 
-        # Extract from documents
-        results = await model.extract(
-            images=images,
-            prompts=request.prompts,
-        )
+    # Load document model
+    load_document = _get_document_loader()
+    model = await load_document(
+        model_id=request.model,
+        task=request.task,
+    )
 
-        # Format response
-        data = []
-        for idx, result in enumerate(results):
-            item = {
-                "index": idx,
-                "confidence": result.confidence,
-            }
+    # Extract from documents
+    results = await model.extract(
+        images=images,
+        prompts=request.prompts,
+    )
 
-            if result.text:
-                item["text"] = result.text
-
-            if result.fields:
-                item["fields"] = [
-                    {
-                        "key": f.key,
-                        "value": f.value,
-                        "confidence": f.confidence,
-                        "bbox": f.bbox,
-                    }
-                    for f in result.fields
-                ]
-
-            if result.answer:
-                item["answer"] = result.answer
-
-            if result.classification:
-                item["classification"] = result.classification
-                item["classification_scores"] = result.classification_scores
-
-            data.append(item)
-
-        return {
-            "object": "list",
-            "data": data,
-            "model": request.model,
-            "task": request.task,
-            "usage": {
-                "documents_processed": len(images),
-            },
+    # Format response
+    data = []
+    for idx, result in enumerate(results):
+        item = {
+            "index": idx,
+            "confidence": result.confidence,
         }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in extract_from_documents: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while extracting from documents",
-        ) from e
+        if result.text:
+            item["text"] = result.text
+
+        if result.fields:
+            item["fields"] = [
+                {
+                    "key": f.key,
+                    "value": f.value,
+                    "confidence": f.confidence,
+                    "bbox": f.bbox,
+                }
+                for f in result.fields
+            ]
+
+        if result.answer:
+            item["answer"] = result.answer
+
+        if result.classification:
+            item["classification"] = result.classification
+            item["classification_scores"] = result.classification_scores
+
+        data.append(item)
+
+    return {
+        "object": "list",
+        "data": data,
+        "model": request.model,
+        "task": request.task,
+        "usage": {
+            "documents_processed": len(images),
+        },
+    }
