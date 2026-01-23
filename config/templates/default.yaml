@@ -55,8 +55,6 @@ rag:
     - name: main_database
       type: ChromaStore
       config:
-        persist_directory: ./data/chroma_db
-        distance_function: cosine
         collection_name: documents
 
       embedding_strategies:
