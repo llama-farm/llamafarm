@@ -3,10 +3,8 @@
 All tests written FIRST and will fail until implementation is complete.
 """
 
-import json
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -156,7 +154,7 @@ rag:
         from tasks.preview_tasks import preview_document_task
 
         # Call with overrides
-        result = preview_document_task(
+        preview_document_task(
             project_dir=str(mock_project_dir),
             file_path=str(sample_file),
             database="default",
@@ -210,7 +208,7 @@ rag:
         sample_file: Path,
     ):
         """Task uses the specified database configuration."""
-        from core.base import PreviewChunk, PreviewResult
+        from core.base import PreviewResult
 
         mock_blob_processor = Mock()
         mock_get_processor.return_value = mock_blob_processor
