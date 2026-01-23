@@ -96,8 +96,9 @@ def calculate_audio_energy(
         max_val = 32767.0
     else:
         # Fallback: treat as 8-bit unsigned
-        samples = audio_data
-        max_val = 127.0
+        # 8-bit unsigned PCM has silence at 128, so center the samples
+        samples = [s - 128 for s in audio_data]
+        max_val = 128.0
 
     # Calculate RMS
     sum_squares = sum(s * s for s in samples)

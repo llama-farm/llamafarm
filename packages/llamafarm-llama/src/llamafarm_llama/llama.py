@@ -477,23 +477,32 @@ class Llama:
         # Create audio bitmap
         bitmap = self.create_audio_bitmap(audio_data, audio_format)
 
-        try:
-            # Tokenize messages with audio
-            chunks = self._tokenize_with_media(messages, [bitmap])
+        # Tokenize messages with audio
+        chunks = self._tokenize_with_media(messages, [bitmap])
 
-            # Process chunks and generate response
-            if stream:
-                return self._stream_completion_with_chunks(
-                    chunks,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
-                    min_p=min_p,
-                    repeat_penalty=repeat_penalty,
-                    stop=stop,
-                )
-            else:
+        # Process chunks and generate response
+        if stream:
+            # Wrap streaming in a generator that manages bitmap lifetime
+            # This ensures bitmap is freed AFTER the stream is consumed,
+            # avoiding use-after-free when mtmd_encode_chunk accesses the bitmap
+            def _stream_with_cleanup():
+                try:
+                    yield from self._stream_completion_with_chunks(
+                        chunks,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        min_p=min_p,
+                        repeat_penalty=repeat_penalty,
+                        stop=stop,
+                    )
+                finally:
+                    self.free_bitmap(bitmap)
+
+            return _stream_with_cleanup()
+        else:
+            try:
                 return self._complete_with_chunks(
                     chunks,
                     max_tokens=max_tokens,
@@ -504,8 +513,8 @@ class Llama:
                     repeat_penalty=repeat_penalty,
                     stop=stop,
                 )
-        finally:
-            self.free_bitmap(bitmap)
+            finally:
+                self.free_bitmap(bitmap)
 
     def _tokenize_with_media(
         self,

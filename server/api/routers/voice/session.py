@@ -648,31 +648,43 @@ class SessionManager:
     async def get_or_create_session(
         self, session_id: str | None, config: VoiceSessionConfig | None = None
     ) -> VoiceSession:
-        """Get existing session or create new one."""
-        if session_id:
-            session = await self.get_session(session_id)
-            if session:
-                # Update config if provided
-                if config:
-                    session.update_config(
-                        stt_model=config.stt_model,
-                        tts_model=config.tts_model,
-                        tts_voice=config.tts_voice,
-                        llm_model=config.llm_model,
-                        language=config.language,
-                        speed=config.speed,
-                        sentence_boundary_only=config.sentence_boundary_only,
-                        barge_in_enabled=config.barge_in_enabled,
-                        barge_in_noise_filter=config.barge_in_noise_filter,
-                        barge_in_min_chunks=config.barge_in_min_chunks,
-                        turn_detection_enabled=config.turn_detection_enabled,
-                        base_silence_duration=config.base_silence_duration,
-                        thinking_silence_duration=config.thinking_silence_duration,
-                        max_silence_duration=config.max_silence_duration,
-                    )
-                return session
+        """Get existing session or create new one.
 
-        return await self.create_session(config)
+        Uses lock to ensure atomicity of the check-and-create operation.
+        """
+        async with self._lock:
+            if session_id:
+                session = self._sessions.get(session_id)
+                if session:
+                    # Update config if provided
+                    if config:
+                        session.update_config(
+                            stt_model=config.stt_model,
+                            tts_model=config.tts_model,
+                            tts_voice=config.tts_voice,
+                            llm_model=config.llm_model,
+                            language=config.language,
+                            speed=config.speed,
+                            sentence_boundary_only=config.sentence_boundary_only,
+                            barge_in_enabled=config.barge_in_enabled,
+                            barge_in_noise_filter=config.barge_in_noise_filter,
+                            barge_in_min_chunks=config.barge_in_min_chunks,
+                            turn_detection_enabled=config.turn_detection_enabled,
+                            base_silence_duration=config.base_silence_duration,
+                            thinking_silence_duration=config.thinking_silence_duration,
+                            max_silence_duration=config.max_silence_duration,
+                        )
+                    return session
+
+            # Create new session (inline to avoid releasing lock)
+            if len(self._sessions) >= self._max_sessions:
+                # Remove oldest session
+                oldest_id = next(iter(self._sessions))
+                del self._sessions[oldest_id]
+
+            session = VoiceSession(config=config or VoiceSessionConfig())
+            self._sessions[session.session_id] = session
+            return session
 
     async def remove_session(self, session_id: str) -> bool:
         """Remove a session. Returns True if session existed."""
