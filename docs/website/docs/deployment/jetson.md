@@ -17,6 +17,43 @@ LlamaFarm runs natively on NVIDIA Jetson devices (Orin, Xavier, TX2, Nano) with 
 | Jetson Xavier NX | 7.2 | 8-16GB shared | 25+ tok/s |
 | Jetson AGX Xavier | 7.2 | 16-32GB shared | 30+ tok/s |
 
+## Quick Start (Automated)
+
+LlamaFarm includes setup scripts that automate the Jetson configuration:
+
+```bash
+# 1. Start the Jetson container
+docker run -it --rm --runtime=nvidia --network host \
+  -v $HOME/.cache:/root/.cache \
+  -v /path/to/llamafarm:/data/llamafarm \
+  dustynv/l4t-pytorch:r36.2.0 \
+  bash
+
+# 2. Install UV package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.cargo/env
+
+# 3. Run the automated setup
+cd /data/llamafarm
+./deployment/jetson/setup.sh
+
+# 4. Start the server
+./deployment/jetson/start.sh
+```
+
+The setup script automatically:
+- Detects Jetson hardware
+- Finds system Python with CUDA PyTorch
+- Creates venv with `--system-site-packages` to inherit CUDA torch
+- Installs dependencies and removes conflicting PyPI packages
+- Creates `.env.jetson` with optimized environment variables
+
+For custom model or context size:
+
+```bash
+./deployment/jetson/start.sh 'unsloth/Qwen3-0.6B-GGUF:Q4_K_M' 4096
+```
+
 ## Prerequisites
 
 1. **JetPack SDK** installed (includes CUDA, cuDNN, TensorRT)
