@@ -7,9 +7,11 @@ import { cn } from '../../../lib/utils'
 import type { PreviewChunk } from '../../../hooks/useDocumentPreview'
 
 // Chunk background colors (alternating, dark mode aware)
+// Uses teal, pink, purple, and indigo for variety and accessibility
 const CHUNK_COLORS = [
-  'bg-purple-200/60 dark:bg-purple-500/40',
+  'bg-teal-200/60 dark:bg-teal-600/40',
   'bg-pink-200/60 dark:bg-pink-500/40',
+  'bg-purple-200/60 dark:bg-purple-500/40',
   'bg-indigo-200/60 dark:bg-indigo-500/40',
 ]
 
@@ -125,13 +127,15 @@ export function PreviewPanel({
               }
               className={cn(
                 seg.color,
-                'relative [box-decoration-break:clone]',
-                isSelected && 'ring-2 ring-primary',
+                'relative [box-decoration-break:clone] outline-none',
+                isSelected
+                  ? 'ring-2 ring-teal-500 dark:ring-teal-400'
+                  : 'ring-0',
                 seg.index !== undefined &&
                   chunks[seg.index]?.start_position < 0 &&
                   'opacity-50',
                 onChunkClick &&
-                  'cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow'
+                  'cursor-pointer hover:ring-2 hover:ring-pink-400/60 dark:hover:ring-pink-500/60 transition-shadow'
               )}
             >
               <span className="absolute -left-7 text-xs text-muted-foreground font-bold select-none">
