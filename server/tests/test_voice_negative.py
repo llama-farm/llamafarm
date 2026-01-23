@@ -15,6 +15,7 @@ Run with: pytest tests/test_voice_negative.py -v -s -m e2e
 """
 
 import asyncio
+import contextlib
 import json
 import struct
 import time
@@ -608,14 +609,12 @@ class TestNPServiceErrors:
         }
 
         # Create project first
-        try:
+        with contextlib.suppress(Exception):
             httpx.post(
                 f"{base_url}/projects/{TEST_NAMESPACE}",
                 json={"name": "invalid-test", "config_template": None},
                 timeout=10.0,
             )
-        except Exception:
-            pass
 
         # Try to update with invalid config
         response = httpx.put(

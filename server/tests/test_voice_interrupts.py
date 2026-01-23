@@ -124,7 +124,7 @@ def generate_real_speech(
             if attempt < retries - 1:
                 time.sleep(1.0)  # Longer pause for connection issues
                 continue
-            raise RuntimeError(f"TTS connection failed after {retries} attempts: {e}")
+            raise RuntimeError(f"TTS connection failed after {retries} attempts: {e}") from e
 
     raise RuntimeError("TTS synthesis failed after all retries")
 
@@ -796,9 +796,8 @@ class TestINT06InterruptTiming:
                                 speaking = True
 
                             # Record when state changes after interrupt
-                            if interrupted and state != VoiceState.SPEAKING.value:
-                                if state_change_time is None:
-                                    state_change_time = time.time()
+                            if interrupted and state != VoiceState.SPEAKING.value and state_change_time is None:
+                                state_change_time = time.time()
 
                             if interrupted and state == VoiceState.IDLE.value:
                                 break

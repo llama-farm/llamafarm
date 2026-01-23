@@ -24,6 +24,13 @@ import httpx
 import websockets
 from fastapi import WebSocket
 
+from config.datamodel import Model
+from core.settings import settings
+from services.universal_runtime_service import UniversalRuntimeService
+
+from .phrase_detector import PhraseBoundaryDetector
+from .session import VoiceSession
+
 
 @dataclass
 class LLMToolCall:
@@ -43,13 +50,6 @@ class LLMContent:
 
 # Type alias for stream output
 LLMStreamOutput = LLMContent | LLMToolCall
-
-from config.datamodel import Model
-from core.settings import settings
-from services.universal_runtime_service import UniversalRuntimeService
-
-from .phrase_detector import PhraseBoundaryDetector
-from .session import VoiceSession
 from .types import (
     ErrorMessage,
     LLMTextMessage,
