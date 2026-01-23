@@ -491,6 +491,7 @@ class VoiceSession:
         """
         # Check if barge-in is enabled
         if not self.config.barge_in_enabled:
+            logger.info("Barge-in check: DISABLED")
             return False
 
         # Get PCM for energy analysis
@@ -499,17 +500,26 @@ class VoiceSession:
             # Decode to PCM (decoder preserves state across calls)
             pcm_chunk = self._decoder.feed(chunk)
             if not pcm_chunk:
+                logger.info(f"Barge-in check: decoder returned empty (chunk={len(chunk)} bytes)")
                 return False
         elif self._audio_format == AudioFormat.PCM or self._audio_format is None:
             # Raw PCM or format not yet detected (assume PCM)
             pcm_chunk = chunk
         else:
             # Unknown encoded format without decoder - can't analyze
+            logger.info(f"Barge-in check: unknown format {self._audio_format}, no decoder")
             return False
 
         # Calculate energy and check against speech threshold
         energy = self._vad._calculate_energy(pcm_chunk)
-        is_speech = energy > self._vad.config.speech_threshold
+        threshold = self._vad.config.speech_threshold
+        is_speech = energy > threshold
+
+        # Log every check for debugging
+        logger.info(
+            f"Barge-in check: energy={energy:.6f}, threshold={threshold:.6f}, "
+            f"is_speech={is_speech}, chunk_size={len(pcm_chunk)}"
+        )
 
         # Apply noise filter if enabled
         if self.config.barge_in_noise_filter:
@@ -517,12 +527,12 @@ class VoiceSession:
                 self._barge_in_speech_chunks += 1
                 if self._barge_in_speech_chunks >= self.config.barge_in_min_chunks:
                     logger.info(
-                        f"Barge-in triggered: {self._barge_in_speech_chunks} consecutive "
+                        f"Barge-in TRIGGERED: {self._barge_in_speech_chunks} consecutive "
                         f"chunks above threshold (energy={energy:.4f})"
                     )
                     return True
                 else:
-                    logger.debug(
+                    logger.info(
                         f"Barge-in pending: {self._barge_in_speech_chunks}/{self.config.barge_in_min_chunks} "
                         f"chunks (energy={energy:.4f})"
                     )
@@ -530,13 +540,13 @@ class VoiceSession:
             else:
                 # Reset counter on silence
                 if self._barge_in_speech_chunks > 0:
-                    logger.debug(f"Barge-in reset: silence detected after {self._barge_in_speech_chunks} chunks")
+                    logger.info(f"Barge-in reset: silence detected after {self._barge_in_speech_chunks} chunks")
                 self._barge_in_speech_chunks = 0
                 return False
         else:
             # No noise filter - trigger immediately on speech
             if is_speech:
-                logger.info(f"Barge-in detected: energy={energy:.4f} > threshold={self._vad.config.speech_threshold}")
+                logger.info(f"Barge-in detected: energy={energy:.4f} > threshold={threshold}")
             return is_speech
 
     def reset_barge_in_state(self) -> None:
@@ -652,31 +662,43 @@ class SessionManager:
     async def get_or_create_session(
         self, session_id: str | None, config: VoiceSessionConfig | None = None
     ) -> VoiceSession:
-        """Get existing session or create new one."""
-        if session_id:
-            session = await self.get_session(session_id)
-            if session:
-                # Update config if provided
-                if config:
-                    session.update_config(
-                        stt_model=config.stt_model,
-                        tts_model=config.tts_model,
-                        tts_voice=config.tts_voice,
-                        llm_model=config.llm_model,
-                        language=config.language,
-                        speed=config.speed,
-                        sentence_boundary_only=config.sentence_boundary_only,
-                        barge_in_enabled=config.barge_in_enabled,
-                        barge_in_noise_filter=config.barge_in_noise_filter,
-                        barge_in_min_chunks=config.barge_in_min_chunks,
-                        turn_detection_enabled=config.turn_detection_enabled,
-                        base_silence_duration=config.base_silence_duration,
-                        thinking_silence_duration=config.thinking_silence_duration,
-                        max_silence_duration=config.max_silence_duration,
-                    )
-                return session
+        """Get existing session or create new one.
 
-        return await self.create_session(config)
+        Uses lock to ensure atomicity of the check-and-create operation.
+        """
+        async with self._lock:
+            if session_id:
+                session = self._sessions.get(session_id)
+                if session:
+                    # Update config if provided
+                    if config:
+                        session.update_config(
+                            stt_model=config.stt_model,
+                            tts_model=config.tts_model,
+                            tts_voice=config.tts_voice,
+                            llm_model=config.llm_model,
+                            language=config.language,
+                            speed=config.speed,
+                            sentence_boundary_only=config.sentence_boundary_only,
+                            barge_in_enabled=config.barge_in_enabled,
+                            barge_in_noise_filter=config.barge_in_noise_filter,
+                            barge_in_min_chunks=config.barge_in_min_chunks,
+                            turn_detection_enabled=config.turn_detection_enabled,
+                            base_silence_duration=config.base_silence_duration,
+                            thinking_silence_duration=config.thinking_silence_duration,
+                            max_silence_duration=config.max_silence_duration,
+                        )
+                    return session
+
+            # Create new session (inline to avoid releasing lock)
+            if len(self._sessions) >= self._max_sessions:
+                # Remove oldest session
+                oldest_id = next(iter(self._sessions))
+                del self._sessions[oldest_id]
+
+            session = VoiceSession(config=config or VoiceSessionConfig())
+            self._sessions[session.session_id] = session
+            return session
 
     async def remove_session(self, session_id: str) -> bool:
         """Remove a session. Returns True if session existed."""

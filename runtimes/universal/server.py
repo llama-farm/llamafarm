@@ -55,6 +55,7 @@ from models import (
     TTSModel,
     VoiceProfile,
 )
+from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
 from routers.chat_completions import router as chat_completions_router
 from utils.device import get_device_info, get_optimal_device
@@ -149,6 +150,7 @@ app.add_middleware(
 
 app.include_router(chat_completions_router)
 app.include_router(audio_speech_router)
+app.include_router(audio_chat_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -494,6 +496,72 @@ async def list_models():
         )
 
     return {"object": "list", "data": models_list}
+
+
+@app.get("/v1/models/{model_id}/capabilities")
+async def get_model_capabilities(model_id: str):
+    """Get capabilities of a loaded model.
+
+    Returns information about what features the model supports, including:
+    - Native audio input (for models like Qwen2.5-Omni)
+    - Native vision/image input
+    - Streaming support
+    - Tool/function calling
+
+    This endpoint is useful for clients to determine how to interact with
+    a model before sending requests.
+
+    Args:
+        model_id: The model identifier (must be currently loaded)
+
+    Returns:
+        Model capabilities including audio/vision support flags
+
+    Example response:
+        {
+            "model_id": "ggml-org/Qwen2.5-Omni-3B-GGUF",
+            "loaded": true,
+            "capabilities": {
+                "native_audio": true,
+                "native_vision": false,
+                "streaming": true,
+                "tool_calling": true
+            }
+        }
+    """
+    # Check if model is loaded
+    model = _models.get(model_id)
+    if model is None:
+        return {
+            "model_id": model_id,
+            "loaded": False,
+            "capabilities": {
+                "native_audio": False,
+                "native_vision": False,
+                "streaming": False,
+                "tool_calling": False,
+            },
+            "message": "Model not loaded. Load the model first to query capabilities.",
+        }
+
+    # Extract capabilities from the loaded model
+    supports_audio = getattr(model, "supports_audio", False)
+    supports_vision = getattr(model, "supports_vision", False)
+    supports_streaming = getattr(model, "supports_streaming", True)
+
+    # GGUF models support tool calling via their chat completion
+    supports_tools = isinstance(model, GGUFLanguageModel)
+
+    return {
+        "model_id": model_id,
+        "loaded": True,
+        "capabilities": {
+            "native_audio": supports_audio,
+            "native_vision": supports_vision,
+            "streaming": supports_streaming,
+            "tool_calling": supports_tools,
+        },
+    }
 
 
 # ============================================================================
@@ -3153,7 +3221,12 @@ async def create_translation(
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="Empty audio file")
 
-        file_extension = Path(file.filename).suffix if file.filename else ".wav"
+        # Sanitize file extension against whitelist (same as transcription endpoint)
+        if file.filename:
+            ext = Path(file.filename).suffix.lower()
+            file_extension = ext if ext in SAFE_AUDIO_EXTENSIONS else ".wav"
+        else:
+            file_extension = ".wav"
 
         # Detect actual audio format from content (don't trust file extension)
         format_name, is_compressed = detect_audio_format(audio_bytes)

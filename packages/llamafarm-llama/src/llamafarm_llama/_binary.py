@@ -431,6 +431,7 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
         # macOS: version before extension (libggml.0.0.0.dylib)
         patterns.extend([
             "libggml*.*.*.*dylib",
+            "libmtmd*.*.*.*dylib",  # Multimodal library for audio/vision
         ])
     else:
         # Linux: version after extension (libggml.so.0.0.0)
@@ -439,6 +440,8 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
             "libggml*.so.*",      # Versioned: libggml.so.0.0.0
             "libggml*.so",        # Unversioned: libggml.so, libggml-cpu.so
             "ggml-*.so",          # Backend plugins: ggml-cpu.so, ggml-cuda.so
+            "libmtmd*.so.*",      # Multimodal library (versioned)
+            "libmtmd*.so",        # Multimodal library (unversioned)
             "libcublas*.so.*",
             "libcudart*.so.*",
             "libcublasLt*.so.*",

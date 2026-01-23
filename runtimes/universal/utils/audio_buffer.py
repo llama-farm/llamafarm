@@ -96,8 +96,9 @@ def calculate_audio_energy(
         max_val = 32767.0
     else:
         # Fallback: treat as 8-bit unsigned
-        samples = audio_data
-        max_val = 127.0
+        # 8-bit unsigned PCM has silence at 128, so center the samples
+        samples = [s - 128 for s in audio_data]
+        max_val = 128.0
 
     # Calculate RMS
     sum_squares = sum(s * s for s in samples)
@@ -978,9 +979,9 @@ def float32_to_int16(audio_data: bytes) -> bytes:
     Returns:
         Audio as 16-bit integers
     """
-    # Unpack as floats
+    # Unpack as floats (slice to exact size to handle non-aligned buffers)
     num_samples = len(audio_data) // 4
-    floats = struct.unpack(f"{num_samples}f", audio_data)
+    floats = struct.unpack(f"{num_samples}f", audio_data[: num_samples * 4])
 
     # Convert to int16
     int16_samples = []

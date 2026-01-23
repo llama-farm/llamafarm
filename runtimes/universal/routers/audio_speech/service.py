@@ -115,10 +115,10 @@ class TTSSynthesisService:
             yield f"data: {json.dumps(done_event)}\n\n"
 
         except Exception as e:
-            logger.error(f"TTS streaming error: {e}")
+            logger.error(f"TTS streaming error: {e}", exc_info=True)
             error_event = {
                 "type": "error",
-                "message": str(e),
+                "message": "Speech synthesis failed",
             }
             yield f"data: {json.dumps(error_event)}\n\n"
 

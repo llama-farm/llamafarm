@@ -654,8 +654,10 @@ class UniversalRuntimeService:
 
         except websockets.exceptions.ConnectionClosed:
             logger.warning("STT WebSocket closed unexpectedly")
+            raise
         except Exception as e:
             logger.error(f"STT streaming error: {e}")
+            raise
 
     @classmethod
     async def translate_audio(

@@ -125,7 +125,7 @@ class TestBinaryInfo:
 
     def test_get_binary_info_version(self):
         """Version should match LLAMA_CPP_VERSION."""
-        from llamafarm_llama._binary import get_binary_info, LLAMA_CPP_VERSION
+        from llamafarm_llama._binary import LLAMA_CPP_VERSION, get_binary_info
 
         info = get_binary_info()
         assert info["version"] == LLAMA_CPP_VERSION

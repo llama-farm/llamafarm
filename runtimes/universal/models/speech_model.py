@@ -21,10 +21,10 @@ from queue import Empty, Queue
 from threading import Thread
 from typing import TYPE_CHECKING, Literal
 
+from .base import BaseModel
+
 if TYPE_CHECKING:
     import numpy as np
-
-from .base import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +295,8 @@ class SpeechModel(BaseModel):
             raise RuntimeError("Model not loaded. Call load() first.")
 
         # Queue for streaming segments from thread to async generator
-        segment_queue: Queue[TranscriptionSegment | None] = Queue()
+        # Can contain: TranscriptionSegment, None (completion), or Exception (error)
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue()
 
         def _sync_transcribe_stream():
             """Run transcription in thread and put segments in queue immediately."""
@@ -337,6 +338,8 @@ class SpeechModel(BaseModel):
                     )
             except Exception as e:
                 logger.error(f"STT streaming error: {e}")
+                # Signal error to consumer
+                segment_queue.put(e)
             finally:
                 # Signal completion
                 segment_queue.put(None)
@@ -353,6 +356,9 @@ class SpeechModel(BaseModel):
                 if segment is None:
                     # Transcription complete
                     break
+                if isinstance(segment, Exception):
+                    # Propagate error from transcription thread
+                    raise segment
                 yield segment
             except Empty:
                 # No segment ready yet, yield control to event loop
@@ -492,7 +498,8 @@ class SpeechModel(BaseModel):
             raise RuntimeError("Model not loaded. Call load() first.")
 
         # Queue for streaming segments from thread to async generator
-        segment_queue: Queue[TranscriptionSegment | None] = Queue()
+        # Can contain: TranscriptionSegment, None (completion), or Exception (error)
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue()
 
         def _sync_transcribe_stream():
             """Run transcription in thread and put segments in queue immediately."""
@@ -534,6 +541,8 @@ class SpeechModel(BaseModel):
                     )
             except Exception as e:
                 logger.error(f"STT streaming error: {e}")
+                # Signal error to consumer
+                segment_queue.put(e)
             finally:
                 # Signal completion
                 segment_queue.put(None)
@@ -550,6 +559,9 @@ class SpeechModel(BaseModel):
                 if segment is None:
                     # Transcription complete
                     break
+                if isinstance(segment, Exception):
+                    # Propagate error from transcription thread
+                    raise segment
                 yield segment
             except Empty:
                 # No segment ready yet, yield control to event loop

@@ -2,15 +2,20 @@
 Voice chat service - orchestrates the STT → LLM → TTS pipeline.
 
 Provides real-time voice conversation by:
-1. Transcribing audio via Universal Runtime STT
+1. Transcribing audio via Universal Runtime STT (or native audio for Omni models)
 2. Streaming LLM responses with phrase boundary detection
 3. Synthesizing speech via Universal Runtime TTS WebSocket
+
+For models that support native audio (like Qwen2.5-Omni), the STT step is skipped
+and audio is sent directly to the LLM.
 """
 
 import asyncio
+import base64
 import json
 import logging
 import re
+import struct
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
@@ -59,61 +64,113 @@ LLMStreamOutput = LLMContent | LLMToolCall
 logger = logging.getLogger(__name__)
 
 
-class StreamingThinkingFilter:
-    """Filters <think>...</think> blocks from a token stream.
+def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1, bits_per_sample: int = 16) -> bytes:
+    """Convert raw PCM audio data to WAV format by adding a WAV header.
 
+    Args:
+        pcm_data: Raw PCM audio bytes (16-bit signed little-endian).
+        sample_rate: Sample rate in Hz (default 16000 for voice).
+        channels: Number of audio channels (default 1 for mono).
+        bits_per_sample: Bits per sample (default 16).
+
+    Returns:
+        WAV-formatted audio bytes with proper header.
+    """
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    data_size = len(pcm_data)
+    file_size = 36 + data_size  # Header (44 bytes) - 8 bytes for RIFF header = 36 + data
+
+    # Build WAV header (44 bytes total)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",           # ChunkID
+        file_size,         # ChunkSize (file size - 8)
+        b"WAVE",           # Format
+        b"fmt ",           # Subchunk1ID
+        16,                # Subchunk1Size (16 for PCM)
+        1,                 # AudioFormat (1 = PCM)
+        channels,          # NumChannels
+        sample_rate,       # SampleRate
+        byte_rate,         # ByteRate
+        block_align,       # BlockAlign
+        bits_per_sample,   # BitsPerSample
+        b"data",           # Subchunk2ID
+        data_size,         # Subchunk2Size
+    )
+
+    return header + pcm_data
+
+
+class StreamingTagFilter:
+    """Filters <tag>...</tag> blocks from a token stream.
+
+    Generic filter that can be used for any tag type (think, input, etc.).
     Tracks state across token boundaries to handle cases where tags
     are split across multiple tokens.
     """
 
-    def __init__(self):
-        self._in_thinking = False
+    def __init__(self, tag_name: str, capture: bool = False):
+        """Initialize filter for a specific tag.
+
+        Args:
+            tag_name: Name of the tag to filter (e.g., "think", "input").
+            capture: If True, captured content is stored and can be retrieved.
+        """
+        self._tag_name = tag_name
+        self._capture = capture
+        self._in_tag = False
         self._buffer = ""
+        self._captured_content = ""
         # Patterns to detect tag boundaries
-        self._open_tag = re.compile(r"<think>", re.IGNORECASE)
-        self._close_tag = re.compile(r"</think>", re.IGNORECASE)
+        self._open_tag = re.compile(rf"<{tag_name}>", re.IGNORECASE)
+        self._close_tag = re.compile(rf"</{tag_name}>", re.IGNORECASE)
+        # Max chars to keep for split tag detection
+        self._keep_chars = len(f"</{tag_name}>") + 1
 
     def filter_token(self, token: str) -> str:
-        """Filter a token, removing thinking content.
+        """Filter a token, removing tagged content.
 
         Args:
             token: Incoming token from LLM stream.
 
         Returns:
-            Filtered token (may be empty if inside thinking block).
+            Filtered token (may be empty if inside tag block).
         """
         # Add token to buffer for pattern matching
         self._buffer += token
 
-        # Process buffer to extract non-thinking content
+        # Process buffer to extract non-tagged content
         result = ""
         while True:
-            if self._in_thinking:
+            if self._in_tag:
                 # Look for closing tag
                 match = self._close_tag.search(self._buffer)
                 if match:
-                    # Found closing tag - exit thinking mode
-                    self._in_thinking = False
+                    # Found closing tag - capture content, exit tag mode
+                    if self._capture:
+                        self._captured_content += self._buffer[:match.start()]
+                    self._in_tag = False
                     self._buffer = self._buffer[match.end():]
                 else:
-                    # Still in thinking mode, discard buffer but keep last 8 chars
-                    # (to catch split </think> tag)
-                    if len(self._buffer) > 8:
-                        self._buffer = self._buffer[-8:]
+                    # Still in tag mode, capture/discard buffer but keep last N chars
+                    if len(self._buffer) > self._keep_chars:
+                        if self._capture:
+                            self._captured_content += self._buffer[:-self._keep_chars]
+                        self._buffer = self._buffer[-self._keep_chars:]
                     break
             else:
                 # Look for opening tag
                 match = self._open_tag.search(self._buffer)
                 if match:
-                    # Found opening tag - emit content before it, enter thinking mode
+                    # Found opening tag - emit content before it, enter tag mode
                     result += self._buffer[:match.start()]
-                    self._in_thinking = True
+                    self._in_tag = True
                     self._buffer = self._buffer[match.end():]
                 else:
-                    # No tag found - emit most of buffer, keep last 7 chars
-                    # (to catch split <think> tag)
-                    if len(self._buffer) > 7:
-                        emit_len = len(self._buffer) - 7
+                    # No tag found - emit most of buffer, keep last N chars
+                    if len(self._buffer) > self._keep_chars:
+                        emit_len = len(self._buffer) - self._keep_chars
                         result += self._buffer[:emit_len]
                         self._buffer = self._buffer[emit_len:]
                     break
@@ -123,13 +180,33 @@ class StreamingThinkingFilter:
     def flush(self) -> str:
         """Flush remaining buffer content.
 
-        Call at end of stream to get any remaining non-thinking content.
+        Call at end of stream to get any remaining non-tagged content.
         """
-        if self._in_thinking:
+        if self._in_tag:
+            if self._capture:
+                self._captured_content += self._buffer
+            self._buffer = ""
             return ""
         result = self._buffer
         self._buffer = ""
         return result
+
+    def get_captured(self) -> str:
+        """Get captured content from inside tags.
+
+        Only returns content if capture=True was set.
+        """
+        return self._captured_content.strip()
+
+
+class StreamingThinkingFilter(StreamingTagFilter):
+    """Filters <think>...</think> blocks from a token stream.
+
+    Convenience class for the common thinking tag filter.
+    """
+
+    def __init__(self):
+        super().__init__("think", capture=False)
 
 
 class StreamingToolCallFilter:
@@ -347,21 +424,19 @@ class VoiceChatService:
             )
         return cls._http_client
 
-    def __init__(self, session: VoiceSession, llm_model_config: Model | None):
+    def __init__(self, session: VoiceSession, llm_model_config: Model):
         """Initialize voice chat service.
 
         Args:
             session: Voice session with conversation state.
             llm_model_config: Resolved LLM model configuration from project.
                               Contains the actual model ID, base_url, etc.
-                              None when running in stt_only mode.
         """
         self.session = session
         self._llm_model_config = llm_model_config
 
         # LLM endpoint - use model's base_url if specified, otherwise runtime default
-        # Note: In stt_only mode, llm_model_config is None and LLM won't be called
-        if llm_model_config and llm_model_config.base_url:
+        if llm_model_config.base_url:
             self._llm_url = llm_model_config.base_url.rstrip("/")
         else:
             self._llm_url = f"http://{settings.universal_host}:{settings.universal_port}/v1"
@@ -384,17 +459,14 @@ class VoiceChatService:
         the user speaks.
         """
         try:
-            # Pre-establish TTS WebSocket (skip in stt_only mode)
-            if not self.session.config.stt_only:
-                ws = await self._get_tts_websocket()
-                logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
+            # Pre-establish TTS WebSocket
+            ws = await self._get_tts_websocket()
+            logger.debug(f"TTS WebSocket pre-warmed: {ws.remote_address}")
 
-                # Pre-warm HTTP connection pool with a lightweight request
-                self.get_http_client()
-                # Just establish the TCP connection, don't make a full request
-                logger.debug("HTTP client pool pre-warmed")
-            else:
-                logger.debug("STT-only mode: skipping TTS/LLM connection warm-up")
+            # Pre-warm HTTP connection pool with a lightweight request
+            self.get_http_client()
+            # Just establish the TCP connection, don't make a full request
+            logger.debug("HTTP client pool pre-warmed")
         except Exception as e:
             logger.warning(f"Connection pre-warm failed (non-fatal): {e}")
 
@@ -447,6 +519,9 @@ class VoiceChatService:
         to the last user message to instruct models like Qwen3 to skip
         chain-of-thought reasoning.
 
+        Handles both text-only messages (content is string) and multimodal
+        messages (content is list of content parts).
+
         Args:
             messages: List of chat messages.
 
@@ -464,9 +539,27 @@ class VoiceChatService:
         for i in range(len(messages) - 1, -1, -1):
             if messages[i].get("role") == "user":
                 content = messages[i].get("content", "")
-                # Only add if not already present
-                if "/think" not in content and "/no_think" not in content:
-                    messages[i]["content"] = f"{content} /no_think"
+
+                # Handle multimodal messages (content is a list of parts)
+                if isinstance(content, list):
+                    # Check if any text parts already contain control tokens
+                    has_control = False
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text = part.get("text", "")
+                            if "/think" in text or "/no_think" in text:
+                                has_control = True
+                                break
+
+                    if not has_control:
+                        # Append control token as a new text part
+                        content = list(content)  # Make a copy
+                        content.append({"type": "text", "text": "/no_think"})
+                        messages[i]["content"] = content
+                else:
+                    # Handle simple string content
+                    if "/think" not in content and "/no_think" not in content:
+                        messages[i]["content"] = f"{content} /no_think"
                 break
 
         return messages
@@ -544,10 +637,28 @@ class VoiceChatService:
             r"\bw/": "with",
             r"\bw/o": "without",
             r"\b&\b": "and",
-            r"\bAI\b": "A.I.",  # Spell out for clearer pronunciation
         }
         for pattern, replacement in abbreviations.items():
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+        # Handle acronyms - convert to phonetic or spoken form to avoid
+        # letter-by-letter pronunciation with pauses
+        acronyms = {
+            r"\bAI\b": "ayeye",  # Sounds like "A.I." without pauses
+            r"\bAPI\b": "A P I",
+            r"\bURL\b": "U R L",
+            r"\bSQL\b": "sequel",
+            r"\bGUI\b": "gooey",
+            r"\bCEO\b": "C E O",
+            r"\bCTO\b": "C T O",
+            r"\bVP\b": "V P",
+            r"\bHR\b": "H R",
+            r"\bIT\b": "I T",
+            r"\bUI\b": "U I",
+            r"\bUX\b": "U X",
+        }
+        for pattern, replacement in acronyms.items():
+            text = re.sub(pattern, replacement, text)
 
         # NOTE: We do NOT expand ordinals (1st, 2nd) or most symbols -
         # modern TTS models handle these naturally.
@@ -742,15 +853,6 @@ class VoiceChatService:
             await self._tts_ws.close()
             self._tts_ws = None
 
-    async def invalidate_tts_connection(self) -> None:
-        """Invalidate TTS WebSocket connection.
-
-        Call this when TTS config (voice or model) changes to force
-        recreation with new parameters on next synthesis.
-        """
-        await self._close_tts_websocket()
-        logger.info("TTS WebSocket invalidated due to config change")
-
     async def synthesize_phrase_stream(
         self, phrase: str, phrase_index: int
     ) -> AsyncGenerator[bytes, None]:
@@ -843,6 +945,7 @@ class VoiceChatService:
         await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
 
         try:
+            # STT PATH: Transcribe audio first, then send text to LLM
             # PARALLEL STT+LLM: Collect first segment(s) quickly, then start LLM
             # while STT continues in background
             transcription_parts: list[str] = []
@@ -911,16 +1014,12 @@ class VoiceChatService:
                 TranscriptionMessage(text=transcription_for_llm, is_final=True).model_dump()
             )
 
-            # STT-only mode: skip LLM and TTS, return to idle
-            if self.session.config.stt_only:
-                logger.debug("STT-only mode, skipping LLM/TTS")
-                self.session.set_state(VoiceState.IDLE)
-                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
-                return
-
             # Step 2 & 3: Stream LLM and TTS in parallel
             self.session.set_state(VoiceState.SPEAKING)
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
+
+            # Use the text-based LLM path
+            llm_stream = self.stream_llm_response(transcription_for_llm)
 
             # Use phrase detector to accumulate LLM tokens
             # Pass sentence_boundary_only config for natural speech (avoids mid-sentence breaks)
@@ -941,7 +1040,7 @@ class VoiceChatService:
             # Track if we've already spoken a tool call placeholder this turn
             tool_call_placeholder_spoken = False
 
-            async for output in self.stream_llm_response(transcription_for_llm):
+            async for output in llm_stream:
                 if not first_token_logged:
                     t_llm_first_token = time.perf_counter()
                     first_token_logged = True
@@ -1082,12 +1181,6 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
-                else:
-                    # Always send is_final=True to signal end of LLM response
-                    # This ensures the client can add the user message to history
-                    await websocket.send_json(
-                        LLMTextMessage(text="", is_final=True).model_dump()
-                    )
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -1115,17 +1208,28 @@ class VoiceChatService:
             )
             self.session.set_state(VoiceState.IDLE)
 
-    async def process_text_turn(self, websocket: WebSocket, text: str) -> None:
-        """Process a text input turn (bypasses STT).
+    async def process_turn_native_audio(
+        self, websocket: WebSocket, audio_bytes: bytes
+    ) -> None:
+        """Process a turn using native audio input (no STT).
 
-        This is similar to process_turn but skips the transcription step,
-        directly using the provided text for LLM generation and TTS.
+        For models like Qwen2.5-Omni that support direct audio input,
+        this method skips STT and sends audio directly to the LLM.
+
+        Pipeline:
+        1. Encode audio as base64
+        2. Send to LLM with multimodal message format
+        3. Stream TTS for each LLM phrase
 
         Args:
             websocket: Client WebSocket connection.
-            text: User's text input.
+            audio_bytes: User's audio input (PCM 16kHz 16-bit mono).
         """
+        # === TIMING INSTRUMENTATION ===
         t_start = time.perf_counter()
+        t_llm_first_token = None
+        t_first_phrase = None
+        t_first_tts_audio = None
 
         # Clear any previous interrupt
         self.session.clear_interrupt()
@@ -1136,57 +1240,103 @@ class VoiceChatService:
         await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
 
         try:
-            # Send the text as a "transcription" so client can display it
-            await websocket.send_json(
-                TranscriptionMessage(text=text, is_final=True).model_dump()
+            # No STT - send audio directly to LLM
+            audio_duration = len(audio_bytes) / 32000  # 16kHz * 2 bytes per sample
+            logger.info(
+                f"Processing native audio turn: {len(audio_bytes)} bytes "
+                f"({audio_duration:.2f}s at 16kHz)"
             )
 
-            # STT-only mode: skip LLM and TTS, return to idle
-            if self.session.config.stt_only:
-                logger.debug("STT-only mode, skipping LLM/TTS for text input")
-                self.session.set_state(VoiceState.IDLE)
-                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
-                return
+            # Send placeholder transcription (we'll ask the model what it heard)
+            await websocket.send_json(
+                TranscriptionMessage(
+                    text="[Native audio - asking model what it heard]",
+                    is_final=True
+                ).model_dump()
+            )
 
-            # Go directly to LLM + TTS
+            # Update state to speaking
             self.session.set_state(VoiceState.SPEAKING)
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
+
+            # Stream LLM response with native audio
+            llm_stream = self.stream_llm_response_with_audio(audio_bytes)
 
             # Use phrase detector to accumulate LLM tokens
             phrase_detector = PhraseBoundaryDetector(
                 sentence_boundary_only=self.session.config.sentence_boundary_only,
             )
             thinking_filter = StreamingThinkingFilter()
+            tool_call_filter = StreamingToolCallFilter()
+            # Filter for <input>...</input> tags - captures content for logging
+            input_filter = StreamingTagFilter("input", capture=True)
             full_response = ""
+            first_token_logged = False
+            first_phrase_logged = False
 
-            async for output in self.stream_llm_response(text):
+            t_llm_start = time.perf_counter()
+            logger.info(f"⏱️ TIMING: Starting native audio LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
+
+            async for output in llm_stream:
+                if not first_token_logged:
+                    t_llm_first_token = time.perf_counter()
+                    first_token_logged = True
+                    logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total")
+
                 # Check for interrupt
                 if self.session.is_interrupted():
                     logger.info("Turn interrupted by user")
                     break
 
-                # Skip tool calls in text input mode (for now)
+                # Handle tool calls
                 if isinstance(output, LLMToolCall):
+                    logger.info(f"Tool call received: {output.name}")
+                    await websocket.send_json(
+                        ToolCallMessage(
+                            tool_call_id=output.id,
+                            function_name=output.name,
+                            arguments=output.arguments,
+                        ).model_dump()
+                    )
                     continue
 
                 # Handle regular content tokens
                 if isinstance(output, LLMContent):
                     token = output.text
-
-                    # Filter thinking content at token level
                     filtered_token = thinking_filter.filter_token(token)
                     full_response += token
 
                     if not filtered_token:
                         continue
 
+                    # Filter <input>...</input> tags (model's echo of what it heard)
+                    filtered_token = input_filter.filter_token(filtered_token)
+                    if not filtered_token:
+                        continue
+
+                    filtered_token = tool_call_filter.filter_token(filtered_token)
+                    if not filtered_token:
+                        continue
+
                     # Detect phrase boundaries
                     phrase = phrase_detector.add_token(filtered_token)
                     if phrase:
+                        if not first_phrase_logged:
+                            t_first_phrase = time.perf_counter()
+                            first_phrase_logged = True
+                            logger.info(f"⏱️ TIMING: First phrase: {(t_first_phrase - t_start)*1000:.1f}ms")
+
                         await websocket.send_json(
                             LLMTextMessage(text=phrase, is_final=False).model_dump()
                         )
-                        await self._synthesize_and_stream_phrase(websocket, phrase)
+
+                        tts_timing = await self._synthesize_and_stream_phrase(
+                            websocket, phrase,
+                            track_first_audio=(t_first_tts_audio is None),
+                            turn_start_time=t_start
+                        )
+                        if t_first_tts_audio is None and tts_timing:
+                            t_first_tts_audio = tts_timing
 
                         if self.session.is_interrupted():
                             break
@@ -1194,6 +1344,18 @@ class VoiceChatService:
             # Flush remaining text
             if not self.session.is_interrupted():
                 remaining_filtered = thinking_filter.flush()
+                if remaining_filtered:
+                    # Filter through input and tool call filters
+                    remaining_filtered = input_filter.filter_token(remaining_filtered)
+                if remaining_filtered:
+                    remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
+
+                # Flush all filters
+                input_filter.flush()  # Just flush, captured content retrieved later
+                tool_call_remaining = tool_call_filter.flush()
+                if tool_call_remaining:
+                    remaining_filtered = (remaining_filtered or "") + tool_call_remaining
+
                 if remaining_filtered:
                     phrase = phrase_detector.add_token(remaining_filtered)
                     if phrase:
@@ -1208,25 +1370,196 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
-                else:
-                    # Always send is_final=True to signal end of LLM response
-                    # This ensures the client can add the user message to history
-                    await websocket.send_json(
-                        LLMTextMessage(text="", is_final=True).model_dump()
-                    )
 
+            # Log what the model heard from the audio (captured from <input> tags)
+            heard_text = input_filter.get_captured()
+            if heard_text:
+                logger.info(f"🎤 MODEL HEARD: \"{heard_text}\"")
+                # Also send to client for debugging
+                await websocket.send_json(
+                    TranscriptionMessage(
+                        text=f"[Model heard: {heard_text}]",
+                        is_final=True
+                    ).model_dump()
+                )
+            else:
+                logger.warning("🎤 MODEL HEARD: (no <input> tag found in response)")
+
+            # === TIMING SUMMARY ===
             t_end = time.perf_counter()
-            logger.info(f"Text turn completed in {(t_end - t_start)*1000:.1f}ms")
+            logger.info("⏱️ TIMING SUMMARY for native audio turn:")
+            logger.info(f"  Total turn duration: {(t_end - t_start)*1000:.1f}ms")
+            logger.info("  (No STT - native audio)")
+            if t_llm_first_token:
+                logger.info(f"  LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms")
+            if t_first_phrase:
+                logger.info(f"  First phrase: {(t_first_phrase - t_start)*1000:.1f}ms")
+            if t_first_tts_audio:
+                logger.info(f"  First TTS audio: {(t_first_tts_audio - t_start)*1000:.1f}ms ⭐")
 
+            # Done with this turn
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
         except Exception as e:
-            logger.error(f"Error processing text turn: {e}", exc_info=True)
+            logger.error(f"Error processing native audio turn: {e}", exc_info=True)
             await websocket.send_json(
                 ErrorMessage(message=f"Processing error: {str(e)}").model_dump()
             )
             self.session.set_state(VoiceState.IDLE)
+
+    async def stream_llm_response_with_audio(
+        self, audio_bytes: bytes
+    ) -> AsyncGenerator[LLMStreamOutput, None]:
+        """Stream LLM response with native audio input.
+
+        Sends audio directly to the LLM using the OpenAI-compatible
+        multimodal message format (input_audio content part).
+
+        Args:
+            audio_bytes: Raw PCM audio (16kHz 16-bit mono).
+
+        Yields:
+            LLMContent for regular text tokens, LLMToolCall for tool calls.
+        """
+        t_start = time.perf_counter()
+        first_token_logged = False
+
+        # Convert PCM to WAV format (adds 44-byte header)
+        # OpenAI-compatible APIs only accept 'wav' or 'mp3', not raw 'pcm'
+        wav_bytes = pcm_to_wav(audio_bytes, sample_rate=16000, channels=1, bits_per_sample=16)
+        audio_base64 = base64.b64encode(wav_bytes).decode("utf-8")
+
+        # Build multimodal message with audio content
+        # Uses OpenAI-compatible format: input_audio with data and format
+        # Include instruction for model to echo what it heard at the end (for debugging)
+        audio_message = {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": audio_base64,
+                        "format": "wav",  # WAV format (PCM with header)
+                    },
+                },
+                {
+                    "type": "text",
+                    "text": "Respond to my audio message. At the very end of your response, add <input>what you heard me say</input> (this will be stripped for logging).",
+                },
+            ],
+        }
+
+        # Add audio message to session history
+        # Note: We store a placeholder in history, not the full audio
+        self.session.messages.append({
+            "role": "user",
+            "content": "[Audio message]",
+        })
+
+        # Prepare messages - use existing history + new audio message
+        # Replace the placeholder with actual audio for this request
+        messages = self.session.messages[:-1] + [audio_message]
+
+        # Prepare request
+        url = f"{self._llm_url}/chat/completions"
+        payload = {
+            "model": self._llm_model_config.model,
+            "messages": messages,
+            "stream": True,
+            "temperature": 0.7,
+            "max_tokens": 500,
+        }
+
+        if self._llm_model_config.model_api_parameters:
+            payload.update(self._llm_model_config.model_api_parameters)
+
+        accumulated_response = ""
+        token_count = 0
+        pending_tool_calls: dict[int, dict] = {}
+
+        try:
+            client = self.get_http_client()
+            async with client.stream("POST", url, json=payload) as response:
+                t_connected = time.perf_counter()
+                logger.info(f"⏱️ LLM (native audio): Connected in {(t_connected - t_start)*1000:.1f}ms")
+                response.raise_for_status()
+
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+
+                    try:
+                        chunk = json.loads(data)
+                        choice = chunk.get("choices", [{}])[0]
+                        delta = choice.get("delta", {})
+
+                        content = delta.get("content", "")
+                        if content:
+                            if not first_token_logged:
+                                first_token_logged = True
+                                logger.info(f"⏱️ LLM (native audio): First token in {(time.perf_counter() - t_start)*1000:.1f}ms")
+                            token_count += 1
+                            accumulated_response += content
+                            yield LLMContent(text=content)
+
+                        # Handle tool calls
+                        tool_calls = delta.get("tool_calls", [])
+                        for tc in tool_calls:
+                            idx = tc.get("index", 0)
+                            if idx not in pending_tool_calls:
+                                pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                            if tc.get("id"):
+                                pending_tool_calls[idx]["id"] = tc["id"]
+                            if tc.get("function", {}).get("name"):
+                                pending_tool_calls[idx]["name"] = tc["function"]["name"]
+                            if tc.get("function", {}).get("arguments"):
+                                pending_tool_calls[idx]["arguments"] += tc["function"]["arguments"]
+
+                        finish_reason = choice.get("finish_reason")
+                        if finish_reason == "tool_calls" and pending_tool_calls:
+                            for idx in sorted(pending_tool_calls.keys()):
+                                tc_data = pending_tool_calls[idx]
+                                if tc_data["id"] and tc_data["name"]:
+                                    yield LLMToolCall(
+                                        id=tc_data["id"],
+                                        name=tc_data["name"],
+                                        arguments=tc_data["arguments"],
+                                    )
+                            pending_tool_calls.clear()
+
+                    except json.JSONDecodeError:
+                        continue
+
+            # Yield remaining tool calls
+            for idx in sorted(pending_tool_calls.keys()):
+                tc_data = pending_tool_calls[idx]
+                if tc_data["id"] and tc_data["name"]:
+                    yield LLMToolCall(
+                        id=tc_data["id"],
+                        name=tc_data["name"],
+                        arguments=tc_data["arguments"],
+                    )
+
+            t_done = time.perf_counter()
+            logger.info(f"⏱️ LLM (native audio): Complete in {(t_done - t_start)*1000:.1f}ms, {token_count} tokens")
+
+            # Add response to history
+            if accumulated_response:
+                clean_response = self._filter_thinking_tags(accumulated_response).strip()
+                if clean_response:
+                    self.session.add_assistant_message(clean_response)
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"LLM request failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"LLM streaming error: {e}")
+            raise
 
     async def _synthesize_and_stream_phrase(
         self,
@@ -1322,9 +1655,10 @@ class VoiceChatService:
             StatusMessage(state=VoiceState.INTERRUPTED).model_dump()
         )
 
-        # Discard any audio that was buffered during TTS playback
-        # This prevents echo/stale audio from being processed
-        self.session.discard_audio()
+        # Close TTS WebSocket to prevent stale data from corrupting future requests.
+        # When interrupted mid-phrase, the TTS server may still be sending audio chunks.
+        # Closing the connection ensures a clean slate for the next phrase.
+        await self._close_tts_websocket()
 
         # Transition to listening for new input
         self.session.set_state(VoiceState.LISTENING)

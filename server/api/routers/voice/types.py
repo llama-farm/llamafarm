@@ -189,7 +189,7 @@ class VoiceSessionConfig(BaseModel):
         "Set to False for more responsive (but potentially more false positive) detection.",
     )
     barge_in_min_chunks: int = Field(
-        default=3,
+        default=2,
         ge=1,
         le=10,
         description="Minimum consecutive chunks above speech threshold required to trigger "
@@ -223,6 +223,14 @@ class VoiceSessionConfig(BaseModel):
         le=10.0,
         description="Maximum silence before forcing end-of-turn (seconds). "
         "Even if utterance seems incomplete, processing starts after this timeout.",
+    )
+
+    # Native audio support (for Omni models)
+    use_native_audio: bool = Field(
+        default=False,
+        description="Use native audio input (skip STT). Enable this for models like "
+        "Qwen2.5-Omni that can process audio directly. When enabled, audio is sent "
+        "straight to the LLM without transcription.",
     )
 
     # Emotion detection settings

@@ -251,7 +251,13 @@ class PhraseBoundaryDetector:
             self._buffer = " ".join(remaining_words)
             return phrase
 
-        # Nothing to split
+        # Force split: single long token (e.g., URL) exceeding max length
+        # Return the entire buffer to prevent unbounded growth
+        if self._buffer.strip():
+            phrase = self._buffer.strip()
+            self._buffer = ""
+            return phrase
+
         return None
 
     def flush(self) -> str | None:
