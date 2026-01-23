@@ -470,6 +470,11 @@ class UniversalRuntimeService:
         return await cls._make_request("GET", "/v1/anomaly/models")
 
     @classmethod
+    async def anomaly_list_backends(cls) -> dict[str, Any]:
+        """List all available anomaly detection backends."""
+        return await cls._make_request("GET", "/v1/anomaly/backends")
+
+    @classmethod
     async def anomaly_delete_model(cls, filename: str) -> dict[str, Any]:
         """Delete a saved anomaly model."""
         return await cls._make_request("DELETE", f"/v1/anomaly/models/{filename}")

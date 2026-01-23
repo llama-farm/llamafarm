@@ -228,16 +228,42 @@ async def _auto_save_model(
     return str(actual_path)
 
 
+@router.get("/v1/anomaly/backends")
+@handle_endpoint_errors("list_anomaly_backends")
+async def list_anomaly_backends():
+    """List all available anomaly detection backends.
+
+    Returns detailed information about each backend including:
+    - Name and description
+    - Category (legacy, fast, distance, clustering, ensemble, streaming, deep_learning)
+    - Speed and memory characteristics
+    - Configurable parameters
+    - Best use cases
+
+    All backends are powered by PyOD and share a consistent API.
+    Legacy backends (isolation_forest, one_class_svm, local_outlier_factor, autoencoder)
+    are mapped to their PyOD equivalents for backward compatibility.
+    """
+    from models.pyod_backend import get_backends_response
+
+    return get_backends_response()
+
+
 @router.post("/v1/anomaly/score")
 @handle_endpoint_errors("score_anomalies")
 async def score_anomalies(request: AnomalyScoreRequest):
     """Score data points for anomalies.
 
-    Detects anomalies in data using various algorithms:
-    - isolation_forest: Fast tree-based method, good general purpose
-    - one_class_svm: Support vector machine for outlier detection
-    - local_outlier_factor: Density-based, good for clustering anomalies
-    - autoencoder: Neural network, best for complex patterns
+    Detects anomalies using PyOD-powered algorithms. See GET /v1/anomaly/backends
+    for the full list of 12+ available backends including:
+
+    Legacy (backward compatible):
+    - isolation_forest, one_class_svm, local_outlier_factor, autoencoder
+
+    Fast (parameter-free):
+    - ecod, hbos, copod
+
+    And more: knn, mcd, cblof, suod, loda
 
     Note: Model must be fitted first via /v1/anomaly/fit or loaded from disk.
     """
@@ -310,10 +336,11 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     **Overwrite Default**: By default, existing models with the same name
     are overwritten. Set overwrite=False to create versioned models.
 
-    Backends:
+    See GET /v1/anomaly/backends for all 12+ available backends.
+    Popular choices:
     - isolation_forest: Fast, works well out of the box (recommended)
-    - one_class_svm: Good for small datasets
-    - local_outlier_factor: Density-based, good for clustering anomalies
+    - ecod: Fast and parameter-free (recommended for new projects)
+    - hbos: Fastest algorithm, good for high dimensions
     - autoencoder: Best for complex patterns, requires more data
     """
     cache_key = _make_cache_key(

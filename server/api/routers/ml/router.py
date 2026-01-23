@@ -450,6 +450,38 @@ async def list_anomaly_models() -> dict[str, Any]:
     }
 
 
+@router.get("/anomaly/backends")
+async def list_anomaly_backends() -> dict[str, Any]:
+    """List all available anomaly detection backends.
+
+    Returns all supported backends with metadata including:
+    - backend: Backend identifier (e.g., "isolation_forest", "ecod")
+    - name: Human-readable name
+    - description: What the algorithm does
+    - category: Backend category (legacy, fast, distance, clustering, ensemble, streaming, deep_learning)
+    - speed: Performance indicator (very_fast, fast, medium, slow)
+    - memory: Memory usage indicator (low, medium, high)
+    - parameters: Configurable parameters
+    - best_for: Recommended use case
+    - is_legacy: Whether this is a legacy (backward-compatible) backend
+
+    Backends are powered by PyOD (Python Outlier Detection).
+    Legacy backend names (isolation_forest, one_class_svm, local_outlier_factor, autoencoder)
+    are mapped to their PyOD equivalents for backward compatibility.
+
+    New backends available:
+    - ecod: Fast, parameter-free (recommended for new projects)
+    - hbos: Fastest algorithm, good for high dimensions
+    - copod: Fast, parameter-free, interpretable
+    - knn: K-Nearest Neighbors outlier detection
+    - mcd: Minimum Covariance Determinant
+    - cblof: Clustering-Based Local Outlier Factor
+    - suod: Scalable ensemble (most robust)
+    - loda: Lightweight online detector (good for streaming)
+    """
+    return await UniversalRuntimeService.anomaly_list_backends()
+
+
 @router.delete("/anomaly/models/{filename}")
 async def delete_anomaly_model(filename: str) -> dict[str, Any]:
     """Delete a saved anomaly model.
