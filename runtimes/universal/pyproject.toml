@@ -32,6 +32,8 @@ dependencies = [
   # Anomaly detection
   "scikit-learn>=1.3.0",
   "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
+  # High-performance data processing for streaming ML
+  "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
   # Text classification (few-shot learning with SetFit)
   "setfit>=1.1.0",
   "sentence-transformers>=3.0.0",
