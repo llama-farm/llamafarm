@@ -14,7 +14,7 @@ from typing import Any
 
 from .turn_detector import EndOfTurnDetector, TurnDetectorConfig
 from .types import VoiceSessionConfig, VoiceState
-from .vad import VADConfig, VoiceActivityDetector
+from .vad import VoiceActivityDetector
 
 logger = logging.getLogger(__name__)
 

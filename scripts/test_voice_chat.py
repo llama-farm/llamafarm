@@ -187,7 +187,7 @@ async def test_voice_chat(
                         else:
                             print(f"← [{msg_type}] {data}")
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("\n(Timeout waiting for response)")
             except websockets.ConnectionClosed:
                 print("\n(Connection closed)")

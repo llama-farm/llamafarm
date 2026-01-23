@@ -257,7 +257,7 @@ async def run_voice_session(
                             result.status_states.append(msg.get("state"))
                         if result.session_id and result.status_states:
                             break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
 
             # Send audio chunks
@@ -295,7 +295,7 @@ async def run_voice_session(
                         elif msg_type == "error":
                             result.errors.append(msg.get("message", ""))
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 except websockets.exceptions.ConnectionClosed:
                     break
@@ -571,7 +571,7 @@ class TestNPServiceErrors:
                         if msg.get("type") == "error":
                             error_received = True
                             error_message = msg.get("message", "")
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
         except websockets.exceptions.InvalidStatusCode as e:
             # Connection rejected with HTTP error - this is expected

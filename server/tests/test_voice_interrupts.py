@@ -283,7 +283,7 @@ async def wait_for_state(
                     if state == target_state:
                         return states, audio_chunks
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
 
     return states, audio_chunks
@@ -378,7 +378,7 @@ class TestINT01BasicInterrupt:
                             if interrupted and state == VoiceState.IDLE.value:
                                 break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         print(f"States seen: {states_seen}")
@@ -465,7 +465,7 @@ class TestINT02EarlyInterrupt:
                             if interrupted and state == VoiceState.IDLE.value:
                                 break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         print(f"States: {states_seen}")
@@ -541,7 +541,7 @@ class TestINT05InterruptThenSilence:
                             if interrupted and state == VoiceState.IDLE.value:
                                 break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         print(f"States: {states_seen}")
@@ -619,7 +619,7 @@ class TestINT07StateTransitions:
                             if interrupted and state == VoiceState.IDLE.value:
                                 break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         print(f"All states: {all_states}")
@@ -707,7 +707,7 @@ class TestINT04RapidInterrupts:
                         if interrupt_count >= len(interrupt_audios) and data.get("state") == VoiceState.IDLE.value:
                             break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         print(f"States: {states_seen}")
@@ -802,7 +802,7 @@ class TestINT06InterruptTiming:
                             if interrupted and state == VoiceState.IDLE.value:
                                 break
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         # Calculate latencies

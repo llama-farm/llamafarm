@@ -32,7 +32,7 @@ def main():
     print()
 
     # Clear cache to force fresh download
-    from llamafarm_llama._binary import _get_cache_dir, LLAMA_CPP_VERSION
+    from llamafarm_llama._binary import LLAMA_CPP_VERSION, _get_cache_dir
 
     cache_dir = _get_cache_dir()
     version_dir = cache_dir / LLAMA_CPP_VERSION
@@ -49,7 +49,7 @@ def main():
     print("Step 1: Download binary")
     print("=" * 60)
 
-    from llamafarm_llama._binary import download_binary, get_platform_key, _get_lib_name
+    from llamafarm_llama._binary import _get_lib_name, download_binary, get_platform_key
 
     platform_key = get_platform_key()
     print(f"Platform key: {platform_key}")

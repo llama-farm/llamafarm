@@ -22,9 +22,9 @@ from dataclasses import dataclass
 
 import httpx
 import websockets
+from config.datamodel import Model
 from fastapi import WebSocket
 
-from config.datamodel import Model
 from core.settings import settings
 from services.universal_runtime_service import UniversalRuntimeService
 
@@ -904,7 +904,7 @@ class VoiceChatService:
                         self._tts_ws = None
                         break
 
-        except websockets.exceptions.ConnectionClosed as e:
+        except websockets.exceptions.ConnectionClosed:
             logger.warning(f"TTS WebSocket closed for phrase {phrase_index}")
             self._tts_ws = None
         except Exception as e:
@@ -1184,7 +1184,7 @@ class VoiceChatService:
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
-            logger.info(f"⏱️ TIMING SUMMARY for turn:")
+            logger.info("⏱️ TIMING SUMMARY for turn:")
             logger.info(f"  Total turn duration: {(t_end - t_start)*1000:.1f}ms")
             if t_first_stt_segment:
                 logger.info(f"  First STT segment: {(t_first_stt_segment - t_start)*1000:.1f}ms")
@@ -1387,9 +1387,9 @@ class VoiceChatService:
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
-            logger.info(f"⏱️ TIMING SUMMARY for native audio turn:")
+            logger.info("⏱️ TIMING SUMMARY for native audio turn:")
             logger.info(f"  Total turn duration: {(t_end - t_start)*1000:.1f}ms")
-            logger.info(f"  (No STT - native audio)")
+            logger.info("  (No STT - native audio)")
             if t_llm_first_token:
                 logger.info(f"  LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms")
             if t_first_phrase:

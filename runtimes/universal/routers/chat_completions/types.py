@@ -3,7 +3,6 @@ from typing import Literal
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # Audio Content Types (for STT transcription)
 # ============================================================================

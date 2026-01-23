@@ -19,15 +19,15 @@ import logging
 
 import httpx
 from config.datamodel import LlamaFarmConfig
-from core.settings import settings
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from core.settings import settings
 from services.model_service import ModelService
 from services.project_service import ProjectService
 from services.prompt_service import PromptService
 
 from .service import VoiceChatService
-from .session import AudioFormat, get_session_manager
+from .session import get_session_manager
 from .types import (
     ClosedMessage,
     ErrorMessage,

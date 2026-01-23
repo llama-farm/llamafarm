@@ -13,7 +13,6 @@ Or from the CLI:
 
 import logging
 import os
-import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -80,8 +79,8 @@ def _extract_speaker_from_tarball(
         True if successful, False otherwise
     """
     try:
-        import soundfile as sf
         import numpy as np
+        import soundfile as sf
     except ImportError:
         logger.error("soundfile not installed. Run: pip install soundfile")
         return False
@@ -239,8 +238,8 @@ def download_all_voices(force: bool = False) -> dict[str, bool]:
         logger.info("Extracting voice samples from tarball...")
 
         try:
-            import soundfile as sf
             import numpy as np
+            import soundfile as sf
         except ImportError:
             logger.error("soundfile not installed. Run: pip install soundfile")
             for voice_id in voices_to_download:

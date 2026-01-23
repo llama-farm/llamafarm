@@ -326,8 +326,8 @@ def voice_test_project():
         response = httpx.get(f"http://{host}:{settings.PORT}/health", timeout=5.0)
         if response.status_code != 200:
             pytest.fail(
-                f"LlamaFarm server not healthy. "
-                f"Start with `nx start server` before running E2E tests."
+                "LlamaFarm server not healthy. "
+                "Start with `nx start server` before running E2E tests."
             )
     except Exception as e:
         pytest.fail(
@@ -393,8 +393,8 @@ def omni_test_project():
         response = httpx.get(f"http://{host}:{settings.PORT}/health", timeout=5.0)
         if response.status_code != 200:
             pytest.fail(
-                f"LlamaFarm server not healthy. "
-                f"Start with `nx start server` before running E2E tests."
+                "LlamaFarm server not healthy. "
+                "Start with `nx start server` before running E2E tests."
             )
     except Exception as e:
         pytest.fail(
@@ -534,7 +534,7 @@ async def run_voice_session_async(
                     # Break after getting initial status
                     if result.session_id and result.status_states:
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
                 except Exception:
                     break
@@ -579,7 +579,7 @@ async def run_voice_session_async(
                         elif msg_type == "error":
                             result.errors.append(msg.get("message", ""))
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Timeout waiting for message - might be done
                     continue
                 except websockets.exceptions.ConnectionClosed:
@@ -916,7 +916,7 @@ class TestE2ELatency:
                         if isinstance(raw_msg, bytes):
                             first_audio_time = time.time()
                             break
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
                     except Exception:
                         break
@@ -1004,7 +1004,7 @@ class TestE2EGP06OmniModel:
         )
         # Just verify we got a non-empty response - Omni transcription can vary
         assert len(result.full_llm_response.strip()) > 0, (
-            f"Empty response from Omni model"
+            "Empty response from Omni model"
         )
 
     @pytest.mark.asyncio
