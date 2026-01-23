@@ -279,6 +279,12 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
             currentUserTextRef.current = ''
             setCurrentTranscription('')
           }
+          // Clear audio/text buffers when response is final to prevent memory leak
+          // (onAudio still accumulates data even when LLM display is disabled)
+          if (isFinal) {
+            currentAssistantAudioRef.current = []
+            currentAssistantTextRef.current = ''
+          }
           return // Skip LLM response display
         }
 

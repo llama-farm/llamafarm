@@ -609,6 +609,8 @@ class VoiceSession:
             remaining_pcm = self._decoder.flush()
             if remaining_pcm:
                 logger.debug(f"Flushed {len(remaining_pcm)} bytes of PCM from decoder")
+                # Add flushed PCM to buffer so it's included in transcription
+                self._audio_buffer.extend(remaining_pcm)
                 return self._vad.process_chunk(remaining_pcm)
         return False
 
@@ -683,6 +685,9 @@ class VoiceSession:
         Assumes client handles echo cancellation, so any detected speech
         is genuine user input.
 
+        Note: Uses a temporary decoder to avoid corrupting the main decoder's
+        state, which would cause issues when processing the actual utterance.
+
         Args:
             chunk: Audio chunk (PCM or encoded WebM/Opus).
 
@@ -696,9 +701,19 @@ class VoiceSession:
 
         # Get PCM for energy analysis
         pcm_chunk: bytes
-        if self._decoder is not None:
-            # Decode to PCM (decoder preserves state across calls)
-            pcm_chunk = self._decoder.feed(chunk)
+        if self._audio_format == AudioFormat.WEBM:
+            # Use temporary decoder to avoid corrupting main decoder state
+            temp_decoder = StreamingAudioDecoder(input_format="webm")
+            pcm_chunk = temp_decoder.feed(chunk)
+            temp_decoder.close()
+            if not pcm_chunk:
+                logger.info(f"Barge-in check: decoder returned empty (chunk={len(chunk)} bytes)")
+                return False
+        elif self._audio_format == AudioFormat.OGG:
+            # Use temporary decoder to avoid corrupting main decoder state
+            temp_decoder = StreamingAudioDecoder(input_format="ogg")
+            pcm_chunk = temp_decoder.feed(chunk)
+            temp_decoder.close()
             if not pcm_chunk:
                 logger.info(f"Barge-in check: decoder returned empty (chunk={len(chunk)} bytes)")
                 return False

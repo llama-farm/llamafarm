@@ -766,13 +766,18 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         }
         setMessages(prev => [...prev, userMessage])
 
-        // Send via REST API
+        // Send via REST API with full conversation history
         try {
+          // Convert existing messages to API format and append new user message
+          const apiMessages = [
+            ...messages.map(m => ({ role: m.role, content: m.text })),
+            { role: 'user' as const, content: inputText },
+          ]
           const result = await sendChatCompletion(
             activeProject.namespace,
             activeProject.project,
             {
-              messages: [{ role: 'user', content: inputText }],
+              messages: apiMessages,
               model: selectedLLMModel,
             }
           )
@@ -800,7 +805,10 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                 })
                 const audioUrl = URL.createObjectURL(audioBlob)
                 const audio = new Audio(audioUrl)
-                audio.play().catch(console.error)
+                // Revoke blob URL after playback to prevent memory leak
+                audio.onended = () => URL.revokeObjectURL(audioUrl)
+                audio.onerror = () => URL.revokeObjectURL(audioUrl)
+                audio.play().catch(() => URL.revokeObjectURL(audioUrl))
               } catch (ttsErr) {
                 console.error('TTS synthesis failed:', ttsErr)
               }

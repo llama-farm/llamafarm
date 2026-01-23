@@ -819,7 +819,9 @@ class VoiceChatService:
                                     )
                             pending_tool_calls.clear()
 
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        # Log malformed JSON for debugging (truncate to avoid log spam)
+                        logger.debug(f"LLM stream: malformed JSON skipped: {data[:100]}... error: {e}")
                         continue
 
             # Yield any remaining tool calls that weren't finalized with finish_reason
@@ -1591,7 +1593,9 @@ class VoiceChatService:
                                     )
                             pending_tool_calls.clear()
 
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        # Log malformed JSON for debugging (truncate to avoid log spam)
+                        logger.debug(f"LLM stream (native audio): malformed JSON skipped: {data[:100]}... error: {e}")
                         continue
 
             # Yield remaining tool calls
