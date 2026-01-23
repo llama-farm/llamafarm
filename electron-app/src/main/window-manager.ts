@@ -124,42 +124,31 @@ export class WindowManager {
               margin-bottom: 20px;
               color: hsl(215, 20%, 65%);
             }
-            /* Error-only model display */
-            .models-container {
+            /* Error display - positioned below progress bar */
+            .error-container {
+              position: absolute;
+              bottom: 40px;
+              left: 50%;
+              transform: translateX(-50%);
               width: 380px;
-              margin-bottom: 20px;
               display: none;
             }
-            .models-container.has-errors {
+            .error-container.has-errors {
               display: block;
             }
-            .model-item {
+            .error-summary {
               display: flex;
               align-items: center;
-              padding: 10px 16px;
-              background: hsla(0, 50%, 20%, 0.3);
-              border: 1px solid hsla(0, 50%, 40%, 0.3);
+              gap: 8px;
+              padding: 12px 16px;
+              background: hsla(0, 40%, 15%, 0.6);
+              border: 1px solid hsla(0, 50%, 35%, 0.4);
               border-radius: 8px;
-              margin-bottom: 8px;
               font-size: 13px;
+              color: hsl(0, 70%, 70%);
             }
-            .model-icon {
-              width: 24px;
-              height: 24px;
-              margin-right: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 16px;
-              color: #ff6b6b;
-            }
-            .model-name {
-              flex: 1;
-              color: hsl(210, 40%, 90%);
-            }
-            .model-status {
-              font-size: 11px;
-              color: #ff6b6b;
+            .error-icon {
+              font-size: 14px;
             }
             .progress-container {
               width: 320px;
@@ -209,19 +198,19 @@ export class WindowManager {
           </div>
           ${logoBase64 ? `<img class="logo" src="data:image/png;base64,${logoBase64}" alt="LlamaFarm" />` : '<div class="logo" style="font-size: 64px;">🦙</div>'}
           <div class="status" id="status">Starting...</div>
-          <div class="models-container" id="models-container"></div>
           <div class="progress-container">
             <div class="progress-bar" id="progress"></div>
           </div>
           <div class="spinner" id="spinner"></div>
           <div class="error" id="error" style="display: none;"></div>
+          <div class="error-container" id="error-container"></div>
 
           <script>
-            // Only show models that have errors
+            // Show error summary with retry button
             function renderModels(models) {
-              const container = document.getElementById('models-container');
+              const container = document.getElementById('error-container');
               if (!models || models.length === 0) {
-                container.className = 'models-container';
+                container.className = 'error-container';
                 container.innerHTML = '';
                 return;
               }
@@ -230,36 +219,17 @@ export class WindowManager {
               const errorModels = models.filter(m => m.status === 'error');
 
               if (errorModels.length === 0) {
-                container.className = 'models-container';
+                container.className = 'error-container';
                 container.innerHTML = '';
                 return;
               }
 
-              // Show error models
-              container.className = 'models-container has-errors';
-              container.innerHTML = '';
+              // Show compact error summary with retry button
+              container.className = 'error-container has-errors';
+              const count = errorModels.length;
+              const modelText = count === 1 ? 'model' : 'models';
 
-              errorModels.forEach(model => {
-                const item = document.createElement('div');
-                item.className = 'model-item';
-
-                const icon = document.createElement('div');
-                icon.className = 'model-icon';
-                icon.textContent = '✗';
-
-                const name = document.createElement('div');
-                name.className = 'model-name';
-                name.textContent = model.display_name;
-
-                const statusEl = document.createElement('div');
-                statusEl.className = 'model-status';
-                statusEl.textContent = 'Failed to load';
-
-                item.appendChild(icon);
-                item.appendChild(name);
-                item.appendChild(statusEl);
-                container.appendChild(item);
-              });
+              container.innerHTML = '<div class="error-summary"><span class="error-icon">⚠</span> ' + count + ' ' + modelText + ' failed to load</div>';
             }
 
             window.llamafarm.splash.onStatus((status) => {
