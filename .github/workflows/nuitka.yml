@@ -73,17 +73,6 @@ jobs:
             runner: macos-latest
             component: runtime
 
-          # macOS x86_64 (Intel)
-          - os: macos-x86_64
-            runner: macos-15-intel
-            component: server
-          - os: macos-x86_64
-            runner: macos-15-intel
-            component: rag
-          - os: macos-x86_64
-            runner: macos-15-intel
-            component: runtime
-
           # Windows x86_64
           - os: windows-x86_64
             runner: windows-latest
@@ -165,6 +154,13 @@ jobs:
           ccache --set-config=compiler_check=content
           # Use ccache symlinks in PATH instead of CC/CXX variables
           echo "$(brew --prefix ccache)/libexec" >> $GITHUB_PATH
+
+      # ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
+      # Large binaries exceed this, causing "relocation truncated to fit" errors.
+      # --long-plt uses indirect calls via PLT to avoid the range limit.
+      - name: Set ARM64 linker flags (Linux)
+        if: runner.os == 'Linux' && contains(matrix.os, 'arm64')
+        run: echo "LDFLAGS=-Wl,--long-plt" >> $GITHUB_ENV
 
       - name: Install build dependencies
         run: |
