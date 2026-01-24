@@ -14,6 +14,7 @@ from .gguf_encoder_model import GGUFEncoderModel
 from .gguf_language_model import GGUFLanguageModel
 from .language_model import LanguageModel
 from .ocr_model import OCRModel
+from .shap_explainer import SHAPExplainer
 from .speech_model import SpeechModel
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "DocumentModel",
     "AnomalyModel",
     "ClassifierModel",
+    "SHAPExplainer",
     "SpeechModel",
 ]

@@ -40,6 +40,14 @@ from models import (
     OCRModel,
     SpeechModel,
 )
+from models.adtk_model import ADTKModel
+from models.catboost_model import CatBoostModel
+from models.drift_model import DriftModel
+from models.timeseries_model import TimeseriesModel
+from routers.adtk import router as adtk_router, set_adtk_loader, set_adtk_state
+from routers.catboost import router as catboost_router, set_catboost_state
+from routers.drift import router as drift_router, set_drift_loader, set_drift_state
+from routers.explain import router as explain_router, set_explain_state, set_model_getter
 from routers.anomaly import (
     router as anomaly_router,
 )
@@ -75,6 +83,15 @@ from routers.health import (
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
 from routers.polars import router as polars_router
+from routers.timeseries import (
+    router as timeseries_router,
+)
+from routers.timeseries import (
+    set_timeseries_loader,
+)
+from routers.timeseries import (
+    set_state as set_timeseries_state,
+)
 from routers.vision import (
     router as vision_router,
 )
@@ -168,7 +185,11 @@ app.add_middleware(
 )
 
 # Include all routers
+app.include_router(adtk_router)
 app.include_router(anomaly_router)
+app.include_router(catboost_router)
+app.include_router(drift_router)
+app.include_router(explain_router)
 app.include_router(audio_router)
 app.include_router(chat_completions_router)
 app.include_router(classifier_router)
@@ -176,6 +197,7 @@ app.include_router(files_router)
 app.include_router(health_router)
 app.include_router(nlp_router)
 app.include_router(polars_router)
+app.include_router(timeseries_router)
 app.include_router(vision_router)
 
 # Model unload timeout configuration (in seconds)
@@ -189,6 +211,10 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_timeseries: ModelCache["TimeseriesModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_adtk: ModelCache["ADTKModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_drift: ModelCache["DriftModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_catboost: ModelCache["CatBoostModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -199,6 +225,10 @@ _cleanup_task: asyncio.Task | None = None
 # Data directories
 _LF_DATA_DIR = Path.home() / ".llamafarm"
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
+TIMESERIES_MODELS_DIR = _LF_DATA_DIR / "models" / "timeseries"
+ADTK_MODELS_DIR = _LF_DATA_DIR / "models" / "adtk"
+DRIFT_MODELS_DIR = _LF_DATA_DIR / "models" / "drift"
+CATBOOST_MODELS_DIR = _LF_DATA_DIR / "models" / "catboost"
 
 
 # ============================================================================
@@ -581,6 +611,119 @@ async def load_classifier(
 
 
 # ============================================================================
+# Timeseries Model Loading
+# ============================================================================
+
+
+def _make_timeseries_cache_key(model_id: str, backend: str) -> str:
+    """Create a cache key for timeseries models."""
+    return f"timeseries:{backend}:{model_id}"
+
+
+async def load_timeseries(
+    model_id: str,
+    backend: str = "arima",
+    **kwargs,
+) -> "TimeseriesModel":
+    """Load or get cached timeseries model."""
+    cache_key = _make_timeseries_cache_key(model_id, backend)
+
+    if cache_key not in _timeseries:
+        async with _model_load_lock:
+            if cache_key not in _timeseries:
+                logger.info(f"Loading timeseries model ({backend}): {model_id}")
+                device = get_device()
+
+                model = TimeseriesModel(
+                    model_id=model_id,
+                    device=device,
+                    backend=backend,
+                    **kwargs,
+                )
+
+                await model.load()
+                _timeseries[cache_key] = model
+
+    return _timeseries.get(cache_key)
+
+
+# ============================================================================
+# ADTK Model Loading
+# ============================================================================
+
+
+def _make_adtk_cache_key(model_id: str, detector: str) -> str:
+    """Create a cache key for ADTK models."""
+    return f"adtk:{detector}:{model_id}"
+
+
+async def load_adtk(
+    model_id: str,
+    detector: str = "level_shift",
+    params: dict | None = None,
+) -> "ADTKModel":
+    """Load or get cached ADTK model."""
+    cache_key = _make_adtk_cache_key(model_id, detector)
+    params = params or {}
+
+    if cache_key not in _adtk:
+        async with _model_load_lock:
+            if cache_key not in _adtk:
+                logger.info(f"Loading ADTK model ({detector}): {model_id}")
+                device = get_device()
+
+                model = ADTKModel(
+                    model_id=model_id,
+                    device=device,
+                    detector=detector,
+                    **params,
+                )
+
+                await model.load()
+                _adtk[cache_key] = model
+
+    return _adtk.get(cache_key)
+
+
+# ============================================================================
+# Drift Model Loading
+# ============================================================================
+
+
+def _make_drift_cache_key(model_id: str, detector: str) -> str:
+    """Create a cache key for drift models."""
+    return f"drift:{detector}:{model_id}"
+
+
+async def load_drift(
+    model_id: str,
+    detector: str = "ks",
+    params: dict | None = None,
+) -> "DriftModel":
+    """Load or get cached drift model."""
+    cache_key = _make_drift_cache_key(model_id, detector)
+    params = params or {}
+
+    if cache_key not in _drift:
+        async with _model_load_lock:
+            if cache_key not in _drift:
+                logger.info(f"Loading drift model ({detector}): {model_id}")
+                device = get_device()
+
+                model = DriftModel(
+                    model_id=model_id,
+                    device=device,
+                    detector=detector,
+                    **params,
+                )
+
+                await model.load()
+                _drift[cache_key] = model
+
+    return _drift.get(cache_key)
+
+
+# ============================================================================
 # Speech Model Loading
 # ============================================================================
 
@@ -640,6 +783,61 @@ set_anomaly_state(_models, _encoders, _model_load_lock)
 set_classifier_loader(load_classifier)
 set_classifier_models_dir(CLASSIFIER_MODELS_DIR)
 set_classifier_state(_classifiers, _model_load_lock)
+
+# Timeseries router
+set_timeseries_loader(load_timeseries)
+set_timeseries_state(_timeseries, _model_load_lock)
+
+# ADTK router
+set_adtk_loader(load_adtk)
+set_adtk_state(_adtk, _model_load_lock)
+
+# Drift router
+set_drift_loader(load_drift)
+set_drift_state(_drift, _model_load_lock)
+
+# CatBoost router
+CATBOOST_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+set_catboost_state(_catboost, _model_load_lock, CATBOOST_MODELS_DIR)
+
+# Explain router - model getter function
+async def get_model_for_explain(model_type: str, model_id: str):
+    """Get a model by type and ID for SHAP explanation.
+
+    Looks up models from the appropriate cache based on model_type.
+    """
+    cache_key = f"{model_type}:{model_id}"
+
+    # Look up in the appropriate cache based on model type
+    if model_type == "anomaly":
+        for key, model in _models.items():
+            if key.startswith("anomaly:") and model_id in key:
+                return model
+    elif model_type == "classifier":
+        for key, model in _classifiers.items():
+            if model_id in key:
+                return model
+    elif model_type == "timeseries":
+        for key, model in _timeseries.items():
+            if model_id in key:
+                return model
+    elif model_type == "adtk":
+        for key, model in _adtk.items():
+            if model_id in key:
+                return model
+    elif model_type == "drift":
+        for key, model in _drift.items():
+            if model_id in key:
+                return model
+    elif model_type == "catboost":
+        for key, model in _catboost.items():
+            if model_id in key:
+                return model
+
+    return None
+
+set_model_getter(get_model_for_explain)
+set_explain_state(_model_load_lock)
 
 # Audio router
 set_speech_loader(load_speech)

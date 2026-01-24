@@ -6,11 +6,22 @@ Provides:
 - {base-name}_{timestamp} versioning when overwrite=False
 - {base-name}-latest resolution to find most recent version
 - Description metadata storage in metadata.json files
+
+Supports all ML model types:
+- classifier: SetFit text classification models (directory-based)
+- anomaly: Anomaly detection models (PyOD backends)
+- timeseries: Time-series forecasting models (Darts/Chronos)
+- adtk: ADTK time-series anomaly detection
+- drift: Data drift detection models
+- shap: SHAP explainers
+- catboost: CatBoost gradient boosting models
 """
 
 import json
 import logging
+import os
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -20,12 +31,27 @@ logger = logging.getLogger(__name__)
 class MLModelService:
     """Service for managing ML model storage and versioning."""
 
-    # Base directory for all models
-    MODELS_DIR = Path.home() / ".llamafarm" / "models"
+    # Base directory for all models (uses LF_DATA_DIR if set)
+    MODELS_DIR = Path(
+        os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm")
+    ) / "models"
 
-    # Subdirectories by model type
-    CLASSIFIER_DIR = "classifier"
-    ANOMALY_DIR = "anomaly"
+    # All supported model types
+    MODEL_TYPES = [
+        "classifier",
+        "anomaly",
+        "timeseries",
+        "adtk",
+        "drift",
+        "shap",
+        "catboost",
+    ]
+
+    # Model types that use directory-based storage (vs file-based)
+    DIRECTORY_BASED_TYPES = ["classifier"]
+
+    # Model types that don't include backend in filename
+    NO_BACKEND_TYPES = ["classifier", "shap", "catboost"]
 
     # Timestamp format for versioning
     TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
@@ -33,37 +59,112 @@ class MLModelService:
     # Pattern to match versioned model names: base_name_YYYYMMDD_HHMMSS
     VERSION_PATTERN = re.compile(r"^(.+)_(\d{8}_\d{6})$")
 
-    # Known anomaly detection backends (used to parse filenames)
-    ANOMALY_BACKENDS = [
-        "isolation_forest",
-        "one_class_svm",
-        "local_outlier_factor",
-        "autoencoder",
-    ]
+    # Known backends by model type (used to parse filenames)
+    KNOWN_BACKENDS: dict[str, list[str]] = {
+        "anomaly": [
+            "isolation_forest",
+            "one_class_svm",
+            "local_outlier_factor",
+            "autoencoder",
+            # PyOD backends
+            "ecod",
+            "copod",
+            "hbos",
+            "knn",
+            "lof",
+            "abod",
+            "cblof",
+            "cof",
+            "sod",
+            "iforest",
+            "inne",
+            "lscp",
+            "mcd",
+            "ocsvm",
+            "pca",
+            "rod",
+            "sampling",
+        ],
+        "timeseries": [
+            "arima",
+            "exponential_smoothing",
+            "theta",
+            "chronos",
+            "chronos-bolt",
+        ],
+        "adtk": [
+            "threshold",
+            "quantile",
+            "inter_quartile_range",
+            "generalized_esd",
+            "persist",
+            "level_shift",
+            "volatility_shift",
+            "seasonal",
+            "autoregressive",
+        ],
+        "drift": [
+            "kolmogorov_smirnov",
+            "chi_squared",
+            "population_stability",
+            "jensen_shannon",
+        ],
+    }
+
+    # Legacy alias for backwards compatibility
+    ANOMALY_BACKENDS = KNOWN_BACKENDS.get("anomaly", [])
 
     @classmethod
     def ensure_dirs(cls) -> None:
-        """Ensure model directories exist."""
-        (cls.MODELS_DIR / cls.CLASSIFIER_DIR).mkdir(parents=True, exist_ok=True)
-        (cls.MODELS_DIR / cls.ANOMALY_DIR).mkdir(parents=True, exist_ok=True)
+        """Ensure all model directories exist."""
+        for model_type in cls.MODEL_TYPES:
+            (cls.MODELS_DIR / model_type).mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def get_model_dir(cls, model_type: str) -> Path:
         """Get the directory for a model type.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: One of MODEL_TYPES (classifier, anomaly, timeseries, etc.)
 
         Returns:
             Path to the model type directory
+
+        Raises:
+            ValueError: If model_type is not recognized
         """
-        cls.ensure_dirs()
-        if model_type == "classifier":
-            return cls.MODELS_DIR / cls.CLASSIFIER_DIR
-        elif model_type == "anomaly":
-            return cls.MODELS_DIR / cls.ANOMALY_DIR
-        else:
-            raise ValueError(f"Unknown model type: {model_type}")
+        if model_type not in cls.MODEL_TYPES:
+            raise ValueError(
+                f"Unknown model type: {model_type}. "
+                f"Valid types: {cls.MODEL_TYPES}"
+            )
+        model_dir = cls.MODELS_DIR / model_type
+        model_dir.mkdir(parents=True, exist_ok=True)
+        return model_dir
+
+    @classmethod
+    def generate_model_name(cls, model_type: str) -> str:
+        """Generate a unique model name if none provided.
+
+        Args:
+            model_type: Type of model (for prefix)
+
+        Returns:
+            Generated name like "timeseries-a1b2c3d4"
+        """
+        return f"{model_type}-{uuid.uuid4().hex[:8]}"
+
+    @classmethod
+    def get_backends_for_type(cls, model_type: str) -> list[str]:
+        """Get known backends for a model type.
+
+        Args:
+            model_type: The model type
+
+        Returns:
+            List of known backend names, or empty list if none defined
+        """
+        return cls.KNOWN_BACKENDS.get(model_type, [])
 
     @classmethod
     def get_versioned_name(cls, base_name: str, overwrite: bool) -> str:
@@ -133,7 +234,7 @@ class MLModelService:
         """List all versions of a model, sorted by timestamp.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: One of MODEL_TYPES
             base_name: Base model name
 
         Returns:
@@ -145,8 +246,8 @@ class MLModelService:
         # Pattern to match this base name's versions
         pattern = re.compile(rf"^{re.escape(base_name)}_(\d{{8}}_\d{{6}})")
 
-        if model_type == "classifier":
-            # Classifiers are directories
+        # Directory-based models (classifier, etc.)
+        if model_type in cls.DIRECTORY_BASED_TYPES:
             for item in model_dir.iterdir():
                 if item.is_dir():
                     match = pattern.match(item.name)
@@ -154,24 +255,34 @@ class MLModelService:
                         versions.append((match.group(1), item.name))
                     elif item.name == base_name:
                         # Non-versioned (overwrite=True) version - use actual mtime
-                        # Format as timestamp so it sorts correctly with versioned models
-                        from datetime import datetime
-
                         mtime = datetime.fromtimestamp(item.stat().st_mtime)
                         ts = mtime.strftime("%Y%m%d_%H%M%S")
                         versions.append((ts, item.name))
+        # Models that don't include backend in filename (shap, catboost)
+        elif model_type in cls.NO_BACKEND_TYPES and model_type not in cls.DIRECTORY_BASED_TYPES:
+            # Get file extension based on model type
+            ext = ".cbm" if model_type == "catboost" else ".joblib"
+            for item in model_dir.iterdir():
+                if item.is_file() and item.suffix == ext:
+                    name_without_ext = item.stem
+                    match = pattern.match(name_without_ext)
+                    if match:
+                        versions.append((match.group(1), name_without_ext))
+                    elif name_without_ext == base_name:
+                        mtime = datetime.fromtimestamp(item.stat().st_mtime)
+                        ts = mtime.strftime("%Y%m%d_%H%M%S")
+                        versions.append((ts, name_without_ext))
         else:
-            # Anomaly models are files like: {model}_{backend}.joblib
-            # or versioned: {model}_{YYYYMMDD_HHMMSS}_{backend}.joblib
+            # File-based models with backend in filename (anomaly, timeseries, adtk, drift)
+            # Filename format: {model}_{backend}.joblib
+            known_backends = cls.get_backends_for_type(model_type)
             for item in model_dir.iterdir():
                 if item.is_file() and item.suffix == ".joblib":
-                    # Filename format: model_name_backend.joblib
-                    # Extract name without .joblib extension
                     name_without_ext = item.stem
 
                     # Remove known backend suffix to get model name
                     model_part = None
-                    for backend in cls.ANOMALY_BACKENDS:
+                    for backend in known_backends:
                         suffix = f"_{backend}"
                         if name_without_ext.endswith(suffix):
                             model_part = name_without_ext[: -len(suffix)]
@@ -202,7 +313,7 @@ class MLModelService:
         """List all models of a type with their metadata.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: One of MODEL_TYPES
 
         Returns:
             List of model info dicts
@@ -210,7 +321,8 @@ class MLModelService:
         model_dir = cls.get_model_dir(model_type)
         models = []
 
-        if model_type == "classifier":
+        # Directory-based models (classifier)
+        if model_type in cls.DIRECTORY_BASED_TYPES:
             for item in model_dir.iterdir():
                 if item.is_dir():
                     # Parse version info
@@ -226,12 +338,43 @@ class MLModelService:
                         {
                             "name": item.name,
                             "base_name": base_name,
+                            "model_type": model_type,
                             "path": str(item),
                             "created": created.isoformat(),
                             "is_versioned": match is not None,
                         }
                     )
+        # Models without backend in filename (shap, catboost)
+        elif model_type in cls.NO_BACKEND_TYPES and model_type not in cls.DIRECTORY_BASED_TYPES:
+            ext = ".cbm" if model_type == "catboost" else ".joblib"
+            for item in model_dir.iterdir():
+                if item.is_file() and item.suffix == ext:
+                    name_without_ext = item.stem
+
+                    # Parse version info
+                    match = cls.VERSION_PATTERN.match(name_without_ext)
+                    if match:
+                        base_name, timestamp = match.groups()
+                        created = datetime.strptime(timestamp, cls.TIMESTAMP_FORMAT)
+                    else:
+                        base_name = name_without_ext
+                        created = datetime.fromtimestamp(item.stat().st_mtime)
+
+                    models.append(
+                        {
+                            "name": name_without_ext,
+                            "filename": item.name,
+                            "base_name": base_name,
+                            "model_type": model_type,
+                            "path": str(item),
+                            "size_bytes": item.stat().st_size,
+                            "created": created.isoformat(),
+                            "is_versioned": match is not None,
+                        }
+                    )
         else:
+            # File-based models with backend in filename (anomaly, timeseries, adtk, drift)
+            known_backends = cls.get_backends_for_type(model_type)
             for item in model_dir.iterdir():
                 if item.is_file() and item.suffix in (".joblib", ".pkl", ".pt"):
                     name_without_ext = item.stem
@@ -240,7 +383,7 @@ class MLModelService:
                     # Filename format: {model}_{backend}.joblib
                     model_name = name_without_ext
                     backend = "unknown"
-                    for known_backend in cls.ANOMALY_BACKENDS:
+                    for known_backend in known_backends:
                         suffix = f"_{known_backend}"
                         if name_without_ext.endswith(suffix):
                             model_name = name_without_ext[: -len(suffix)]
@@ -262,6 +405,7 @@ class MLModelService:
                             "filename": item.name,
                             "base_name": base_name,
                             "backend": backend,
+                            "model_type": model_type,
                             "path": str(item),
                             "size_bytes": item.stat().st_size,
                             "created": created.isoformat(),
@@ -323,7 +467,7 @@ class MLModelService:
         """Delete a model.
 
         Args:
-            model_type: 'classifier' or 'anomaly'
+            model_type: One of MODEL_TYPES
             name: Model name or filename
 
         Returns:
@@ -336,30 +480,32 @@ class MLModelService:
 
         model_dir = cls.get_model_dir(model_type)
 
-        if model_type == "classifier":
+        # Directory-based models (classifier)
+        if model_type in cls.DIRECTORY_BASED_TYPES:
             path = cls._validate_path(model_dir, name)
             if path.is_dir():
                 shutil.rmtree(path)
-                logger.info(f"Deleted classifier model: {name}")
+                logger.info(f"Deleted {model_type} model: {name}")
                 return True
         else:
-            # For anomaly, name might be just the model name or the full filename
+            # File-based models - name might be just the model name or the full filename
             path = cls._validate_path(model_dir, name)
             if path.is_file():
                 # Also delete associated metadata
                 cls._delete_metadata(model_type, name)
                 path.unlink()
-                logger.info(f"Deleted anomaly model: {name}")
+                logger.info(f"Deleted {model_type} model: {name}")
                 return True
 
-            # Try with various extensions used by anomaly models
-            for ext in (".joblib", ".pkl", ".pt"):
+            # Try with various extensions used by models
+            extensions = [".cbm"] if model_type == "catboost" else [".joblib", ".pkl", ".pt"]
+            for ext in extensions:
                 try:
                     path = cls._validate_path(model_dir, f"{name}{ext}")
                     if path.is_file():
                         cls._delete_metadata(model_type, name)
                         path.unlink()
-                        logger.info(f"Deleted anomaly model: {name}{ext}")
+                        logger.info(f"Deleted {model_type} model: {name}{ext}")
                         return True
                 except ValueError:
                     continue
@@ -374,8 +520,10 @@ class MLModelService:
     def _get_metadata_path(cls, model_type: str, model_name: str) -> Path:
         """Get the path to a model's metadata file.
 
-        For classifiers: ~/.llamafarm/models/classifier/{model_name}/metadata.json
-        For anomaly: ~/.llamafarm/models/anomaly/{model_name}.metadata.json
+        For directory-based models (classifier):
+            ~/.llamafarm/models/classifier/{model_name}/metadata.json
+        For file-based models (anomaly, timeseries, etc.):
+            ~/.llamafarm/models/{type}/{model_name}.metadata.json
 
         Raises:
             ValueError: If the model name is invalid (e.g., path traversal)
@@ -385,10 +533,10 @@ class MLModelService:
         # Validate model name to prevent path traversal
         cls._validate_path(model_dir, model_name)
 
-        if model_type == "classifier":
+        if model_type in cls.DIRECTORY_BASED_TYPES:
             return model_dir / model_name / "metadata.json"
         else:
-            # For anomaly models, store metadata alongside the model file
+            # For file-based models, store metadata alongside the model file
             return model_dir / f"{model_name}.metadata.json"
 
     @classmethod

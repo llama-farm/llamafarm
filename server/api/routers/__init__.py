@@ -8,6 +8,7 @@ from .nlp import router as nlp_router
 from .projects import router as projects_router
 from .rag import router as rag_router
 from .system import disk_router, upgrades_router
+from .timeseries import router as timeseries_router
 from .vision import vision_router
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     "models_router",
     "ml_router",
     "nlp_router",
+    "timeseries_router",
     "vision_router",
 ]
