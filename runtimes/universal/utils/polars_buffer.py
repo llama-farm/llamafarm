@@ -154,9 +154,10 @@ class PolarsBuffer:
             if len(self._df) > self._window_size:
                 self._df = self._df.tail(self._window_size)
 
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        self._append_count += 1
-        self._total_append_time_ms += elapsed_ms
+            # Update counters inside lock for thread safety
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._append_count += 1
+            self._total_append_time_ms += elapsed_ms
 
     def append_batch(self, records: list[dict[str, Any]]) -> None:
         """Append multiple records at once (more efficient than individual appends).
@@ -181,9 +182,10 @@ class PolarsBuffer:
             if len(self._df) > self._window_size:
                 self._df = self._df.tail(self._window_size)
 
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        self._append_count += len(records)
-        self._total_append_time_ms += elapsed_ms
+            # Update counters inside lock for thread safety
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            self._append_count += len(records)
+            self._total_append_time_ms += elapsed_ms
 
     def get_data(self) -> pl.DataFrame:
         """Get the raw buffer data as a DataFrame.

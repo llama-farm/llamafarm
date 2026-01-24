@@ -17,7 +17,9 @@ echo "========================================"
 echo ""
 
 # Run the demo using Python directly
-cd /Users/robthelen/llamafarm-head/llamafarm/runtimes/universal
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT/runtimes/universal"
 
 uv run python3 << 'PYTHON_DEMO'
 import time

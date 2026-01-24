@@ -319,7 +319,11 @@ def _create_detector_with_params(
     elif backend == "autoencoder":
         # AutoEncoder has more parameters
         # PyOD uses hidden_neuron_list and epoch_num (not hidden_neurons/epochs)
-        hidden_neuron_list = kwargs.get("hidden_neuron_list", [64, 32])
+        # Accept friendly names and map to PyOD parameter names
+        hidden_neuron_list = kwargs.get(
+            "hidden_neuron_list",
+            kwargs.get("hidden_neurons", [64, 32])
+        )
         return detector_class(
             **common_params,
             hidden_neuron_list=hidden_neuron_list,

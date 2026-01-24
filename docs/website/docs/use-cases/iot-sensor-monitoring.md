@@ -228,8 +228,12 @@ async def monitor_detector_health():
 For advanced analysis beyond anomaly detection:
 
 ```python
-async def analyze_with_polars():
-    """Use Polars buffers for custom feature engineering."""
+async def analyze_with_polars(sensor_data: dict):
+    """Use Polars buffers for custom feature engineering.
+
+    Args:
+        sensor_data: Sensor reading dict with values like temperature, humidity, etc.
+    """
     async with httpx.AsyncClient() as client:
         # Create dedicated analysis buffer
         await client.post(f"{LLAMAFARM_URL}/polars/buffers", json={

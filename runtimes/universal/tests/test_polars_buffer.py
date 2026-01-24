@@ -347,8 +347,14 @@ class TestRollingFeatures:
         assert "value_lag_1" in names
 
 
+@pytest.mark.slow
 class TestPolarsBufferPerformance:
-    """Test performance characteristics."""
+    """Test performance characteristics.
+
+    These tests have timing thresholds and may be flaky in CI.
+    Run with: pytest -m slow
+    Skip with: pytest -m "not slow"
+    """
 
     def test_append_performance(self):
         """Test that append is fast (<1ms average)."""

@@ -211,8 +211,11 @@ class TestStreamingAnomalyRetraining:
         for i in range(20):
             await detector.process({"value": float(i + 10)})
 
-        # Wait for background retrain to complete
-        await asyncio.sleep(0.2)
+        # Poll for background retrain to complete (max 2 seconds)
+        for _ in range(20):
+            if detector.model_version > initial_version:
+                break
+            await asyncio.sleep(0.1)
 
         # Should have triggered retrain
         assert detector.model_version > initial_version

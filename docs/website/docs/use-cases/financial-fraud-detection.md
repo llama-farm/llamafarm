@@ -119,8 +119,11 @@ async def screen_transaction(enhanced_transaction: dict):
                         "score": r["score"],
                         "reason": "realtime_anomaly"
                     }
+            # Use last result's score if available
+            if result["results"]:
+                return {"action": "approve", "score": result["results"][-1].get("score", 0)}
 
-        return {"action": "approve", "score": r.get("score", 0)}
+        return {"action": "approve", "score": 0}
 ```
 
 ## Step 3: Batch Model Training (Daily)
