@@ -30,7 +30,7 @@ func TestLinuxARM64Spec(t *testing.T) {
 		t.Errorf("Expected LibPath=bin/libllama.so, got %s", LinuxARM64BinarySpec.LibPath)
 	}
 
-	expectedURLPart := "llama-b7376-bin-linux-arm64.zip"
+	expectedURLPart := fmt.Sprintf("llama-%s-bin-linux-arm64.zip", LlamaCppVersion)
 	if !contains(LinuxARM64BinarySpec.URL, expectedURLPart) {
 		t.Errorf("Expected URL to contain %s, got %s", expectedURLPart, LinuxARM64BinarySpec.URL)
 	}

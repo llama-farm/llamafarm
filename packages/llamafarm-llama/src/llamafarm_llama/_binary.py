@@ -22,8 +22,34 @@ from importlib import metadata
 logger = logging.getLogger(__name__)
 
 # Pin to specific llama.cpp release
-LLAMA_CPP_VERSION = "b7693"
+# Version is read from llama-cpp-version.txt at repo root (single source of truth)
+def _read_llama_cpp_version() -> str:
+    """Read llama.cpp version from centralized version file."""
+    # Try to find version file relative to repo root
+    # Walk up from this file to find llama-cpp-version.txt
+    current = Path(__file__).resolve()
+    for _ in range(10):  # Max 10 levels up
+        current = current.parent
+        version_file = current / "llama-cpp-version.txt"
+        if version_file.exists():
+            return version_file.read_text().strip()
+    # Fallback to hardcoded version if file not found (e.g., installed package)
+    return "b7693"
+
+LLAMA_CPP_VERSION = _read_llama_cpp_version()
 LLAMA_CPP_REPO = "ggml-org/llama.cpp"
+
+
+def _get_llamafarm_release_version() -> str:
+    """Get LlamaFarm release version for ARM64 binary downloads."""
+    try:
+        version = metadata.version("llamafarm-llama")
+        if version and not version.startswith("0.0.0"):
+            return f"v{version}"
+    except metadata.PackageNotFoundError:
+        pass
+    # Fallback for dev installs
+    return "v0.0.1"
 
 # Binary URLs from llama.cpp GitHub releases
 # Format: https://github.com/ggml-org/llama.cpp/releases/download/{version}/{artifact}
@@ -40,9 +66,9 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "lib": "build/bin/libllama.so",
         "sha256": None,
     },
-    # Linux ARM64 (LlamaFarm provided)
+    # Linux ARM64 (LlamaFarm provided - not available from upstream)
     ("linux", "arm64", "cpu"): {
-        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{version}/llama-b7376-bin-linux-arm64.zip",
+        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.zip",
         "lib": "bin/libllama.so",
         "sha256": None,
     },
@@ -440,12 +466,13 @@ def download_binary(
 
     manifest = BINARY_MANIFEST[platform_key]
     if platform_key == ("linux", "arm64", "cpu"):
-         # Use full URL from manifest for our custom builds
-         url = manifest["artifact"].format(version=version)
-         artifact = url.split("/")[-1]
+        # Use full URL from manifest for our custom builds (hosted on LlamaFarm releases)
+        llamafarm_version = _get_llamafarm_release_version()
+        url = manifest["artifact"].format(version=version, llamafarm_version=llamafarm_version)
+        artifact = url.split("/")[-1]
     else:
-         artifact = manifest["artifact"].format(version=version)
-         url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
+        artifact = manifest["artifact"].format(version=version)
+        url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
 
     print(f"Downloading llama.cpp {version} for {platform_key}...")
     print(f"  URL: {url}")

@@ -183,11 +183,11 @@ class TestSourceBuild:
 
         # Mock other file operations to simulate successful extraction
         def fake_extract_zip(zip_path, dest_dir):
-            if "llama-b7376-bin-linux-arm64.zip" in str(zip_path):
-                 # Create dummy lib file
-                 lib_dir = dest_dir / "bin"
-                 lib_dir.mkdir(parents=True, exist_ok=True)
-                 (lib_dir / "libllama.so").touch()
+            if "bin-linux-arm64.zip" in str(zip_path):
+                # Create dummy lib file
+                lib_dir = dest_dir / "bin"
+                lib_dir.mkdir(parents=True, exist_ok=True)
+                (lib_dir / "libllama.so").touch()
 
         monkeypatch.setattr(_binary, "_safe_extract_zip", fake_extract_zip)
         

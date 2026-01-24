@@ -10,7 +10,7 @@
         "cwd": "{workspaceRoot}",
         "commands": [
           "cd cli && go generate ./cmd/config",
-          "cd cli && go build -o ../dist/lf ."
+          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/cmd/orchestrator.LlamaCppVersion=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf ."
         ],
         "parallel": false,
         "dependsOn": [

@@ -449,7 +449,7 @@ jobs:
             LIB_NAME="libllama.so"
           fi
 
-          LLAMA_VERSION="b7693"
+          LLAMA_VERSION=$(cat llama-cpp-version.txt | tr -d '\n')
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
           echo "Expected binary location: $LIB_PATH"

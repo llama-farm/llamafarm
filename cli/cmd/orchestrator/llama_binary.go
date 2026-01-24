@@ -16,8 +16,10 @@ import (
 	"github.com/llamafarm/cli/internal/buildinfo"
 )
 
-// LlamaCppVersion is the pinned llama.cpp release version
-const LlamaCppVersion = "b7693"
+// LlamaCppVersion is the pinned llama.cpp release version.
+// This is injected at build time from llama-cpp-version.txt via ldflags.
+// Fallback to hardcoded version for dev builds.
+var LlamaCppVersion = "b7693"
 
 // BinaryInfo contains information about a platform-specific binary
 type BinaryInfo struct {
