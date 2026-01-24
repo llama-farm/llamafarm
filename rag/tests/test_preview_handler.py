@@ -3,9 +3,7 @@
 All tests written FIRST and will fail until implementation is complete.
 """
 
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -156,7 +154,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_size_override=100,
@@ -178,7 +176,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_overlap_override=50,
@@ -199,7 +197,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_strategy_override="sentences",
@@ -211,7 +209,6 @@ class TestPreviewHandler:
 
     def test_preview_result_statistics(self):
         """PreviewResult contains correct statistics."""
-        from core.base import PreviewResult
         from core.preview_handler import PreviewHandler
 
         mock_blob_processor = Mock()

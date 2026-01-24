@@ -1,6 +1,6 @@
 """Pydantic models for NLP endpoints."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class EmbeddingRequest(BaseModel):

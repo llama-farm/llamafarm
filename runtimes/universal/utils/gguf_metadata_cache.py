@@ -95,6 +95,7 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
 
     try:
         import gc
+
         from gguf import GGUFReader
 
         # Temporarily disable GC during GGUF parsing to avoid segfault

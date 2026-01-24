@@ -20,13 +20,16 @@ Environment Variables:
 """
 
 import asyncio
+import base64
 import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel as PydanticBaseModel
 
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
@@ -90,7 +93,13 @@ from routers.vision import (
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
-from utils.file_handler import get_file_images
+from utils.file_handler import (
+    delete_file,
+    get_file,
+    get_file_images,
+    list_files,
+    store_file,
+)
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 
@@ -176,8 +185,8 @@ def _preload_async_backends():
     """
     try:
         # Preload anyio's async backend - used by FastAPI StreamingResponse
-        import anyio._core._eventloop  # noqa: F401
         import anyio._backends._asyncio  # noqa: F401
+        import anyio._core._eventloop  # noqa: F401
 
         logger.info("anyio async backends preloaded successfully")
     except ImportError:

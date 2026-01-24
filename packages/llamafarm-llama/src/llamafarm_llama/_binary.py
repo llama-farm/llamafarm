@@ -13,11 +13,11 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from importlib import metadata
 from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from importlib import metadata
 
 logger = logging.getLogger(__name__)
 
@@ -435,19 +435,6 @@ def download_binary(
         platform_key = get_platform_key()
 
     version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
-
-    # For Linux ARM64, we need the LlamaFarm package version to construct the URL
-    if platform_key == ("linux", "arm64", "cpu"):
-        try:
-            package_version = metadata.version("llamafarm-llama")
-            # If dev version, fallback or handle appropriately. For now assume v0.0.1 for dev
-            if "dev" in package_version or "0.1.0" in package_version: # 0.1.0 is the pyproject default
-                 version = "v0.0.1"
-            else:
-                 version = f"v{package_version}"
-        except metadata.PackageNotFoundError:
-            version = "v0.0.1"
-
 
     if platform_key not in BINARY_MANIFEST:
         if _should_build_from_source(platform_key):
