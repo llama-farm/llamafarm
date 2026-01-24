@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "huggingface_hub>=0.24.0",
     "hf-transfer>=0.1.9",  # High-speed downloads (set HF_HUB_ENABLE_HF_TRANSFER=1)
+    "filelock>=3.16.1",
 ]
 
 [project.optional-dependencies]

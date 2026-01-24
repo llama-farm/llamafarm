@@ -83,6 +83,14 @@ dependencies = [
   "llama-index-readers-file>=0.1.0",
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
+  "urllib3>=2.3.0",
+  "aiohttp>=3.11.11",
+  "protobuf>=5.29.3",
+  "filelock>=3.16.1",
+  "pypdf>=5.1.0",
+  "authlib>=1.4.0",
+  "orjson>=3.10.14",
+  "marshmallow>=3.26.1",
 ]
 
 [dependency-groups]

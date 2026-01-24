@@ -25,7 +25,7 @@ dependencies = [
   "pymupdf>=1.26.6", # Required for PDF file uploads
   # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
-  "protobuf>=6.33.1",
+  "protobuf>=5.29.3",
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
   "jinja2>=3.0.0",  # For tool-aware chat template rendering

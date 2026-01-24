@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -1993,23 +1993,30 @@ name = "llama-rag"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
+    { name = "authlib" },
     { name = "beautifulsoup4" },
     { name = "celery" },
     { name = "chardet" },
     { name = "chromadb" },
     { name = "colorama" },
     { name = "docx2txt" },
+    { name = "filelock" },
     { name = "llama-index" },
     { name = "llama-index-core" },
     { name = "llama-index-readers-file" },
     { name = "llamafarm-common" },
     { name = "llamafarm-config" },
     { name = "lxml" },
+    { name = "marshmallow" },
     { name = "msg-parser", extra = ["rtf"] },
     { name = "openpyxl" },
+    { name = "orjson" },
     { name = "pandas" },
+    { name = "protobuf" },
     { name = "psutil" },
     { name = "pydantic-settings" },
+    { name = "pypdf" },
     { name = "pypdf2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -2025,6 +2032,7 @@ dependencies = [
     { name = "spacy" },
     { name = "structlog" },
     { name = "tqdm" },
+    { name = "urllib3" },
     { name = "xlrd" },
 ]
 
@@ -2140,6 +2148,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.11.11" },
+    { name = "authlib", specifier = ">=1.4.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "camelot-py", marker = "extra == 'llamaindex'", specifier = ">=0.11.0" },
@@ -2150,6 +2160,7 @@ requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "docx2txt", specifier = ">=0.9" },
     { name = "faiss-cpu", marker = "extra == 'vector-dbs'", specifier = ">=1.7.4" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "lancedb", marker = "extra == 'vector-dbs'", specifier = ">=0.3.0" },
@@ -2165,6 +2176,7 @@ requires-dist = [
     { name = "llamafarm-common", editable = "../common" },
     { name = "llamafarm-config", editable = "../config" },
     { name = "lxml", specifier = ">=4.9.0" },
+    { name = "marshmallow", specifier = ">=3.26.1" },
     { name = "memory-profiler", marker = "extra == 'monitoring'", specifier = ">=0.61.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.5.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0.0" },
@@ -2175,6 +2187,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'llamaindex'", specifier = ">=1.24.0" },
     { name = "openai", marker = "extra == 'embeddings'", specifier = ">=1.0.0" },
     { name = "openpyxl", specifier = ">=3.1.2" },
+    { name = "orjson", specifier = ">=3.10.14" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pdf2image", marker = "extra == 'llamaindex'", specifier = ">=1.16.0" },
     { name = "pdfplumber", marker = "extra == 'llamaindex'", specifier = ">=0.10.0" },
@@ -2182,11 +2195,13 @@ requires-dist = [
     { name = "pinecone-client", marker = "extra == 'vector-dbs'", specifier = ">=2.2.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "prometheus-client", marker = "extra == 'monitoring'", specifier = ">=0.17.0" },
+    { name = "protobuf", specifier = ">=5.29.3" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "psutil", marker = "extra == 'monitoring'", specifier = ">=5.9.0" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "pymilvus", marker = "extra == 'vector-dbs'", specifier = ">=2.3.0" },
     { name = "pymupdf", marker = "extra == 'llamaindex'", specifier = ">=1.23.0" },
+    { name = "pypdf", specifier = ">=5.1.0" },
     { name = "pypdf", marker = "extra == 'llamaindex'", specifier = ">=3.17.0" },
     { name = "pypdf2", specifier = ">=3.0.0" },
     { name = "pytesseract", marker = "extra == 'llamaindex'", specifier = ">=0.3.10" },
@@ -2219,6 +2234,7 @@ requires-dist = [
     { name = "tabula-py", marker = "extra == 'llamaindex'", specifier = ">=2.8.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
     { name = "transformers", marker = "extra == 'embeddings'", specifier = ">=4.53.0" },
+    { name = "urllib3", specifier = ">=2.3.0" },
     { name = "weaviate-client", marker = "extra == 'vector-dbs'", specifier = ">=3.24.0" },
     { name = "xlrd", specifier = ">=2.0.1" },
 ]
@@ -2241,12 +2257,14 @@ name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../common" }
 dependencies = [
+    { name = "filelock" },
     { name = "hf-transfer" },
     { name = "huggingface-hub" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "huggingface-hub", specifier = ">=0.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
@@ -2267,6 +2285,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
     { name = "tomli-w" },
+    { name = "urllib3" },
 ]
 
 [package.metadata]
@@ -2278,6 +2297,7 @@ requires-dist = [
     { name = "ruamel-yaml", specifier = ">=0.18.0" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
     { name = "tomli-w", specifier = ">=1.0.0" },
+    { name = "urllib3", specifier = ">=2.3.0" },
 ]
 
 [package.metadata.requires-dev]
