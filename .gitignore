@@ -766,3 +766,4 @@ thoughts
 training/
 
 .playwright-mcp/
+.claude/*
