@@ -44,7 +44,7 @@ response = client.post(
 result = response.json()
 
 print("=== Quick Start: Anomaly Detection ===\n")
-for i, item in enumerate(result["data"]):
+for item in result["data"]:
     original = test_data[item["index"]]
     status = "ANOMALY!" if item["is_anomaly"] else "Normal"
     print(f"Point {item['index']} {original}: {status} (score: {item['score']:.3f})")

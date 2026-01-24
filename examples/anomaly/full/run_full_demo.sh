@@ -98,15 +98,14 @@ print_step "Starting Universal Runtime..."
 nx start universal-runtime > /tmp/universal-runtime.log 2>&1 &
 RUNTIME_PID=$!
 
-print_step "Waiting for Universal Runtime to initialize..."
-sleep 8
+# Wait for Universal Runtime to be ready (polling instead of fixed sleep)
+wait_for_server "http://localhost:11540/health" "Universal Runtime"
 
 print_step "Starting LlamaFarm Server..."
 nx start server > /tmp/llamafarm-server.log 2>&1 &
 SERVER_PID=$!
 
-# Wait for servers to be ready
-wait_for_server "http://localhost:11540/health" "Universal Runtime"
+# Wait for LlamaFarm Server to be ready
 wait_for_server "http://localhost:8005/health" "LlamaFarm Server"
 
 print_step "Both servers are running!"

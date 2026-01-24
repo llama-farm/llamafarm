@@ -317,6 +317,13 @@ class AnomalyModel(BaseModel):
                 **self._backend_params,
             )
 
+        # Ensure detector is initialized
+        if self._detector is None:
+            raise RuntimeError(
+                f"Detector not initialized for backend '{self.backend}'. "
+                "This may indicate an unsupported backend or initialization error."
+            )
+
         # Fit PyOD detector
         fit_detector(self._detector, X_scaled)
         self._is_fitted = True

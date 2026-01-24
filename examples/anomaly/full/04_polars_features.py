@@ -59,7 +59,10 @@ async def polars_demo():
 
         if create_response.status_code == 409:
             print("Buffer already exists, clearing it...")
-            await client.post(f"{LLAMAFARM_URL}/polars/buffers/{BUFFER_ID}/clear")
+            clear_response = await client.post(f"{LLAMAFARM_URL}/polars/buffers/{BUFFER_ID}/clear")
+            if clear_response.status_code != 200:
+                print(f"❌ Error clearing buffer: {clear_response.text}")
+                return
         elif create_response.status_code != 200:
             print(f"❌ Error creating buffer: {create_response.text}")
             return

@@ -392,8 +392,9 @@ def _create_detector_with_params(
         )
 
     else:
-        # Fallback: try to create with just contamination
-        return detector_class(**common_params)
+        # Fallback: pass contamination plus any user-provided kwargs
+        # This ensures custom parameters aren't silently ignored
+        return detector_class(**common_params, **kwargs)
 
 
 # =============================================================================
@@ -406,7 +407,17 @@ def fit_detector(detector: Any, X: np.ndarray) -> None:
     Args:
         detector: PyOD detector instance
         X: Training data (n_samples, n_features)
+
+    Raises:
+        ValueError: If X is empty or has invalid shape
     """
+    if X is None or len(X) == 0:
+        raise ValueError("Training data cannot be empty")
+    if len(X.shape) != 2:
+        raise ValueError(f"Training data must be 2D, got shape {X.shape}")
+    if X.shape[0] < 2:
+        raise ValueError(f"Need at least 2 samples for training, got {X.shape[0]}")
+
     detector.fit(X)
     logger.debug(f"Fitted detector on {X.shape[0]} samples, {X.shape[1]} features")
 
