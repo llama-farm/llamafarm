@@ -1,7 +1,6 @@
 """Tests for Llama class."""
 
 from unittest.mock import MagicMock, patch
-import pytest
 
 
 class TestLlamaInit:
@@ -29,7 +28,7 @@ class TestLlamaInit:
         try:
             sys.platform = "win32"
             # Create instance - path should be converted internally
-            llama = Llama(model_path="C:\\models\\test.gguf")
+            _llama = Llama(model_path="C:\\models\\test.gguf")  # noqa: F841
 
             # Verify that llama_load_model_from_file was called
             # (path conversion happens inside the Llama class)
@@ -44,10 +43,10 @@ class TestTokenization:
     def test_tokenize_requires_model(self):
         """Tokenize should require a loaded model."""
         # This tests that the method exists and has correct signature
-        from llamafarm_llama.llama import Llama
-
         # Check method signature
         import inspect
+
+        from llamafarm_llama.llama import Llama
 
         sig = inspect.signature(Llama.tokenize)
         params = list(sig.parameters.keys())
@@ -56,9 +55,9 @@ class TestTokenization:
 
     def test_detokenize_requires_model(self):
         """Detokenize should require a loaded model."""
-        from llamafarm_llama.llama import Llama
-
         import inspect
+
+        from llamafarm_llama.llama import Llama
 
         sig = inspect.signature(Llama.detokenize)
         params = list(sig.parameters.keys())
@@ -71,9 +70,9 @@ class TestChatCompletion:
 
     def test_create_chat_completion_signature(self):
         """create_chat_completion should have expected parameters."""
-        from llamafarm_llama.llama import Llama
-
         import inspect
+
+        from llamafarm_llama.llama import Llama
 
         sig = inspect.signature(Llama.create_chat_completion)
         params = list(sig.parameters.keys())
@@ -90,9 +89,9 @@ class TestChatCompletion:
 
     def test_stream_parameter_default_false(self):
         """Stream parameter should default to False."""
-        from llamafarm_llama.llama import Llama
-
         import inspect
+
+        from llamafarm_llama.llama import Llama
 
         sig = inspect.signature(Llama.create_chat_completion)
         params = sig.parameters
@@ -105,9 +104,9 @@ class TestEmbeddings:
 
     def test_create_embedding_signature(self):
         """create_embedding should have expected parameters."""
-        from llamafarm_llama.llama import Llama
-
         import inspect
+
+        from llamafarm_llama.llama import Llama
 
         sig = inspect.signature(Llama.create_embedding)
         params = list(sig.parameters.keys())

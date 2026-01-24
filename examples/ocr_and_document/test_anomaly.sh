@@ -493,28 +493,7 @@ echo -e "${BLUE}  Test 6: Save and Load Model${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo ""
 
-echo -e "${YELLOW}Saving trained model...${NC}"
-SAVE_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/save" \
-    -H "Content-Type: application/json" \
-    --max-time 60 \
-    -d '{
-        "model": "temp_zscore",
-        "backend": "isolation_forest",
-        "normalization": "zscore"
-    }')
-
-echo "$SAVE_RESPONSE" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    if data.get('saved'):
-        print(f'  ✓ Model saved: {data.get(\"filename\", \"unknown\")}')
-    else:
-        print(f'  Save response: {data}')
-except Exception as e:
-    print(f'Error: {e}')
-" 2>/dev/null
-echo ""
+# Note: Models now autosave during fit, no explicit save endpoint needed
 
 echo -e "${YELLOW}Loading saved model...${NC}"
 LOAD_RESPONSE=$(curl -s -X POST "${BASE_URL}/v1/anomaly/load" \
@@ -565,10 +544,9 @@ echo "     - Default threshold: 0.0 (set your own!)"
 echo "     - Best for: Debugging, advanced users"
 echo ""
 echo "API Endpoints:"
-echo "  POST /v1/anomaly/fit     - Train model (add 'normalization' param)"
+echo "  POST /v1/anomaly/fit     - Train model (autosaves, add 'normalization' param)"
 echo "  POST /v1/anomaly/score   - Score all data points"
 echo "  POST /v1/anomaly/detect  - Return only anomalies"
-echo "  POST /v1/anomaly/save    - Save model to disk"
 echo "  POST /v1/anomaly/load    - Load model from disk"
 echo "  GET  /v1/anomaly/models  - List saved models"
 echo ""

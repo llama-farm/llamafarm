@@ -1,0 +1,8 @@
+# Downloaded voice samples (users run download_voices.py)
+*.wav
+*.flac
+*.mp3
+
+# Keep the download script and README
+!download_voices.py
+!README.md

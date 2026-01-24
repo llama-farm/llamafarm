@@ -254,6 +254,14 @@ properties:
               items:
                 $ref: "#/definitions/Tool"
               default: []
+            keep_loaded:
+              type: boolean
+              description: |
+                Keep this model loaded in memory to prevent cache eviction.
+                When true, the runtime will not purge this model from cache
+                even under memory pressure. Useful for models that need fast
+                response times (e.g., voice chat LLMs).
+              default: false
 
   mcp:
     type: object
@@ -300,6 +308,232 @@ properties:
                 type: string
               example:
                 Authorization: Bearer ${env:MCP_SERVER_TOKEN}
+
+  voice:
+    type: object
+    description: Voice chat configuration for real-time speech interaction via WebSocket
+    properties:
+      enabled:
+        type: boolean
+        description: Enable or disable the voice chat endpoint
+        default: true
+      llm_model:
+        type: string
+        description: |
+          Reference to a model name in runtime.models[] to use for voice chat.
+          The model's prompts array will be applied to voice conversations.
+      tts:
+        type: object
+        description: Text-to-speech configuration
+        properties:
+          model:
+            type: string
+            description: |
+              TTS model/backend ID:
+              - kokoro: High-quality neural TTS with built-in voices (default)
+              - chatterbox-turbo: Fast voice cloning TTS (350M params, sub-200ms)
+                Requires voice_profiles configuration for voice cloning.
+              - pocket-tts: Lightweight CPU TTS from Kyutai (100M params, ~6x realtime)
+                Fast and efficient, no GPU required.
+            default: kokoro
+          voice:
+            type: string
+            description: |
+              Voice identifier for synthesis.
+
+              For Kokoro, use built-in voice IDs:
+              - af_heart (American Female, default)
+              - af_bella, af_nicole, af_sarah, af_sky (American Female)
+              - am_adam, am_michael (American Male)
+              - bf_emma, bf_isabella (British Female)
+              - bm_george, bm_lewis (British Male)
+
+              For Pocket TTS, use built-in voice IDs:
+              - alba (default), marius, javert, jean
+              - fantine, cosette, eponine, azelma
+
+              For Chatterbox Turbo, use a voice profile name defined in voice_profiles.
+            default: af_heart
+          speed:
+            type: number
+            minimum: 0.5
+            maximum: 2.0
+            description: |
+              Speech speed multiplier (0.5-2.0). For more natural-sounding
+              speech, try 0.9-0.95 (slightly slower than default).
+              - 0.8-0.9: Slower, deliberate (good for complex topics)
+              - 0.9-0.95: Natural conversational pace (recommended)
+              - 1.0: Default speed
+              - 1.1-1.2: Faster, energetic
+            default: 0.95
+          keep_loaded:
+            type: boolean
+            description: |
+              Keep TTS model loaded in memory to prevent cache eviction.
+              When true, the runtime will not purge this model from cache
+              even under memory pressure. Reduces latency for voice responses.
+            default: false
+          voice_profiles:
+            type: object
+            description: |
+              Named voice profiles for voice cloning (Chatterbox Turbo only).
+              Each profile maps a name to a reference audio file (~10s of speech).
+            additionalProperties:
+              type: object
+              properties:
+                audio_path:
+                  type: string
+                  description: |
+                    Path to reference audio file for voice cloning.
+                    Can be relative to project directory or absolute.
+                description:
+                  type: string
+                  description: Human-readable description of this voice
+              required:
+                - audio_path
+          temperature:
+            type: number
+            minimum: 0.1
+            maximum: 2.0
+            description: |
+              Chatterbox Turbo temperature (ignored for Kokoro).
+              Controls randomness in generation. Higher = more varied output.
+              - 0.5: More deterministic
+              - 0.8: Balanced (default)
+              - 1.2: More creative/varied
+            default: 0.8
+          top_k:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            description: |
+              Chatterbox Turbo top-k sampling (ignored for Kokoro).
+              Number of highest probability tokens to consider.
+            default: 1000
+          top_p:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Chatterbox Turbo nucleus sampling threshold (ignored for Kokoro).
+              Cumulative probability cutoff for token selection.
+            default: 0.95
+          repetition_penalty:
+            type: number
+            minimum: 1.0
+            maximum: 2.0
+            description: |
+              Chatterbox Turbo repetition penalty (ignored for Kokoro).
+              Penalty applied to repeating tokens. Higher = less repetition.
+            default: 1.2
+      stt:
+        type: object
+        description: Speech-to-text configuration
+        properties:
+          model:
+            type: string
+            enum: [tiny, base, small, medium, large-v3, distil-large-v3-turbo]
+            description: |
+              Whisper model size for transcription:
+              - tiny (39M, fastest, lower accuracy)
+              - base (74M, fast, good accuracy, default)
+              - small (244M, medium speed, better accuracy)
+              - medium (769M, slower, high accuracy)
+              - large-v3 (1.5B, slowest, highest accuracy)
+              - distil-large-v3-turbo (~800M, fast & accurate, recommended)
+            default: base
+          language:
+            type: string
+            description: Language code for transcription (e.g., "en", "es", "fr")
+            default: en
+          keep_loaded:
+            type: boolean
+            description: |
+              Keep STT model loaded in memory to prevent cache eviction.
+              When true, the runtime will not purge this model from cache
+              even under memory pressure. Reduces latency for voice transcription.
+            default: false
+      enable_thinking:
+        type: boolean
+        description: |
+          Enable thinking/reasoning mode for the LLM. When false (default),
+          the LLM is instructed to skip chain-of-thought reasoning and respond
+          directly. This is recommended for voice chat since thinking output
+          would be spoken aloud by TTS.
+        default: false
+      turn_detection:
+        type: object
+        description: |
+          End-of-turn detection configuration. Controls how the system detects
+          when a user has finished speaking vs when they're just pausing to think.
+          This prevents the LLM from responding prematurely during thinking pauses.
+        properties:
+          enabled:
+            type: boolean
+            description: |
+              Enable smart end-of-turn detection using linguistic analysis.
+              When enabled, the system analyzes partial transcriptions to detect
+              thinking pauses vs actual end of utterance, preventing premature
+              LLM responses. When disabled, uses fixed silence threshold only.
+            default: true
+          base_silence_duration:
+            type: number
+            minimum: 0.1
+            maximum: 2.0
+            description: |
+              Base silence duration for complete utterances (seconds).
+              Used when the transcription appears linguistically complete
+              (ends with punctuation or a complete phrase like "yes", "thanks").
+            default: 0.4
+          thinking_silence_duration:
+            type: number
+            minimum: 0.3
+            maximum: 5.0
+            description: |
+              Extended silence duration for incomplete utterances (seconds).
+              Used when linguistic analysis suggests the user is mid-thought
+              (trailing conjunctions like "and", "but", prepositions like "to",
+              "with", or filler words like "um", "uh").
+            default: 1.2
+          max_silence_duration:
+            type: number
+            minimum: 0.5
+            maximum: 10.0
+            description: |
+              Maximum silence before forcing end-of-turn (seconds).
+              Even if the utterance seems incomplete, processing starts after
+              this timeout to ensure responsiveness.
+            default: 2.5
+      emotion:
+        type: object
+        description: |
+          Speech emotion recognition configuration. Analyzes user audio to detect
+          emotional tone (angry, happy, sad, etc.) and provides context to the LLM.
+        properties:
+          enabled:
+            type: boolean
+            description: |
+              Enable speech emotion recognition. When enabled, analyzes audio to
+              detect user emotional tone and includes it in the LLM context. This
+              allows the model to respond appropriately to user mood.
+            default: true
+          model:
+            type: string
+            description: |
+              Emotion recognition model ID:
+              - wav2vec2-lg-xlsr-en: English emotion recognition (default, recommended)
+              - wav2vec2-base-superb: Alternative model from SUPERB benchmark
+              Custom HuggingFace model IDs are also supported.
+            default: wav2vec2-lg-xlsr-en
+          confidence_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Minimum confidence threshold for emotion detection.
+              Predictions below this threshold are reported as 'neutral'.
+              Lower values increase sensitivity but may produce false positives.
+            default: 0.4
 
 definitions:
   Tool:

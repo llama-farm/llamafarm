@@ -2,12 +2,18 @@
 UniversalRuntimeService - HTTP client for proxying requests to Universal Runtime.
 
 Provides a one-to-one mapping to Universal Runtime's specialized ML endpoints.
+Uses a persistent connection pool to minimize TCP/TLS handshake overhead.
 """
 
+import asyncio
+import json
 import logging
+import time
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
+import websockets
 from fastapi import HTTPException
 
 from core.settings import settings
@@ -15,8 +21,82 @@ from core.settings import settings
 logger = logging.getLogger(__name__)
 
 
+# Global persistent HTTP client for connection pooling
+_http_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def get_runtime_client() -> httpx.AsyncClient:
+    """Get or create the persistent HTTP client for runtime communication.
+
+    Uses connection pooling with HTTP/1.1 keep-alive to avoid
+    TCP handshake overhead on each request (~50-100ms savings per request).
+
+    Returns:
+        Shared httpx.AsyncClient instance with connection pooling enabled.
+    """
+    global _http_client
+
+    if _http_client is not None and not _http_client.is_closed:
+        return _http_client
+
+    async with _client_lock:
+        # Double-check after acquiring lock
+        if _http_client is not None and not _http_client.is_closed:
+            return _http_client
+
+        base_url = f"http://{settings.universal_host}:{settings.universal_port}"
+        logger.info(f"Creating persistent HTTP client for Universal Runtime at {base_url}")
+
+        # Configure connection pool limits
+        # max_connections: Total connections across all hosts
+        # max_keepalive_connections: Connections to keep alive in pool
+        # keepalive_expiry: How long to keep idle connections (seconds)
+        limits = httpx.Limits(
+            max_connections=20,
+            max_keepalive_connections=10,
+            keepalive_expiry=30.0,
+        )
+
+        _http_client = httpx.AsyncClient(
+            base_url=base_url,
+            limits=limits,
+            timeout=httpx.Timeout(
+                connect=10.0,  # Connection timeout
+                read=300.0,    # Read timeout (5 min for ML ops)
+                write=60.0,    # Write timeout
+                pool=10.0,     # Pool checkout timeout
+            ),
+            # Enable HTTP/2 for multiplexing (requires httpx[http2])
+            http2=True,
+        )
+
+        logger.info("Persistent HTTP client created with connection pooling")
+        return _http_client
+
+
+async def close_runtime_client() -> None:
+    """Close the persistent HTTP client.
+
+    Should be called during application shutdown to cleanly close connections.
+    """
+    global _http_client
+
+    async with _client_lock:
+        if _http_client is not None:
+            logger.info("Closing persistent HTTP client")
+            await _http_client.aclose()
+            _http_client = None
+            logger.info("Persistent HTTP client closed")
+
+
 class UniversalRuntimeService:
-    """Service for proxying requests to the Universal Runtime."""
+    """Service for proxying requests to the Universal Runtime.
+
+    Uses a persistent connection pool for efficient communication.
+    Connection pooling reduces per-request latency by ~50-100ms by
+    reusing TCP connections instead of establishing new ones.
+    """
 
     @staticmethod
     def get_base_url() -> str:
@@ -33,6 +113,8 @@ class UniversalRuntimeService:
     ) -> dict[str, Any]:
         """Make an HTTP request to the Universal Runtime.
 
+        Uses persistent connection pool for efficient communication.
+
         Args:
             method: HTTP method (GET, POST, DELETE)
             path: API path (e.g., /v1/ocr)
@@ -45,35 +127,43 @@ class UniversalRuntimeService:
         Raises:
             HTTPException: If the request fails
         """
-        url = f"{cls.get_base_url()}{path}"
-        logger.debug(f"Making {method} request to {url}")
+        logger.debug(f"Making {method} request to {path}")
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                if method == "GET":
-                    response = await client.get(url)
-                elif method == "POST":
-                    response = await client.post(url, json=json)
-                elif method == "DELETE":
-                    response = await client.delete(url)
-                else:
-                    raise ValueError(f"Unsupported HTTP method: {method}")
+            client = await get_runtime_client()
 
-                if response.status_code >= 400:
-                    # Forward error from Universal Runtime
-                    try:
-                        error_detail = response.json().get("detail", response.text)
-                    except Exception:
-                        error_detail = response.text
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=error_detail,
-                    )
+            # Create request-specific timeout if different from default
+            request_timeout = httpx.Timeout(
+                connect=10.0,
+                read=timeout,
+                write=60.0,
+                pool=10.0,
+            )
 
-                return response.json()
+            if method == "GET":
+                response = await client.get(path, timeout=request_timeout)
+            elif method == "POST":
+                response = await client.post(path, json=json, timeout=request_timeout)
+            elif method == "DELETE":
+                response = await client.delete(path, timeout=request_timeout)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+
+            if response.status_code >= 400:
+                # Forward error from Universal Runtime
+                try:
+                    error_detail = response.json().get("detail", response.text)
+                except Exception:
+                    error_detail = response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=error_detail,
+                )
+
+            return response.json()
 
         except httpx.ConnectError as e:
-            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            logger.error(f"Failed to connect to Universal Runtime at {path}: {e}")
             raise HTTPException(
                 status_code=503,
                 detail=f"Universal Runtime not available at {cls.get_base_url()}. "
@@ -93,6 +183,106 @@ class UniversalRuntimeService:
                 status_code=500,
                 detail=f"Error calling Universal Runtime: {str(e)}",
             ) from e
+
+    # =========================================================================
+    # NLP (Embeddings, Rerank, Classify, NER)
+    # =========================================================================
+
+    @classmethod
+    async def embeddings(
+        cls,
+        input: str | list[str],
+        model: str,
+        encoding_format: str = "float",
+        dimensions: int | None = None,
+    ) -> dict[str, Any]:
+        """Generate embeddings for text input.
+
+        Args:
+            input: Text or list of texts to embed
+            model: HuggingFace model ID or GGUF path
+            encoding_format: Output format (float, base64)
+            dimensions: Truncate embeddings to this size
+        """
+        payload: dict[str, Any] = {
+            "input": input,
+            "model": model,
+            "encoding_format": encoding_format,
+        }
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
+
+        return await cls._make_request("POST", "/v1/embeddings", json=payload)
+
+    @classmethod
+    async def rerank(
+        cls,
+        query: str,
+        documents: list[str],
+        model: str,
+        top_n: int | None = None,
+        return_documents: bool = True,
+    ) -> dict[str, Any]:
+        """Rerank documents by relevance to a query.
+
+        Args:
+            query: The query to rank against
+            documents: List of documents to rerank
+            model: Reranker model ID
+            top_n: Return only top N results
+            return_documents: Include document text in response
+        """
+        payload: dict[str, Any] = {
+            "query": query,
+            "documents": documents,
+            "model": model,
+            "return_documents": return_documents,
+        }
+        if top_n is not None:
+            payload["top_n"] = top_n
+
+        return await cls._make_request("POST", "/v1/rerank", json=payload)
+
+    @classmethod
+    async def classify(
+        cls,
+        input: str | list[str],
+        model: str,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Classify text using zero-shot or trained classifier.
+
+        Args:
+            input: Text or list of texts to classify
+            model: Classification model ID
+            labels: Labels for zero-shot classification
+        """
+        payload: dict[str, Any] = {
+            "input": input,
+            "model": model,
+        }
+        if labels:
+            payload["labels"] = labels
+
+        return await cls._make_request("POST", "/v1/classify", json=payload)
+
+    @classmethod
+    async def ner(
+        cls,
+        input: str | list[str],
+        model: str,
+    ) -> dict[str, Any]:
+        """Extract named entities from text.
+
+        Args:
+            input: Text or list of texts
+            model: NER model ID
+        """
+        payload = {
+            "input": input,
+            "model": model,
+        }
+        return await cls._make_request("POST", "/v1/ner", json=payload)
 
     # =========================================================================
     # OCR
@@ -383,7 +573,7 @@ class UniversalRuntimeService:
         cls,
         audio_bytes: bytes,
         filename: str = "audio.wav",
-        model: str = "distil-large-v3",
+        model: str = "distil-large-v3-turbo",
         language: str | None = None,
         prompt: str | None = None,
         response_format: str = "json",
@@ -407,10 +597,15 @@ class UniversalRuntimeService:
         Returns:
             Transcription result
         """
-        url = f"{cls.get_base_url()}/v1/audio/transcriptions"
-        logger.debug(f"Transcribing audio via {url}")
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+
+        audio_kb = len(audio_bytes) / 1024
+        logger.debug(f"Transcribing audio ({audio_kb:.1f}KB)")
 
         try:
+            client = await get_runtime_client()
+
             # Build form data
             files = {"file": (filename, audio_bytes)}
             data = {
@@ -425,27 +620,41 @@ class UniversalRuntimeService:
             if timestamp_granularities:
                 data["timestamp_granularities"] = timestamp_granularities
 
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(url, files=files, data=data)
+            request_timeout = httpx.Timeout(
+                connect=10.0,
+                read=timeout,
+                write=120.0,  # Longer write timeout for large audio files
+                pool=10.0,
+            )
 
-                if response.status_code >= 400:
-                    try:
-                        error_detail = response.json().get("detail", response.text)
-                    except Exception:
-                        error_detail = response.text
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=error_detail,
-                    )
+            response = await client.post(
+                "/v1/audio/transcriptions",
+                files=files,
+                data=data,
+                timeout=request_timeout,
+            )
 
-                # Handle text response formats
-                if response_format in ("text", "srt", "vtt"):
-                    return {"text": response.text}
+            t_response = time.perf_counter()
+            logger.info(f"⏱️ STT HTTP: Response in {(t_response - t_start)*1000:.1f}ms for {audio_kb:.1f}KB")
 
-                return response.json()
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json().get("detail", response.text)
+                except Exception:
+                    error_detail = response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=error_detail,
+                )
+
+            # Handle text response formats
+            if response_format in ("text", "srt", "vtt"):
+                return {"text": response.text}
+
+            return response.json()
 
         except httpx.ConnectError as e:
-            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            logger.error(f"Failed to connect to Universal Runtime: {e}")
             raise HTTPException(
                 status_code=503,
                 detail=f"Universal Runtime not available at {cls.get_base_url()}. "
@@ -467,11 +676,96 @@ class UniversalRuntimeService:
             ) from e
 
     @classmethod
+    async def transcribe_audio_stream(
+        cls,
+        audio_bytes: bytes,
+        model: str = "distil-large-v3-turbo",
+        language: str | None = None,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Stream transcription segments as they're processed.
+
+        Uses WebSocket to get segments as they're transcribed, enabling
+        parallel processing (e.g., start LLM on first segment).
+
+        Args:
+            audio_bytes: Raw PCM audio (16kHz, 16-bit, mono)
+            model: Whisper model
+            language: ISO language code (auto-detected if None)
+
+        Yields:
+            Transcription segments with text, timestamps, etc.
+        """
+        # === TIMING INSTRUMENTATION ===
+        t_start = time.perf_counter()
+        t_connected = None
+        t_audio_sent = None
+        t_first_segment = None
+        first_segment_logged = False
+
+        ws_url = f"ws://{settings.universal_host}:{settings.universal_port}/v1/audio/transcriptions/stream"
+        params = [
+            f"model={model}",
+            "chunk_interval=0.5",  # Faster chunking for lower latency
+        ]
+        if language:
+            params.append(f"language={language}")
+        ws_url += "?" + "&".join(params)
+
+        try:
+            async with websockets.connect(ws_url) as ws:
+                t_connected = time.perf_counter()
+                logger.info(f"⏱️ STT WS: Connected in {(t_connected - t_start)*1000:.1f}ms")
+
+                # Send all audio at once (it's already collected by VAD)
+                await ws.send(audio_bytes)
+                # Signal end of audio
+                await ws.send("END")
+                t_audio_sent = time.perf_counter()
+                audio_kb = len(audio_bytes) / 1024
+                logger.info(f"⏱️ STT WS: Audio sent ({audio_kb:.1f}KB) in {(t_audio_sent - t_connected)*1000:.1f}ms")
+
+                # Receive segments as they're transcribed
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        data = json.loads(msg)
+
+                        msg_type = data.get("type", "")
+                        if msg_type == "segment":
+                            if not first_segment_logged:
+                                t_first_segment = time.perf_counter()
+                                first_segment_logged = True
+                                logger.info(f"⏱️ STT WS: First segment in {(t_first_segment - t_start)*1000:.1f}ms total, {(t_first_segment - t_audio_sent)*1000:.1f}ms processing")
+                            yield data
+                        elif msg_type == "done":
+                            t_done = time.perf_counter()
+                            logger.info(f"⏱️ STT WS: Complete in {(t_done - t_start)*1000:.1f}ms total")
+                            break
+                        elif msg_type == "error":
+                            logger.error(f"STT stream error: {data.get('message')}")
+                            break
+                        elif msg_type == "warning":
+                            logger.warning(f"STT stream warning: {data.get('message')}")
+                        # Ignore other message types
+
+                    except TimeoutError:
+                        logger.warning("STT stream timeout")
+                        break
+
+        except websockets.exceptions.ConnectionClosed:
+            # This can happen when consumer breaks early from the generator (e.g., to start LLM early)
+            logger.debug("STT WebSocket closed (may be expected during early exit)")
+            raise
+        except Exception as e:
+            logger.error(f"STT streaming error: {e}")
+            raise
+
+    @classmethod
     async def translate_audio(
         cls,
         audio_bytes: bytes,
         filename: str = "audio.wav",
-        model: str = "distil-large-v3",
+        model: str = "distil-large-v3-turbo",
         prompt: str | None = None,
         response_format: str = "json",
         temperature: float = 0.0,
@@ -491,10 +785,11 @@ class UniversalRuntimeService:
         Returns:
             Translation result
         """
-        url = f"{cls.get_base_url()}/v1/audio/translations"
-        logger.debug(f"Translating audio via {url}")
+        logger.debug("Translating audio")
 
         try:
+            client = await get_runtime_client()
+
             files = {"file": (filename, audio_bytes)}
             data = {
                 "model": model,
@@ -504,26 +799,37 @@ class UniversalRuntimeService:
             if prompt:
                 data["prompt"] = prompt
 
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(url, files=files, data=data)
+            request_timeout = httpx.Timeout(
+                connect=10.0,
+                read=timeout,
+                write=120.0,
+                pool=10.0,
+            )
 
-                if response.status_code >= 400:
-                    try:
-                        error_detail = response.json().get("detail", response.text)
-                    except Exception:
-                        error_detail = response.text
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail=error_detail,
-                    )
+            response = await client.post(
+                "/v1/audio/translations",
+                files=files,
+                data=data,
+                timeout=request_timeout,
+            )
 
-                if response_format == "text":
-                    return {"text": response.text}
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json().get("detail", response.text)
+                except Exception:
+                    error_detail = response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=error_detail,
+                )
 
-                return response.json()
+            if response_format == "text":
+                return {"text": response.text}
+
+            return response.json()
 
         except httpx.ConnectError as e:
-            logger.error(f"Failed to connect to Universal Runtime at {url}: {e}")
+            logger.error(f"Failed to connect to Universal Runtime: {e}")
             raise HTTPException(
                 status_code=503,
                 detail=f"Universal Runtime not available at {cls.get_base_url()}. "
@@ -543,6 +849,108 @@ class UniversalRuntimeService:
                 status_code=500,
                 detail=f"Error translating audio: {str(e)}",
             ) from e
+
+    # =========================================================================
+    # Text-to-Speech
+    # =========================================================================
+
+    @classmethod
+    async def synthesize_speech(
+        cls,
+        text: str,
+        model: str = "kokoro",
+        voice: str = "af_heart",
+        response_format: str = "mp3",
+        speed: float = 1.0,
+        timeout: float = 60.0,
+    ) -> bytes:
+        """Generate speech from text.
+
+        Args:
+            text: Text to synthesize (max 4096 characters)
+            model: TTS model identifier
+            voice: Voice ID to use
+            response_format: Audio format (mp3, opus, wav, pcm, flac, aac)
+            speed: Speech speed multiplier (0.25 to 4.0)
+            timeout: Request timeout in seconds
+
+        Returns:
+            Audio bytes in the requested format
+        """
+        logger.debug("Synthesizing speech")
+
+        payload = {
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+
+        try:
+            client = await get_runtime_client()
+
+            request_timeout = httpx.Timeout(
+                connect=10.0,
+                read=timeout,
+                write=30.0,
+                pool=10.0,
+            )
+
+            response = await client.post(
+                "/v1/audio/speech",
+                json=payload,
+                timeout=request_timeout,
+            )
+
+            if response.status_code >= 400:
+                try:
+                    error_detail = response.json().get("detail", response.text)
+                except Exception:
+                    error_detail = response.text
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=error_detail,
+                )
+
+            return response.content
+
+        except httpx.ConnectError as e:
+            logger.error(f"Failed to connect to Universal Runtime: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Universal Runtime not available at {cls.get_base_url()}. "
+                "Start it with: nx start universal",
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.error(f"TTS request timed out: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail="TTS request timed out. Text may be too long.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error synthesizing speech: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error synthesizing speech: {str(e)}",
+            ) from e
+
+    @classmethod
+    async def list_tts_voices(cls, model: str | None = None) -> dict[str, Any]:
+        """List available TTS voices.
+
+        Args:
+            model: Filter by model ID (optional)
+
+        Returns:
+            List of available voices
+        """
+        path = "/v1/audio/voices"
+        if model:
+            path += f"?model={model}"
+        return await cls._make_request("GET", path, timeout=10.0)
 
     # =========================================================================
     # Health Check

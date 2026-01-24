@@ -98,9 +98,48 @@ speech = [
   "av>=12.0.0",  # PyAV for efficient compressed audio decoding (WebM/Opus)
 ]
 
+# Text-to-speech with Kokoro
+# Usage: uv pip install "universal-runtime[tts]" && uv pip install en-core-web-sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# Note: spaCy model must be installed separately (URL deps don't work in extras with uv pip)
+tts = [
+  "kokoro>=0.9.0",  # High-quality neural TTS (~82M params)
+  "misaki[en]>=0.9.0",  # G2P for English (kokoro dependency)
+  "spacy>=3.7.0",  # NLP for G2P
+  "pydub>=0.25.0",  # Audio format conversion (MP3, FLAC)
+  "av>=12.0.0",  # PyAV for Opus/AAC encoding
+]
+
+# Text-to-speech with Chatterbox Turbo (voice cloning)
+# Usage: uv pip install "universal-runtime[tts-chatterbox]"
+# Note: chatterbox-tts has strict pins but works with newer versions.
+# We override its constraints via [tool.uv.override-dependencies] below.
+tts-chatterbox = [
+  "chatterbox-tts>=0.1.6",
+  "pydub>=0.25.0",
+  "av>=12.0.0",
+]
+
+# Text-to-speech with Pocket TTS (Kyutai)
+# Lightweight CPU-only TTS, ~6x faster than real-time on Apple Silicon
+# Usage: uv pip install "universal-runtime[tts-pocket]"
+tts-pocket = [
+  "pocket-tts>=0.1.0",
+]
+
+# Text-to-speech with Kokoro MLX (Apple Silicon optimized)
+# Native MLX implementation for faster inference on M-series chips
+# Usage: uv pip install "universal-runtime[tts-mlx]"
+tts-mlx = [
+  "mlx-audio>=0.1.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# Allow direct URL references for spaCy model in optional dependencies
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["models", "utils", "core"]
@@ -126,6 +165,19 @@ py-modules = ["server", "download_model"]
 #   3. ROCm (AMD GPUs) - uses ROCm index
 #   4. CPU (fallback) - uses CPU-only index (~100MB)
 index-url = "https://pypi.org/simple"
+
+# Override chatterbox-tts strict dependency pins - it works fine with newer versions
+override-dependencies = [
+  "numpy>=1.24.0,<2.4",   # numba (via librosa) requires numpy<2.4
+  "torch>=2.0.0",         # chatterbox pins ==2.6.0, but works with other versions
+  "torchaudio>=2.0.0",    # chatterbox pins ==2.6.0
+  "transformers>=4.35.0", # chatterbox pins ==4.46.3
+]
+
+# spaCy model for TTS (Kokoro) - added here so uv sync works
+constraint-dependencies = [
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+]
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }

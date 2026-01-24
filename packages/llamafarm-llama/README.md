@@ -93,6 +93,7 @@ print(f"Binary location: {info['lib_path']}")
 | Platform | Architecture | Backends |
 |----------|--------------|----------|
 | Linux | x86_64 | CPU, CUDA 11, CUDA 12, Vulkan |
+| Linux | arm64 | CPU (source build), CUDA (source build), Vulkan (source build) |
 | macOS | arm64 | Metal |
 | macOS | x86_64 | CPU |
 | Windows | x86_64 | CPU, CUDA 12, Vulkan |

@@ -27,12 +27,12 @@ dependencies = [
   "urllib3>=2.0.0",
   "six>=1.16.0",
   "requests>=2.32.5,<3.0.0",
-  "httpx>=0.25.0",
+  "httpx[http2]>=0.25.0",
   "mcp>=1.2.0",
   "structlog>=25.4.0",
   "asgi-correlation-id>=4.3.4",
   "atomic-agents==2.1.0",
-  "jsonref>=1.1.0",             # Can be removed since it's now in config
+  "jsonref>=1.1.0", # Can be removed since it's now in config
   "celery>=5.5.3",
   # Configuration parsing
   "pyyaml>=6.0.0", # Can be removed since it's now in config
@@ -45,9 +45,11 @@ dependencies = [
   "ollama>=0.6.0",
   "huggingface-hub>=1.0.1",
   "psutil>=5.9.0",
-  "pymupdf>=1.26.0",  # PDF to image conversion
+  "pymupdf>=1.26.0", # PDF to image conversion
+  "websockets>=12.0", # For WebSocket client connections to runtime
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
+  "numpy>=2.4.1",
 ]
 
 [project.optional-dependencies]
@@ -71,6 +73,9 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "e2e: end-to-end tests requiring running services (Universal Runtime, LLM)",
+]
 
 # Ruff configuration is shared across all Python components
 # See ../ruff.toml for the actual configuration

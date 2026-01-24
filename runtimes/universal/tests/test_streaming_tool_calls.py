@@ -140,9 +140,9 @@ class TestIncrementalToolCallStreaming:
 
         assert name_chunk_idx is not None, "Tool name should have been emitted"
         assert complete_chunk_idx is not None, "Tool call should have completed"
-        assert (
-            name_chunk_idx < complete_chunk_idx
-        ), "Name should be emitted before completion"
+        assert name_chunk_idx < complete_chunk_idx, (
+            "Name should be emitted before completion"
+        )
         assert tool_name_found == "get_weather"
 
     @pytest.mark.asyncio
@@ -172,15 +172,15 @@ class TestIncrementalToolCallStreaming:
                         args_snapshots.append(args)
 
         # Verify: arguments were captured incrementally (multiple snapshots)
-        assert (
-            len(args_snapshots) > 1
-        ), f"Arguments should be captured incrementally, got {len(args_snapshots)} snapshots"
+        assert len(args_snapshots) > 1, (
+            f"Arguments should be captured incrementally, got {len(args_snapshots)} snapshots"
+        )
 
         # Verify the snapshots grow over time
         for i in range(1, len(args_snapshots)):
-            assert len(args_snapshots[i]) >= len(
-                args_snapshots[i - 1]
-            ), "Arguments should grow monotonically"
+            assert len(args_snapshots[i]) >= len(args_snapshots[i - 1]), (
+                "Arguments should grow monotonically"
+            )
 
     @pytest.mark.asyncio
     async def test_incomplete_tool_call_handled_gracefully(self):
@@ -260,8 +260,14 @@ class TestIncrementalToolCallStreaming:
 
         assert parsed["object"] == "chat.completion.chunk"
         assert len(parsed["choices"]) == 1
-        assert parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["name"] == "get_weather"
-        assert parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"] == ""
+        assert (
+            parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["name"]
+            == "get_weather"
+        )
+        assert (
+            parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"]
+            == ""
+        )
 
         # Incremental args chunk (no id, no type, just index and function.arguments)
         args_chunk = ChatCompletionChunk(
@@ -290,7 +296,10 @@ class TestIncrementalToolCallStreaming:
         args_json = args_chunk.model_dump_json(exclude_none=True)
         args_parsed = json.loads(args_json)
 
-        assert args_parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"] == '{"loc'
+        assert (
+            args_parsed["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"]
+            == '{"loc'
+        )
 
     @pytest.mark.asyncio
     async def test_state_machine_transitions(self):
@@ -350,7 +359,7 @@ class TestIncrementalToolCallStreaming:
 
         # Simulate streaming two tool calls
         full_content = (
-            'I will make two calls. '
+            "I will make two calls. "
             '<tool_call>{"name": "get_weather", "arguments": {"city": "NYC"}}</tool_call> '
             '<tool_call>{"name": "get_time", "arguments": {"timezone": "EST"}}</tool_call>'
         )
@@ -374,9 +383,8 @@ class TestIncrementalToolCallStreaming:
                     tool_names_found.append(name)
                     state = ToolCallStreamState.STREAMING_ARGS
 
-            elif (
-                state == ToolCallStreamState.STREAMING_ARGS
-                and is_tool_call_complete(accumulated)
+            elif state == ToolCallStreamState.STREAMING_ARGS and is_tool_call_complete(
+                accumulated
             ):
                 # Process completed tool call
                 tool_calls = detect_tool_call_in_content(accumulated)
@@ -393,7 +401,9 @@ class TestIncrementalToolCallStreaming:
                     state = ToolCallStreamState.BUFFERING_START
 
         # Verify both tool calls were detected
-        assert len(tool_names_found) == 2, f"Expected 2 tool calls, got {tool_names_found}"
+        assert len(tool_names_found) == 2, (
+            f"Expected 2 tool calls, got {tool_names_found}"
+        )
         assert tool_names_found[0] == "get_weather"
         assert tool_names_found[1] == "get_time"
         assert tool_call_index == 2

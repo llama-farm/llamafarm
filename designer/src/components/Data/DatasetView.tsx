@@ -70,6 +70,7 @@ import {
   loadReprocessingFileHash,
   clearReprocessingFileHash,
 } from '../../utils/datasetStorage'
+import { DocumentPreviewModal } from '../Rag/Preview'
 
 type Dataset = {
   id: string
@@ -144,6 +145,11 @@ function DatasetView() {
   const [reprocessingFileHash, setReprocessingFileHash] = useState<
     string | null
   >(null)
+  // Track which file to preview
+  const [previewFile, setPreviewFile] = useState<{
+    hash: string
+    filename: string
+  } | null>(null)
   const [pendingProcessing, setPendingProcessing] = useState<boolean>(
     Boolean(navigationState?.pendingProcessing)
   )
@@ -3034,6 +3040,17 @@ function DatasetView() {
                                         <DropdownMenuItem
                                           onClick={() =>
                                             f.fullHash &&
+                                            setPreviewFile({
+                                              hash: f.fullHash,
+                                              filename: f.name,
+                                            })
+                                          }
+                                        >
+                                          Preview Chunking
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            f.fullHash &&
                                             handleReprocessFile(f.fullHash)
                                           }
                                           disabled={isReprocessing || !!currentTaskId}
@@ -3071,6 +3088,18 @@ function DatasetView() {
           )}
         </div>
       )}
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        namespace={activeProject?.namespace || ''}
+        project={activeProject?.project || ''}
+        database={(currentApiDataset as any)?.database || 'default'}
+        fileHash={previewFile?.hash}
+        filename={previewFile?.filename}
+        datasetId={datasetId}
+      />
     </div>
   )
 }

@@ -137,6 +137,14 @@ class LlamaFarmApp {
       }
     })
 
+    // Splash minimize
+    ipcMain.on('splash-minimize', () => {
+      const splash = this.windowManager.getSplashWindow()
+      if (splash && !splash.isDestroyed()) {
+        splash.minimize()
+      }
+    })
+
     // Services are managed automatically - no manual control needed
   }
 
@@ -281,8 +289,8 @@ class LlamaFarmApp {
     await this.startServices()
 
     this.windowManager.updateSplash({
-      message: 'LlamaFarm CLI ready',
-      progress: 90
+      message: '✓ Services started',
+      progress: 75
     })
   }
 
@@ -420,8 +428,8 @@ class LlamaFarmApp {
         if (response.status === 200) {
           console.log('Server is ready!')
           this.windowManager.updateSplash({
-            message: 'Server ready!',
-            progress: 90
+            message: '✓ Server ready',
+            progress: 85
           })
           return
         }
@@ -457,39 +465,25 @@ class LlamaFarmApp {
 
     try {
       const result = await this.modelDownloader.ensureModels((progress) => {
-        // Map model statuses to splash format
-        const models = progress.models.map(m => ({
-          id: m.id,
-          display_name: m.display_name,
-          status: m.status,
-          progress: m.progress
-        }))
-
+        // Only show simple status messages - no model list unless there's an error
         this.windowManager.updateSplash({
           message: progress.message,
-          progress: 85 + (progress.overall_progress * 0.1), // 85-95% range
-          models
+          progress: 88 + (progress.overall_progress * 0.07) // 88-95% range
         })
       })
 
       if (result.success) {
         console.log('All required models are ready')
         this.windowManager.updateSplash({
-          message: 'All models ready!',
-          progress: 95,
-          models: result.models.map(m => ({
-            id: m.id,
-            display_name: m.display_name,
-            status: m.status,
-            progress: m.progress
-          }))
+          message: '✓ Models ready',
+          progress: 95
         })
       } else {
-        // Some models failed but continue anyway
+        // Some models failed - show them in the error display
         const failedModels = result.models.filter(m => m.status === 'error')
         console.warn('Some models failed to download:', failedModels.map(m => m.id))
         this.windowManager.updateSplash({
-          message: 'Some models unavailable (continuing...)',
+          message: 'Some models unavailable',
           progress: 95,
           models: result.models.map(m => ({
             id: m.id,
@@ -500,8 +494,8 @@ class LlamaFarmApp {
         })
       }
 
-      // Small delay to show the model status
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Brief pause before opening Designer
+      await new Promise(resolve => setTimeout(resolve, 500))
     } catch (error) {
       console.warn('Model check failed (continuing anyway):', error)
       // Model download failure is not critical - continue anyway
@@ -555,11 +549,14 @@ class LlamaFarmApp {
   }
 
   /**
-   * Activate handler (macOS)
+   * Activate handler (macOS dock click, Windows/Linux taskbar click)
    */
   private onActivate(): void {
-    // On macOS, recreate window when dock icon is clicked
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (this.windowManager.wasMinimizedOnComplete) {
+      // Loading completed while minimized - show main window
+      this.windowManager.showMainWindowFromActivation()
+    } else if (BrowserWindow.getAllWindows().length === 0) {
+      // On macOS, recreate window when dock icon is clicked
       this.windowManager.createMainWindow()
     }
   }

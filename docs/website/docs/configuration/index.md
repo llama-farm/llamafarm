@@ -17,6 +17,7 @@ runtime: { ... }
 prompts: [...]
 rag: { ... }
 datasets: [...]
+voice: { ... }
 ```
 
 ### Metadata
@@ -284,6 +285,119 @@ datasets:
 
 - `files` are SHA256 hashes tracked by the server.
 - Not required, but useful for syncing dataset metadata across environments.
+
+### Voice
+
+The `voice` section configures real-time voice chat via WebSocket. This enables a full-duplex voice assistant pipeline: Speech In → STT → LLM → TTS → Speech Out.
+
+```yaml
+voice:
+  enabled: true
+  llm_model: chat-model      # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro            # TTS model ID
+    voice: af_heart          # Voice ID
+    speed: 1.0               # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base              # Whisper model size
+    language: en             # Language code
+```
+
+#### Voice Fields
+
+| Field       | Type    | Default | Description                                                              |
+| ----------- | ------- | ------- | ------------------------------------------------------------------------ |
+| `enabled`   | boolean | `true`  | Enable or disable the voice chat endpoint                                |
+| `llm_model` | string  | —       | Reference to a model name in `runtime.models[]` for voice conversations  |
+| `tts`       | object  | —       | Text-to-speech configuration                                             |
+| `stt`       | object  | —       | Speech-to-text configuration                                             |
+
+#### TTS (Text-to-Speech)
+
+| Field   | Type   | Default     | Description                                     |
+| ------- | ------ | ----------- | ----------------------------------------------- |
+| `model` | string | `kokoro`    | TTS model ID                                    |
+| `voice` | string | `af_heart`  | Voice ID (see available voices below)           |
+| `speed` | number | `1.0`       | Speech speed multiplier (0.5-2.0)               |
+
+**Available Voices:**
+
+| Voice ID      | Description               |
+| ------------- | ------------------------- |
+| `af_heart`    | Heart (American Female) - default |
+| `af_bella`    | Bella (American Female)   |
+| `af_nicole`   | Nicole (American Female)  |
+| `af_sarah`    | Sarah (American Female)   |
+| `af_sky`      | Sky (American Female)     |
+| `am_adam`     | Adam (American Male)      |
+| `am_michael`  | Michael (American Male)   |
+| `bf_emma`     | Emma (British Female)     |
+| `bf_isabella` | Isabella (British Female) |
+| `bm_george`   | George (British Male)     |
+| `bm_lewis`    | Lewis (British Male)      |
+
+#### STT (Speech-to-Text)
+
+| Field      | Type   | Default | Description                                         |
+| ---------- | ------ | ------- | --------------------------------------------------- |
+| `model`    | string | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
+| `language` | string | `en`    | Language code for transcription                     |
+
+**STT Model Comparison:**
+
+| Model      | Size   | Speed    | Accuracy |
+| ---------- | ------ | -------- | -------- |
+| `tiny`     | 39M    | Fastest  | Lower    |
+| `base`     | 74M    | Fast     | Good     |
+| `small`    | 244M   | Medium   | Better   |
+| `medium`   | 769M   | Slower   | High     |
+| `large-v3` | 1.5B   | Slowest  | Highest  |
+
+#### Example: Complete Voice Configuration
+
+```yaml
+version: v1
+name: voice-assistant
+namespace: default
+
+prompts:
+  - name: voice_system
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational. Avoid long lists or complex formatting
+          since your output will be spoken aloud.
+
+runtime:
+  default_model: voice-model
+  models:
+    - name: voice-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      base_url: http://localhost:11540/v1
+      prompts: [voice_system]
+      model_api_parameters:
+        temperature: 0.7
+        max_tokens: 256
+
+voice:
+  enabled: true
+  llm_model: voice-model
+  tts:
+    model: kokoro
+    voice: am_adam
+    speed: 1.1
+  stt:
+    model: small
+    language: en
+```
+
+The prompts attached to the referenced LLM model are automatically applied to voice conversations.
+
+---
 
 ## Validation & Errors
 
