@@ -686,6 +686,58 @@ class UniversalRuntimeService:
             ) from e
 
     # =========================================================================
+    # Polars Buffer
+    # =========================================================================
+
+    @classmethod
+    async def polars_create_buffer(cls, request: dict) -> dict[str, Any]:
+        """Create a new Polars buffer."""
+        return await cls._make_request("POST", "/v1/polars/buffers", json=request)
+
+    @classmethod
+    async def polars_list_buffers(cls) -> dict[str, Any]:
+        """List all active Polars buffers."""
+        return await cls._make_request("GET", "/v1/polars/buffers")
+
+    @classmethod
+    async def polars_get_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Get stats for a specific buffer."""
+        return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}")
+
+    @classmethod
+    async def polars_delete_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Delete a buffer."""
+        return await cls._make_request("DELETE", f"/v1/polars/buffers/{buffer_id}")
+
+    @classmethod
+    async def polars_clear_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Clear all data from a buffer."""
+        return await cls._make_request("POST", f"/v1/polars/buffers/{buffer_id}/clear")
+
+    @classmethod
+    async def polars_append(cls, request: dict) -> dict[str, Any]:
+        """Append data to a buffer."""
+        return await cls._make_request("POST", "/v1/polars/append", json=request)
+
+    @classmethod
+    async def polars_features(cls, request: dict) -> dict[str, Any]:
+        """Compute features from a buffer."""
+        return await cls._make_request("POST", "/v1/polars/features", json=request)
+
+    @classmethod
+    async def polars_get_data(
+        cls, buffer_id: str, tail: int | None = None, with_features: bool = False
+    ) -> dict[str, Any]:
+        """Get data from a buffer."""
+        params = []
+        if tail is not None:
+            params.append(f"tail={tail}")
+        if with_features:
+            params.append("with_features=true")
+        query = f"?{'&'.join(params)}" if params else ""
+        return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}/data{query}")
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 

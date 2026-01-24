@@ -25,6 +25,12 @@ from .types import (
     ClassifierLoadRequest,
     ClassifierPredictRequest,
     ClassifierSaveRequest,
+    PolarsBufferAppendRequest,
+    PolarsBufferCreateRequest,
+    PolarsBufferFeaturesRequest,
+    PolarsBuffersListResponse,
+    PolarsBufferStats,
+    PolarsBufferDataResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -601,3 +607,158 @@ async def reset_streaming_detector(model_id: str) -> dict[str, Any]:
         Reset confirmation with new status
     """
     return await UniversalRuntimeService.anomaly_stream_reset_detector(model_id)
+
+
+# =============================================================================
+# Polars Buffer Endpoints
+# =============================================================================
+
+
+@router.post("/polars/buffers")
+async def create_polars_buffer(request: PolarsBufferCreateRequest) -> dict[str, Any]:
+    """Create a new named Polars buffer.
+
+    Creates a sliding window buffer that maintains the most recent N records.
+    Use this for streaming data processing with automatic window truncation.
+
+    Polars buffers provide a high-performance data substrate for:
+    - Streaming anomaly detection
+    - Rolling feature computation
+    - Efficient columnar data storage
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "window_size": 1000
+    }
+    ```
+
+    Returns:
+        Buffer creation confirmation with settings
+    """
+    return await UniversalRuntimeService.polars_create_buffer(request.model_dump())
+
+
+@router.get("/polars/buffers")
+async def list_polars_buffers() -> PolarsBuffersListResponse:
+    """List all active Polars buffers with their statistics.
+
+    Returns:
+        List of buffers with size, columns, memory usage, and performance stats
+    """
+    result = await UniversalRuntimeService.polars_list_buffers()
+    return PolarsBuffersListResponse(**result)
+
+
+@router.get("/polars/buffers/{buffer_id}")
+async def get_polars_buffer(buffer_id: str) -> PolarsBufferStats:
+    """Get statistics for a specific buffer.
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Buffer statistics including size, columns, memory usage
+    """
+    result = await UniversalRuntimeService.polars_get_buffer(buffer_id)
+    return PolarsBufferStats(**result)
+
+
+@router.delete("/polars/buffers/{buffer_id}")
+async def delete_polars_buffer(buffer_id: str) -> dict[str, Any]:
+    """Delete a buffer and free its memory.
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    return await UniversalRuntimeService.polars_delete_buffer(buffer_id)
+
+
+@router.post("/polars/buffers/{buffer_id}/clear")
+async def clear_polars_buffer(buffer_id: str) -> dict[str, Any]:
+    """Clear all data from a buffer (keep the buffer itself).
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Clear confirmation with new size (0)
+    """
+    return await UniversalRuntimeService.polars_clear_buffer(buffer_id)
+
+
+@router.post("/polars/append")
+async def append_to_polars_buffer(request: PolarsBufferAppendRequest) -> dict[str, Any]:
+    """Append data to a buffer.
+
+    Supports single records or batches:
+    - Single: {"buffer_id": "my-buffer", "data": {"value": 1.0, "label": "A"}}
+    - Batch: {"buffer_id": "my-buffer", "data": [{"value": 1.0}, {"value": 2.0}]}
+
+    The buffer automatically truncates to window_size, keeping the most recent records.
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "data": [
+            {"temperature": 72.5, "humidity": 45.2},
+            {"temperature": 73.1, "humidity": 44.8}
+        ]
+    }
+    ```
+
+    Returns:
+        Append result with count and buffer size
+    """
+    return await UniversalRuntimeService.polars_append(request.model_dump())
+
+
+@router.post("/polars/features")
+async def compute_polars_features(request: PolarsBufferFeaturesRequest) -> PolarsBufferDataResponse:
+    """Compute rolling features from buffer data.
+
+    Computes rolling statistics (mean, std, min, max) and lag features
+    for all numeric columns in the buffer.
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "rolling_windows": [5, 10],
+        "include_rolling_stats": ["mean", "std"],
+        "include_lags": true,
+        "lag_periods": [1, 2],
+        "tail": 10
+    }
+    ```
+
+    Returns:
+        Data with computed features as new columns
+    """
+    result = await UniversalRuntimeService.polars_features(request.model_dump())
+    return PolarsBufferDataResponse(**result)
+
+
+@router.get("/polars/buffers/{buffer_id}/data")
+async def get_polars_buffer_data(
+    buffer_id: str,
+    tail: int | None = None,
+    with_features: bool = False,
+) -> PolarsBufferDataResponse:
+    """Get raw data from a buffer.
+
+    Args:
+        buffer_id: Buffer identifier
+        tail: Return only last N rows (optional)
+        with_features: Compute and include rolling features
+
+    Returns:
+        Buffer data as a list of dictionaries
+    """
+    result = await UniversalRuntimeService.polars_get_data(buffer_id, tail, with_features)
+    return PolarsBufferDataResponse(**result)

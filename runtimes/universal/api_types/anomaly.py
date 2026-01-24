@@ -68,6 +68,44 @@ class AnomalyScoreRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PolarsConfig(BaseModel):
+    """Configuration for Polars-based feature engineering.
+
+    When enabled, data is processed through a Polars buffer that can compute
+    rolling statistics and lag features automatically.
+
+    Example:
+        polars_config = {
+            "enabled": True,
+            "rolling_windows": [5, 10],
+            "include_rolling_stats": ["mean", "std"],
+            "include_lags": True,
+            "lag_periods": [1, 2]
+        }
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable Polars-based feature engineering",
+    )
+    rolling_windows: list[int] | None = Field(
+        default=None,
+        description="Rolling window sizes (e.g., [5, 10, 20])",
+    )
+    include_rolling_stats: list[Literal["mean", "std", "min", "max"]] | None = Field(
+        default=None,
+        description="Which rolling statistics to compute (default: all)",
+    )
+    include_lags: bool = Field(
+        default=False,
+        description="Include lag features",
+    )
+    lag_periods: list[int] | None = Field(
+        default=None,
+        description="Lag periods to compute (e.g., [1, 2, 3])",
+    )
+
+
 class AnomalyFitRequest(BaseModel):
     """Anomaly model fitting request.
 
@@ -89,6 +127,11 @@ class AnomalyFitRequest(BaseModel):
     - isolation_forest: Fast, works well out of the box (recommended legacy)
     - ecod: Fast and parameter-free (recommended for new projects)
     - hbos: Fastest algorithm, good for high dimensions
+
+    Polars Integration:
+    - Set polars_config.enabled=True to use Polars for feature engineering
+    - Configure rolling_windows for automatic rolling statistics
+    - Configure lag_periods for temporal features
     """
 
     model: str = "default"  # Model identifier (for caching)
@@ -107,6 +150,11 @@ class AnomalyFitRequest(BaseModel):
     batch_size: int = 32  # Batch size (autoencoder only)
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     overwrite: bool = True  # If True, overwrite existing model; if False, version it
+    # Polars configuration
+    polars_config: PolarsConfig | None = Field(
+        default=None,
+        description="Optional Polars-based feature engineering configuration",
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -365,4 +413,87 @@ class AnomalyStreamDetectorsResponse(BaseModel):
 
     object: Literal["list"] = "list"
     data: list[AnomalyStreamDetectorInfo]
+    total: int
+
+
+# =============================================================================
+# Polars Buffer Types (for direct buffer access)
+# =============================================================================
+
+
+class PolarsBufferCreateRequest(BaseModel):
+    """Request to create a named Polars buffer."""
+
+    buffer_id: str = Field(..., description="Unique buffer identifier")
+    window_size: int = Field(
+        default=1000,
+        ge=10,
+        description="Maximum records to keep (sliding window)",
+    )
+
+
+class PolarsBufferAppendRequest(BaseModel):
+    """Request to append data to a Polars buffer."""
+
+    buffer_id: str = Field(..., description="Buffer identifier")
+    data: dict | list[dict] = Field(
+        ...,
+        description="Single record or batch of records to append",
+    )
+
+
+class PolarsBufferFeaturesRequest(BaseModel):
+    """Request to compute features from a Polars buffer."""
+
+    buffer_id: str = Field(..., description="Buffer identifier")
+    rolling_windows: list[int] | None = Field(
+        default=None,
+        description="Rolling window sizes (default: [5, 10, 20])",
+    )
+    include_rolling_stats: list[Literal["mean", "std", "min", "max"]] | None = Field(
+        default=None,
+        description="Which rolling stats to compute (default: all)",
+    )
+    include_lags: bool = Field(
+        default=True,
+        description="Include lag features",
+    )
+    lag_periods: list[int] | None = Field(
+        default=None,
+        description="Lag periods (default: [1, 2, 3])",
+    )
+    tail: int | None = Field(
+        default=None,
+        description="Return only last N rows (optional)",
+    )
+
+
+class PolarsBufferStats(BaseModel):
+    """Statistics about a Polars buffer."""
+
+    buffer_id: str
+    size: int
+    window_size: int
+    columns: list[str]
+    numeric_columns: list[str]
+    memory_bytes: int
+    append_count: int
+    avg_append_ms: float
+
+
+class PolarsBufferDataResponse(BaseModel):
+    """Response containing buffer data."""
+
+    object: Literal["polars_data"] = "polars_data"
+    buffer_id: str
+    rows: int
+    columns: list[str]
+    data: list[dict]
+
+
+class PolarsBuffersListResponse(BaseModel):
+    """List of active Polars buffers."""
+
+    object: Literal["list"] = "list"
+    data: list[PolarsBufferStats]
     total: int

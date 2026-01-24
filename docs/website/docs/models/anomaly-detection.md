@@ -383,6 +383,33 @@ Neural network learns to compress (encode) and reconstruct (decode) normal data.
 | Complex patterns | Medium | Medium | Medium | Excellent |
 | GPU support | No | No | No | Yes |
 
+### All Available Backends (PyOD)
+
+LlamaFarm supports 12 anomaly detection backends powered by PyOD. Use `GET /v1/anomaly/backends` to list all with metadata.
+
+| Backend | Category | Speed | Memory | Best For |
+|---------|----------|-------|--------|----------|
+| `isolation_forest` | Legacy | Fast | Low | General purpose (recommended default) |
+| `one_class_svm` | Legacy | Slow | Medium | Small datasets, tight boundaries |
+| `local_outlier_factor` | Legacy | Medium | Medium | Local/density-based anomalies |
+| `autoencoder` | Deep Learning | Slow | High | Complex patterns, large datasets |
+| `ecod` | Fast | Very Fast | Low | **Recommended for new projects** - parameter-free |
+| `hbos` | Fast | Very Fast | Low | Fastest algorithm, high dimensions |
+| `copod` | Fast | Very Fast | Low | Parameter-free, interpretable |
+| `knn` | Distance | Medium | Medium | When density matters |
+| `mcd` | Distance | Medium | Medium | Gaussian-distributed data |
+| `cblof` | Clustering | Medium | Medium | Clustered data |
+| `suod` | Ensemble | Medium | Medium | Most robust, combines multiple algorithms |
+| `loda` | Streaming | Fast | Low | Online/streaming scenarios |
+
+**Backend Categories:**
+- **Legacy**: Original 4 backends with backward compatibility
+- **Fast**: Parameter-free or minimal tuning, good for quick experiments
+- **Distance**: Use distance metrics for anomaly scoring
+- **Clustering**: Leverage cluster structure in data
+- **Ensemble**: Combine multiple algorithms
+- **Deep Learning**: Neural network approaches
+
 ---
 
 ## Understanding Contamination
@@ -585,6 +612,206 @@ Response:
 
 ```bash
 curl -X DELETE http://localhost:11540/v1/anomaly/models/api_detector_v1.joblib
+```
+
+---
+
+## Streaming Anomaly Detection
+
+For real-time data streams, LlamaFarm provides a streaming API that handles:
+- **Cold start**: Collects samples before first training
+- **Auto-retraining**: Periodically retrains on new data
+- **Sliding window**: Maintains recent history for context
+- **Tick-Tock pattern**: Seamless model updates without downtime
+
+### Quick Start
+
+```bash
+# Send streaming data points
+curl -X POST http://localhost:8005/v1/ml/anomaly/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "live-sensor",
+    "data": {"temperature": 72.5, "humidity": 45.2},
+    "backend": "ecod",
+    "min_samples": 50,
+    "retrain_interval": 100,
+    "window_size": 1000,
+    "threshold": 0.5
+  }'
+```
+
+### Streaming Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `model` | "default-stream" | Unique detector identifier |
+| `data` | required | Single dict or batch of dicts |
+| `backend` | "ecod" | PyOD backend (ecod recommended for streaming) |
+| `min_samples` | 50 | Samples before first training (cold start) |
+| `retrain_interval` | 100 | Retrain after this many new samples |
+| `window_size` | 1000 | Sliding window size (keeps recent N samples) |
+| `threshold` | 0.5 | Anomaly score threshold |
+| `contamination` | 0.1 | Expected outlier proportion |
+| `rolling_windows` | null | Optional: [5, 10, 20] for rolling features |
+| `include_lags` | false | Include lag features |
+
+### Response Statuses
+
+- **collecting**: Cold start phase, building initial dataset
+- **ready**: Model trained, returning anomaly scores
+- **retraining**: Background retrain in progress (still scoring)
+
+```json
+{
+  "object": "streaming_result",
+  "model": "live-sensor",
+  "status": "ready",
+  "results": [
+    {
+      "index": 0,
+      "score": 0.42,
+      "is_anomaly": false,
+      "raw_score": 0.38,
+      "samples_until_ready": 0
+    }
+  ],
+  "model_version": 3,
+  "samples_collected": 350,
+  "samples_until_ready": 0,
+  "threshold": 0.5
+}
+```
+
+### Managing Streaming Detectors
+
+```bash
+# List all active detectors
+curl http://localhost:8005/v1/ml/anomaly/stream/detectors
+
+# Get specific detector stats
+curl http://localhost:8005/v1/ml/anomaly/stream/live-sensor
+
+# Reset detector (clears data, restarts cold start)
+curl -X POST http://localhost:8005/v1/ml/anomaly/stream/live-sensor/reset
+
+# Delete detector
+curl -X DELETE http://localhost:8005/v1/ml/anomaly/stream/live-sensor
+```
+
+### Recommended Backends for Streaming
+
+| Backend | Why |
+|---------|-----|
+| `ecod` | **Recommended** - Fast, parameter-free, handles drift |
+| `hbos` | Fastest, good for high-throughput streams |
+| `loda` | Designed for streaming, lightweight |
+| `isolation_forest` | Reliable, good baseline |
+
+---
+
+## Polars Buffer API
+
+For advanced use cases, LlamaFarm exposes direct access to Polars-based data buffers. These provide:
+- **High-performance columnar storage** using Polars DataFrames
+- **Automatic sliding window** truncation
+- **Rolling feature computation** (mean, std, min, max)
+- **Lag features** for temporal patterns
+
+:::tip When to Use Polars Buffers
+Most users should use the streaming anomaly detection API, which manages Polars buffers automatically. Use the direct Polars API when you need:
+- Custom feature engineering pipelines
+- Integration with other ML systems
+- Manual control over data lifecycle
+:::
+
+### Create a Buffer
+
+```bash
+curl -X POST http://localhost:8005/v1/ml/polars/buffers \
+  -H "Content-Type: application/json" \
+  -d '{"buffer_id": "sensor-data", "window_size": 1000}'
+```
+
+### Append Data
+
+```bash
+# Single record
+curl -X POST http://localhost:8005/v1/ml/polars/append \
+  -H "Content-Type: application/json" \
+  -d '{
+    "buffer_id": "sensor-data",
+    "data": {"temperature": 72.5, "humidity": 45.2}
+  }'
+
+# Batch append
+curl -X POST http://localhost:8005/v1/ml/polars/append \
+  -H "Content-Type: application/json" \
+  -d '{
+    "buffer_id": "sensor-data",
+    "data": [
+      {"temperature": 72.5, "humidity": 45.2},
+      {"temperature": 73.1, "humidity": 44.8},
+      {"temperature": 71.9, "humidity": 46.0}
+    ]
+  }'
+```
+
+### Compute Rolling Features
+
+```bash
+curl -X POST http://localhost:8005/v1/ml/polars/features \
+  -H "Content-Type: application/json" \
+  -d '{
+    "buffer_id": "sensor-data",
+    "rolling_windows": [5, 10, 20],
+    "include_rolling_stats": ["mean", "std", "min", "max"],
+    "include_lags": true,
+    "lag_periods": [1, 2, 3],
+    "tail": 10
+  }'
+```
+
+Response includes computed columns like:
+- `temperature_rolling_mean_5`, `temperature_rolling_std_10`
+- `humidity_rolling_min_20`, `humidity_rolling_max_5`
+- `temperature_lag_1`, `humidity_lag_2`
+
+### Buffer Management
+
+```bash
+# List all buffers
+curl http://localhost:8005/v1/ml/polars/buffers
+
+# Get buffer stats
+curl http://localhost:8005/v1/ml/polars/buffers/sensor-data
+
+# Get raw data
+curl "http://localhost:8005/v1/ml/polars/buffers/sensor-data/data?tail=10"
+
+# Get data with features
+curl "http://localhost:8005/v1/ml/polars/buffers/sensor-data/data?with_features=true&tail=10"
+
+# Clear buffer (keep structure)
+curl -X POST http://localhost:8005/v1/ml/polars/buffers/sensor-data/clear
+
+# Delete buffer
+curl -X DELETE http://localhost:8005/v1/ml/polars/buffers/sensor-data
+```
+
+### Buffer Statistics
+
+```json
+{
+  "buffer_id": "sensor-data",
+  "size": 500,
+  "window_size": 1000,
+  "columns": ["temperature", "humidity"],
+  "numeric_columns": ["temperature", "humidity"],
+  "memory_bytes": 8000,
+  "append_count": 500,
+  "avg_append_ms": 0.15
+}
 ```
 
 ---
