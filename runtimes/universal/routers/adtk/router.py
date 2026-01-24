@@ -28,7 +28,7 @@ from api_types.adtk import (
     ADTKModelInfo,
     ADTKModelsResponse,
 )
-from core.endpoint_errors import handle_endpoint_errors
+from services.error_handler import handle_endpoint_errors
 from models.adtk_model import (
     ADTKModel,
     delete_model,
@@ -81,24 +81,17 @@ async def get_or_load_model(
 
     Returns:
         ADTKModel instance
+
+    Note:
+        The loader function (load_adtk in server.py) handles its own locking,
+        so we don't need to acquire the lock here. Doing so would cause a deadlock
+        since asyncio locks are not reentrant.
     """
-    if _adtk_cache is None or _model_load_lock is None or _loader_func is None:
-        raise RuntimeError("ADTK router not initialized. Call set_adtk_state first.")
+    if _loader_func is None:
+        raise RuntimeError("ADTK router not initialized. Call set_adtk_loader first.")
 
-    cache_key = f"{model_id}_{detector}"
-    cached = _adtk_cache.get(cache_key)
-    if cached:
-        return cached
-
-    async with _model_load_lock:
-        # Double-check after acquiring lock
-        cached = _adtk_cache.get(cache_key)
-        if cached:
-            return cached
-
-        model = await _loader_func(model_id, detector, params or {})
-        _adtk_cache.put(cache_key, model)
-        return model
+    # The loader function handles caching and locking internally
+    return await _loader_func(model_id, detector, params or {})
 
 
 @router.get("/v1/adtk/detectors")

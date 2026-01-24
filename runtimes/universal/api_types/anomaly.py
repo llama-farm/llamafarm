@@ -4,9 +4,12 @@ All anomaly detection is powered by PyOD, providing 12+ algorithms.
 Legacy backend names are mapped to PyOD equivalents for backward compatibility.
 """
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from api_types.explain import FeatureContribution, NarrativeExplanation
 
 # =============================================================================
 # Backend Type
@@ -54,6 +57,11 @@ class AnomalyScoreRequest(BaseModel):
     - standardization (default): Sigmoid 0-1 range, threshold ~0.5
     - zscore: Standard deviations from mean, threshold ~2.0-3.0
     - raw: Backend-native scores (higher = more anomalous)
+
+    SHAP Explanations:
+    - Set explain=True to get SHAP feature contributions for detected anomalies
+    - Only anomalies are explained (for performance)
+    - feature_names helps generate readable explanations
     """
 
     model: str = "default"  # Model identifier
@@ -64,6 +72,14 @@ class AnomalyScoreRequest(BaseModel):
     )  # Feature encoding schema
     threshold: float | None = None  # Override default threshold
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
+    explain: bool = Field(
+        default=False,
+        description="If True, generate SHAP explanations for anomalies",
+    )
+    feature_names: list[str] | None = Field(
+        default=None,
+        description="Feature names for SHAP explanations (improves readability)",
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -179,6 +195,23 @@ class AnomalyLoadRequest(BaseModel):
 # =============================================================================
 
 
+class AnomalyFeatureContribution(BaseModel):
+    """Feature contribution to an anomaly score (SHAP-based)."""
+
+    feature: str
+    value: float  # Actual feature value
+    shap_value: float  # SHAP contribution
+    direction: Literal["increases", "decreases"]  # Impact on anomaly score
+
+
+class AnomalyExplanation(BaseModel):
+    """SHAP explanation for why a data point is anomalous."""
+
+    contributions: list[AnomalyFeatureContribution]
+    summary: str  # One-sentence summary
+    details: list[str]  # Per-feature explanations
+
+
 class AnomalyScoreResult(BaseModel):
     """Single anomaly score result."""
 
@@ -186,6 +219,7 @@ class AnomalyScoreResult(BaseModel):
     score: float  # Normalized score (0-1 for standardization)
     is_anomaly: bool
     raw_score: float  # PyOD-native raw score
+    explanation: AnomalyExplanation | None = None  # SHAP explanation (only for anomalies when explain=True)
 
 
 class AnomalyScoreResponse(BaseModel):

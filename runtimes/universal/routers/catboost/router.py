@@ -32,7 +32,7 @@ from api_types.catboost import (
     CatBoostUpdateRequest,
     CatBoostUpdateResponse,
 )
-from core.endpoint_errors import handle_endpoint_errors
+from services.error_handler import handle_endpoint_errors
 from models.catboost_model import CatBoostModel, get_catboost_info
 from utils.model_cache import ModelCache
 

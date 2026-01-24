@@ -94,6 +94,11 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.nlp_router, prefix=API_PREFIX)
     app.include_router(routers.timeseries_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
+    # New ML routers (proxy to Universal Runtime)
+    app.include_router(routers.adtk_router, prefix=API_PREFIX)
+    app.include_router(routers.drift_router, prefix=API_PREFIX)
+    app.include_router(routers.explain_router, prefix=API_PREFIX)
+    app.include_router(routers.catboost_router, prefix=API_PREFIX)
     # Health endpoints are exposed at the root (no version prefix)
     app.include_router(routers.health_router)
 

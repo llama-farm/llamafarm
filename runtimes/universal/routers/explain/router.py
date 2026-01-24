@@ -24,7 +24,7 @@ from api_types.explain import (
     SHAPExplainRequest,
     SHAPExplainResponse,
 )
-from core.endpoint_errors import handle_endpoint_errors
+from services.error_handler import handle_endpoint_errors
 from models.shap_explainer import (
     SHAPExplainer,
     get_explainer_types,

@@ -29,7 +29,7 @@ from api_types.drift import (
     DriftResult,
     DriftStatus,
 )
-from core.endpoint_errors import handle_endpoint_errors
+from services.error_handler import handle_endpoint_errors
 from models.drift_model import (
     DriftModel,
     delete_model,
@@ -82,24 +82,17 @@ async def get_or_load_model(
 
     Returns:
         DriftModel instance
+
+    Note:
+        The loader function (load_drift in server.py) handles its own locking,
+        so we don't need to acquire the lock here. Doing so would cause a deadlock
+        since asyncio locks are not reentrant.
     """
-    if _drift_cache is None or _model_load_lock is None or _loader_func is None:
-        raise RuntimeError("Drift router not initialized. Call set_drift_state first.")
+    if _loader_func is None:
+        raise RuntimeError("Drift router not initialized. Call set_drift_loader first.")
 
-    cache_key = f"{model_id}_{detector}"
-    cached = _drift_cache.get(cache_key)
-    if cached:
-        return cached
-
-    async with _model_load_lock:
-        # Double-check after acquiring lock
-        cached = _drift_cache.get(cache_key)
-        if cached:
-            return cached
-
-        model = await _loader_func(model_id, detector, params or {})
-        _drift_cache.put(cache_key, model)
-        return model
+    # The loader function handles caching and locking internally
+    return await _loader_func(model_id, detector, params or {})
 
 
 @router.get("/v1/drift/detectors")

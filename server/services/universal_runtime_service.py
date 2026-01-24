@@ -850,6 +850,147 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/timeseries/models/{model_name}")
 
     # =========================================================================
+    # ADTK Time Series Anomaly Detection
+    # =========================================================================
+
+    @classmethod
+    async def adtk_list_detectors(cls) -> dict[str, Any]:
+        """List available ADTK detectors."""
+        return await cls._make_request("GET", "/v1/adtk/detectors")
+
+    @classmethod
+    async def adtk_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit an ADTK model on time series data."""
+        return await cls._make_request("POST", "/v1/adtk/fit", json=request)
+
+    @classmethod
+    async def adtk_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect anomalies in time series data."""
+        return await cls._make_request("POST", "/v1/adtk/detect", json=request)
+
+    @classmethod
+    async def adtk_list_models(cls) -> dict[str, Any]:
+        """List saved ADTK models."""
+        return await cls._make_request("GET", "/v1/adtk/models")
+
+    @classmethod
+    async def adtk_load(cls, request: dict) -> dict[str, Any]:
+        """Load an ADTK model from disk."""
+        return await cls._make_request("POST", "/v1/adtk/load", json=request)
+
+    @classmethod
+    async def adtk_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete an ADTK model."""
+        return await cls._make_request("DELETE", f"/v1/adtk/models/{model_name}")
+
+    # =========================================================================
+    # Drift Detection
+    # =========================================================================
+
+    @classmethod
+    async def drift_list_detectors(cls) -> dict[str, Any]:
+        """List available drift detector types."""
+        return await cls._make_request("GET", "/v1/drift/detectors")
+
+    @classmethod
+    async def drift_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit a drift detector on reference data."""
+        return await cls._make_request("POST", "/v1/drift/fit", json=request)
+
+    @classmethod
+    async def drift_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect drift in new data."""
+        return await cls._make_request("POST", "/v1/drift/detect", json=request)
+
+    @classmethod
+    async def drift_list_models(cls) -> dict[str, Any]:
+        """List saved drift models."""
+        return await cls._make_request("GET", "/v1/drift/models")
+
+    @classmethod
+    async def drift_status(cls, model_name: str) -> dict[str, Any]:
+        """Get drift detector status."""
+        return await cls._make_request("GET", f"/v1/drift/status/{model_name}")
+
+    @classmethod
+    async def drift_reset(cls, model_name: str) -> dict[str, Any]:
+        """Reset a drift detector."""
+        return await cls._make_request("POST", f"/v1/drift/reset/{model_name}")
+
+    @classmethod
+    async def drift_load(cls, request: dict) -> dict[str, Any]:
+        """Load a drift model from disk."""
+        return await cls._make_request("POST", "/v1/drift/load", json=request)
+
+    @classmethod
+    async def drift_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete a drift model."""
+        return await cls._make_request("DELETE", f"/v1/drift/models/{model_name}")
+
+    # =========================================================================
+    # SHAP Explainability
+    # =========================================================================
+
+    @classmethod
+    async def explain_list_explainers(cls) -> dict[str, Any]:
+        """List available SHAP explainer types."""
+        return await cls._make_request("GET", "/v1/explain/explainers")
+
+    @classmethod
+    async def explain_shap(cls, request: dict) -> dict[str, Any]:
+        """Generate SHAP explanations for model predictions."""
+        return await cls._make_request("POST", "/v1/explain/shap", json=request)
+
+    @classmethod
+    async def explain_importance(cls, request: dict) -> dict[str, Any]:
+        """Compute global feature importance from SHAP values."""
+        return await cls._make_request("POST", "/v1/explain/importance", json=request)
+
+    # =========================================================================
+    # CatBoost Classification/Regression
+    # =========================================================================
+
+    @classmethod
+    async def catboost_info(cls) -> dict[str, Any]:
+        """Get CatBoost availability and capabilities."""
+        return await cls._make_request("GET", "/v1/catboost/info")
+
+    @classmethod
+    async def catboost_list_models(cls) -> dict[str, Any]:
+        """List saved CatBoost models."""
+        return await cls._make_request("GET", "/v1/catboost/models")
+
+    @classmethod
+    async def catboost_fit(cls, request: dict) -> dict[str, Any]:
+        """Train a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/fit", json=request)
+
+    @classmethod
+    async def catboost_predict(cls, request: dict) -> dict[str, Any]:
+        """Make predictions with a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/predict", json=request)
+
+    @classmethod
+    async def catboost_update(cls, request: dict) -> dict[str, Any]:
+        """Incrementally update a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/update", json=request)
+
+    @classmethod
+    async def catboost_load(cls, request: dict) -> dict[str, Any]:
+        """Load a CatBoost model from disk."""
+        return await cls._make_request("POST", "/v1/catboost/load", json=request)
+
+    @classmethod
+    async def catboost_delete(cls, model_id: str) -> dict[str, Any]:
+        """Delete a CatBoost model."""
+        return await cls._make_request("DELETE", f"/v1/catboost/{model_id}")
+
+    @classmethod
+    async def catboost_importance(cls, model_id: str) -> dict[str, Any]:
+        """Get feature importance for a CatBoost model."""
+        return await cls._make_request("GET", f"/v1/catboost/{model_id}/importance")
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 
