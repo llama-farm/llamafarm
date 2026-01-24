@@ -75,7 +75,7 @@ embedding = response["data"][0]["embedding"]
 |----------|-------------|
 | `LLAMAFARM_BACKEND` | Force specific backend: `cpu`, `cuda12`, `cuda11`, `metal`, `vulkan` |
 | `LLAMAFARM_CACHE_DIR` | Custom cache directory for downloaded binaries |
-| `LLAMAFARM_LLAMA_VERSION` | Override llama.cpp version (default: b5438) |
+| `LLAMAFARM_LLAMA_VERSION` | Override llama.cpp version (default: b7693) |
 
 ### Binary Info
 

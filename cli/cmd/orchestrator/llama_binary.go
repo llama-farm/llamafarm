@@ -16,7 +16,7 @@ import (
 )
 
 // LlamaCppVersion is the pinned llama.cpp release version
-const LlamaCppVersion = "b7376"
+const LlamaCppVersion = "b7693"
 
 // BinaryInfo contains information about a platform-specific binary
 type BinaryInfo struct {
