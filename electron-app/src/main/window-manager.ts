@@ -4,10 +4,13 @@
 
 import { BrowserWindow, app, screen } from 'electron'
 import * as path from 'path'
+import * as fs from 'fs'
 
 export class WindowManager {
   private splashWindow: BrowserWindow | null = null
   private mainWindow: BrowserWindow | null = null
+  private _loadingComplete = false
+  private _wasMinimizedOnComplete = false
 
   /**
    * Create splash screen
@@ -17,16 +20,46 @@ export class WindowManager {
       width: 500,
       height: 400,
       frame: false,
-      transparent: true,
+      transparent: false,
       resizable: false,
       alwaysOnTop: false,
       movable: true,
+      minimizable: true,
+      backgroundColor: '#1a1f2e',
       webPreferences: {
         preload: path.join(__dirname, '../preload/index.js'),
         nodeIntegration: false,
         contextIsolation: true
       }
     })
+
+    // Load logo as base64
+    let logoBase64 = ''
+    try {
+      // In development: logo is in build folder
+      // In production: logo should be in extraResources
+      const possiblePaths = [
+        path.join(__dirname, '../../build/splash-logo.png'),           // Development
+        path.join(__dirname, '../../../build/splash-logo.png'),        // Packaged (app.asar)
+        path.join(process.resourcesPath || '', 'splash-logo.png'),     // extraResources
+        path.join(app.getAppPath(), 'build/splash-logo.png')           // App path fallback
+      ]
+
+      for (const logoPath of possiblePaths) {
+        if (fs.existsSync(logoPath)) {
+          const logoData = fs.readFileSync(logoPath)
+          logoBase64 = logoData.toString('base64')
+          console.log('Loaded splash logo from:', logoPath)
+          break
+        }
+      }
+
+      if (!logoBase64) {
+        console.warn('Splash logo not found in any expected location')
+      }
+    } catch (error) {
+      console.warn('Failed to load splash logo:', error)
+    }
 
     // Load embedded splash HTML with model status support
     const splashHTML = `
@@ -38,7 +71,7 @@ export class WindowManager {
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-              background: hsl(222.2, 47.4%, 11.2%);
+              background: linear-gradient(165deg, hsl(222, 47%, 14%) 0%, hsl(222, 47%, 11%) 50%, hsl(225, 50%, 9%) 100%);
               color: hsl(210, 40%, 98%);
               display: flex;
               flex-direction: column;
@@ -47,19 +80,43 @@ export class WindowManager {
               height: 100vh;
               overflow: hidden;
             }
-            .logo {
-              font-size: 64px;
-              margin-bottom: 24px;
-              filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.3));
+            .drag-bar {
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: 32px;
+              -webkit-app-region: drag;
+              display: flex;
+              align-items: center;
+              justify-content: flex-end;
+              padding: 0 8px;
             }
-            h1 {
-              font-size: 36px;
-              font-weight: 600;
-              margin-bottom: 32px;
-              background: linear-gradient(135deg, rgba(34, 211, 238, 1) 0%, rgba(59, 130, 246, 1) 100%);
-              -webkit-background-clip: text;
-              -webkit-text-fill-color: transparent;
-              background-clip: text;
+            .window-controls {
+              -webkit-app-region: no-drag;
+            }
+            .minimize-btn {
+              width: 24px;
+              height: 24px;
+              border: none;
+              border-radius: 4px;
+              background: transparent;
+              color: hsl(215, 20%, 65%);
+              font-size: 18px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              line-height: 1;
+            }
+            .minimize-btn:hover {
+              background: hsl(215, 28%, 25%);
+            }
+            .logo {
+              width: 180px;
+              height: auto;
+              margin-bottom: 36px;
+              filter: drop-shadow(0 0 24px rgba(34, 211, 238, 0.25));
             }
             .status {
               font-size: 15px;
@@ -67,60 +124,31 @@ export class WindowManager {
               margin-bottom: 20px;
               color: hsl(215, 20%, 65%);
             }
-            .models-container {
+            /* Error display - positioned below progress bar */
+            .error-container {
+              position: absolute;
+              bottom: 40px;
+              left: 50%;
+              transform: translateX(-50%);
               width: 380px;
-              margin-bottom: 20px;
               display: none;
             }
-            .model-item {
+            .error-container.has-errors {
+              display: block;
+            }
+            .error-summary {
               display: flex;
               align-items: center;
-              padding: 10px 16px;
-              background: hsl(215, 28%, 17%);
+              gap: 8px;
+              padding: 12px 16px;
+              background: hsla(0, 40%, 15%, 0.6);
+              border: 1px solid hsla(0, 50%, 35%, 0.4);
               border-radius: 8px;
-              margin-bottom: 8px;
               font-size: 13px;
+              color: hsl(0, 70%, 70%);
             }
-            .model-icon {
-              width: 24px;
-              height: 24px;
-              margin-right: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 16px;
-            }
-            .model-icon.checking {
-              animation: pulse 1s ease-in-out infinite;
-            }
-            .model-icon.present { color: #4ade80; }
-            .model-icon.downloading { color: #22d3ee; }
-            .model-icon.error { color: #ff6b6b; }
-            .model-name {
-              flex: 1;
-              color: hsl(210, 40%, 90%);
-            }
-            .model-status {
-              font-size: 11px;
-              color: hsl(215, 20%, 55%);
-            }
-            .model-progress {
-              width: 60px;
-              height: 4px;
-              background: hsl(215, 28%, 25%);
-              border-radius: 2px;
-              overflow: hidden;
-              margin-left: 8px;
-            }
-            .model-progress-bar {
-              height: 100%;
-              background: linear-gradient(90deg, #22d3ee, #3b82f6);
-              transition: width 0.2s ease;
-              width: 0%;
-            }
-            @keyframes pulse {
-              0%, 100% { opacity: 0.4; }
-              50% { opacity: 1; }
+            .error-icon {
+              font-size: 14px;
             }
             .progress-container {
               width: 320px;
@@ -163,87 +191,45 @@ export class WindowManager {
           </style>
         </head>
         <body>
-          <div class="logo">🦙</div>
-          <h1>LlamaFarm</h1>
+          <div class="drag-bar">
+            <div class="window-controls">
+              <button class="minimize-btn" onclick="window.llamafarm.splash.minimize()" title="Minimize">−</button>
+            </div>
+          </div>
+          ${logoBase64 ? `<img class="logo" src="data:image/png;base64,${logoBase64}" alt="LlamaFarm" />` : '<div class="logo" style="font-size: 64px;">🦙</div>'}
           <div class="status" id="status">Starting...</div>
-          <div class="models-container" id="models-container"></div>
           <div class="progress-container">
             <div class="progress-bar" id="progress"></div>
           </div>
           <div class="spinner" id="spinner"></div>
           <div class="error" id="error" style="display: none;"></div>
+          <div class="error-container" id="error-container"></div>
 
           <script>
-            const VALID_STATUSES = ['present', 'downloading', 'checking', 'error'];
-
-            function getStatusIcon(status) {
-              switch (status) {
-                case 'present': return '✓';
-                case 'downloading': return '↓';
-                case 'checking': return '○';
-                case 'error': return '✗';
-                default: return '○';
-              }
-            }
-
-            function getStatusText(status) {
-              switch (status) {
-                case 'present': return 'Ready';
-                case 'downloading': return 'Downloading...';
-                case 'error': return 'Error';
-                default: return '';
-              }
-            }
-
+            // Show error summary with retry button
             function renderModels(models) {
-              const container = document.getElementById('models-container');
+              const container = document.getElementById('error-container');
               if (!models || models.length === 0) {
-                container.style.display = 'none';
+                container.className = 'error-container';
+                container.innerHTML = '';
                 return;
               }
-              container.style.display = 'block';
-              // Clear existing content safely
-              container.innerHTML = '';
 
-              models.forEach(model => {
-                // Sanitize status to only allow known values (prevents CSS injection)
-                const safeStatus = VALID_STATUSES.includes(model.status) ? model.status : 'checking';
+              // Filter to only show models with errors
+              const errorModels = models.filter(m => m.status === 'error');
 
-                // Build DOM elements safely to prevent XSS
-                const item = document.createElement('div');
-                item.className = 'model-item';
+              if (errorModels.length === 0) {
+                container.className = 'error-container';
+                container.innerHTML = '';
+                return;
+              }
 
-                const icon = document.createElement('div');
-                icon.className = 'model-icon ' + safeStatus;
-                icon.textContent = getStatusIcon(safeStatus);
+              // Show compact error summary with retry button
+              container.className = 'error-container has-errors';
+              const count = errorModels.length;
+              const modelText = count === 1 ? 'model' : 'models';
 
-                const name = document.createElement('div');
-                name.className = 'model-name';
-                name.textContent = model.display_name; // Safe: textContent escapes HTML
-
-                const statusEl = document.createElement('div');
-                statusEl.className = 'model-status';
-                statusEl.textContent = getStatusText(safeStatus);
-
-                item.appendChild(icon);
-                item.appendChild(name);
-                item.appendChild(statusEl);
-
-                // Add progress bar if downloading
-                if (safeStatus === 'downloading' && typeof model.progress === 'number') {
-                  const progressContainer = document.createElement('div');
-                  progressContainer.className = 'model-progress';
-                  const progressBar = document.createElement('div');
-                  progressBar.className = 'model-progress-bar';
-                  // Sanitize progress value to prevent CSS injection
-                  const safeProgress = Math.max(0, Math.min(100, Number(model.progress) || 0));
-                  progressBar.style.width = safeProgress + '%';
-                  progressContainer.appendChild(progressBar);
-                  item.appendChild(progressContainer);
-                }
-
-                container.appendChild(item);
-              });
+              container.innerHTML = '<div class="error-summary"><span class="error-icon">⚠</span> ' + count + ' ' + modelText + ' failed to load</div>';
             }
 
             window.llamafarm.splash.onStatus((status) => {
@@ -345,8 +331,21 @@ export class WindowManager {
     const showWindow = () => {
       if (!shown && this.mainWindow && !this.mainWindow.isDestroyed()) {
         shown = true
-        this.mainWindow.show()
-        this.closeSplash()
+
+        // Check if splash was minimized when loading completed
+        const splashMinimized = this.splashWindow?.isMinimized() ?? false
+
+        if (splashMinimized) {
+          // Don't force window - user will activate via dock/taskbar
+          this._loadingComplete = true
+          this._wasMinimizedOnComplete = true
+          this.notifyLoadingComplete()
+          // Keep splash minimized, don't show main window yet
+        } else {
+          // Normal flow: show main window, close splash
+          this.mainWindow.show()
+          this.closeSplash()
+        }
       }
     }
 
@@ -411,6 +410,55 @@ export class WindowManager {
     }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.close()
+    }
+  }
+
+  /**
+   * Check if loading completed while window was minimized
+   */
+  get wasMinimizedOnComplete(): boolean {
+    return this._wasMinimizedOnComplete
+  }
+
+  /**
+   * Notify user that loading is complete (platform-specific)
+   */
+  private notifyLoadingComplete(): void {
+    switch (process.platform) {
+      case 'darwin':
+        // macOS: Bounce dock icon (critical = bounce until user responds)
+        app.dock?.bounce('critical')
+        break
+
+      case 'win32':
+        // Windows: Flash taskbar
+        if (this.splashWindow && !this.splashWindow.isDestroyed()) {
+          this.splashWindow.flashFrame(true)
+        }
+        break
+
+      case 'linux':
+        // Linux: Set urgency hint (flashes taskbar where supported)
+        if (this.splashWindow && !this.splashWindow.isDestroyed()) {
+          this.splashWindow.setProgressBar(1) // Show complete
+          this.splashWindow.flashFrame(true) // Flash if supported
+        }
+        break
+    }
+  }
+
+  /**
+   * Handle app activation (dock click, taskbar click)
+   * Called from index.ts onActivate when loading completed while minimized
+   */
+  showMainWindowFromActivation(): void {
+    if (this._wasMinimizedOnComplete && this.mainWindow) {
+      // Loading completed while minimized, now user activated
+      this.closeSplash()
+      this.mainWindow.show()
+      this.mainWindow.focus()
+      this._wasMinimizedOnComplete = false
+      this._loadingComplete = false
     }
   }
 }

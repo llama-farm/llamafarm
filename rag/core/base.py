@@ -41,6 +41,81 @@ class ProcessingResult:
     metrics: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class PreviewChunk:
+    """A single chunk with position information for preview."""
+
+    chunk_index: int
+    content: str
+    start_position: int  # Character position in original text (-1 if not found)
+    end_position: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def char_count(self) -> int:
+        """Get character count of the chunk."""
+        return len(self.content)
+
+    @property
+    def word_count(self) -> int:
+        """Get word count of the chunk."""
+        return len(self.content.split())
+
+
+@dataclass
+class PreviewResult:
+    """Result of generating a document preview."""
+
+    original_text: str
+    chunks: list[PreviewChunk]
+    file_info: dict[str, Any]
+    parser_used: str
+    chunk_strategy: str
+    chunk_size: int
+    chunk_overlap: int
+    total_chunks: int
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def avg_chunk_size(self) -> float:
+        """Calculate average chunk size."""
+        if not self.chunks:
+            return 0.0
+        return sum(c.char_count for c in self.chunks) / len(self.chunks)
+
+    @property
+    def total_size_with_overlaps(self) -> int:
+        """Calculate total size including overlaps."""
+        return sum(c.char_count for c in self.chunks)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "original_text": self.original_text,
+            "chunks": [
+                {
+                    "chunk_index": c.chunk_index,
+                    "content": c.content,
+                    "start_position": c.start_position,
+                    "end_position": c.end_position,
+                    "char_count": c.char_count,
+                    "word_count": c.word_count,
+                    "metadata": c.metadata,
+                }
+                for c in self.chunks
+            ],
+            "file_info": self.file_info,
+            "parser_used": self.parser_used,
+            "chunk_strategy": self.chunk_strategy,
+            "chunk_size": self.chunk_size,
+            "chunk_overlap": self.chunk_overlap,
+            "total_chunks": self.total_chunks,
+            "avg_chunk_size": self.avg_chunk_size,
+            "total_size_with_overlaps": self.total_size_with_overlaps,
+            "warnings": self.warnings,
+        }
+
+
 class Component(ABC):
     """Base class for all pipeline components."""
 

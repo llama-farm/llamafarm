@@ -1,6 +1,5 @@
 """Tests for context management utilities."""
 
-
 import pytest
 
 from utils.context_manager import (
@@ -16,7 +15,9 @@ from utils.token_counter import TokenCounter
 class MockLlama:
     """Mock Llama instance for testing."""
 
-    def tokenize(self, text: str, add_special: bool = True, parse_special: bool = False):
+    def tokenize(
+        self, text: str, add_special: bool = True, parse_special: bool = False
+    ):
         """Mock tokenize that returns approximately 1 token per 4 characters."""
         if not text:
             return []
@@ -288,7 +289,10 @@ class TestHistoryCompressor:
         compressor = HistoryCompressor()
         long_code = "\n".join([f"line {i}" for i in range(50)])
         messages = [
-            {"role": "assistant", "content": f"Here's the code:\n```python\n{long_code}\n```"},
+            {
+                "role": "assistant",
+                "content": f"Here's the code:\n```python\n{long_code}\n```",
+            },
             {"role": "user", "content": "Recent 1"},
             {"role": "assistant", "content": "Recent 2"},
             {"role": "user", "content": "Recent 3"},
@@ -304,7 +308,9 @@ class TestHistoryCompressor:
     def test_remove_repetitions(self):
         """Test removal of duplicate content."""
         compressor = HistoryCompressor()
-        repeated_content = "This is a long message that repeats multiple times in the conversation."
+        repeated_content = (
+            "This is a long message that repeats multiple times in the conversation."
+        )
         messages = [
             {"role": "user", "content": repeated_content},
             {"role": "assistant", "content": "Response 1"},

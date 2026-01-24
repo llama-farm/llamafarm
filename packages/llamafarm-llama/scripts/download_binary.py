@@ -16,11 +16,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from llamafarm_llama._binary import (
-    download_binary,
-    get_platform_key,
-    get_binary_info,
-    LLAMA_CPP_VERSION,
     BINARY_MANIFEST,
+    LLAMA_CPP_VERSION,
+    download_binary,
+    get_binary_info,
+    get_platform_key,
 )
 
 

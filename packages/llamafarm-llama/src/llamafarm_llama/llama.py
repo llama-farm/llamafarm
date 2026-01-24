@@ -17,7 +17,7 @@ from typing import (
     Union,
 )
 
-from ._bindings import ensure_backend, ffi, get_lib
+from ._bindings import ensure_backend, ffi, get_lib, get_mtmd_lib
 from .types import (
     ChatCompletionChunk,
     ChatCompletionResponse,
@@ -66,6 +66,7 @@ class Llama:
         self,
         model_path: str,
         *,
+        mmproj_path: Optional[str] = None,  # Multimodal projector path for audio/vision
         n_ctx: int = 2048,
         n_batch: int = 2048,  # Larger batch = faster prompt processing
         n_threads: Optional[int] = None,
@@ -92,6 +93,8 @@ class Llama:
 
         Args:
             model_path: Path to the GGUF model file.
+            mmproj_path: Path to multimodal projector file (.gguf) for audio/vision models.
+                         If provided, enables audio/vision input via create_chat_completion_with_audio().
             n_ctx: Context window size.
             n_batch: Batch size for prompt processing. Larger = faster TTFT.
             n_threads: Number of threads for generation. None = auto.
@@ -249,6 +252,15 @@ class Llama:
         # Initialize sampler chain
         self._sampler = None
 
+        # Initialize multimodal context if projector path provided
+        self._mtmd_lib = None
+        self._mtmd_ctx = ffi.NULL
+        self._supports_audio = False
+        self._supports_vision = False
+
+        if mmproj_path:
+            self._init_multimodal(mmproj_path, n_threads, flash_attn, verbose)
+
         if verbose:
             n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
             n_ctx_train = self._lib.llama_model_n_ctx_train(self._model)
@@ -299,6 +311,542 @@ class Llama:
         except Exception as e:
             logger.warning(f"Warmup failed (non-fatal): {e}")
 
+    def _init_multimodal(
+        self,
+        mmproj_path: str,
+        n_threads: int,
+        flash_attn: bool,
+        verbose: bool,
+    ) -> None:
+        """Initialize multimodal context for audio/vision input.
+
+        Args:
+            mmproj_path: Path to the multimodal projector file (.gguf)
+            n_threads: Number of threads for encoding
+            flash_attn: Whether to use flash attention
+            verbose: Print verbose output
+        """
+        # Load mtmd library
+        self._mtmd_lib = get_mtmd_lib()
+        if self._mtmd_lib is None:
+            raise RuntimeError(
+                "Failed to load mtmd library. Multimodal support requires libmtmd. "
+                "Try clearing the cache and re-downloading: "
+                "python -c \"from llamafarm_llama._binary import clear_cache; clear_cache()\""
+            )
+
+        if verbose:
+            logger.info(f"Loading multimodal projector: {mmproj_path}")
+
+        # Get default params and configure
+        mtmd_params = self._mtmd_lib.mtmd_context_params_default()
+        mtmd_params.use_gpu = True
+        mtmd_params.n_threads = n_threads
+        mtmd_params.flash_attn_type = 1 if flash_attn else -1
+        mtmd_params.warmup = True
+        mtmd_params.print_timings = verbose
+
+        # Initialize mtmd context with the model
+        mmproj_path_bytes = mmproj_path.encode("utf-8")
+        self._mtmd_ctx = self._mtmd_lib.mtmd_init_from_file(
+            mmproj_path_bytes,
+            self._model,
+            mtmd_params,
+        )
+
+        if self._mtmd_ctx == ffi.NULL:
+            raise RuntimeError(f"Failed to load multimodal projector: {mmproj_path}")
+
+        # Query capabilities
+        self._supports_audio = self._mtmd_lib.mtmd_support_audio(self._mtmd_ctx)
+        self._supports_vision = self._mtmd_lib.mtmd_support_vision(self._mtmd_ctx)
+
+        if verbose:
+            caps = []
+            if self._supports_audio:
+                caps.append("audio")
+            if self._supports_vision:
+                caps.append("vision")
+            logger.info(f"Multimodal capabilities: {', '.join(caps) if caps else 'none'}")
+
+    @property
+    def supports_audio(self) -> bool:
+        """Whether this model supports audio input."""
+        return self._supports_audio
+
+    @property
+    def supports_vision(self) -> bool:
+        """Whether this model supports vision (image) input."""
+        return self._supports_vision
+
+    def create_audio_bitmap(
+        self,
+        audio_data: Union[bytes, List[float]],
+        audio_format: str = "wav",
+    ) -> "ffi.CData":
+        """Create an audio bitmap for multimodal processing.
+
+        Args:
+            audio_data: Audio data as WAV bytes or PCM float samples (16kHz mono)
+            audio_format: Format of audio_data - "wav" for WAV bytes, "pcm" for float samples
+
+        Returns:
+            mtmd_bitmap handle (must be freed with free_bitmap)
+
+        Raises:
+            RuntimeError: If model doesn't support audio
+        """
+        if not self._supports_audio:
+            raise RuntimeError("Model does not support audio input")
+
+        if audio_format == "wav":
+            # Use helper that decodes WAV internally via miniaudio
+            buf = ffi.new(f"unsigned char[{len(audio_data)}]", audio_data)
+            bitmap = self._mtmd_lib.mtmd_helper_bitmap_init_from_buf(
+                self._mtmd_ctx, buf, len(audio_data)
+            )
+        elif audio_format == "pcm":
+            # PCM float array (16kHz mono, float32)
+            if isinstance(audio_data, bytes):
+                import struct
+                n_samples = len(audio_data) // 4
+                samples = list(struct.unpack(f"{n_samples}f", audio_data))
+            else:
+                samples = list(audio_data)
+
+            samples_arr = ffi.new(f"float[{len(samples)}]", samples)
+            bitmap = self._mtmd_lib.mtmd_bitmap_init_from_audio(
+                len(samples), samples_arr
+            )
+        else:
+            raise ValueError(f"Unknown audio format: {audio_format}")
+
+        if bitmap == ffi.NULL:
+            raise RuntimeError("Failed to create audio bitmap")
+
+        return bitmap
+
+    def free_bitmap(self, bitmap: "ffi.CData") -> None:
+        """Free a bitmap created by create_audio_bitmap.
+
+        Args:
+            bitmap: Bitmap handle from create_audio_bitmap
+        """
+        if self._mtmd_lib is not None and bitmap != ffi.NULL:
+            self._mtmd_lib.mtmd_bitmap_free(bitmap)
+
+    def create_chat_completion_with_audio(
+        self,
+        messages: List[Dict],
+        audio_data: Union[bytes, List[float]],
+        audio_format: str = "wav",
+        *,
+        max_tokens: int = 256,
+        temperature: float = 0.8,
+        top_p: float = 0.95,
+        top_k: int = 40,
+        min_p: float = 0.05,
+        repeat_penalty: float = 1.1,
+        stream: bool = False,
+        stop: Optional[List[str]] = None,
+    ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
+        """Create a chat completion with audio input.
+
+        The audio will be processed through the multimodal projector and
+        inserted at the default marker position in the prompt.
+
+        Args:
+            messages: List of chat messages. Should contain the marker for audio placement.
+            audio_data: Audio data as WAV bytes or PCM float samples (16kHz mono)
+            audio_format: Format - "wav" for WAV bytes, "pcm" for float samples
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Top-p sampling
+            top_k: Top-k sampling
+            min_p: Min-p sampling
+            repeat_penalty: Repetition penalty
+            stream: Whether to stream the response
+            stop: Stop sequences
+
+        Returns:
+            ChatCompletionResponse or Iterator[ChatCompletionChunk] if streaming
+        """
+        if not self._supports_audio:
+            raise RuntimeError("Model does not support audio input")
+
+        # Create audio bitmap
+        bitmap = self.create_audio_bitmap(audio_data, audio_format)
+
+        # Tokenize messages with audio
+        # Guard against tokenization errors to avoid leaking the bitmap
+        try:
+            chunks = self._tokenize_with_media(messages, [bitmap])
+        except Exception:
+            self.free_bitmap(bitmap)
+            raise
+
+        # Process chunks and generate response
+        if stream:
+            # Wrap streaming in a generator that manages bitmap lifetime
+            # This ensures bitmap is freed AFTER the stream is consumed,
+            # avoiding use-after-free when mtmd_encode_chunk accesses the bitmap
+            def _stream_with_cleanup():
+                try:
+                    yield from self._stream_completion_with_chunks(
+                        chunks,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        min_p=min_p,
+                        repeat_penalty=repeat_penalty,
+                        stop=stop,
+                    )
+                finally:
+                    self.free_bitmap(bitmap)
+
+            return _stream_with_cleanup()
+        else:
+            try:
+                return self._complete_with_chunks(
+                    chunks,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    min_p=min_p,
+                    repeat_penalty=repeat_penalty,
+                    stop=stop,
+                )
+            finally:
+                self.free_bitmap(bitmap)
+
+    def _tokenize_with_media(
+        self,
+        messages: List[Dict],
+        bitmaps: List["ffi.CData"],
+    ) -> "ffi.CData":
+        """Tokenize messages with media (audio/images).
+
+        Args:
+            messages: Chat messages
+            bitmaps: List of media bitmaps
+
+        Returns:
+            mtmd_input_chunks handle
+        """
+        # Apply chat template to get prompt text
+        prompt = self._apply_chat_template(messages)
+
+        # Insert default marker if not present
+        default_marker = ffi.string(self._mtmd_lib.mtmd_default_marker()).decode("utf-8")
+        if default_marker not in prompt and bitmaps:
+            # Insert marker before the last user message content
+            # This is a simple heuristic - models may need specific placement
+            last_content = messages[-1].get("content", "")
+            # Handle multimodal content (list of parts)
+            if isinstance(last_content, list):
+                # Extract text from text parts for the replacement
+                text_parts = []
+                for part in last_content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                last_content_str = " ".join(text_parts)
+            else:
+                last_content_str = last_content or ""
+
+            if last_content_str:
+                prompt = prompt.replace(
+                    last_content_str,
+                    f"{default_marker}{last_content_str}"
+                )
+
+        # Create input text struct
+        input_text = ffi.new("struct mtmd_input_text *")
+        prompt_bytes = prompt.encode("utf-8")
+        input_text.text = ffi.new("char[]", prompt_bytes)
+        input_text.add_special = True
+        input_text.parse_special = True
+
+        # Create output chunks
+        chunks = self._mtmd_lib.mtmd_input_chunks_init()
+        if chunks == ffi.NULL:
+            raise RuntimeError("Failed to create input chunks")
+
+        # Create bitmap array
+        bitmaps_arr = ffi.new(f"mtmd_bitmap *[{len(bitmaps)}]", bitmaps)
+
+        # Tokenize with media
+        result = self._mtmd_lib.mtmd_tokenize(
+            self._mtmd_ctx,
+            chunks,
+            input_text,
+            bitmaps_arr,
+            len(bitmaps),
+        )
+
+        if result != 0:
+            self._mtmd_lib.mtmd_input_chunks_free(chunks)
+            raise RuntimeError(f"Failed to tokenize with media: error {result}")
+
+        return chunks
+
+    def _complete_with_chunks(
+        self,
+        chunks: "ffi.CData",
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        min_p: float,
+        repeat_penalty: float,
+        stop: Optional[List[str]],
+    ) -> ChatCompletionResponse:
+        """Generate completion from tokenized chunks."""
+        try:
+            # Clear KV cache
+            self._lib.llama_memory_clear(self._memory, True)
+
+            # Process each chunk
+            n_chunks = self._mtmd_lib.mtmd_input_chunks_size(chunks)
+            total_tokens = 0
+
+            for i in range(n_chunks):
+                chunk = self._mtmd_lib.mtmd_input_chunks_get(chunks, i)
+                chunk_type = self._mtmd_lib.mtmd_input_chunk_get_type(chunk)
+
+                if chunk_type == 0:  # MTMD_INPUT_CHUNK_TYPE_TEXT
+                    # Get tokens and decode
+                    n_tokens_ptr = ffi.new("size_t *")
+                    tokens_ptr = self._mtmd_lib.mtmd_input_chunk_get_tokens_text(chunk, n_tokens_ptr)
+                    n_tokens = n_tokens_ptr[0]
+
+                    if n_tokens > 0:
+                        tokens = [tokens_ptr[j] for j in range(n_tokens)]
+                        self._decode_batch(tokens)
+                        total_tokens += n_tokens
+                else:
+                    # Image/audio chunk - encode and use embeddings
+                    result = self._mtmd_lib.mtmd_encode_chunk(self._mtmd_ctx, chunk)
+                    if result != 0:
+                        raise RuntimeError(f"Failed to encode chunk: error {result}")
+
+                    # Get embeddings and feed to model
+                    embd_ptr = self._mtmd_lib.mtmd_get_output_embd(self._mtmd_ctx)
+                    n_embd_tokens = self._mtmd_lib.mtmd_input_chunk_get_n_tokens(chunk)
+
+                    # Create batch with embeddings
+                    self._decode_embeddings(embd_ptr, n_embd_tokens)
+                    total_tokens += n_embd_tokens
+
+            # Create sampler and generate
+            self._create_sampler(
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                min_p=min_p,
+                repeat_penalty=repeat_penalty,
+            )
+
+            # Generate tokens
+            generated_tokens = []
+            generated_text = ""
+            finish_reason = "length"
+
+            for _ in range(max_tokens):
+                token = self._sample_token()
+
+                # Check EOS
+                if self._lib.llama_vocab_is_eog(self._vocab, token):
+                    finish_reason = "stop"
+                    break
+
+                generated_tokens.append(token)
+                text = self.detokenize([token])
+                generated_text += text
+
+                # Check stop sequences
+                if stop:
+                    for s in stop:
+                        if s in generated_text:
+                            finish_reason = "stop"
+                            break
+                    if finish_reason == "stop":
+                        break
+
+                # Decode for next iteration
+                self._decode_batch([token])
+
+            return {
+                "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": self._model_path,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": generated_text,
+                        },
+                        "finish_reason": finish_reason,
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": total_tokens,
+                    "completion_tokens": len(generated_tokens),
+                    "total_tokens": total_tokens + len(generated_tokens),
+                },
+            }
+        finally:
+            self._mtmd_lib.mtmd_input_chunks_free(chunks)
+            if self._sampler is not None:
+                self._lib.llama_sampler_free(self._sampler)
+                self._sampler = None
+
+    def _stream_completion_with_chunks(
+        self,
+        chunks: "ffi.CData",
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        min_p: float,
+        repeat_penalty: float,
+        stop: Optional[List[str]],
+    ) -> Iterator[ChatCompletionChunk]:
+        """Stream completion from tokenized chunks."""
+        try:
+            # Clear KV cache
+            self._lib.llama_memory_clear(self._memory, True)
+
+            # Process each chunk (same as non-streaming)
+            n_chunks = self._mtmd_lib.mtmd_input_chunks_size(chunks)
+
+            for i in range(n_chunks):
+                chunk = self._mtmd_lib.mtmd_input_chunks_get(chunks, i)
+                chunk_type = self._mtmd_lib.mtmd_input_chunk_get_type(chunk)
+
+                if chunk_type == 0:  # TEXT
+                    n_tokens_ptr = ffi.new("size_t *")
+                    tokens_ptr = self._mtmd_lib.mtmd_input_chunk_get_tokens_text(chunk, n_tokens_ptr)
+                    n_tokens = n_tokens_ptr[0]
+
+                    if n_tokens > 0:
+                        tokens = [tokens_ptr[j] for j in range(n_tokens)]
+                        self._decode_batch(tokens)
+                else:
+                    # Image/audio
+                    result = self._mtmd_lib.mtmd_encode_chunk(self._mtmd_ctx, chunk)
+                    if result != 0:
+                        raise RuntimeError(f"Failed to encode chunk: error {result}")
+
+                    embd_ptr = self._mtmd_lib.mtmd_get_output_embd(self._mtmd_ctx)
+                    n_embd_tokens = self._mtmd_lib.mtmd_input_chunk_get_n_tokens(chunk)
+                    self._decode_embeddings(embd_ptr, n_embd_tokens)
+
+            # Create sampler
+            self._create_sampler(
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                min_p=min_p,
+                repeat_penalty=repeat_penalty,
+            )
+
+            # Stream generation
+            completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+            generated_text = ""
+
+            for i in range(max_tokens):
+                token = self._sample_token()
+
+                # Check EOS
+                if self._lib.llama_vocab_is_eog(self._vocab, token):
+                    yield {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": self._model_path,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                    break
+
+                text = self.detokenize([token])
+                generated_text += text
+
+                # Check stop sequences
+                should_stop = False
+                if stop:
+                    for s in stop:
+                        if s in generated_text:
+                            should_stop = True
+                            break
+
+                yield {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": self._model_path,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": text},
+                            "finish_reason": "stop" if should_stop else None,
+                        }
+                    ],
+                }
+
+                if should_stop:
+                    break
+
+                # Decode for next iteration
+                self._decode_batch([token])
+        finally:
+            self._mtmd_lib.mtmd_input_chunks_free(chunks)
+            if self._sampler is not None:
+                self._lib.llama_sampler_free(self._sampler)
+                self._sampler = None
+
+    def _decode_embeddings(self, embd_ptr: "ffi.CData", n_tokens: int) -> None:
+        """Decode embeddings through the model.
+
+        Args:
+            embd_ptr: Pointer to embedding data
+            n_tokens: Number of embedding tokens
+        """
+        n_embd = self._lib.llama_model_n_embd(self._model)
+
+        # Create batch with embeddings
+        batch = self._lib.llama_batch_init(n_tokens, n_embd, 1)
+        batch.n_tokens = n_tokens
+
+        # Copy embeddings to batch
+        for i in range(n_tokens * n_embd):
+            batch.embd[i] = embd_ptr[i]
+
+        # Set positions
+        pos = self._lib.llama_n_ctx(self._ctx) - n_tokens  # Current position
+        for i in range(n_tokens):
+            batch.pos[i] = pos + i
+            batch.n_seq_id[i] = 1
+            seq_id = ffi.new("llama_seq_id[1]", [0])
+            batch.seq_id[i] = seq_id
+            batch.logits[i] = 0 if i < n_tokens - 1 else 1
+
+        # Decode
+        result = self._lib.llama_decode(self._ctx, batch)
+        self._lib.llama_batch_free(batch)
+
+        if result != 0:
+            raise RuntimeError(f"Failed to decode embeddings: error {result}")
+
     def _cleanup(self):
         """Internal cleanup logic. Safe to call multiple times."""
         if getattr(self, "_closed", False):
@@ -308,6 +856,17 @@ class Llama:
         if hasattr(self, "_sampler") and self._sampler is not None:
             self._lib.llama_sampler_free(self._sampler)
             self._sampler = None
+
+        # Free multimodal context before llama context
+        if hasattr(self, "_mtmd_ctx") and self._mtmd_ctx is not None and self._mtmd_ctx != ffi.NULL:
+            if self._mtmd_lib is not None:
+                self._mtmd_lib.mtmd_free(self._mtmd_ctx)
+            self._mtmd_ctx = ffi.NULL
+            # Reset multimodal flags to prevent use-after-free
+            # If these remain True, callers checking supports_audio/supports_vision
+            # would attempt to use the freed multimodal context
+            self._supports_audio = False
+            self._supports_vision = False
 
         if hasattr(self, "_ctx") and self._ctx is not None and self._ctx != ffi.NULL:
             self._lib.llama_free(self._ctx)
@@ -506,7 +1065,25 @@ class Llama:
                         f"Message at index {i} with role '{msg_role}' has None content, "
                         "using empty string"
                     )
-            content = (raw_content or "").encode("utf-8")
+                content_str = ""
+            elif isinstance(raw_content, list):
+                # Handle multimodal messages (list of content parts)
+                # Extract text from text parts, use placeholder for other types
+                text_parts = []
+                for part in raw_content:
+                    if isinstance(part, dict):
+                        part_type = part.get("type", "")
+                        if part_type == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part_type == "input_audio":
+                            text_parts.append("[audio]")
+                        elif part_type == "image_url":
+                            text_parts.append("[image]")
+                        # Skip unknown types
+                content_str = " ".join(text_parts)
+            else:
+                content_str = raw_content or ""
+            content = content_str.encode("utf-8")
             role_refs.append(ffi.new("char[]", role))
             content_refs.append(ffi.new("char[]", content))
             chat_array[i].role = role_refs[-1]

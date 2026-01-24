@@ -68,7 +68,9 @@ class ContextSummarizer:
         self._model_id = model_id or self.DEFAULT_MODEL
         self._quantization = quantization or self.DEFAULT_QUANTIZATION
         # Use explicit None check to allow keep_recent=0
-        self._keep_recent = keep_recent if keep_recent is not None else self.DEFAULT_KEEP_RECENT
+        self._keep_recent = (
+            keep_recent if keep_recent is not None else self.DEFAULT_KEEP_RECENT
+        )
         self._load_language = load_language
         self._model: GGUFLanguageModel | None = None
 
@@ -79,7 +81,9 @@ class ContextSummarizer:
 
         # Use the server's load_language function for proper caching
         if self._load_language is not None:
-            logger.info(f"Loading summarization model via server cache: {self._model_id}")
+            logger.info(
+                f"Loading summarization model via server cache: {self._model_id}"
+            )
             self._model = await self._load_language(
                 self._model_id,
                 n_ctx=4096,

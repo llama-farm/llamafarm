@@ -126,7 +126,9 @@ def validate_tool_schema(tool: dict) -> list[str]:
     if "parameters" in func:
         params = func["parameters"]
         if not isinstance(params, dict):
-            errors.append(f"Tool parameters must be a dict, got {type(params).__name__}")
+            errors.append(
+                f"Tool parameters must be a dict, got {type(params).__name__}"
+            )
 
     return errors
 
@@ -160,7 +162,9 @@ def parse_tool_choice(tool_choice: str | dict | None) -> tuple[str, str | None]:
             if func_name:
                 return ("specific", func_name)
         # Fallback if dict format is unexpected
-        logger.warning(f"Unexpected tool_choice dict format: {tool_choice}, using 'auto'")
+        logger.warning(
+            f"Unexpected tool_choice dict format: {tool_choice}, using 'auto'"
+        )
         return ("auto", None)
     else:
         logger.warning(f"Unknown tool_choice value: {tool_choice}, using 'auto'")
@@ -225,8 +229,7 @@ def inject_tools_into_messages(
     tools_to_inject = tools
     if mode == "specific" and specific_func:
         tools_to_inject = [
-            t for t in tools
-            if t.get("function", {}).get("name") == specific_func
+            t for t in tools if t.get("function", {}).get("name") == specific_func
         ]
         if not tools_to_inject:
             logger.warning(

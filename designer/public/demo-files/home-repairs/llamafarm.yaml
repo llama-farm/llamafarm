@@ -1,0 +1,162 @@
+version: v1
+name: home-repair-helper
+namespace: default
+
+# =============================================================================
+# RUNTIME CONFIGURATION - Universal Runtime with fast, lightweight model
+# =============================================================================
+runtime:
+  models:
+    - name: default
+      description: "Qwen3 1.7B (GGUF Q4_K_M quantized) - Fast, efficient model optimized for Apple Silicon and local inference"
+      provider: universal
+      model: unsloth/Qwen3-1.7B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540/v1
+      default: true
+      prompt_format: unstructured
+      prompts: ["default"]
+
+# =============================================================================
+# PROMPTS CONFIGURATION - Home Repair Helper Expert
+# =============================================================================
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful, practical home repair assistant. You help homeowners diagnose problems and understand how to fix common household issues. You have expertise in:
+
+          - Plumbing (drains, toilets, faucets, water heaters)
+          - Electrical basics (outlets, switches, light fixtures, troubleshooting)
+          - Drywall repair (holes, cracks, water damage)
+          - Interior painting (prep, technique, troubleshooting)
+          - Doors and windows (sticking, drafts, repairs)
+          - Appliance troubleshooting (refrigerator, dishwasher, washer/dryer, HVAC)
+          - Seasonal maintenance (spring, summer, fall, winter tasks)
+          - Tools and safety (what to use, when to call a pro)
+
+          When answering questions:
+          1. SAFETY FIRST - Always mention safety precautions, especially for electrical and gas-related issues
+          2. Help diagnose the problem before jumping to solutions
+          3. Clearly state when something is DIY-appropriate vs. needs a professional
+          4. Give step-by-step instructions when applicable
+          5. Mention common mistakes to avoid
+          6. If unsure about something, say so - bad advice can be dangerous or expensive
+
+          Be encouraging but realistic. Many repairs are simpler than people think, but some genuinely require professionals.
+          Always base your answers on the documents provided.
+
+# =============================================================================
+# DATASETS CONFIGURATION - Home repair knowledge demo dataset
+# =============================================================================
+datasets:
+  - name: home_repair_knowledge
+    database: home_repair_knowledge_db
+    data_processing_strategy: default
+
+# =============================================================================
+# RAG CONFIGURATION - Optimized for home repair documentation
+# =============================================================================
+rag:
+  default_database: home_repair_knowledge_db
+
+  # =============================================================================
+  # DATABASE CONFIGURATION - ChromaDB optimized for home repair content
+  # =============================================================================
+  databases:
+    - name: "home_repair_knowledge_db"
+      type: "ChromaStore"
+      config:
+        persist_directory: "./data/chroma/home_repair_knowledge_db"
+        distance_function: "cosine"
+        collection_name: "home_repair_knowledge"
+
+      # Embedding configuration - high quality embeddings
+      default_embedding_strategy: "semantic_embeddings"
+      embedding_strategies:
+        - name: "semantic_embeddings"
+          type: "UniversalEmbedder"
+          priority: 0
+          config:
+            model: sentence-transformers/all-MiniLM-L6-v2
+            base_url: http://127.0.0.1:11540/v1
+            batch_size: 32
+            timeout: 120
+            normalize: true
+
+      # Retrieval configuration - semantic search with high recall
+      default_retrieval_strategy: "comprehensive_search"
+      retrieval_strategies:
+        - name: "comprehensive_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 12
+          default: true
+
+        - name: "precise_search"
+          type: "BasicSimilarityStrategy"
+          config:
+            distance_metric: "cosine"
+            top_k: 5
+
+  # Processing strategy - supports markdown, PDF, TXT, and DOCX
+  data_processing_strategies:
+    - name: "default"
+      description: "Universal processor for home repair content"
+      parsers:
+        # PDF Parser with robust fallback
+        - type: "PDFParser_LlamaIndex"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 10
+          config:
+            chunk_strategy: "semantic"
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        - type: "PDFParser_PyPDF2"
+          file_include_patterns: ["*.pdf", "*.PDF"]
+          priority: 50
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "paragraphs"
+            extract_metadata: true
+            combine_pages: false
+
+        # Word Document Parser
+        - type: "DocxParser_LlamaIndex"
+          file_include_patterns: ["*.docx", "*.DOCX"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            extract_metadata: true
+            extract_tables: true
+
+        # Markdown Parser
+        - type: "MarkdownParser_Python"
+          file_include_patterns: ["*.md", "*.markdown"]
+          priority: 10
+          config:
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sections"
+            extract_metadata: true
+            extract_code_blocks: true
+            extract_links: true
+
+        # Plain Text Parser (catch-all)
+        - type: "TextParser_Python"
+          file_include_patterns: ["*.txt", "*.text"]
+          priority: 50
+          config:
+            encoding: "utf-8"
+            chunk_size: 1000
+            chunk_overlap: 100
+            chunk_strategy: "sentences"
+            clean_text: true
+            extract_metadata: true
+      extractors: []

@@ -21,21 +21,76 @@ Environment Variables:
 
 import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
-from models import BaseModel, GGUFLanguageModel, LanguageModel
-from state import (
-    cleanup_idle_models,
-    get_device,
-    get_model_load_lock,
-    get_models_cache,
-    set_cleanup_task,
-    shutdown_models,
+from models import (
+    AnomalyModel,
+    BaseModel,
+    ChatterboxConfig,
+    ClassifierModel,
+    DocumentModel,
+    EncoderModel,
+    GGUFEncoderModel,
+    GGUFLanguageModel,
+    LanguageModel,
+    OCRModel,
+    SpeechModel,
+    TTSModel,
+    VoiceProfile,
 )
+from routers.anomaly import (
+    router as anomaly_router,
+)
+from routers.anomaly import (
+    set_anomaly_loader,
+)
+from routers.anomaly import (
+    set_state as set_anomaly_state,
+)
+from routers.audio import router as audio_router
+from routers.audio import set_speech_loader
+from routers.audio_chat import router as audio_chat_router
+from routers.audio_speech import router as audio_speech_router
+from routers.chat_completions import router as chat_completions_router
+from routers.classifier import (
+    router as classifier_router,
+)
+from routers.classifier import (
+    set_classifier_loader,
+)
+from routers.classifier import (
+    set_models_dir as set_classifier_models_dir,
+)
+from routers.classifier import (
+    set_state as set_classifier_state,
+)
+from routers.files import router as files_router
+from routers.health import (
+    router as health_router,
+)
+from routers.health import (
+    set_device_info_getter,
+    set_models_cache,
+)
+from routers.nlp import router as nlp_router
+from routers.nlp import set_encoder_loader
+from routers.vision import (
+    router as vision_router,
+)
+from routers.vision import (
+    set_document_loader,
+    set_file_image_getter,
+    set_ocr_loader,
+)
+from utils.device import get_device_info, get_optimal_device
+from utils.feature_encoder import FeatureEncoder
+from utils.file_handler import get_file_images
+from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 
 # Configure logging FIRST, before anything else
@@ -47,8 +102,166 @@ setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
 logger = UniversalRuntimeLogger("universal-runtime")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle (startup and shutdown)."""
+    global _cleanup_task
+
+    # Startup
+    logger.info("Starting Universal Runtime")
+
+    # Start model cleanup background task
+    _cleanup_task = asyncio.create_task(_cleanup_idle_models())
+    logger.info("Model cleanup background task started")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down Universal Runtime")
+
+    # Stop cleanup task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _cleanup_task
+        logger.info("Model cleanup task stopped")
+
+    # Unload all remaining models
+    if _models:
+        logger.info(f"Unloading {len(_models)} remaining model(s)")
+        for cache_key, model in list(_models.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded model: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading model {cache_key}: {e}")
+        _models.clear()
+
+    if _classifiers:
+        logger.info(f"Unloading {len(_classifiers)} remaining classifier(s)")
+        for cache_key, model in list(_classifiers.items()):
+            try:
+                await model.unload()
+                logger.info(f"Unloaded classifier: {cache_key}")
+            except Exception as e:
+                logger.error(f"Error unloading classifier {cache_key}: {e}")
+        _classifiers.clear()
+
+    logger.info("Shutdown complete")
+
+
+app = FastAPI(
+    title="Universal Runtime",
+    description="OpenAI-compatible API for HuggingFace models (transformers, diffusers, embedders)",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+# CORS configuration - use environment variable for allowed origins
+# Default allows common local development ports
+# Set CORS_ALLOWED_ORIGINS to a comma-separated list of origins in production
+_default_origins = "http://localhost:3000,http://localhost:5173,http://localhost:4200,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:4200"
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include all routers
+app.include_router(anomaly_router)
+app.include_router(audio_router)
+app.include_router(audio_speech_router)
+app.include_router(audio_chat_router)
+app.include_router(chat_completions_router)
+app.include_router(classifier_router)
+app.include_router(files_router)
+app.include_router(health_router)
+app.include_router(nlp_router)
+app.include_router(vision_router)
+
+# Model unload timeout configuration (in seconds)
+# Default: 5 minutes (300 seconds)
+MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
+# Cleanup check interval (in seconds) - how often to check for idle models
+# Default: 30 seconds
+CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
+
+# Global model caches using TTL-based caching (via cachetools)
+# Models are automatically tracked for idle time and cleaned up by background task
+_models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+_model_load_lock = asyncio.Lock()
+_current_device = None
+
+# Feature encoder cache for anomaly detection with mixed data types
+_encoders: dict[str, FeatureEncoder] = {}
+_cleanup_task: asyncio.Task | None = None
+
+# Data directories
+_LF_DATA_DIR = Path.home() / ".llamafarm"
+CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
+
+
 # ============================================================================
 # Language Model Loading (for chat_completions router)
+# ============================================================================
+
+
+async def _cleanup_idle_models() -> None:
+    """Background task that periodically unloads idle models.
+
+    Uses ModelCache's TTL-based expiration to find and unload models that
+    haven't been accessed in MODEL_UNLOAD_TIMEOUT seconds.
+    """
+    logger.info(
+        f"Model cleanup task started (timeout={MODEL_UNLOAD_TIMEOUT}s, "
+        f"check_interval={CLEANUP_CHECK_INTERVAL}s)"
+    )
+
+    while True:
+        try:
+            await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
+
+            # Cleanup expired models from both caches
+            for cache, cache_name in [
+                (_models, "models"),
+                (_classifiers, "classifiers"),
+            ]:
+                expired_items = cache.pop_expired()
+                if expired_items:
+                    logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
+                    for cache_key, model in expired_items:
+                        try:
+                            await model.unload()
+                            logger.info(f"Successfully unloaded: {cache_key}")
+                        except Exception as e:
+                            logger.error(
+                                f"Error unloading model {cache_key}: {e}", exc_info=True
+                            )
+
+        except asyncio.CancelledError:
+            logger.info("Model cleanup task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}", exc_info=True)
+            # Continue running despite errors
+
+
+def get_device():
+    """Get the optimal device for the current platform."""
+    global _current_device
+    if _current_device is None:
+        _current_device = get_optimal_device()
+        logger.info(f"Using device: {_current_device}")
+    return _current_device
+
+
+# ============================================================================
+# Language Model Loading
 # ============================================================================
 
 
@@ -65,24 +278,7 @@ def _make_language_cache_key(
     cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
 ) -> str:
-    """Generate a cache key for a causal language model.
-
-    Args:
-        model_id: HuggingFace model identifier
-        n_ctx: Optional context window size for GGUF models
-        n_batch: Optional batch size for GGUF models
-        n_gpu_layers: Optional number of GPU layers for GGUF models
-        n_threads: Optional thread count for GGUF models
-        flash_attn: Optional flash attention flag for GGUF models
-        use_mmap: Optional memory-mapping flag for GGUF models
-        use_mlock: Optional memory-lock flag for GGUF models
-        cache_type_k: Optional KV cache key quantization for GGUF models
-        cache_type_v: Optional KV cache value quantization for GGUF models
-        preferred_quantization: Optional quantization preference for GGUF models
-
-    Returns:
-        A unique cache key string that identifies this specific model configuration
-    """
+    """Generate a cache key for a causal language model."""
     quant_key = (
         preferred_quantization if preferred_quantization is not None else "default"
     )
@@ -115,46 +311,23 @@ async def load_language(
     cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
 ):
-    """Load a causal language model (GGUF or transformers format).
-
-    Automatically detects whether the model is in GGUF or transformers format
-    and loads it with the appropriate backend. GGUF models use llama-cpp
-    for optimized inference, while transformers models use the standard HuggingFace
-    transformers library.
-
-    Args:
-        model_id: HuggingFace model identifier
-        n_ctx: Optional context window size for GGUF models. If None, will be
-               computed automatically based on available memory and model defaults.
-        n_batch: Optional batch size for prompt processing. If None, defaults to 2048.
-                 Critical for memory: lower values (e.g., 512) reduce compute buffer size.
-        n_gpu_layers: Optional number of layers to offload to GPU. If None, will be
-                      auto-detected based on device. Use -1 for all layers.
-        n_threads: Optional number of CPU threads. If None, auto-detected.
-        flash_attn: Optional flag to enable/disable flash attention. If None,
-                    defaults to True for faster inference.
-        use_mmap: Optional flag for memory-mapped file loading. If None, defaults to True.
-        use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
-        cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
-                      Using "q4_0" can reduce KV cache memory by ~4x.
-        cache_type_v: Optional KV cache value quantization type. Same options as cache_type_k.
-        preferred_quantization: Optional quantization preference for GGUF models
-                                (e.g., "Q4_K_M", "Q8_0"). If None, defaults to Q4_K_M.
-                                Only downloads the specified quantization to save disk space.
-    """
-    models_cache = get_models_cache()
-    model_load_lock = get_model_load_lock()
-
-    # Include all parameters in cache key for GGUF models so different configurations are cached separately
-    # Use "auto"/"default" for None values to allow automatic detection
+    """Load a causal language model (GGUF or transformers format)."""
     cache_key = _make_language_cache_key(
-        model_id, n_ctx, n_batch, n_gpu_layers, n_threads, flash_attn,
-        use_mmap, use_mlock, cache_type_k, cache_type_v, preferred_quantization
+        model_id,
+        n_ctx,
+        n_batch,
+        n_gpu_layers,
+        n_threads,
+        flash_attn,
+        use_mmap,
+        use_mlock,
+        cache_type_k,
+        cache_type_v,
+        preferred_quantization,
     )
-    if cache_key not in models_cache:
-        async with model_load_lock:
-            # Double-check if model was loaded while waiting for the lock
-            if cache_key not in models_cache:
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
                 logger.info(
                     f"Loading causal LM: {model_id} "
                     f"(n_ctx={n_ctx if n_ctx is not None else 'auto'}, "
@@ -191,88 +364,400 @@ async def load_language(
                     model = LanguageModel(model_id, device)
 
                 await model.load()
-                models_cache[cache_key] = model
+                _models[cache_key] = model
 
     # Return model (get() refreshes TTL automatically)
-    return models_cache.get(cache_key)
+    return _models.get(cache_key)
 
 
 # ============================================================================
-# Application Lifecycle
+# Encoder Model Loading
 # ============================================================================
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifecycle (startup and shutdown)."""
-    # Startup
-    logger.info("Starting Universal Runtime")
-
-    # Start model cleanup background task
-    cleanup_task = asyncio.create_task(cleanup_idle_models())
-    set_cleanup_task(cleanup_task)
-    logger.info("Model cleanup background task started")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down Universal Runtime")
-    await shutdown_models()
-    logger.info("Shutdown complete")
+def _make_encoder_cache_key(
+    model_id: str,
+    task: str,
+    model_format: str,
+    preferred_quantization: str | None = None,
+    max_length: int | None = None,
+) -> str:
+    """Generate a cache key for an encoder model."""
+    quant_key = (
+        preferred_quantization if preferred_quantization is not None else "default"
+    )
+    len_key = max_length if max_length is not None else "auto"
+    return f"encoder:{task}:{model_format}:{model_id}:quant{quant_key}:len{len_key}"
 
 
-# ============================================================================
-# FastAPI Application
-# ============================================================================
+async def load_encoder(
+    model_id: str,
+    task: str = "embedding",
+    preferred_quantization: str | None = None,
+    max_length: int | None = None,
+    use_flash_attention: bool = True,
+):
+    """Load an encoder model for embeddings, classification, reranking, or NER."""
+    model_format = detect_model_format(model_id)
+    cache_key = _make_encoder_cache_key(
+        model_id, task, model_format, preferred_quantization, max_length
+    )
 
-app = FastAPI(
-    title="Universal Runtime",
-    description="OpenAI-compatible API for HuggingFace models (transformers, diffusers, embedders)",
-    version="2.0.0",
-    lifespan=lifespan,
-)
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(
+                    f"Loading encoder ({task}): {model_id} (format: {model_format})"
+                )
+                device = get_device()
 
-# CORS configuration - use environment variable for allowed origins
-# Default allows common local development ports
-# Set CORS_ALLOWED_ORIGINS to a comma-separated list of origins in production
-_default_origins = "http://localhost:3000,http://localhost:5173,http://localhost:4200,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:4200"
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
+                model: BaseModel
+                if model_format == "gguf":
+                    if task != "embedding":
+                        raise ValueError(
+                            f"GGUF models only support embedding task, not '{task}'"
+                        )
+                    model = GGUFEncoderModel(
+                        model_id, device, preferred_quantization=preferred_quantization
+                    )
+                else:
+                    model = EncoderModel(
+                        model_id,
+                        device,
+                        task=task,
+                        max_length=max_length,
+                        use_flash_attention=use_flash_attention,
+                    )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+                await model.load()
+                _models[cache_key] = model
 
-# ============================================================================
-# Register Routers
-# ============================================================================
-
-# Import routers (intentionally after app creation to avoid circular imports)
-from routers.anomaly import router as anomaly_router  # noqa: E402
-from routers.chat_completions import router as chat_completions_router  # noqa: E402
-from routers.classifier import router as classifier_router  # noqa: E402
-from routers.core import router as core_router  # noqa: E402
-from routers.documents import router as documents_router  # noqa: E402
-from routers.embeddings import router as embeddings_router  # noqa: E402
-from routers.files import router as files_router  # noqa: E402
-from routers.ocr import router as ocr_router  # noqa: E402
-
-# Register all routers
-app.include_router(core_router)
-app.include_router(chat_completions_router)
-app.include_router(files_router)
-app.include_router(embeddings_router)
-app.include_router(documents_router)
-app.include_router(ocr_router)
-app.include_router(anomaly_router)
-app.include_router(classifier_router)
+    return _models.get(cache_key)
 
 
 # ============================================================================
-# Main Entry Point
+# Document Model Loading
+# ============================================================================
+
+
+def _make_document_cache_key(model_id: str, task: str) -> str:
+    """Generate a cache key for a document model."""
+    return f"document:{task}:{model_id}"
+
+
+async def load_document(
+    model_id: str,
+    task: str = "extraction",
+):
+    """Load a document understanding model."""
+    cache_key = _make_document_cache_key(model_id, task)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading document model ({task}): {model_id}")
+                device = get_device()
+
+                model = DocumentModel(
+                    model_id=model_id,
+                    device=device,
+                    task=task,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+# ============================================================================
+# OCR Model Loading
+# ============================================================================
+
+
+def _make_ocr_cache_key(backend: str, languages: list[str]) -> str:
+    """Generate a cache key for an OCR model."""
+    lang_key = "_".join(sorted(languages))
+    return f"ocr:{backend}:{lang_key}"
+
+
+async def load_ocr(backend: str = "surya", languages: list[str] | None = None):
+    """Load an OCR model with the specified backend."""
+    langs = languages or ["en"]
+    cache_key = _make_ocr_cache_key(backend, langs)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading OCR model: {backend} (languages: {langs})")
+                device = get_device()
+
+                model = OCRModel(
+                    model_id=f"ocr-{backend}",
+                    device=device,
+                    backend=backend,
+                    languages=langs,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+# ============================================================================
+# Anomaly Model Loading
+# ============================================================================
+
+
+def _make_anomaly_cache_key(
+    model_id: str, backend: str, normalization: str | None = None
+) -> str:
+    """Generate a cache key for an anomaly model."""
+    if normalization:
+        return f"anomaly:{backend}:{normalization}:{model_id}"
+    return f"anomaly:{backend}:{model_id}"
+
+
+async def load_anomaly(
+    model_id: str,
+    backend: str = "isolation_forest",
+    contamination: float = 0.1,
+    threshold: float | None = None,
+    normalization: str = "standardization",
+):
+    """Load an anomaly detection model."""
+    cache_key = _make_anomaly_cache_key(model_id, backend, normalization)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading anomaly model ({backend}): {model_id}")
+                device = get_device()
+
+                model = AnomalyModel(
+                    model_id=model_id,
+                    device=device,
+                    backend=backend,
+                    contamination=contamination,
+                    threshold=threshold,
+                    normalization=normalization,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+# ============================================================================
+# Classifier Model Loading
+# ============================================================================
+
+
+def _make_classifier_cache_key(model_name: str) -> str:
+    """Create a cache key for classifier models."""
+    return f"classifier:{model_name}"
+
+
+async def load_classifier(
+    model_id: str,
+    base_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+) -> "ClassifierModel":
+    """Load or get cached classifier model."""
+    cache_key = _make_classifier_cache_key(model_id)
+
+    if cache_key not in _classifiers:
+        async with _model_load_lock:
+            if cache_key not in _classifiers:
+                logger.info(f"Loading classifier model: {model_id}")
+                device = get_device()
+
+                model = ClassifierModel(
+                    model_id=model_id,
+                    device=device,
+                    base_model=base_model,
+                )
+
+                await model.load()
+                _classifiers[cache_key] = model
+
+    return _classifiers.get(cache_key)
+
+
+# ============================================================================
+# Speech Model Loading
+# ============================================================================
+
+# Safe audio file extensions (whitelist for security)
+SAFE_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus", ".pcm",
+})
+
+# Silence detection threshold for decoded Opus audio (higher due to noise floor)
+SILENCE_THRESHOLD_OPUS = 0.03
+
+
+def _make_speech_cache_key(model_id: str, compute_type: str | None = None) -> str:
+    """Generate a cache key for a speech model."""
+    ct_key = compute_type if compute_type is not None else "auto"
+    return f"speech:{model_id}:{ct_key}"
+
+
+async def load_speech(
+    model_id: str = "distil-large-v3",
+    compute_type: str | None = None,
+) -> SpeechModel:
+    """Load a speech-to-text model."""
+    cache_key = _make_speech_cache_key(model_id, compute_type)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading speech model: {model_id}")
+                device = get_device()
+
+                model = SpeechModel(
+                    model_id=model_id,
+                    device=device,
+                    compute_type=compute_type,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+# ==============================================================================
+# TTS (Text-to-Speech) Model Loading
+# ==============================================================================
+
+
+def _make_tts_cache_key(
+    model_id: str,
+    voice: str,
+    voice_profile_path: str | None = None,
+) -> str:
+    """Generate cache key for TTS model.
+
+    Args:
+        model_id: TTS model identifier
+        voice: Default voice for the model
+        voice_profile_path: Path to voice profile audio (for Chatterbox)
+
+    Returns:
+        Cache key string
+    """
+    if voice_profile_path:
+        # Hash the path to keep key reasonable length
+        import hashlib
+
+        path_hash = hashlib.md5(voice_profile_path.encode()).hexdigest()[:8]
+        return f"tts:{model_id}:{voice}:{path_hash}"
+    return f"tts:{model_id}:{voice}"
+
+
+async def load_tts(
+    model_id: str = "kokoro",
+    voice: str = "af_heart",
+    voice_profiles: dict[str, dict] | None = None,
+    temperature: float = 0.8,
+    top_k: int = 1000,
+    top_p: float = 0.95,
+    repetition_penalty: float = 1.2,
+) -> TTSModel:
+    """Load a text-to-speech model.
+
+    Args:
+        model_id: TTS model identifier ("kokoro" or "chatterbox-turbo")
+        voice: Default voice ID (Kokoro) or profile name (Chatterbox)
+        voice_profiles: Dict of {name: {audio_path, description}} for Chatterbox
+        temperature: Chatterbox Turbo temperature (0.1-2.0)
+        top_k: Chatterbox Turbo top-k sampling (1-5000)
+        top_p: Chatterbox Turbo nucleus sampling (0.0-1.0)
+        repetition_penalty: Chatterbox Turbo repetition penalty (1.0-2.0)
+
+    Returns:
+        Loaded TTSModel instance
+    """
+    # Convert voice_profiles dict to VoiceProfile objects
+    profiles: dict[str, VoiceProfile] | None = None
+    voice_profile_path: str | None = None
+
+    if voice_profiles:
+        profiles = {
+            name: VoiceProfile(name=name, audio_path=cfg["audio_path"], description=cfg.get("description", ""))
+            for name, cfg in voice_profiles.items()
+        }
+        # Get the path for the selected voice for cache key
+        if voice in profiles:
+            voice_profile_path = profiles[voice].audio_path
+
+    cache_key = _make_tts_cache_key(model_id, voice, voice_profile_path)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading TTS model: {model_id} (voice={voice})")
+                device = get_device()
+
+                # Create Chatterbox config if applicable
+                chatterbox_config = None
+                if model_id == "chatterbox-turbo":
+                    chatterbox_config = ChatterboxConfig(
+                        temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
+                    )
+
+                model = TTSModel(
+                    model_id=model_id,
+                    device=device,
+                    voice=voice,
+                    voice_profiles=profiles,
+                    chatterbox_config=chatterbox_config,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
+    return _models.get(cache_key)
+
+
+# ============================================================================
+# Router Dependency Injection
+# ============================================================================
+
+# Health router
+set_models_cache(_models)
+set_device_info_getter(get_device_info)
+
+# NLP router
+set_encoder_loader(load_encoder)
+
+# Vision router
+set_ocr_loader(load_ocr)
+set_document_loader(load_document)
+set_file_image_getter(get_file_images)
+
+# Anomaly router
+set_anomaly_loader(load_anomaly)
+set_anomaly_state(_models, _encoders, _model_load_lock)
+
+# Classifier router
+set_classifier_loader(load_classifier)
+set_classifier_models_dir(CLASSIFIER_MODELS_DIR)
+set_classifier_state(_classifiers, _model_load_lock)
+
+# Audio router
+set_speech_loader(load_speech)
+
+
+# ============================================================================
+# Server Entry Point
 # ============================================================================
 
 if __name__ == "__main__":
@@ -294,4 +779,6 @@ if __name__ == "__main__":
         port=port,
         log_config=None,  # Disable uvicorn's log config (handled in setup_logging)
         access_log=False,  # Disable uvicorn access logs (handled by structlog)
+        ws_ping_interval=30.0,  # Send ping every 30s (default: 20s)
+        ws_ping_timeout=60.0,  # Wait 60s for pong (default: 20s) - allows for slow transcription
     )

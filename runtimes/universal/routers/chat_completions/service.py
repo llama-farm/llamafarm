@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -33,7 +34,14 @@ from utils.tool_calling import (
     strip_tool_call_from_content,
 )
 
-from .types import ChatCompletionRequest, ContextUsageInfo, ThinkingContent
+from .types import (
+    ChatCompletionRequest,
+    ContextUsageInfo,
+    ThinkingContent,
+    extract_audio_from_messages,
+    has_audio_content,
+    replace_audio_with_text,
+)
 
 
 class ToolCallStreamState(Enum):
@@ -42,6 +50,7 @@ class ToolCallStreamState(Enum):
     NORMAL = "normal"  # Streaming regular content
     BUFFERING_START = "buffering_start"  # Detected <tool_call>, waiting for name
     STREAMING_ARGS = "streaming_args"  # Name emitted, streaming arguments
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +61,40 @@ class ChatCompletionsService:
         from server import load_language
 
         self.load_language = load_language
+
+    async def _transcribe_audio(self, audio_data: bytes, audio_format: str = "wav") -> str:
+        """Transcribe audio using the STT model.
+
+        This is used as a fallback when the LLM doesn't support direct audio input.
+
+        Args:
+            audio_data: Base64-decoded audio bytes
+            audio_format: Audio format (wav, mp3, pcm)
+
+        Returns:
+            Transcribed text
+        """
+        from server import load_speech
+
+        # Load STT model (default whisper model)
+        stt_model = await load_speech()
+
+        # Convert audio format if needed
+        if audio_format == "pcm":
+            # Convert PCM to WAV for whisper
+            import io
+            import wave
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(16000)
+                wav_file.writeframes(audio_data)
+            audio_data = wav_buffer.getvalue()
+
+        # Transcribe
+        result = await stt_model.transcribe_audio(audio_data)
+        return result.get("text", "").strip()
 
     async def chat_completions(self, chat_request: ChatCompletionRequest):
         """
@@ -99,6 +142,14 @@ class ChatCompletionsService:
                 chat_request.model
             )
 
+            # Convert messages to dict format early (needed for audio detection)
+            messages_dict = [dict(msg) for msg in chat_request.messages]
+
+            # Check for audio content in messages
+            audio_in_request = has_audio_content(messages_dict)
+
+            # Load language model first to check for native audio support
+            # (We'll handle audio transcription after if model doesn't support native audio)
             model = await self.load_language(
                 model_id,
                 n_ctx=n_ctx,
@@ -112,10 +163,6 @@ class ChatCompletionsService:
                 cache_type_v=cache_type_v,
                 preferred_quantization=gguf_quantization,
             )
-
-            # Convert messages to dict format
-            # ChatCompletionMessageParam is already dict-compatible
-            messages_dict = [dict(msg) for msg in chat_request.messages]
 
             # Extract thinking params from extra_body if not set at top level
             # (OpenAI SDK sends custom params via extra_body)
@@ -137,6 +184,54 @@ class ChatCompletionsService:
             # This is essential for models like Qwen that use special tokens (<|im_start|>, etc.)
             # and thinking tags (<think>)
             is_gguf = isinstance(model, GGUFLanguageModel)
+
+            # Handle audio content - either native audio or STT transcription
+            use_native_audio = False
+            audio_bytes = None
+            audio_format = "wav"
+
+            if audio_in_request:
+                # Check if model supports native audio input
+                model_supports_audio = is_gguf and getattr(model, "supports_audio", False)
+
+                if model_supports_audio:
+                    # Use native audio input (no transcription needed)
+                    logger.info("Model supports native audio input - using direct audio processing")
+                    use_native_audio = True
+
+                    # Extract audio data (only first audio part for now)
+                    audio_parts = extract_audio_from_messages(messages_dict)
+                    if audio_parts:
+                        msg_idx, audio_input = audio_parts[0]
+                        audio_bytes = base64.b64decode(audio_input.data)
+                        audio_format = audio_input.format
+                        logger.info(
+                            f"Using native audio: {len(audio_bytes)} bytes, format={audio_format}"
+                        )
+                else:
+                    # Fall back to STT transcription
+                    logger.info("Audio content detected - transcribing via STT (model doesn't support native audio)")
+
+                    # Extract and transcribe all audio parts
+                    audio_parts = extract_audio_from_messages(messages_dict)
+                    transcriptions: dict[int, str] = {}
+
+                    for msg_idx, audio_input in audio_parts:
+                        # Decode base64 audio
+                        audio_bytes_for_stt = base64.b64decode(audio_input.data)
+                        # Transcribe
+                        transcription = await self._transcribe_audio(
+                            audio_bytes_for_stt, audio_input.format
+                        )
+                        transcriptions[msg_idx] = transcription
+                        logger.debug(
+                            f"Transcribed audio in message {msg_idx}: "
+                            f"'{transcription[:100]}{'...' if len(transcription) > 100 else ''}'"
+                        )
+
+                    # Replace audio content with transcribed text
+                    messages_dict = replace_audio_with_text(messages_dict, transcriptions)
+                    logger.info(f"Replaced {len(audio_parts)} audio parts with transcriptions")
 
             # Inject thinking control (Qwen soft switch: /think or /no_think)
             # Default is OFF - inject /no_think unless explicitly enabled with think=true
@@ -179,6 +274,7 @@ class ChatCompletionsService:
 
             # Context management for GGUF models
             context_usage_info = None
+
             if is_gguf and model.context_manager:
                 # Apply history compression to reduce token usage
                 compressor = HistoryCompressor(model.token_counter)
@@ -215,7 +311,9 @@ class ChatCompletionsService:
                     strategy = None
                     if chat_request.truncation_strategy:
                         try:
-                            strategy = TruncationStrategy(chat_request.truncation_strategy)
+                            strategy = TruncationStrategy(
+                                chat_request.truncation_strategy
+                            )
                         except ValueError:
                             logger.warning(
                                 f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
@@ -229,10 +327,16 @@ class ChatCompletionsService:
                     if strategy == TruncationStrategy.SUMMARIZE:
                         try:
                             # Pass the server's load_language for proper caching
-                            summarizer = ContextSummarizer(load_language=self.load_language)
-                            messages_dict = await summarizer.summarize_messages(messages_dict)
+                            summarizer = ContextSummarizer(
+                                load_language=self.load_language
+                            )
+                            messages_dict = await summarizer.summarize_messages(
+                                messages_dict
+                            )
                             # Re-validate after summarization
-                            usage = model.context_manager.validate_messages(messages_dict)
+                            usage = model.context_manager.validate_messages(
+                                messages_dict
+                            )
 
                             # Check if we STILL need truncation after summarization
                             # (e.g., if recent messages are still too large)
@@ -241,8 +345,11 @@ class ChatCompletionsService:
                                     f"Still over budget after summarization "
                                     f"({usage.prompt_tokens} tokens), applying fallback truncation"
                                 )
-                                messages_dict, usage = model.context_manager.truncate_if_needed(
-                                    messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                                messages_dict, usage = (
+                                    model.context_manager.truncate_if_needed(
+                                        messages_dict,
+                                        TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                    )
                                 )
                                 usage = type(usage)(
                                     total_context=usage.total_context,
@@ -268,8 +375,11 @@ class ChatCompletionsService:
                             logger.warning(
                                 f"Summarization failed: {e}, falling back to keep_system"
                             )
-                            messages_dict, usage = model.context_manager.truncate_if_needed(
-                                messages_dict, TruncationStrategy.KEEP_SYSTEM_SLIDING
+                            messages_dict, usage = (
+                                model.context_manager.truncate_if_needed(
+                                    messages_dict,
+                                    TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                )
                             )
                     else:
                         # Use regular truncation strategy
@@ -344,19 +454,34 @@ class ChatCompletionsService:
                     )
                     yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
 
-                    # Stream tokens using unified generate_stream API
-                    token_stream = model.generate_stream(
-                        messages=messages_dict,
-                        max_tokens=total_max_tokens,
-                        temperature=chat_request.temperature
-                        if chat_request.temperature is not None
-                        else 0.7,
-                        top_p=chat_request.top_p,
-                        stop=chat_request.stop,
-                        thinking_budget=thinking_tokens if is_gguf else None,
-                        tools=tools_dict,
-                        tool_choice=chat_request.tool_choice,
-                    )
+                    # Stream tokens - use native audio if supported, otherwise text
+                    if use_native_audio and audio_bytes:
+                        # Use native audio processing (no STT transcription)
+                        token_stream = model.generate_stream_with_audio(
+                            messages=messages_dict,
+                            audio_data=audio_bytes,
+                            audio_format=audio_format,
+                            max_tokens=total_max_tokens,
+                            temperature=chat_request.temperature
+                            if chat_request.temperature is not None
+                            else 0.7,
+                            top_p=chat_request.top_p,
+                            stop=chat_request.stop,
+                        )
+                    else:
+                        # Standard text generation (audio already transcribed if present)
+                        token_stream = model.generate_stream(
+                            messages=messages_dict,
+                            max_tokens=total_max_tokens,
+                            temperature=chat_request.temperature
+                            if chat_request.temperature is not None
+                            else 0.7,
+                            top_p=chat_request.top_p,
+                            stop=chat_request.stop,
+                            thinking_budget=thinking_tokens if is_gguf else None,
+                            tools=tools_dict,
+                            tool_choice=chat_request.tool_choice,
+                        )
 
                     # State machine for incremental tool call streaming
                     accumulated_content = ""
@@ -465,7 +590,9 @@ class ChatCompletionsService:
 
                                     # Emit remaining arguments (from where we left off)
                                     if len(final_args) > args_emitted_length:
-                                        remaining_args = final_args[args_emitted_length:]
+                                        remaining_args = final_args[
+                                            args_emitted_length:
+                                        ]
                                         args_chunk = ChatCompletionChunk(
                                             id=completion_id,
                                             object="chat.completion.chunk",
@@ -619,19 +746,34 @@ class ChatCompletionsService:
                     },
                 )
 
-            # Non-streaming response using unified generate API
-            response_text = await model.generate(
-                messages=messages_dict,
-                max_tokens=total_max_tokens,
-                temperature=chat_request.temperature
-                if chat_request.temperature is not None
-                else 0.7,
-                top_p=chat_request.top_p,
-                stop=chat_request.stop,
-                thinking_budget=thinking_tokens if is_gguf else None,
-                tools=tools_dict,
-                tool_choice=chat_request.tool_choice,
-            )
+            # Non-streaming response - use native audio if supported, otherwise text
+            if use_native_audio and audio_bytes:
+                # Use native audio processing (no STT transcription)
+                response_text = await model.generate_with_audio(
+                    messages=messages_dict,
+                    audio_data=audio_bytes,
+                    audio_format=audio_format,
+                    max_tokens=total_max_tokens,
+                    temperature=chat_request.temperature
+                    if chat_request.temperature is not None
+                    else 0.7,
+                    top_p=chat_request.top_p,
+                    stop=chat_request.stop,
+                )
+            else:
+                # Standard text generation (audio already transcribed if present)
+                response_text = await model.generate(
+                    messages=messages_dict,
+                    max_tokens=total_max_tokens,
+                    temperature=chat_request.temperature
+                    if chat_request.temperature is not None
+                    else 0.7,
+                    top_p=chat_request.top_p,
+                    stop=chat_request.stop,
+                    thinking_budget=thinking_tokens if is_gguf else None,
+                    tools=tools_dict,
+                    tool_choice=chat_request.tool_choice,
+                )
 
             # Debug log the raw response from the model
             if logger.isEnabledFor(logging.DEBUG):
@@ -744,8 +886,7 @@ class ChatCompletionsService:
             # Debug log the response
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"Sending response:\n"
-                    f"{json.dumps(response, indent=2, default=str)}"
+                    f"Sending response:\n{json.dumps(response, indent=2, default=str)}"
                 )
 
             return response

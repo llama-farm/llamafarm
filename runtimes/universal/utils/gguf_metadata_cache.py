@@ -114,7 +114,9 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                     n_ctx_train = field.parts[field.data[0]]
                     if n_ctx_train:
                         metadata.n_ctx_train = int(n_ctx_train)
-                        logger.debug(f"Found context size in field '{key}': {n_ctx_train}")
+                        logger.debug(
+                            f"Found context size in field '{key}': {n_ctx_train}"
+                        )
                 except (IndexError, ValueError, TypeError):
                     pass
 
@@ -140,8 +142,10 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                     # Older format fallback
                     try:
                         metadata.chat_template = bytes(field.data).decode("utf-8")
-                    except (UnicodeDecodeError) as e:
-                        logger.warning(f"Failed to decode chat template (fallback): {e}")
+                    except UnicodeDecodeError as e:
+                        logger.warning(
+                            f"Failed to decode chat template (fallback): {e}"
+                        )
 
             # BOS token ID
             if key == "tokenizer.ggml.bos_token_id":
@@ -174,7 +178,9 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                 try:
                     token_bytes = tokens_data[bos_id]
                     if isinstance(token_bytes, (bytes, bytearray)):
-                        metadata.bos_token = token_bytes.decode("utf-8", errors="replace")
+                        metadata.bos_token = token_bytes.decode(
+                            "utf-8", errors="replace"
+                        )
                     elif isinstance(token_bytes, str):
                         metadata.bos_token = token_bytes
                 except (IndexError, UnicodeDecodeError):
@@ -184,7 +190,9 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                 try:
                     token_bytes = tokens_data[eos_id]
                     if isinstance(token_bytes, (bytes, bytearray)):
-                        metadata.eos_token = token_bytes.decode("utf-8", errors="replace")
+                        metadata.eos_token = token_bytes.decode(
+                            "utf-8", errors="replace"
+                        )
                     elif isinstance(token_bytes, str):
                         metadata.eos_token = token_bytes
                 except (IndexError, UnicodeDecodeError):

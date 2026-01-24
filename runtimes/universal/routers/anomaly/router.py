@@ -1,46 +1,237 @@
-"""
-Anomaly detection endpoints.
+"""Anomaly detection router with auto-save functionality.
 
-Train and use anomaly detection models for detecting outliers in data.
+This router handles:
+- /v1/anomaly/score - Score data for anomalies
+- /v1/anomaly/fit - Fit anomaly detector (auto-saves after training)
+- /v1/anomaly/detect - Detect anomalies (returns only anomalous points)
+- /v1/anomaly/load - Load pre-trained model from disk
+- /v1/anomaly/models - List saved models
+- /v1/anomaly/models/{filename} - Delete a saved model
+
+Note: The /v1/anomaly/save endpoint has been removed. Models are automatically
+saved after fit to ensure data persistence without requiring an explicit save call.
 """
+
+from collections.abc import Callable, Coroutine
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from api_types.anomaly import (
+    AnomalyFitRequest,
+    AnomalyLoadRequest,
+    AnomalyScoreRequest,
+)
 from core.logging import UniversalRuntimeLogger
-from models import AnomalyModel
-from state import (
+from services.error_handler import handle_endpoint_errors
+from services.path_validator import (
     ANOMALY_MODELS_DIR,
-    get_device,
-    get_encoders_cache,
-    get_model_load_lock,
-    get_models_cache,
+    PathValidationError,
     sanitize_filename,
+    sanitize_model_name,
     validate_path_within_directory,
 )
 from utils.feature_encoder import FeatureEncoder
 
-from .service import (
-    auto_save_anomaly_model,
-    get_model_path,
-    load_anomaly,
-    make_anomaly_cache_key,
-    prepare_anomaly_data,
-)
-from .types import (
-    AnomalyFitRequest,
-    AnomalyLoadRequest,
-    AnomalySaveRequest,
-    AnomalyScoreRequest,
-)
+logger = UniversalRuntimeLogger("anomaly-router")
 
-router = APIRouter()
-logger = UniversalRuntimeLogger("universal-runtime.anomaly")
+router = APIRouter(tags=["anomaly"])
+
+# Dependency injection: model loader function
+# Set via set_anomaly_loader() from the main server
+_load_anomaly_fn: Callable[..., Coroutine[Any, Any, Any]] | None = None
+
+# Dependency injection: state management
+# These are injected from the main server to share state
+_models: dict | None = None
+_encoders: dict[str, FeatureEncoder] | None = None
+_model_load_lock = None
+
+# Model storage directory - uses shared path_validator config
+_ANOMALY_MODELS_DIR = ANOMALY_MODELS_DIR
+
+
+def set_anomaly_loader(
+    load_anomaly_fn: Callable[..., Coroutine[Any, Any, Any]] | None,
+) -> None:
+    """Set the anomaly model loader function.
+
+    This should be called during app initialization to inject the model loading
+    dependency from the main server.
+
+    Args:
+        load_anomaly_fn: Async function that loads an anomaly model
+    """
+    global _load_anomaly_fn
+    _load_anomaly_fn = load_anomaly_fn
+
+
+def get_anomaly_loader() -> Callable[..., Coroutine[Any, Any, Any]] | None:
+    """Get the current anomaly loader function (for testing purposes)."""
+    return _load_anomaly_fn
+
+
+def set_models_dir(models_dir: Path) -> None:
+    """Set the models directory for saving/loading models.
+
+    Args:
+        models_dir: Path to the anomaly models directory
+    """
+    global _ANOMALY_MODELS_DIR
+    _ANOMALY_MODELS_DIR = models_dir
+
+
+def set_state(
+    models: dict,
+    encoders: dict[str, FeatureEncoder],
+    model_load_lock,
+) -> None:
+    """Set shared state from the main server.
+
+    Args:
+        models: Model cache dictionary
+        encoders: Feature encoder cache dictionary
+        model_load_lock: Async lock for model loading
+    """
+    global _models, _encoders, _model_load_lock
+    _models = models
+    _encoders = encoders
+    _model_load_lock = model_load_lock
+
+
+async def _get_anomaly_model(
+    model_id: str,
+    backend: str = "isolation_forest",
+    **kwargs,
+) -> Any:
+    """Get or load an anomaly model."""
+    if _load_anomaly_fn is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Anomaly model loader not initialized. Server configuration error.",
+        )
+    return await _load_anomaly_fn(model_id=model_id, backend=backend, **kwargs)
+
+
+def _make_cache_key(
+    model_id: str, backend: str, normalization: str | None = None
+) -> str:
+    """Generate a cache key for an anomaly model."""
+    if normalization:
+        return f"anomaly:{backend}:{normalization}:{model_id}"
+    return f"anomaly:{backend}:{model_id}"
+
+
+def _get_model_path(model_name: str, backend: str) -> Path:
+    """Get the path for a model file based on name and backend.
+
+    The path is always within _ANOMALY_MODELS_DIR - users cannot control it.
+    """
+    safe_name = sanitize_model_name(model_name)
+    safe_backend = sanitize_model_name(backend)
+    filename = f"{safe_name}_{safe_backend}"
+    return _ANOMALY_MODELS_DIR / filename
+
+
+def _prepare_data(
+    data: list[list[float]] | list[dict],
+    schema: dict[str, str] | None,
+    cache_key: str,
+    fit_mode: bool = False,
+) -> list[list[float]]:
+    """Prepare data for anomaly detection by encoding if needed.
+
+    Args:
+        data: Raw data (numeric arrays or dicts)
+        schema: Feature encoding schema (required for dict data during fit)
+        cache_key: Cache key for storing/retrieving encoder
+        fit_mode: If True, fit the encoder on the data. If False, use existing encoder.
+
+    Returns:
+        Encoded numeric data as list of lists
+    """
+    if _encoders is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Encoder state not initialized. Server configuration error.",
+        )
+
+    # If data is already numeric, return as-is
+    if not data:
+        return []
+
+    if isinstance(data[0], list):
+        return data
+
+    # Dict-based data - need to encode
+    if fit_mode:
+        if schema is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Schema is required when fitting with dict-based data. "
+                "Example: schema = {'time_ms': 'numeric', 'user_agent': 'hash'}",
+            )
+        encoder = FeatureEncoder()
+        encoder.fit(data, schema)
+        _encoders[cache_key] = encoder
+        logger.info(f"Fitted feature encoder for {cache_key} with schema: {schema}")
+    else:
+        if cache_key not in _encoders:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No encoder found for model '{cache_key}'. "
+                "Train with /v1/anomaly/fit using dict data first, or pass schema.",
+            )
+        encoder = _encoders[cache_key]
+
+    encoded = encoder.transform(data)
+    return encoded.tolist()
+
+
+async def _auto_save_model(
+    model: Any,
+    model_name: str,
+    backend: str,
+    cache_key: str,
+) -> str | None:
+    """Auto-save anomaly model after fit to prevent data loss.
+
+    Models are saved immediately after training to ensure they persist
+    across server restarts without requiring an explicit /save call.
+
+    Returns:
+        Path to the saved model file, or None if save failed
+    """
+    _ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    save_path = _get_model_path(model_name, backend)
+    await model.save(str(save_path))
+
+    # Determine actual saved file path
+    if backend == "autoencoder":
+        actual_path = save_path.with_suffix(".pt")
+    else:
+        actual_path = save_path.with_suffix(".joblib")
+        if not actual_path.exists():
+            actual_path = save_path.with_suffix(".pkl")
+
+    logger.debug(f"Model auto-saved to {actual_path}")
+
+    # Save encoder if one exists for this model
+    if _encoders and cache_key in _encoders:
+        encoder = _encoders[cache_key]
+        encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
+        encoder.save(encoder_save_path)
+        logger.debug(f"Feature encoder saved to {encoder_save_path}")
+
+    return str(actual_path)
 
 
 @router.post("/v1/anomaly/score")
+@handle_endpoint_errors("score_anomalies")
 async def score_anomalies(request: AnomalyScoreRequest):
-    """
-    Score data points for anomalies.
+    """Score data points for anomalies.
 
     Detects anomalies in data using various algorithms:
     - isolation_forest: Fast tree-based method, good general purpose
@@ -49,547 +240,367 @@ async def score_anomalies(request: AnomalyScoreRequest):
     - autoencoder: Neural network, best for complex patterns
 
     Note: Model must be fitted first via /v1/anomaly/fit or loaded from disk.
-
-    Example request:
-    ```json
-    {
-        "model": "sensor-detector",
-        "backend": "isolation_forest",
-        "data": [[1.0, 2.0], [1.1, 2.1], [100.0, 200.0]],
-        "threshold": 0.5
-    }
-    ```
-
-    Response includes:
-    - score: Anomaly score (0-1, higher = more anomalous)
-    - is_anomaly: Boolean based on threshold
-    - raw_score: Backend-specific raw score
     """
-    try:
-        cache_key = make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
+    cache_key = _make_cache_key(
+        request.model, request.backend, request.normalization
+    )
+
+    model = await _get_anomaly_model(
+        model_id=request.model,
+        backend=request.backend,
+        normalization=request.normalization,
+    )
+
+    if not model.is_fitted:
+        raise HTTPException(
+            status_code=400,
+            detail="Model not fitted. Call /v1/anomaly/fit first or load a pre-trained model.",
         )
 
-        model = await load_anomaly(
-            model_id=request.model,
-            backend=request.backend,
-            normalization=request.normalization,
-        )
+    prepared_data = _prepare_data(
+        data=request.data,
+        schema=request.schema_,
+        cache_key=cache_key,
+        fit_mode=False,
+    )
 
-        if not model.is_fitted:
-            raise HTTPException(
-                status_code=400,
-                detail="Model not fitted. Call /v1/anomaly/fit first or load a pre-trained model.",
-            )
+    results = await model.score(
+        data=prepared_data,
+        threshold=request.threshold,
+    )
 
-        # Prepare data (encode if dict-based)
-        prepared_data = prepare_anomaly_data(
-            data=request.data,
-            schema=request.schema,
-            cache_key=cache_key,
-            fit_mode=False,  # Use existing encoder
-        )
-
-        # Score data
-        results = await model.score(
-            data=prepared_data,
-            threshold=request.threshold,
-        )
-
-        # Format response
-        data = [
-            {
-                "index": r.index,
-                "score": r.score,
-                "is_anomaly": r.is_anomaly,
-                "raw_score": r.raw_score,
-            }
-            for r in results
-        ]
-
-        # Summary statistics
-        anomaly_count = sum(1 for r in results if r.is_anomaly)
-
-        return {
-            "object": "list",
-            "data": data,
-            "total_count": len(data),
-            "model": request.model,
-            "backend": request.backend,
-            "summary": {
-                "total_points": len(data),
-                "anomaly_count": anomaly_count,
-                "anomaly_rate": anomaly_count / len(data) if data else 0,
-                "threshold": request.threshold or model.threshold,
-            },
+    data = [
+        {
+            "index": r.index,
+            "score": r.score,
+            "is_anomaly": r.is_anomaly,
+            "raw_score": r.raw_score,
         }
+        for r in results
+    ]
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in score_anomalies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    anomaly_count = sum(1 for r in results if r.is_anomaly)
+
+    return {
+        "object": "list",
+        "data": data,
+        "total_count": len(data),
+        "model": request.model,
+        "backend": request.backend,
+        "summary": {
+            "total_points": len(data),
+            "anomaly_count": anomaly_count,
+            "anomaly_rate": anomaly_count / len(data) if data else 0,
+            "threshold": request.threshold or model.threshold,
+        },
+    }
 
 
 @router.post("/v1/anomaly/fit")
+@handle_endpoint_errors("fit_anomaly_detector")
 async def fit_anomaly_detector(request: AnomalyFitRequest):
-    """
-    Fit an anomaly detector on training data.
+    """Fit an anomaly detector on training data.
 
     Train an anomaly detection model on data assumed to be mostly normal.
     The model learns what "normal" looks like and can then detect deviations.
+
+    **Auto-Save**: Models are automatically saved after successful training
+    to ensure persistence across server restarts. No explicit save call needed.
+
+    **Overwrite Default**: By default, existing models with the same name
+    are overwritten. Set overwrite=False to create versioned models.
 
     Backends:
     - isolation_forest: Fast, works well out of the box (recommended)
     - one_class_svm: Good for small datasets
     - local_outlier_factor: Density-based, good for clustering anomalies
     - autoencoder: Best for complex patterns, requires more data
-
-    Example request:
-    ```json
-    {
-        "model": "sensor-detector",
-        "backend": "isolation_forest",
-        "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9], ...],
-        "contamination": 0.1
-    }
-    ```
-
-    After fitting, use /v1/anomaly/score to detect anomalies in new data.
     """
-    try:
-        cache_key = make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
-        )
+    cache_key = _make_cache_key(
+        request.model, request.backend, request.normalization
+    )
 
-        # Prepare data (encode if dict-based, and fit the encoder)
-        prepared_data = prepare_anomaly_data(
-            data=request.data,
-            schema=request.schema,
-            cache_key=cache_key,
-            fit_mode=True,  # Fit encoder on training data
-        )
+    prepared_data = _prepare_data(
+        data=request.data,
+        schema=request.schema_,
+        cache_key=cache_key,
+        fit_mode=True,
+    )
 
-        model = await load_anomaly(
-            model_id=request.model,
-            backend=request.backend,
-            contamination=request.contamination,
-            normalization=request.normalization,
-        )
+    model = await _get_anomaly_model(
+        model_id=request.model,
+        backend=request.backend,
+        contamination=request.contamination,
+        normalization=request.normalization,
+    )
 
-        # Fit model
-        result = await model.fit(
-            data=prepared_data,
-            epochs=request.epochs,
-            batch_size=request.batch_size,
-        )
+    result = await model.fit(
+        data=prepared_data,
+        epochs=request.epochs,
+        batch_size=request.batch_size,
+    )
 
-        # Include encoder info in response if used
-        encoder_info = None
-        encoders_cache = get_encoders_cache()
-        if cache_key in encoders_cache:
-            encoder = encoders_cache[cache_key]
-            encoder_info = {
-                "schema": encoder.schema.features if encoder.schema else {},
-                "features": list(encoder.schema.features.keys())
-                if encoder.schema
-                else [],
-            }
-
-        # Auto-save model to prevent data loss on restart
-        # This is mandatory - models must persist across server restarts
-        await auto_save_anomaly_model(
-            model=model,
-            model_name=request.model,
-            backend=request.backend,
-            cache_key=cache_key,
-        )
-
-        return {
-            "object": "fit_result",
-            "model": request.model,
-            "backend": request.backend,
-            "samples_fitted": result.samples_fitted,
-            "training_time_ms": result.training_time_ms,
-            "model_params": result.model_params,
-            "encoder": encoder_info,
-            "status": "fitted",
+    # Include encoder info in response if used
+    encoder_info = None
+    if _encoders and cache_key in _encoders:
+        encoder = _encoders[cache_key]
+        encoder_info = {
+            "schema": encoder.schema.features if encoder.schema else {},
+            "features": list(encoder.schema.features.keys())
+            if encoder.schema
+            else [],
         }
 
-    except Exception as e:
-        logger.error(f"Error in fit_anomaly_detector: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    # Auto-save model to prevent data loss on restart
+    saved_path = await _auto_save_model(
+        model=model,
+        model_name=request.model,
+        backend=request.backend,
+        cache_key=cache_key,
+    )
+
+    return {
+        "object": "fit_result",
+        "model": request.model,
+        "backend": request.backend,
+        "samples_fitted": result.samples_fitted,
+        "training_time_ms": result.training_time_ms,
+        "model_params": result.model_params,
+        "encoder": encoder_info,
+        "saved_path": saved_path,
+        "status": "fitted",
+    }
 
 
 @router.post("/v1/anomaly/detect")
+@handle_endpoint_errors("detect_anomalies")
 async def detect_anomalies(request: AnomalyScoreRequest):
-    """
-    Detect anomalies in data (returns only anomalous points).
+    """Detect anomalies in data (returns only anomalous points).
 
     Same as /v1/anomaly/score but filters to return only points
     classified as anomalies.
-
-    Example request:
-    ```json
-    {
-        "model": "sensor-detector",
-        "backend": "isolation_forest",
-        "data": [[1.0, 2.0], [1.1, 2.1], [100.0, 200.0]],
-        "threshold": 0.5
-    }
-    ```
     """
-    try:
-        cache_key = make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
+    cache_key = _make_cache_key(
+        request.model, request.backend, request.normalization
+    )
+
+    model = await _get_anomaly_model(
+        model_id=request.model,
+        backend=request.backend,
+        normalization=request.normalization,
+    )
+
+    if not model.is_fitted:
+        raise HTTPException(
+            status_code=400,
+            detail="Model not fitted. Call /v1/anomaly/fit first.",
         )
 
-        model = await load_anomaly(
-            model_id=request.model,
-            backend=request.backend,
-            normalization=request.normalization,
-        )
+    prepared_data = _prepare_data(
+        data=request.data,
+        schema=request.schema_,
+        cache_key=cache_key,
+        fit_mode=False,
+    )
 
-        if not model.is_fitted:
-            raise HTTPException(
-                status_code=400,
-                detail="Model not fitted. Call /v1/anomaly/fit first.",
-            )
+    results = await model.detect(
+        data=prepared_data,
+        threshold=request.threshold,
+    )
 
-        # Prepare data (encode if dict-based)
-        prepared_data = prepare_anomaly_data(
-            data=request.data,
-            schema=request.schema,
-            cache_key=cache_key,
-            fit_mode=False,  # Use existing encoder
-        )
-
-        # Detect anomalies
-        results = await model.detect(
-            data=prepared_data,
-            threshold=request.threshold,
-        )
-
-        # Format response
-        data = [
-            {
-                "index": r.index,
-                "score": r.score,
-                "raw_score": r.raw_score,
-            }
-            for r in results
-        ]
-
-        return {
-            "object": "list",
-            "data": data,
-            "total_count": len(data),
-            "model": request.model,
-            "backend": request.backend,
-            "summary": {
-                "anomalies_detected": len(data),
-                "threshold": request.threshold or model.threshold,
-            },
+    data = [
+        {
+            "index": r.index,
+            "score": r.score,
+            "raw_score": r.raw_score,
         }
+        for r in results
+    ]
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in detect_anomalies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.post("/v1/anomaly/save")
-async def save_anomaly_model(request: AnomalySaveRequest):
-    """
-    Save a fitted anomaly model to disk for production use.
-
-    After fitting a model with /v1/anomaly/fit, save it to disk so it
-    persists across server restarts.
-
-    Example request:
-    ```json
-    {
-        "model": "sensor-detector",
-        "backend": "isolation_forest"
+    return {
+        "object": "list",
+        "data": data,
+        "total_count": len(data),
+        "model": request.model,
+        "backend": request.backend,
+        "summary": {
+            "anomalies_detected": len(data),
+            "threshold": request.threshold or model.threshold,
+        },
     }
-    ```
 
-    Models are saved to ~/.llamafarm/models/anomaly/ with auto-generated
-    filenames based on the model name and backend.
-    """
-    try:
-        cache_key = make_anomaly_cache_key(
-            request.model, request.backend, request.normalization
-        )
 
-        models_cache = get_models_cache()
-        encoders_cache = get_encoders_cache()
-
-        if cache_key not in models_cache:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Model '{request.model}' with backend '{request.backend}' and "
-                f"normalization '{request.normalization}' not found in cache. "
-                "Fit the model first with /v1/anomaly/fit",
-            )
-
-        model = models_cache[cache_key]
-
-        if not model.is_fitted:
-            raise HTTPException(
-                status_code=400,
-                detail="Model not fitted. Call /v1/anomaly/fit first.",
-            )
-
-        # Create models directory if needed
-        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Generate path from model name (no user-controlled paths)
-        save_path = get_model_path(request.model, request.backend)
-        await model.save(str(save_path))
-
-        # Determine actual saved file
-        if request.backend == "autoencoder":
-            actual_path = save_path.with_suffix(".pt")
-        else:
-            actual_path = save_path.with_suffix(".joblib")
-            if not actual_path.exists():
-                actual_path = save_path.with_suffix(".pkl")
-
-        # Save encoder if one exists for this model
-        encoder_path = None
-        if cache_key in encoders_cache:
-            encoder = encoders_cache[cache_key]
-            encoder_save_path = save_path.parent / f"{save_path.name}_encoder.json"
-            encoder.save(encoder_save_path)
-            encoder_path = str(encoder_save_path)
-            logger.info(f"Saved feature encoder to {encoder_save_path}")
-
-        return {
-            "object": "save_result",
-            "model": request.model,
-            "backend": request.backend,
-            "filename": actual_path.name,
-            "path": str(actual_path),
-            "encoder_path": encoder_path,
-            "status": "saved",
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in save_anomaly_model: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+# Note: /v1/anomaly/save endpoint removed - auto-save handles persistence
 
 
 @router.post("/v1/anomaly/load")
+@handle_endpoint_errors("load_anomaly_model")
 async def load_anomaly_model(request: AnomalyLoadRequest):
-    """
-    Load a pre-trained anomaly model from disk.
+    """Load a pre-trained anomaly model from disk.
 
     Load a previously saved model for production inference without
     re-training. The model path is automatically determined from the
     model name and backend - no user control over file paths.
-
-    Example request:
-    ```json
-    {
-        "model": "sensor-detector",
-        "backend": "isolation_forest"
-    }
-    ```
-
-    The model will be loaded from ~/.llamafarm/models/anomaly/ and cached
-    for subsequent /v1/anomaly/score and /v1/anomaly/detect calls.
     """
-    try:
-        models_cache = get_models_cache()
-        encoders_cache = get_encoders_cache()
-        model_load_lock = get_model_load_lock()
+    if _models is None or _model_load_lock is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Model state not initialized. Server configuration error.",
+        )
 
-        # Generate path from model name (no user-controlled paths)
-        base_path = get_model_path(request.model, request.backend)
+    base_path = _get_model_path(request.model, request.backend)
 
-        # Determine actual file (check for different extensions)
-        model_path = None
-        for ext in [".joblib", ".pkl", ".pt"]:
-            candidate = base_path.with_suffix(ext)
-            if candidate.exists():
-                model_path = candidate
-                break
+    # Find the model file
+    model_path = None
+    for ext in [".joblib", ".pkl", ".pt"]:
+        candidate = base_path.with_suffix(ext)
+        if candidate.exists():
+            model_path = candidate
+            break
 
-        if model_path is None:
-            available = (
-                [f.name for f in ANOMALY_MODELS_DIR.glob("*") if f.is_file()]
-                if ANOMALY_MODELS_DIR.exists()
-                else []
-            )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Model '{request.model}' with backend '{request.backend}' not found. "
-                f"Available models: {available}",
-            )
+    if model_path is None:
+        available = (
+            [f.name for f in _ANOMALY_MODELS_DIR.glob("*") if f.is_file()]
+            if _ANOMALY_MODELS_DIR.exists()
+            else []
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{request.model}' with backend '{request.backend}' not found. "
+            f"Available models: {available}",
+        )
 
-        async with model_load_lock:
-            logger.info(f"Loading pre-trained anomaly model: {model_path}")
-            device = get_device()
+    # Load via the injected loader
+    async with _model_load_lock:
+        logger.info(f"Loading pre-trained anomaly model: {model_path}")
 
-            model = AnomalyModel(
-                model_id=str(model_path),  # Pass path as model_id for loading
-                device=device,
-                backend=request.backend,
-            )
+        # Import here to avoid circular imports
+        from models import AnomalyModel
+        from utils.device import get_optimal_device
 
-            await model.load()
+        device = get_optimal_device()
 
-            # Use the model's actual normalization (loaded from file) for the cache key
-            cache_key = make_anomaly_cache_key(
-                request.model, request.backend, model.normalization
-            )
+        model = AnomalyModel(
+            model_id=str(model_path),
+            device=device,
+            backend=request.backend,
+        )
 
-            # Remove existing model from cache if present
-            if cache_key in models_cache:
-                await models_cache[cache_key].unload()
-                del models_cache[cache_key]
+        await model.load()
 
-            models_cache[cache_key] = model
+        cache_key = _make_cache_key(
+            request.model, request.backend, model.normalization
+        )
 
-        # Try to load encoder if one exists
-        encoder_loaded = False
-        encoder_schema = None
-        # Derive encoder path from base path (same name pattern)
-        encoder_path = base_path.parent / f"{base_path.name}_encoder.json"
-        if encoder_path.exists():
-            encoder = FeatureEncoder.load(encoder_path)
-            encoders_cache[cache_key] = encoder
-            encoder_loaded = True
-            encoder_schema = encoder.schema
-            logger.info(f"Loaded feature encoder from {encoder_path}")
+        if cache_key in _models:
+            await _models[cache_key].unload()
+            del _models[cache_key]
 
-        return {
-            "object": "load_result",
-            "model": request.model,
-            "backend": request.backend,
-            "normalization": model.normalization,
-            "filename": model_path.name,
-            "is_fitted": model.is_fitted,
-            "threshold": model.threshold,
-            "encoder_loaded": encoder_loaded,
-            "encoder_schema": encoder_schema,
-            "status": "loaded",
-        }
+        _models[cache_key] = model
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in load_anomaly_model: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    # Try to load encoder if one exists
+    encoder_loaded = False
+    encoder_schema = None
+    encoder_path = base_path.parent / f"{base_path.name}_encoder.json"
+    if encoder_path.exists() and _encoders is not None:
+        encoder = FeatureEncoder.load(encoder_path)
+        _encoders[cache_key] = encoder
+        encoder_loaded = True
+        encoder_schema = encoder.schema
+        logger.info(f"Loaded feature encoder from {encoder_path}")
+
+    return {
+        "object": "load_result",
+        "model": request.model,
+        "backend": request.backend,
+        "normalization": model.normalization,
+        "filename": model_path.name,
+        "is_fitted": model.is_fitted,
+        "threshold": model.threshold,
+        "encoder_loaded": encoder_loaded,
+        "encoder_schema": encoder_schema,
+        "status": "loaded",
+    }
 
 
 @router.get("/v1/anomaly/models")
+@handle_endpoint_errors("list_anomaly_models")
 async def list_anomaly_models():
+    """List all saved anomaly models available for loading.
+
+    Returns models saved in the anomaly models directory.
     """
-    List all saved anomaly models available for loading.
+    _ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    Returns models saved in the ANOMALY_MODELS_DIR directory.
+    models = []
+    for path in _ANOMALY_MODELS_DIR.glob("*"):
+        if path.is_file() and path.suffix in (".pt", ".pkl", ".joblib"):
+            stat = path.stat()
+            backend = "autoencoder" if path.suffix == ".pt" else "sklearn"
 
-    Response includes:
-    - filename: Name of the saved model file
-    - size_bytes: File size
-    - modified: Last modification timestamp
-    - backend: Detected backend type (from file extension)
-    """
-    try:
-        ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            models.append(
+                {
+                    "filename": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified": stat.st_mtime,
+                    "backend": backend,
+                }
+            )
 
-        models = []
-        for path in ANOMALY_MODELS_DIR.glob("*"):
-            if path.is_file() and path.suffix in (".pt", ".pkl", ".joblib"):
-                stat = path.stat()
+    models.sort(key=lambda x: x["modified"], reverse=True)
 
-                # Detect backend from extension
-                backend = "autoencoder" if path.suffix == ".pt" else "sklearn"
-
-                models.append(
-                    {
-                        "filename": path.name,
-                        "size_bytes": stat.st_size,
-                        "modified": stat.st_mtime,
-                        "backend": backend,
-                    }
-                )
-
-        # Sort by modification time (newest first)
-        models.sort(key=lambda x: x["modified"], reverse=True)
-
-        return {
-            "object": "list",
-            "data": models,
-            "models_dir": str(ANOMALY_MODELS_DIR),
-            "total": len(models),
-        }
-
-    except Exception as e:
-        logger.error(f"Error in list_anomaly_models: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "list",
+        "data": models,
+        "models_dir": str(_ANOMALY_MODELS_DIR),
+        "total": len(models),
+    }
 
 
 @router.delete("/v1/anomaly/models/{filename}")
+@handle_endpoint_errors("delete_anomaly_model")
 async def delete_anomaly_model(filename: str):
-    """
-    Delete a saved anomaly model.
+    """Delete a saved anomaly model.
 
     Removes the model file from disk. Does not affect cached models.
     """
+    safe_filename = sanitize_filename(filename)
+    if not safe_filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename",
+        )
+
+    if (
+        "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or safe_filename == "."
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename: path separators not allowed",
+        )
+
+    model_path = _ANOMALY_MODELS_DIR / safe_filename
+
     try:
-        # Sanitize filename to prevent path traversal attacks
-        # Use sanitize_filename to preserve extension dots (.joblib)
-        safe_filename = sanitize_filename(filename)
-        if not safe_filename:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid filename",
-            )
+        resolved_path = validate_path_within_directory(
+            model_path, _ANOMALY_MODELS_DIR
+        )
+    except PathValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
-        # Also reject any path separators or special directory names
-        if (
-            "/" in filename
-            or "\\" in filename
-            or ".." in filename
-            or safe_filename == "."
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid filename: path separators not allowed",
-            )
+    if not resolved_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model file not found: {safe_filename}",
+        )
 
-        model_path = ANOMALY_MODELS_DIR / safe_filename
+    resolved_path.unlink()
 
-        # Validate the resolved path is still within the safe directory
-        try:
-            resolved_path = validate_path_within_directory(
-                model_path, ANOMALY_MODELS_DIR
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-
-        if not resolved_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Model file not found: {safe_filename}",
-            )
-
-        resolved_path.unlink()
-
-        return {
-            "object": "delete_result",
-            "filename": safe_filename,
-            "deleted": True,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in delete_anomaly_model: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {
+        "object": "delete_result",
+        "filename": safe_filename,
+        "deleted": True,
+    }
