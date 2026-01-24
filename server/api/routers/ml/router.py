@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
@@ -27,10 +27,10 @@ from .types import (
     ClassifierSaveRequest,
     PolarsBufferAppendRequest,
     PolarsBufferCreateRequest,
+    PolarsBufferDataResponse,
     PolarsBufferFeaturesRequest,
     PolarsBuffersListResponse,
     PolarsBufferStats,
-    PolarsBufferDataResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,8 +225,6 @@ async def delete_classifier_model(model_name: str) -> dict[str, Any]:
     """
     # Validate model name to prevent path traversal
     if "/" in model_name or "\\" in model_name or ".." in model_name:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=f"Invalid model name: {model_name}")
 
     return await UniversalRuntimeService.classifier_delete_model(model_name)
@@ -496,8 +494,6 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
     """
     # Validate filename to prevent path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
 
     return await UniversalRuntimeService.anomaly_delete_model(filename)

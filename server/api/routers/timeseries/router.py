@@ -10,9 +10,8 @@ All endpoints proxy to the Universal Runtime for actual computation.
 """
 
 import logging
-from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
@@ -315,8 +314,6 @@ async def get_model(model_name: str) -> TimeseriesModelInfo:
                 created=m.get("created", ""),
                 description=m.get("description"),
             )
-
-    from fastapi import HTTPException
 
     raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
 

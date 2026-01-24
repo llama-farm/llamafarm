@@ -9,7 +9,9 @@ Provides endpoints for data drift monitoring:
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -29,13 +31,13 @@ from api_types.drift import (
     DriftResult,
     DriftStatus,
 )
-from services.error_handler import handle_endpoint_errors
 from models.drift_model import (
     DriftModel,
     delete_model,
     get_detectors_info,
     list_saved_models,
 )
+from services.error_handler import handle_endpoint_errors
 from services.path_validator import DRIFT_MODELS_DIR, generate_model_name
 from utils.model_cache import ModelCache
 
@@ -93,6 +95,40 @@ async def get_or_load_model(
 
     # The loader function handles caching and locking internally
     return await _loader_func(model_id, detector, params or {})
+
+
+def _find_model_file(model_name: str, default_detector: str = "ks") -> tuple[Path, str]:
+    """Find model file and extract detector type.
+
+    Handles -latest suffix to find most recent version.
+
+    Args:
+        model_name: Model name, optionally with -latest suffix
+        default_detector: Default detector type if not parseable from filename
+
+    Returns:
+        Tuple of (model_path, detector_type)
+
+    Raises:
+        FileNotFoundError: If no matching model file found
+    """
+    if model_name.endswith("-latest"):
+        base_name = model_name[:-7]
+        model_files = list(DRIFT_MODELS_DIR.glob(f"{base_name}_*.joblib"))
+        if not model_files:
+            raise FileNotFoundError(f"No model found matching: {base_name}")
+        model_file = max(model_files, key=lambda p: p.stat().st_mtime)
+    else:
+        model_files = list(DRIFT_MODELS_DIR.glob(f"{model_name}_*.joblib"))
+        if not model_files:
+            raise FileNotFoundError(f"No model found: {model_name}")
+        model_file = model_files[0]
+
+    # Parse detector from filename
+    parts = model_file.stem.rsplit("_", 1)
+    detector = parts[1] if len(parts) == 2 else default_detector
+
+    return model_file, detector
 
 
 @router.get("/v1/drift/detectors")
@@ -155,28 +191,9 @@ async def detect_drift(request: DriftDetectRequest) -> DriftDetectResponse:
     """Check for drift in new data."""
     start_time = time.time()
 
-    # Load the model
+    # Find model file and detector type
     model_name = request.model
-
-    # Handle -latest suffix
-    if model_name.endswith("-latest"):
-        base_name = model_name[:-7]
-        # Find most recent version
-        model_files = list(DRIFT_MODELS_DIR.glob(f"{base_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found matching: {base_name}")
-        model_file = max(model_files, key=lambda p: p.stat().st_mtime)
-        # Parse detector from filename
-        parts = model_file.stem.rsplit("_", 1)
-        detector = parts[1] if len(parts) == 2 else "ks"
-    else:
-        # Find the model
-        model_files = list(DRIFT_MODELS_DIR.glob(f"{model_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found: {model_name}")
-        model_file = model_files[0]
-        parts = model_file.stem.rsplit("_", 1)
-        detector = parts[1] if len(parts) == 2 else "ks"
+    model_file, detector = _find_model_file(model_name)
 
     # Load model
     model = await get_or_load_model(model_name, detector)
@@ -206,22 +223,8 @@ async def load_model(request: DriftLoadRequest) -> DriftLoadResponse:
     """Load a saved drift model."""
     model_name = request.model
 
-    # Handle -latest suffix
-    if model_name.endswith("-latest"):
-        base_name = model_name[:-7]
-        model_files = list(DRIFT_MODELS_DIR.glob(f"{base_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found matching: {base_name}")
-        model_file = max(model_files, key=lambda p: p.stat().st_mtime)
-    else:
-        model_files = list(DRIFT_MODELS_DIR.glob(f"{model_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found: {model_name}")
-        model_file = model_files[0]
-
-    # Parse detector from filename
-    parts = model_file.stem.rsplit("_", 1)
-    detector = parts[1] if len(parts) == 2 else "ks"
+    # Find model file and detector type
+    model_file, detector = _find_model_file(model_name)
 
     # Load the model
     model = DriftModel(model_id=model_name, detector=detector)
@@ -244,14 +247,8 @@ async def load_model(request: DriftLoadRequest) -> DriftLoadResponse:
 @handle_endpoint_errors("drift-status")
 async def get_status(model_name: str) -> DriftStatus:
     """Get the status of a drift detector."""
-    # Find the model
-    model_files = list(DRIFT_MODELS_DIR.glob(f"{model_name}_*.joblib"))
-    if not model_files:
-        raise FileNotFoundError(f"No model found: {model_name}")
-    model_file = model_files[0]
-
-    parts = model_file.stem.rsplit("_", 1)
-    detector = parts[1] if len(parts) == 2 else "ks"
+    # Find model file and detector type
+    model_file, detector = _find_model_file(model_name)
 
     # Try to get from cache first
     if _drift_cache is not None:
@@ -303,7 +300,7 @@ async def reset_detector(model_name: str) -> DriftResetResponse:
         raise RuntimeError("Drift router not initialized")
 
     # Find model in cache
-    for cache_key in list(_drift_cache._cache.keys()):
+    for cache_key in list(_drift_cache.keys()):
         if cache_key.startswith(f"{model_name}_"):
             model = _drift_cache.get(cache_key)
             if model:

@@ -10,7 +10,8 @@ Provides endpoints for detecting temporal anomalies:
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -28,13 +29,13 @@ from api_types.adtk import (
     ADTKModelInfo,
     ADTKModelsResponse,
 )
-from services.error_handler import handle_endpoint_errors
 from models.adtk_model import (
     ADTKModel,
     delete_model,
     get_detectors_info,
     list_saved_models,
 )
+from services.error_handler import handle_endpoint_errors
 from services.path_validator import ADTK_MODELS_DIR, generate_model_name
 from utils.model_cache import ModelCache
 
@@ -92,6 +93,40 @@ async def get_or_load_model(
 
     # The loader function handles caching and locking internally
     return await _loader_func(model_id, detector, params or {})
+
+
+def _find_model_file(model_name: str, default_detector: str = "level_shift") -> tuple[Any, str]:
+    """Find model file and extract detector type.
+
+    Handles -latest suffix to find most recent version.
+
+    Args:
+        model_name: Model name, optionally with -latest suffix
+        default_detector: Default detector type if not parseable from filename
+
+    Returns:
+        Tuple of (model_path, detector_type)
+
+    Raises:
+        FileNotFoundError: If no matching model file found
+    """
+    if model_name.endswith("-latest"):
+        base_name = model_name[:-7]
+        model_files = list(ADTK_MODELS_DIR.glob(f"{base_name}_*.joblib"))
+        if not model_files:
+            raise FileNotFoundError(f"No model found matching: {base_name}")
+        model_file = max(model_files, key=lambda p: p.stat().st_mtime)
+    else:
+        model_files = list(ADTK_MODELS_DIR.glob(f"{model_name}_*.joblib"))
+        if not model_files:
+            raise FileNotFoundError(f"No model found: {model_name}")
+        model_file = model_files[0]
+
+    # Parse detector from filename
+    parts = model_file.stem.rsplit("_", 1)
+    detector = parts[1] if len(parts) == 2 else default_detector
+
+    return model_file, detector
 
 
 @router.get("/v1/adtk/detectors")
@@ -200,30 +235,10 @@ async def detect_anomalies(request: ADTKDetectRequest) -> ADTKDetectResponse:
 @handle_endpoint_errors("adtk-load")
 async def load_model(request: ADTKLoadRequest) -> ADTKLoadResponse:
     """Load a saved ADTK model."""
-    # Find the model file
     model_name = request.model
 
-    # Handle -latest suffix
-    if model_name.endswith("-latest"):
-        base_name = model_name[:-7]
-        # Find most recent version
-        model_files = list(ADTK_MODELS_DIR.glob(f"{base_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found matching: {base_name}")
-        model_file = max(model_files, key=lambda p: p.stat().st_mtime)
-    else:
-        # Direct lookup
-        model_files = list(ADTK_MODELS_DIR.glob(f"{model_name}_*.joblib"))
-        if not model_files:
-            raise FileNotFoundError(f"No model found: {model_name}")
-        model_file = model_files[0]
-
-    # Parse detector from filename
-    parts = model_file.stem.rsplit("_", 1)
-    if len(parts) == 2:
-        _, detector = parts
-    else:
-        detector = "level_shift"
+    # Find model file and detector type
+    model_file, detector = _find_model_file(model_name)
 
     # Load the model
     model = ADTKModel(model_id=model_name, detector=detector)

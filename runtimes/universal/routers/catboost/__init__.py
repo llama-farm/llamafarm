@@ -1,5 +1,5 @@
 """CatBoost Classification/Regression router."""
 
-from routers.catboost.router import router, set_catboost_loader, set_catboost_state
+from routers.catboost.router import router, set_catboost_state
 
-__all__ = ["router", "set_catboost_loader", "set_catboost_state"]
+__all__ = ["router", "set_catboost_state"]

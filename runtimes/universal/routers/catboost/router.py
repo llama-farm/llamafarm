@@ -11,7 +11,6 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, HTTPException
 
@@ -32,31 +31,18 @@ from api_types.catboost import (
     CatBoostUpdateRequest,
     CatBoostUpdateResponse,
 )
-from services.error_handler import handle_endpoint_errors
 from models.catboost_model import CatBoostModel, get_catboost_info
+from services.error_handler import handle_endpoint_errors
 from utils.model_cache import ModelCache
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Type for model loader function
-CatBoostLoaderFunc = Callable[..., Awaitable[CatBoostModel]]
-
 # Module-level state (set by server.py)
 _catboost_cache: ModelCache[CatBoostModel] | None = None
 _model_load_lock: asyncio.Lock | None = None
 _catboost_models_dir: Path | None = None
-
-
-def set_catboost_loader(loader: CatBoostLoaderFunc) -> None:
-    """Set the function to load CatBoost models.
-
-    Args:
-        loader: Async function that creates CatBoostModel instances
-    """
-    # Currently not used - models are created directly
-    pass
 
 
 def set_catboost_state(
@@ -153,7 +139,9 @@ async def fit_model(request: CatBoostFitRequest) -> CatBoostFitResponse:
             n_samples = len(train_data)
             n_val = int(n_samples * request.validation_fraction)
             indices = list(range(n_samples))
-            random.shuffle(indices)
+            # Use seeded random for reproducible validation splits
+            rng = random.Random(request.random_state if request.random_state is not None else 42)
+            rng.shuffle(indices)
 
             val_indices = indices[:n_val]
             train_indices = indices[n_val:]

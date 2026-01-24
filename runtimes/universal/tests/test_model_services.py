@@ -350,6 +350,9 @@ class TestAutoencoderEarlyStopping:
         # Fit with early stopping
         await model.fit(data, epochs=50, batch_size=32, use_executor=False)
 
-        # Model should be in eval mode with best weights restored
-        assert not model._encoder.training
-        assert not model._decoder.training
+        # Model should be fitted and ready for inference
+        assert model._is_fitted
+        assert model._detector is not None
+        # PyOD's AutoEncoder should be able to score new data
+        scores = model._detector.decision_function(data[:5])
+        assert len(scores) == 5

@@ -12,7 +12,7 @@ Provides access to:
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.universal_runtime_service import UniversalRuntimeService
@@ -272,8 +272,6 @@ async def delete_model(model_id: str) -> dict[str, Any]:
     """
     # Validate to prevent path traversal
     if "/" in model_id or "\\" in model_id or ".." in model_id:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=f"Invalid model ID: {model_id}")
 
     return await UniversalRuntimeService.catboost_delete(model_id)

@@ -12,7 +12,7 @@ that general-purpose detectors miss.
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.universal_runtime_service import UniversalRuntimeService
@@ -221,8 +221,6 @@ async def delete_model(model_name: str) -> dict[str, Any]:
     """
     # Validate to prevent path traversal
     if "/" in model_name or "\\" in model_name or ".." in model_name:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=f"Invalid model name: {model_name}")
 
     return await UniversalRuntimeService.adtk_delete(model_name)

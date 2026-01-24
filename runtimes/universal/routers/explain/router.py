@@ -7,7 +7,8 @@ Supports tree, linear, and kernel explainers for different model types.
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -20,15 +21,15 @@ from api_types.explain import (
     FeatureImportanceRequest,
     FeatureImportanceResponse,
     NarrativeExplanation,
-    SHAPExplanation,
     SHAPExplainRequest,
     SHAPExplainResponse,
+    SHAPExplanation,
 )
-from services.error_handler import handle_endpoint_errors
 from models.shap_explainer import (
     SHAPExplainer,
     get_explainer_types,
 )
+from services.error_handler import handle_endpoint_errors
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,19 @@ async def explain_shap(request: SHAPExplainRequest) -> SHAPExplainResponse:
         data = np.array(request.data, dtype=np.float32)
 
         # Create background data from the input if needed
+        # For kernel and linear explainers, we need at least 2 samples for background data
         background_data = data if len(data) > 1 else None
+
+        # If only one sample and explainer type requires background, provide clear error
+        if len(data) < 2 and request.explainer_type in ("kernel", "linear"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"The '{request.explainer_type}' explainer requires at least 2 data points "
+                    "for background data. Either provide more samples or use 'tree' explainer "
+                    "if your model is tree-based (IForest, CatBoost, XGBoost)."
+                ),
+            )
 
         # Create explainer
         explainer = SHAPExplainer(
