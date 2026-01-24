@@ -80,6 +80,23 @@ async def stream_detection():
     print(f"Samples: {NUM_SAMPLES}")
     print(f"Anomaly injection: every {ANOMALY_INTERVAL} samples")
     print()
+
+    # Explain Polars feature engineering
+    num_cols = 4  # temperature, humidity, pressure, motor_rpm
+    num_windows = len(DETECTOR_CONFIG.get('rolling_windows', []))
+    num_lags = len(DETECTOR_CONFIG.get('lag_periods', []))
+    rolling_features = num_cols * num_windows * 4  # 4 stats: mean, std, min, max
+    lag_features = num_cols * num_lags if DETECTOR_CONFIG.get('include_lags') else 0
+    total_features = num_cols + rolling_features + lag_features
+
+    print("Polars Feature Engineering:")
+    print(f"  Original features: {num_cols}")
+    print(f"  Rolling windows: {DETECTOR_CONFIG.get('rolling_windows', [])} → {rolling_features} features")
+    print(f"  Lag periods: {DETECTOR_CONFIG.get('lag_periods', [])} → {lag_features} features")
+    print(f"  Total features per sample: {total_features}")
+    print()
+    print("  Benefits: SIMD vectorization + parallel execution + cold start handling")
+    print()
     print("Starting stream...")
     print("-" * 60)
 

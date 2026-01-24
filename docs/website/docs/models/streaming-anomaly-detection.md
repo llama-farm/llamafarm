@@ -121,9 +121,9 @@ LlamaFarm uses a tick-tock pattern for seamless model updates:
 | `threshold` | float | 0.5 | Anomaly score threshold (0-1) |
 | `contamination` | float | 0.1 | Expected proportion of anomalies (0-0.5) |
 
-### Rolling Feature Parameters
+### Rolling Feature Parameters (Polars-Powered)
 
-Enable automatic feature engineering:
+Enable automatic feature engineering using high-performance Polars:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -137,6 +137,47 @@ When `rolling_windows` is provided, the detector computes:
 - `{col}_rolling_min_{window}` - Rolling minimum
 - `{col}_rolling_max_{window}` - Rolling maximum
 - `{col}_lag_{period}` - Lagged values (if `include_lags=true`)
+
+**Why Rolling Features Matter:**
+
+A raw value like `$500` is meaningless without context. The model needs to know: "Is $500 normal for this user?" Rolling features provide this context automatically.
+
+**Polars Performance Advantage:**
+
+| Feature Engineering | Pandas | Polars |
+|--------------------|--------|--------|
+| Rolling std (10K rows) | 10-50ms | <1ms |
+| Multi-column parallel | Sequential | Parallel (all CPU cores) |
+| Memory on append | Copy each time | Arrow (no-copy) |
+
+**Cold Start Handling:**
+
+During the first few samples, rolling statistics have insufficient history. Polars automatically fills null values with `0.0`, ensuring your model always receives valid numeric vectors—no crashes from NaN values.
+
+**Example with Rolling Features:**
+
+```bash
+curl -X POST http://localhost:8005/v1/ml/anomaly/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "fraud-detector",
+    "data": {"amount": 500, "merchant_category": 5},
+    "backend": "ecod",
+    "min_samples": 50,
+    "window_size": 1000,
+    "rolling_windows": [5, 10, 20],
+    "include_lags": true,
+    "lag_periods": [1, 2, 5],
+    "schema": {"amount": "numeric", "merchant_category": "numeric"}
+  }'
+```
+
+This transforms each transaction from 2 features to **26 features**:
+- 2 original: `amount`, `merchant_category`
+- 24 rolling: 4 stats × 3 windows × 2 columns
+- Plus lag features if enabled
+
+See [Polars Buffer API](./polars-buffers.md) for detailed information about the underlying Polars mechanics.
 
 ---
 

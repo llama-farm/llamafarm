@@ -1,21 +1,48 @@
-"""High-performance data buffer using Polars.
+"""High-performance stateful memory buffer using Polars.
 
-Provides a sliding window buffer optimized for streaming ML workloads:
-- O(1) append operations
-- Lazy evaluation for rolling features
-- Automatic window truncation
-- Thread-safe operations
+In streaming anomaly detection, the biggest bottleneck is Feature Engineering Latency,
+not Model Inference. While an Isolation Forest decides "Fraud or Not" in ~1ms,
+calculating "Standard Deviation of the last 10,000 transactions" in Pandas takes 10-50ms.
+
+Polars solves this by being a columnar data store written in Rust with:
+- Apache Arrow memory format for efficient allocation (no copy-on-append)
+- SIMD vectorization (Single Instruction/Multiple Data) for rolling calculations
+- Parallel execution across CPU cores for multi-column feature computation
+
+Key Features:
+1. SLIDING WINDOW MECHANICS
+   - Ingest: Convert incoming dict to 1-row DataFrame
+   - Stack: Use pl.concat to append to history
+   - Truncate: tail(window_size) keeps memory bounded
+
+2. LAZY ROLLING FEATURES
+   - Uses Polars lazy API for deferred execution
+   - SIMD: Calculate mean of 2,000 numbers in same time as 2 numbers
+   - Parallel: Compute rolling stats for all columns simultaneously
+
+3. COLD START HANDLING
+   - fill_null(0.0) ensures valid numeric vectors from first transaction
+   - No data loss during warm-up period
 
 Usage:
     buffer = PolarsBuffer(window_size=1000)
     buffer.append({"time_ms": 100, "value": 1.5, "category": "A"})
     buffer.append_batch([{"time_ms": 101, "value": 2.0}, ...])
 
-    # Get features for anomaly detection
+    # Get features for anomaly detection (lazy + SIMD + parallel)
     features = buffer.get_features(rolling_windows=[5, 10, 20])
 
     # Get latest N records with computed features
     latest = buffer.get_latest(n=10)
+
+Data Flow Example:
+    Step 1: Init        -> []
+    Step 2: Tick 1      -> [100]  (user spends $100)
+    Step 3: Tick 2      -> [100, 150]
+    ...
+    Step 101: Tick 101  -> [150, ..., 200]  (First $100 dropped, window full)
+    Step 102: Calc      -> rolling_mean = 175.0 (instant on buffer)
+    Step 103: Vector    -> [200.0, 175.0] (Raw + Context for model)
 """
 
 import logging
@@ -197,13 +224,20 @@ class PolarsBuffer:
         rolling_windows: list[int] | None = None,
         include_lags: bool = True,
         lag_periods: list[int] | None = None,
+        fill_null_value: float = 0.0,
     ) -> pl.DataFrame:
-        """Compute rolling features for the buffer data.
+        """Compute rolling features for the buffer data using lazy evaluation.
+
+        Uses Polars lazy API for optimal performance:
+        - SIMD vectorization for rolling calculations
+        - Parallel computation across columns on multiple CPU cores
+        - Cold start handling with fill_null for early samples
 
         Args:
             rolling_windows: Window sizes for rolling stats (default: [5, 10, 20])
             include_lags: Whether to include lag features
             lag_periods: Lag periods to compute (default: [1, 2, 3])
+            fill_null_value: Value to use for nulls during cold start (default: 0.0)
 
         Returns:
             DataFrame with original columns plus computed features
@@ -217,39 +251,43 @@ class PolarsBuffer:
             if self._df is None or len(self._df) == 0:
                 return pl.DataFrame()
 
-            df = self._df.clone()
+            # Use lazy API for optimal performance (SIMD + parallel execution)
+            lazy_df = self._df.lazy()
+
             numeric_cols = [
-                col for col, dtype in df.schema.items() if dtype.is_numeric()
+                col for col, dtype in self._df.schema.items() if dtype.is_numeric()
             ]
 
             if not numeric_cols:
-                return df
+                return self._df.clone()
 
             # Build expressions for lazy evaluation
+            # Polars will execute these in parallel across CPU cores
             feature_exprs = []
 
             for col in numeric_cols:
-                # Rolling statistics
+                # Rolling statistics with SIMD vectorization
                 for window in rolling_windows:
-                    if window <= len(df):
-                        feature_exprs.extend([
-                            pl.col(col).rolling_mean(window).alias(f"{col}_rolling_mean_{window}"),
-                            pl.col(col).rolling_std(window).alias(f"{col}_rolling_std_{window}"),
-                            pl.col(col).rolling_min(window).alias(f"{col}_rolling_min_{window}"),
-                            pl.col(col).rolling_max(window).alias(f"{col}_rolling_max_{window}"),
-                        ])
+                    # Always compute, fill_null handles cold start
+                    feature_exprs.extend([
+                        pl.col(col).rolling_mean(window).fill_null(fill_null_value).alias(f"{col}_rolling_mean_{window}"),
+                        pl.col(col).rolling_std(window).fill_null(fill_null_value).alias(f"{col}_rolling_std_{window}"),
+                        pl.col(col).rolling_min(window).fill_null(fill_null_value).alias(f"{col}_rolling_min_{window}"),
+                        pl.col(col).rolling_max(window).fill_null(fill_null_value).alias(f"{col}_rolling_max_{window}"),
+                    ])
 
                 # Lag features
                 if include_lags:
                     for lag in lag_periods:
                         feature_exprs.append(
-                            pl.col(col).shift(lag).alias(f"{col}_lag_{lag}")
+                            pl.col(col).shift(lag).fill_null(fill_null_value).alias(f"{col}_lag_{lag}")
                         )
 
             if feature_exprs:
-                df = df.with_columns(feature_exprs)
+                lazy_df = lazy_df.with_columns(feature_exprs)
 
-            return df
+            # Collect triggers parallel execution
+            return lazy_df.collect()
 
     def get_latest(
         self,

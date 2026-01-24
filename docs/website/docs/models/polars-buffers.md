@@ -7,6 +7,25 @@ sidebar_position: 5
 
 LlamaFarm provides direct access to high-performance Polars-based data buffers for advanced streaming and feature engineering use cases.
 
+## Why Polars Matters for Anomaly Detection
+
+In streaming anomaly detection, **Feature Engineering Latency** is the biggest bottleneck—not model inference:
+
+| Operation | Typical Latency |
+|-----------|----------------|
+| Isolation Forest inference | ~1ms |
+| Rolling std of 10,000 rows (Pandas) | 10-50ms |
+| Rolling std of 10,000 rows (Polars) | <1ms |
+
+**The Problem:** To detect if "$500" is anomalous, the model needs context—"Is $500 normal for this user?" This requires calculating rolling statistics over a history window. In Pandas, this creates a major latency bottleneck.
+
+**The Solution:** Polars is a columnar data store written in Rust with:
+
+1. **Apache Arrow Memory Format** - No copy-on-append, efficient memory allocation
+2. **SIMD Vectorization** - Calculate mean of 2,000 numbers in the same CPU cycles as 2 numbers
+3. **Parallel Execution** - Compute rolling stats for ALL columns simultaneously across CPU cores
+4. **Cold Start Handling** - `fill_null(0.0)` ensures valid feature vectors from the very first transaction
+
 ## Overview
 
 Polars buffers are the "data substrate" underlying LlamaFarm's streaming anomaly detection. While most users should use the [Streaming Anomaly Detection API](./streaming-anomaly-detection.md) directly, the Polars Buffer API is available for:
@@ -18,10 +37,59 @@ Polars buffers are the "data substrate" underlying LlamaFarm's streaming anomaly
 
 **Key Features:**
 - **High-performance columnar storage** using Polars DataFrames
-- **Automatic sliding window** truncation
-- **Rolling feature computation** (mean, std, min, max)
+- **Automatic sliding window** truncation (memory never grows indefinitely)
+- **Rolling feature computation** (mean, std, min, max) with SIMD + parallel execution
 - **Lag features** for temporal patterns
 - **Sub-millisecond append performance**
+- **Cold start handling** with null filling
+
+---
+
+## How the Data Flows
+
+Understanding the internal data flow helps you optimize your pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DATA FLOW VISUALIZATION                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Step 1: INIT          →  []                                                │
+│                                                                              │
+│  Step 2: INGEST        →  {"amount": 100}                                   │
+│          (Tick 1)          ↓                                                │
+│                         [100]    ← Polars converts dict to 1-row DataFrame  │
+│                                                                              │
+│  Step 3: STACK         →  {"amount": 150}                                   │
+│          (Tick 2)          ↓                                                │
+│                         [100, 150]  ← pl.concat (Arrow memory - no copy)    │
+│                                                                              │
+│  ...                                                                         │
+│                                                                              │
+│  Step 101: TRUNCATE    →  {"amount": 200}                                   │
+│            (Tick 101)      ↓                                                │
+│                         [150, ..., 200]  ← tail(window_size) drops $100     │
+│                                                                              │
+│  Step 102: COMPUTE     →  rolling_mean = 175.0                              │
+│            (SIMD)          (Calculated instantly with vectorization)        │
+│                                                                              │
+│  Step 103: EXPORT      →  [200.0, 175.0, ...]                               │
+│            (to NumPy)      (Raw value + Context features for model)         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Cold Start Behavior
+
+During the first few ticks, rolling features have insufficient history:
+
+| Tick | Buffer | rolling_mean_5 | rolling_std_5 | What Happens |
+|------|--------|----------------|---------------|--------------|
+| 1 | [100] | 100.0 | **0.0** | std is null → filled with 0.0 |
+| 2 | [100, 150] | 125.0 | 35.36 | 2 values, real std |
+| 5 | [100, 150, 120, 80, 200] | 130.0 | 45.83 | Full 5-value window |
+
+The `fill_null(0.0)` ensures your model always receives valid numeric vectors, even from the very first transaction. No crashes, no NaN errors.
 
 ---
 

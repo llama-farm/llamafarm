@@ -293,14 +293,15 @@ class StreamingAnomalyDetector:
 
         # Get data from buffer - optionally with rolling features
         if self.rolling_windows:
+            # get_features uses lazy evaluation with SIMD + parallel execution
+            # fill_null(0.0) handles cold start - no data is dropped
             df = self._buffer.get_features(
                 rolling_windows=self.rolling_windows,
                 include_lags=self.include_lags,
                 lag_periods=self.lag_periods,
+                fill_null_value=0.0,  # Cold start handling
             )
-            # Drop nulls from rolling window computation
-            df = df.drop_nulls()
-            # Select only numeric columns
+            # Select only numeric columns for the model
             numeric_cols = [c for c in df.columns if df[c].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]]
             X = df.select(numeric_cols).to_numpy()
         else:
