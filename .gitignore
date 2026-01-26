@@ -6,9 +6,10 @@ node_modules/
 llamafarm-cli
 .python-version
 
-# Generated files (schema.json/yaml are temporary, but types.go is committed)
+# Generated files
 cli/cmd/config/schema.json
 cli/cmd/config/schema.yaml
+cli/cmd/config/types.go
 # ==============================================================================
 # RAG System - Comprehensive .gitignore (No Negative Patterns)
 # ==============================================================================
