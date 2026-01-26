@@ -1247,11 +1247,16 @@ class VoiceChatService:
         except Exception as e:
             logger.error(f"Error processing turn: {e}", exc_info=True)
             # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your request. Please try again."
-                ).model_dump()
-            )
+            try:
+                await websocket.send_json(
+                    ErrorMessage(
+                        message="An error occurred while processing your request. Please try again."
+                    ).model_dump()
+                )
+                # Send status update so frontend knows we're back to idle
+                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+            except Exception:
+                pass  # WebSocket might be closed
             self.session.set_state(VoiceState.IDLE)
 
     async def process_turn_native_audio(
@@ -1455,11 +1460,16 @@ class VoiceChatService:
         except Exception as e:
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
             # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your audio. Please try again."
-                ).model_dump()
-            )
+            try:
+                await websocket.send_json(
+                    ErrorMessage(
+                        message="An error occurred while processing your audio. Please try again."
+                    ).model_dump()
+                )
+                # Send status update so frontend knows we're back to idle
+                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+            except Exception:
+                pass  # WebSocket might be closed
             self.session.set_state(VoiceState.IDLE)
 
     async def stream_llm_response_with_audio(

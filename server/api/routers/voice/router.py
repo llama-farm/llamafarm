@@ -523,6 +523,21 @@ async def voice_chat_websocket(
             logger.info("process_turn cancelled by interrupt")
         except Exception as e:
             logger.error(f"process_turn error: {e}", exc_info=True)
+            # Send error to client so UI doesn't stay stuck in loading state
+            try:
+                await websocket.send_json(
+                    ErrorMessage(
+                        message="An error occurred while processing your request. Please try again."
+                    ).model_dump()
+                )
+                # Also send status update to reset client state to idle
+                await websocket.send_json(
+                    StatusMessage(state=VoiceState.IDLE).model_dump()
+                )
+                # Reset session state
+                session.set_state(VoiceState.IDLE)
+            except Exception:
+                pass  # WebSocket might be closed
         finally:
             current_turn_task = None
 

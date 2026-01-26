@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import { Volume2, StopCircle } from 'lucide-react'
+import { Volume2, StopCircle, Loader2 } from 'lucide-react'
 import type { SpeechMessage } from '../../types/ml'
 
 interface ConversationViewProps {
@@ -14,6 +14,10 @@ interface ConversationViewProps {
   isSpeaking?: boolean
   /** Callback to stop speaking */
   onStopSpeaking?: () => void
+  /** Whether we're waiting for an LLM response */
+  isThinking?: boolean
+  /** Whether we're synthesizing TTS for a response */
+  isSynthesizingTTS?: boolean
   className?: string
 }
 
@@ -25,6 +29,8 @@ export function ConversationView({
   streamingAssistantText,
   isSpeaking,
   onStopSpeaking,
+  isThinking,
+  isSynthesizingTTS,
   className = '',
 }: ConversationViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -34,7 +40,7 @@ export function ConversationView({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, streamingUserText, streamingAssistantText])
+  }, [messages, streamingUserText, streamingAssistantText, isThinking, isSynthesizingTTS])
 
   if (messages.length === 0) {
     return (
@@ -99,6 +105,26 @@ export function ConversationView({
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thinking indicator - shown when waiting for LLM response */}
+      {isThinking && !streamingAssistantText && (
+        <div className="w-full flex justify-start">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Thinking...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Synthesizing TTS indicator - shown when generating audio */}
+      {isSynthesizingTTS && !isThinking && (
+        <div className="w-full flex justify-start">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Generating audio...</span>
           </div>
         </div>
       )}
