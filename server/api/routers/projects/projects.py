@@ -886,7 +886,6 @@ async def get_task(namespace: str, project_id: str, task_id: str):
 
         # Also check for cancelled flag in group_info
         if group_info and group_info.get("cancelled"):
-            is_cancelled = True
             response.cancelled = True
 
         if group_info and "children" in group_info:

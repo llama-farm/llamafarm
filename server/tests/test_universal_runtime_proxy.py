@@ -1,8 +1,8 @@
 """Tests for Universal Runtime proxy endpoints (NLP, auto-save, port configuration)."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -170,8 +170,8 @@ class TestPortConfiguration:
 
     def test_port_comes_from_settings(self):
         """Test that UniversalRuntimeService uses settings for port."""
-        from server.services.universal_runtime_service import UniversalRuntimeService
         from server.core.settings import settings
+        from server.services.universal_runtime_service import UniversalRuntimeService
 
         base_url = UniversalRuntimeService.get_base_url()
 

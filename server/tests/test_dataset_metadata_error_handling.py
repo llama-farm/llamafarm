@@ -777,7 +777,8 @@ class TestErrorHandlingIntegration:
         mock_load_config.return_value = production_config
 
         # Simulate realistic production errors
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        # Note: This function is defined for future use but not currently attached to a mock
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == production_hashes[0]:
                 return metadata_1
             elif file_content_hash == production_hashes[1]:

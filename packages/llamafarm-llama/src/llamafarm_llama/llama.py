@@ -229,7 +229,7 @@ class Llama:
             # Use random seed
             import random
 
-            seed = random.randint(0, 2**32 - 1)
+            _seed = random.randint(0, 2**32 - 1)  # noqa: F841 - seed generation for future use
 
         # Create context
         self._ctx = self._lib.llama_new_context_with_model(self._model, ctx_params)

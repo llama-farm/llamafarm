@@ -4,12 +4,9 @@ Tests that preview produces the EXACT same chunks as actual ingestion.
 All tests written FIRST and will fail until implementation is complete.
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
-
-from core.base import Document
 
 
 class TestPreviewIntegration:
@@ -84,11 +81,11 @@ unlabeled datasets.
         sample_text_content: str,
     ):
         """Preview chunks MUST match what ingestion produces."""
-        from core.blob_processor import BlobProcessor
-        from core.preview_handler import PreviewHandler
-
         # Create a minimal strategy config for testing
         from config.datamodel import DataProcessingStrategy, Parser
+
+        from core.blob_processor import BlobProcessor
+        from core.preview_handler import PreviewHandler
 
         strategy = DataProcessingStrategy(
             name="test_strategy",
@@ -138,10 +135,10 @@ unlabeled datasets.
         sample_markdown_file: Path,
     ):
         """Preview matches ingestion for markdown files."""
+        from config.datamodel import DataProcessingStrategy, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         strategy = DataProcessingStrategy(
             name="test_markdown_strategy",
@@ -185,10 +182,10 @@ unlabeled datasets.
         sample_text_file: Path,
     ):
         """Extractors are applied same way in preview and ingestion."""
+        from config.datamodel import DataProcessingStrategy, Extractor, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Extractor, Parser
 
         strategy = DataProcessingStrategy(
             name="test_extractor_strategy",
@@ -226,10 +223,10 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_with_different_chunk_sizes(self, sample_text_file: Path):
         """Preview correctly records chunk size override in result."""
+        from config.datamodel import DataProcessingStrategy, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         strategy = DataProcessingStrategy(
             name="test_small_chunks_strategy",
@@ -271,10 +268,10 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_positions_are_accurate(self, sample_text_content: str):
         """Preview chunk positions accurately map to original text."""
+        from config.datamodel import DataProcessingStrategy, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         strategy = DataProcessingStrategy(
             name="test_position_strategy",
@@ -310,10 +307,10 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_overlap_detection(self):
         """Preview correctly identifies overlapping regions."""
+        from config.datamodel import DataProcessingStrategy, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         # Use a known text with predictable chunking
         text = "AAAA BBBB CCCC DDDD EEEE FFFF GGGG HHHH"
@@ -354,10 +351,10 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_idempotent(self, sample_text_file: Path):
         """Calling preview multiple times produces same result."""
+        from config.datamodel import DataProcessingStrategy, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         strategy = DataProcessingStrategy(
             name="test_strategy",
