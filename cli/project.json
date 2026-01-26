@@ -25,7 +25,8 @@
         "commands": [
           "cd config && uv run python compile_schema.py",
           "which go-jsonschema >/dev/null 2>&1 || go install github.com/atombender/go-jsonschema@latest",
-          "cd cli/cmd/config && sh generate-types.sh"
+          "cd cli/cmd/config && sh generate-types.sh",
+          "echo 'Verifying types.go...' && ls -la cli/cmd/config/types.go && grep -c LlamaFarmConfigPromptsElem cli/cmd/config/types.go"
         ],
         "parallel": false
       }
