@@ -9,6 +9,15 @@ fi
 
 go-jsonschema -p config --struct-name-from-title -o types.go schema.json
 
+# Verify --struct-name-from-title worked (PromptSet should exist, not LlamaFarmConfigPromptsElem)
+if ! grep -q 'type PromptSet struct' types.go; then
+    echo "Error: --struct-name-from-title flag did not work correctly." >&2
+    echo "Expected 'type PromptSet struct' but it was not found in types.go" >&2
+    echo "This usually means go-jsonschema version doesn't support this flag." >&2
+    echo "Ensure go-jsonschema v0.16.0+ is installed." >&2
+    exit 1
+fi
+
 # Fix go-jsonschema bug: when additionalProperties:true is combined with
 # minimum constraints, it generates code that uses 'raw' variable without
 # declaring it. This Python script adds the missing declaration only where needed.
