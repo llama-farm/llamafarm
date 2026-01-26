@@ -57,31 +57,32 @@ def _get_llamafarm_release_version() -> str:
 # Note: Starting from b7836+, Linux/macOS use .tar.gz format; Windows uses .zip
 BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
     # Linux x86_64
+    # Note: Upstream tar.gz extracts to llama-{version}/ subdirectory with libs at root level
     ("linux", "x86_64", "cpu"): {
         "artifact": "llama-{version}-bin-ubuntu-x64.tar.gz",
-        "lib": "build/bin/libllama.so",
+        "lib": "libllama.so",  # Libs are in llama-{version}/ subdir, we use rglob to find
         "sha256": None,  # Populated at release time
     },
     ("linux", "x86_64", "vulkan"): {
         "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.tar.gz",
-        "lib": "build/bin/libllama.so",
+        "lib": "libllama.so",
         "sha256": None,
     },
     # Linux ARM64 (LlamaFarm provided - not available from upstream)
     ("linux", "arm64", "cpu"): {
         "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.tar.gz",
-        "lib": "bin/libllama.so",
+        "lib": "libllama.so",
         "sha256": None,
     },
     # macOS
     ("darwin", "arm64", "metal"): {
         "artifact": "llama-{version}-bin-macos-arm64.tar.gz",
-        "lib": "build/bin/libllama.dylib",
+        "lib": "libllama.dylib",  # Libs are in llama-{version}/ subdir, we use rglob to find
         "sha256": None,
     },
     ("darwin", "x86_64", "cpu"): {
         "artifact": "llama-{version}-bin-macos-x64.tar.gz",
-        "lib": "build/bin/libllama.dylib",
+        "lib": "libllama.dylib",
         "sha256": None,
     },
     # Windows (still uses .zip format)
@@ -385,8 +386,13 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
 
     Handles cases where libllama.dylib -> libllama.0.dylib -> libllama.0.0.7376.dylib
     by following the chain, copying the actual file, and recreating symlinks.
+
+    Also handles cases where tarfile extraction creates 0-byte placeholder files
+    instead of proper symlinks (can happen on some systems/CI environments).
     """
     dest_dir = dest_path.parent
+    src_dir = src_path.parent
+    lib_name = dest_path.name  # e.g., "libllama.so" or "libllama.dylib"
 
     # Follow symlink chain to find the actual file
     current = src_path
@@ -417,6 +423,31 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
             break
         else:
             break
+
+    # If we couldn't resolve the symlink chain (e.g., 0-byte file on CI),
+    # search for the versioned library directly
+    if not current.exists() or current.stat().st_size < 1000:
+        logger.debug(f"Symlink resolution failed, searching for versioned library")
+        # Look for versioned files like libllama.so.0.0.7694 or libllama.0.0.7694.dylib
+        if lib_name.endswith(".so"):
+            # Linux: libllama.so.X.Y.Z
+            base = lib_name[:-3]  # Remove .so
+            versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*"))
+        elif lib_name.endswith(".dylib"):
+            # macOS: libllama.X.Y.Z.dylib
+            base = lib_name[:-6]  # Remove .dylib
+            versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*dylib"))
+        else:
+            versioned_candidates = []
+
+        # Find the most versioned file (largest file size is usually the real one)
+        versioned_candidates = [f for f in versioned_candidates if f.is_file() and f.stat().st_size > 1000]
+        if versioned_candidates:
+            # Sort by version number to get the full version
+            current = max(versioned_candidates, key=lambda f: f.stat().st_size)
+            logger.debug(f"Found versioned library: {current} ({current.stat().st_size} bytes)")
+            # Build symlink chain from filename patterns
+            symlink_chain = _build_symlink_chain(lib_name, current.name, current.parent)
 
     # Verify we found an actual file
     if not current.exists():
@@ -449,6 +480,46 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
         # No symlinks, just copy the file directly
         shutil.copy2(current, dest_path)
         logger.debug(f"Copied file: {current.name} -> {dest_path.name}")
+
+
+def _build_symlink_chain(base_name: str, versioned_name: str, src_dir: Path) -> list[tuple[Path, str]]:
+    """Build a symlink chain from base name to versioned file.
+
+    For example, for libllama.so -> libllama.so.0 -> libllama.so.0.0.7694
+    returns [(libllama.so, libllama.so.0), (libllama.so.0, libllama.so.0.0.7694)]
+    """
+    import re
+
+    chain = []
+
+    if base_name.endswith(".so"):
+        # Linux: libllama.so -> libllama.so.0 -> libllama.so.0.0.7694
+        match = re.match(r"^(.+\.so)\.(\d+)\.(\d+)\.(\d+)$", versioned_name)
+        if match:
+            so_base = match.group(1)  # libllama.so
+            major = match.group(2)
+            # libllama.so -> libllama.so.0
+            major_name = f"{so_base}.{major}"
+            if (src_dir / major_name).exists() or True:  # Always create chain
+                chain.append((src_dir / base_name, major_name))
+                chain.append((src_dir / major_name, versioned_name))
+            else:
+                chain.append((src_dir / base_name, versioned_name))
+    elif base_name.endswith(".dylib"):
+        # macOS: libllama.dylib -> libllama.0.dylib -> libllama.0.0.7694.dylib
+        match = re.match(r"^(.+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", versioned_name)
+        if match:
+            lib_base = match.group(1)  # libllama
+            major = match.group(2)
+            # libllama.dylib -> libllama.0.dylib
+            major_name = f"{lib_base}.{major}.dylib"
+            if (src_dir / major_name).exists() or True:  # Always create chain
+                chain.append((src_dir / base_name, major_name))
+                chain.append((src_dir / major_name, versioned_name))
+            else:
+                chain.append((src_dir / base_name, versioned_name))
+
+    return chain
 
 
 def download_binary(
