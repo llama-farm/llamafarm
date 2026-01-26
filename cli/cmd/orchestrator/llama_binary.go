@@ -33,11 +33,12 @@ type BinaryInfo struct {
 
 // LlamaBinarySpec defines llama.cpp binary download configuration
 // Starting from b7694+, Linux/macOS releases use .tar.gz format
+// Libraries are extracted to llama-{version}/ subdirectory, not build/bin/
 var LlamaBinarySpec = map[HardwareCapability]BinaryInfo{
 	HardwareCPU: {
 		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-ubuntu-x64.tar.gz", LlamaCppVersion, LlamaCppVersion),
 		SHA256:  "", // TODO: Populate at release
-		LibPath: "build/bin/libllama.so",
+		LibPath: "libllama.so",
 		LibName: "libllama.so",
 	},
 	HardwareCUDA: {
@@ -45,19 +46,19 @@ var LlamaBinarySpec = map[HardwareCapability]BinaryInfo{
 		// Falls back to Vulkan or CPU
 		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-ubuntu-vulkan-x64.tar.gz", LlamaCppVersion, LlamaCppVersion),
 		SHA256:  "",
-		LibPath: "build/bin/libllama.so",
+		LibPath: "libllama.so",
 		LibName: "libllama.so",
 	},
 	HardwareMetal: {
 		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-macos-arm64.tar.gz", LlamaCppVersion, LlamaCppVersion),
 		SHA256:  "",
-		LibPath: "build/bin/libllama.dylib",
+		LibPath: "libllama.dylib",
 		LibName: "libllama.dylib",
 	},
 	HardwareROCm: {
 		URL:     fmt.Sprintf("https://github.com/ggml-org/llama.cpp/releases/download/%s/llama-%s-bin-ubuntu-vulkan-x64.tar.gz", LlamaCppVersion, LlamaCppVersion),
 		SHA256:  "",
-		LibPath: "build/bin/libllama.so",
+		LibPath: "libllama.so",
 		LibName: "libllama.so",
 	},
 }
@@ -84,7 +85,7 @@ var LinuxARM64BinarySpec = BinaryInfo{
 	// TODO: Update URL pattern when release strategy is finalized
 	URL:     fmt.Sprintf("https://github.com/llama-farm/llamafarm/releases/download/%s/llama-%s-bin-linux-arm64.tar.gz", getLlamaFarmReleaseVersion(), LlamaCppVersion),
 	SHA256:  "",
-	LibPath: "bin/libllama.so",
+	LibPath: "libllama.so",
 	LibName: "libllama.so",
 }
 
@@ -667,8 +668,71 @@ func extractFileWithSymlinks(r *zip.ReadCloser, fileMap map[string]*zip.File, f 
 	return nil
 }
 
-// extractTarGz extracts a specific file from a tar.gz archive
+// extractTarGz extracts a specific file from a tar.gz archive, following symlinks
 func extractTarGz(archivePath, srcPath, destPath string) error {
+	srcName := filepath.Base(srcPath)
+
+	// First pass: build a map of all entries to follow symlinks
+	entries := make(map[string]*tar.Header)
+	if err := readTarGzEntries(archivePath, entries); err != nil {
+		return err
+	}
+
+	// Find the target entry
+	var targetEntry *tar.Header
+	var targetName string
+	for name, header := range entries {
+		if strings.HasSuffix(name, srcName) {
+			targetEntry = header
+			targetName = name
+			break
+		}
+	}
+
+	if targetEntry == nil {
+		return fmt.Errorf("file %s not found in archive", srcPath)
+	}
+
+	// Follow symlink chain to find the actual file
+	resolvedName := targetName
+	for targetEntry.Typeflag == tar.TypeSymlink {
+		// Resolve the symlink target relative to the symlink's directory
+		symlinkDir := filepath.Dir(resolvedName)
+		target := filepath.Join(symlinkDir, targetEntry.Linkname)
+		target = filepath.Clean(target)
+		target = strings.ReplaceAll(target, "\\", "/")
+
+		utils.LogDebug(fmt.Sprintf("Following symlink: %s -> %s", resolvedName, target))
+
+		// Find the target in our map
+		nextEntry, ok := entries[target]
+		if !ok {
+			// Try matching by just the basename in the same directory
+			targetBase := filepath.Base(targetEntry.Linkname)
+			for name, h := range entries {
+				if filepath.Dir(name) == symlinkDir && filepath.Base(name) == targetBase {
+					nextEntry = h
+					target = name
+					ok = true
+					break
+				}
+			}
+		}
+
+		if !ok {
+			return fmt.Errorf("symlink target %s not found in archive", target)
+		}
+
+		targetEntry = nextEntry
+		resolvedName = target
+	}
+
+	// Now extract the actual file
+	return extractTarGzFile(archivePath, resolvedName, destPath)
+}
+
+// readTarGzEntries reads all tar entries into a map for symlink resolution
+func readTarGzEntries(archivePath string, entries map[string]*tar.Header) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
 		return err
@@ -682,7 +746,43 @@ func extractTarGz(archivePath, srcPath, destPath string) error {
 	defer gzr.Close()
 
 	tr := tar.NewReader(gzr)
-	srcName := filepath.Base(srcPath)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read tar: %w", err)
+		}
+
+		// Normalize path
+		name := filepath.Clean(header.Name)
+		name = strings.ReplaceAll(name, "\\", "/")
+
+		// Store a copy of the header
+		headerCopy := *header
+		entries[name] = &headerCopy
+	}
+
+	return nil
+}
+
+// extractTarGzFile extracts a specific file by name from a tar.gz archive
+func extractTarGzFile(archivePath, fileName, destPath string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
 	destDir := filepath.Dir(destPath)
 
 	for {
@@ -694,8 +794,11 @@ func extractTarGz(archivePath, srcPath, destPath string) error {
 			return fmt.Errorf("failed to read tar: %w", err)
 		}
 
-		// Check if this is the file we want
-		if strings.HasSuffix(header.Name, srcName) || header.Name == srcPath {
+		// Normalize path for comparison
+		headerName := filepath.Clean(header.Name)
+		headerName = strings.ReplaceAll(headerName, "\\", "/")
+
+		if headerName == fileName {
 			// Validate filename to prevent path traversal
 			name := filepath.Base(header.Name)
 			if name == "" || name == "." || name == ".." ||
@@ -728,7 +831,7 @@ func extractTarGz(archivePath, srcPath, destPath string) error {
 		}
 	}
 
-	return fmt.Errorf("file %s not found in archive", srcPath)
+	return fmt.Errorf("file %s not found in archive", fileName)
 }
 
 // extractTarGzDependencies extracts all library dependencies from a tar.gz archive
