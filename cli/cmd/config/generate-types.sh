@@ -11,7 +11,7 @@ ls -la schema.json 2>/dev/null || echo "DEBUG: schema.json NOT FOUND"
 
 # Generate Go types using go-jsonschema
 if ! command -v go-jsonschema >/dev/null 2>&1; then
-    echo "Error: go-jsonschema not found. Install with: go install github.com/atombender/go-jsonschema@latest" >&2
+    echo "Error: go-jsonschema not found. Install with: go install github.com/atombender/go-jsonschema@v0.20.0" >&2
     echo "DEBUG: Checking $HOME/go/bin..."
     ls -la "$HOME/go/bin" 2>/dev/null || echo "DEBUG: $HOME/go/bin not found"
     exit 1
