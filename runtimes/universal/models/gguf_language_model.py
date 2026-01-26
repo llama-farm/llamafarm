@@ -31,24 +31,24 @@ logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def _is_unified_memory_gpu() -> bool:
-    """Detect unified memory GPU platforms (Jetson Tegra, Apple Silicon).
+    """Detect NVIDIA Jetson/Tegra unified memory GPU platforms.
 
-    Unified memory platforms share RAM between CPU and GPU. On these systems,
-    running inference through ThreadPoolExecutor can cause performance issues
-    due to thread context switching overhead in shared memory architecture.
-    Running synchronously avoids this overhead and provides stability benefits
-    by keeping CUDA/Metal operations in predictable thread contexts.
+    Jetson devices have unified memory where CPU and GPU share RAM. On these systems,
+    running inference through ThreadPoolExecutor can cause performance issues due to
+    thread context switching overhead. Running synchronously avoids this overhead and
+    provides stability benefits by keeping CUDA operations in predictable thread contexts.
 
     Supported platforms:
-        - NVIDIA Jetson (Tegra): Orin, Xavier, TX2, Nano
-        - Apple Silicon: M1, M2, M3 series (unified memory architecture)
+        - NVIDIA Jetson Orin (Nano, NX, AGX)
+        - NVIDIA Jetson Xavier (NX, AGX)
+        - NVIDIA Jetson TX2, Nano
 
     Environment variable override:
         LLAMAFARM_SYNC_INFERENCE=1  # Force synchronous inference
         LLAMAFARM_SYNC_INFERENCE=0  # Force asynchronous inference (ThreadPoolExecutor)
 
     Returns:
-        True if synchronous inference should be used (unified memory or override)
+        True if synchronous inference should be used (Jetson/Tegra or override)
     """
     # Check for environment variable override first
     override = os.environ.get("LLAMAFARM_SYNC_INFERENCE", "").lower()
@@ -65,25 +65,19 @@ def _is_unified_memory_gpu() -> bool:
             with open("/proc/device-tree/compatible", "rb") as f:
                 compatible = f.read().decode("utf-8", errors="ignore").lower()
                 if "tegra" in compatible or "jetson" in compatible:
-                    logger.info("Unified memory GPU detected: NVIDIA Jetson/Tegra (sync inference enabled)")
+                    logger.info("NVIDIA Jetson/Tegra detected (sync inference enabled)")
                     return True
         # Fallback: check kernel version string
         if os.path.exists("/proc/version"):
             with open("/proc/version") as f:
                 if "tegra" in f.read().lower():
-                    logger.info("Unified memory GPU detected: NVIDIA Tegra kernel (sync inference enabled)")
+                    logger.info("NVIDIA Tegra kernel detected (sync inference enabled)")
                     return True
     except Exception:
         pass
 
-    # Auto-detect: Apple Silicon (unified memory architecture)
-    if sys.platform == "darwin":
-        import platform
-        if platform.machine() == "arm64":
-            logger.info("Unified memory GPU detected: Apple Silicon (sync inference enabled)")
-            return True
-
-    logger.info("Discrete GPU or CPU-only detected (async inference via ThreadPoolExecutor)")
+    # Apple Silicon and other platforms use async inference (ThreadPoolExecutor)
+    # which was the original behavior before Jetson optimizations
     return False
 
 
@@ -891,11 +885,39 @@ class GGUFLanguageModel(BaseModel):
         """
         assert self.llama is not None, "Model not loaded"
 
-        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
         # Capture llama reference for nested function (type checker can't see through closures)
         llama = self.llama
+
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching
+        # overhead in unified memory architecture
+        if _is_unified_memory_gpu():
+            logits_processor = None
+            if thinking_budget is not None:
+                from utils.thinking import ThinkingBudgetProcessor
+
+                logits_processor = ThinkingBudgetProcessor(
+                    llama, max_thinking_tokens=thinking_budget
+                )
+
+            for chunk in llama.create_completion(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+                logits_processor=logits_processor,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def _generate_stream():
             """Run completion in separate thread."""
@@ -1039,6 +1061,34 @@ class GGUFLanguageModel(BaseModel):
                 f"{'=' * 60}\n{json.dumps(prepared_messages, indent=2)}\n{'=' * 60}"
             )
 
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching
+        # overhead in unified memory architecture
+        if _is_unified_memory_gpu():
+            logits_processor = None
+            if thinking_budget is not None:
+                from utils.thinking import ThinkingBudgetProcessor
+
+                logits_processor = ThinkingBudgetProcessor(
+                    self.llama, max_thinking_tokens=thinking_budget
+                )
+
+            for chunk in self.llama.create_chat_completion(
+                messages=prepared_messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+                logits_processor=logits_processor,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
         queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -1168,7 +1218,11 @@ class GGUFLanguageModel(BaseModel):
                 raise RuntimeError(f"Audio chat completion failed: {e}") from e
 
         try:
-            result = await loop.run_in_executor(self._executor, _generate)
+            # On Jetson/Tegra, run synchronously to avoid thread context switching overhead
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
@@ -1216,6 +1270,26 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching overhead
+        if _is_unified_memory_gpu():
+            for chunk in self.llama.create_chat_completion_with_audio(
+                messages=messages,
+                audio_data=audio_data,
+                audio_format=audio_format,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
         queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
