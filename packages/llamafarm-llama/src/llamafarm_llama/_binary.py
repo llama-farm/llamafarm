@@ -85,6 +85,8 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "sha256": None,
     },
     # Windows (still uses .zip format)
+    # Note: CUDA 11 is no longer provided by upstream llama.cpp (b7694+).
+    # Users with CUDA 11 will fall back to CPU. See docs for building custom binaries.
     ("win32", "amd64", "cpu"): {
         "artifact": "llama-{version}-bin-win-cpu-x64.zip",
         "lib": "llama.dll",  # Windows: library is in root
@@ -92,11 +94,6 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
     },
     ("win32", "amd64", "cuda12"): {
         "artifact": "llama-{version}-bin-win-cuda-12.4-x64.zip",
-        "lib": "llama.dll",
-        "sha256": None,
-    },
-    ("win32", "amd64", "cuda11"): {
-        "artifact": "llama-{version}-bin-win-cuda11.7-x64.zip",
         "lib": "llama.dll",
         "sha256": None,
     },
@@ -221,10 +218,12 @@ def _detect_backend(system: str, machine: str) -> str:
     if system == "darwin" and machine == "arm64":
         return "metal"  # Apple Silicon always has Metal
 
-    # Check for CUDA
+    # Check for CUDA (only CUDA 12+ is supported; CUDA 11 falls back to CPU)
     if _has_cuda():
         cuda_version = _get_cuda_version()
-        return "cuda12" if cuda_version >= 12 else "cuda11"
+        if cuda_version >= 12:
+            return "cuda12"
+        # CUDA 11 not supported by upstream llama.cpp b7694+, fall through to CPU
 
     # Check for Vulkan
     if _has_vulkan():
