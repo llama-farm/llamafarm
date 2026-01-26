@@ -121,7 +121,7 @@ unlabeled datasets.
 
         # CRITICAL: Same content in each chunk
         for i, (preview_chunk, ingested_doc) in enumerate(
-            zip(preview_result.chunks, ingestion_docs)
+            zip(preview_result.chunks, ingestion_docs, strict=True)
         ):
             assert preview_chunk.content == ingested_doc.content, (
                 f"Chunk {i} content mismatch:\n"
@@ -166,7 +166,7 @@ unlabeled datasets.
         assert len(preview_result.chunks) == len(ingestion_docs)
 
         # Same content
-        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs):
+        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs, strict=True):
             assert preview_chunk.content == ingested_doc.content
 
     @pytest.mark.integration
@@ -217,7 +217,7 @@ unlabeled datasets.
         ingestion_docs = blob_processor.process_blob(file_data, metadata)
 
         # Same content (extractors don't change content, only metadata)
-        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs):
+        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs, strict=True):
             assert preview_chunk.content == ingested_doc.content
 
     @pytest.mark.integration
@@ -383,7 +383,7 @@ unlabeled datasets.
         assert result1.total_chunks == result2.total_chunks
         assert result1.original_text == result2.original_text
 
-        for c1, c2 in zip(result1.chunks, result2.chunks):
+        for c1, c2 in zip(result1.chunks, result2.chunks, strict=True):
             assert c1.content == c2.content
             assert c1.start_position == c2.start_position
             assert c1.end_position == c2.end_position

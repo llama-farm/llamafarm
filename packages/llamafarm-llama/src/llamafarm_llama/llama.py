@@ -252,6 +252,14 @@ class Llama:
         # Initialize sampler chain
         self._sampler = None
 
+        # Pre-allocate reusable buffers for detokenization to avoid CFFI
+        # thread-safety issues with dynamic type creation during GC
+        import threading
+        self._detok_lock = threading.Lock()
+        self._detok_token_buf = ffi.new("llama_token[8192]")  # Max 8K tokens
+        self._detok_char_buf = ffi.new("char[131072]")  # 128KB text buffer
+        self._detok_char_buf_size = 131072
+
         # Initialize multimodal context if projector path provided
         self._mtmd_lib = None
         self._mtmd_ctx = ffi.NULL
@@ -973,35 +981,46 @@ class Llama:
         if not tokens:
             return b""
 
-        tokens_array = ffi.new(f"llama_token[{len(tokens)}]", tokens)
-        buf_size = len(tokens) * 16  # Estimate
-        buf = ffi.new(f"char[{buf_size}]")
+        n_tokens = len(tokens)
 
-        n_chars = self._lib.llama_detokenize(
-            self._vocab,
-            tokens_array,
-            len(tokens),
-            buf,
-            buf_size,
-            remove_special,
-            False,  # unparse_special
-        )
+        # Use pre-allocated buffers with lock to avoid CFFI thread-safety issues
+        with self._detok_lock:
+            # Check if we can use pre-allocated token buffer
+            if n_tokens <= 8192:
+                tokens_array = self._detok_token_buf
+                for i, t in enumerate(tokens):
+                    tokens_array[i] = t
+            else:
+                # Fallback for very large token arrays (rare)
+                tokens_array = ffi.new(f"llama_token[{n_tokens}]", tokens)
 
-        if n_chars < 0:
-            # Need more space
-            buf_size = -n_chars
-            buf = ffi.new(f"char[{buf_size}]")
+            # First try with pre-allocated char buffer
             n_chars = self._lib.llama_detokenize(
                 self._vocab,
                 tokens_array,
-                len(tokens),
-                buf,
-                buf_size,
+                n_tokens,
+                self._detok_char_buf,
+                self._detok_char_buf_size,
                 remove_special,
-                False,
+                False,  # unparse_special
             )
 
-        return ffi.buffer(buf, n_chars)[:]
+            if n_chars < 0:
+                # Need more space than pre-allocated - allocate dynamically (rare)
+                buf_size = -n_chars
+                buf = ffi.new(f"char[{buf_size}]")
+                n_chars = self._lib.llama_detokenize(
+                    self._vocab,
+                    tokens_array,
+                    n_tokens,
+                    buf,
+                    buf_size,
+                    remove_special,
+                    False,
+                )
+                return ffi.buffer(buf, n_chars)[:]
+
+            return ffi.buffer(self._detok_char_buf, n_chars)[:]
 
     @staticmethod
     def _decode_utf8_streaming(data: bytes) -> tuple[str, bytes]:
@@ -1379,16 +1398,19 @@ class Llama:
         for i in range(max_tokens):
             # Apply logits processor if provided
             if logits_processor is not None:
-                logits = self._lib.llama_get_logits(self._ctx)
+                import numpy as np
+                logits_ptr = self._lib.llama_get_logits(self._ctx)
                 n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
-                # Convert to list for processor
-                logits_list = [logits[i] for i in range(n_vocab)]
-                processed = logits_processor(
-                    prompt_tokens + generated_tokens, logits_list
+                # Use numpy for efficient array operations (avoids 2x 151k iterations)
+                logits_array = np.ctypeslib.as_array(
+                    ffi.cast("float*", logits_ptr), shape=(n_vocab,)
                 )
-                # Write back
-                for j, v in enumerate(processed):
-                    logits[j] = v
+                processed = logits_processor(
+                    prompt_tokens + generated_tokens, logits_array
+                )
+                # Write back efficiently with numpy
+                if processed is not logits_array:
+                    np.copyto(logits_array, processed)
 
             token = self._sample_token()
             generated_tokens.append(token)

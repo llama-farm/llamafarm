@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
 )
@@ -26,11 +27,11 @@ func TestLinuxARM64Spec(t *testing.T) {
 	if LinuxARM64BinarySpec.LibName != "libllama.so" {
 		t.Errorf("Expected LibName=libllama.so, got %s", LinuxARM64BinarySpec.LibName)
 	}
-	if LinuxARM64BinarySpec.LibPath != "bin/libllama.so" {
-		t.Errorf("Expected LibPath=bin/libllama.so, got %s", LinuxARM64BinarySpec.LibPath)
+	if LinuxARM64BinarySpec.LibPath != "libllama.so" {
+		t.Errorf("Expected LibPath=libllama.so, got %s", LinuxARM64BinarySpec.LibPath)
 	}
 
-	expectedURLPart := "llama-b7376-bin-linux-arm64.zip"
+	expectedURLPart := fmt.Sprintf("llama-%s-bin-linux-arm64.tar.gz", LlamaCppVersion)
 	if !contains(LinuxARM64BinarySpec.URL, expectedURLPart) {
 		t.Errorf("Expected URL to contain %s, got %s", expectedURLPart, LinuxARM64BinarySpec.URL)
 	}

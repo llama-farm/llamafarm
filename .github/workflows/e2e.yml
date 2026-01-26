@@ -442,14 +442,16 @@ jobs:
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
             LIB_NAME="libllama.dylib"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
             LIB_NAME="llama.dll"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
             LIB_NAME="libllama.so"
           fi
 
-          LLAMA_VERSION="b7376"
+          # Strip both LF and CR to handle Windows CRLF line endings
+          LLAMA_VERSION=$(cat llama-cpp-version.txt | tr -d '\r\n')
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
           echo "Expected binary location: $LIB_PATH"
@@ -907,7 +909,8 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
           fi

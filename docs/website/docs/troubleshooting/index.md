@@ -40,6 +40,37 @@ Common symptoms, their causes, and how to resolve them when working with LlamaFa
 | `lf` command not found after installation | Binary not in system PATH | Ensure `/usr/local/bin` (or custom install directory) is in your PATH. Run `echo $PATH` to verify. |
 | Installation script fails | Permissions issue or unsupported platform | Try with `sudo` or check platform compatibility (macOS/Linux supported). Windows users should download `lf.exe` manually. |
 
+## GPU & CUDA Issues
+
+| Issue | Cause | Fix |
+| ----- | ----- | --- |
+| CUDA 11 falls back to CPU | Upstream llama.cpp (b7694+) no longer provides CUDA 11 binaries | Upgrade to CUDA 12+, or build llama.cpp from source with CUDA 11 support (see below). |
+| GPU not detected | CUDA/Vulkan drivers not installed or not in PATH | Install appropriate GPU drivers. For CUDA, ensure `nvidia-smi` works. |
+| Metal not used on macOS | Running on Intel Mac | Metal acceleration is only available on Apple Silicon (M1/M2/M3). Intel Macs use CPU. |
+
+### Building llama.cpp with CUDA 11
+
+If you need CUDA 11 support, you must build llama.cpp from source:
+
+```bash
+# Clone llama.cpp
+git clone https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+git checkout b7694
+
+# Build with CUDA 11
+mkdir build && cd build
+cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="native"
+cmake --build . --config Release
+
+# Copy the library to LlamaFarm cache
+mkdir -p ~/.cache/llamafarm-llama/b7694
+cp bin/libllama.so ~/.cache/llamafarm-llama/b7694/  # Linux
+# or: cp bin/llama.dll ~/.cache/llamafarm-llama/b7694/  # Windows
+```
+
+Set `LLAMAFARM_BACKEND=cpu` to force CPU mode if GPU detection causes issues.
+
 ## Sessions & State
 
 - Delete `.llamafarm/projects/<namespace>/<project>/dev/context` to reset dev chat history.

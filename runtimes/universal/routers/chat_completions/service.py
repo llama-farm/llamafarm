@@ -478,7 +478,7 @@ class ChatCompletionsService:
                             else 0.7,
                             top_p=chat_request.top_p,
                             stop=chat_request.stop,
-                            thinking_budget=thinking_tokens if is_gguf else None,
+                            thinking_budget=(thinking_tokens or None) if is_gguf else None,
                             tools=tools_dict,
                             tool_choice=chat_request.tool_choice,
                         )
@@ -770,7 +770,7 @@ class ChatCompletionsService:
                     else 0.7,
                     top_p=chat_request.top_p,
                     stop=chat_request.stop,
-                    thinking_budget=thinking_tokens if is_gguf else None,
+                    thinking_budget=(thinking_tokens or None) if is_gguf else None,
                     tools=tools_dict,
                     tool_choice=chat_request.tool_choice,
                 )

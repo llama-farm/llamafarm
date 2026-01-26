@@ -10,7 +10,7 @@
         "cwd": "{workspaceRoot}",
         "commands": [
           "cd cli && go generate ./cmd/config",
-          "cd cli && go build -o ../dist/lf ."
+          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/cmd/orchestrator.LlamaCppVersion=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf ."
         ],
         "parallel": false,
         "dependsOn": [
@@ -24,8 +24,9 @@
         "cwd": "{workspaceRoot}",
         "commands": [
           "cd config && uv run python compile_schema.py",
-          "which go-jsonschema >/dev/null 2>&1 || go install github.com/atombender/go-jsonschema@latest",
-          "cd cli/cmd/config && sh generate-types.sh"
+          "go install github.com/atombender/go-jsonschema@v0.20.0",
+          "cd cli/cmd/config && sh generate-types.sh",
+          "echo 'Verifying types.go...' && ls -la cli/cmd/config/types.go && grep -c LlamaFarmConfigPromptsElem cli/cmd/config/types.go"
         ],
         "parallel": false
       }

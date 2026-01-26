@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
@@ -25,6 +27,64 @@ if TYPE_CHECKING:
     from llamafarm_llama import Llama
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _is_unified_memory_gpu() -> bool:
+    """Detect unified memory GPU platforms (Jetson Tegra, Apple Silicon).
+
+    Unified memory platforms share RAM between CPU and GPU. On these systems,
+    running inference through ThreadPoolExecutor can cause performance issues
+    due to thread context switching overhead in shared memory architecture.
+    Running synchronously avoids this overhead and provides stability benefits
+    by keeping CUDA/Metal operations in predictable thread contexts.
+
+    Supported platforms:
+        - NVIDIA Jetson (Tegra): Orin, Xavier, TX2, Nano
+        - Apple Silicon: M1, M2, M3 series (unified memory architecture)
+
+    Environment variable override:
+        LLAMAFARM_SYNC_INFERENCE=1  # Force synchronous inference
+        LLAMAFARM_SYNC_INFERENCE=0  # Force asynchronous inference (ThreadPoolExecutor)
+
+    Returns:
+        True if synchronous inference should be used (unified memory or override)
+    """
+    # Check for environment variable override first
+    override = os.environ.get("LLAMAFARM_SYNC_INFERENCE", "").lower()
+    if override in ("1", "true", "yes"):
+        logger.info("Sync inference ENABLED via LLAMAFARM_SYNC_INFERENCE=1")
+        return True
+    if override in ("0", "false", "no"):
+        logger.info("Sync inference DISABLED via LLAMAFARM_SYNC_INFERENCE=0")
+        return False
+
+    # Auto-detect: NVIDIA Tegra/Jetson (unified memory iGPU)
+    try:
+        if os.path.exists("/proc/device-tree/compatible"):
+            with open("/proc/device-tree/compatible", "rb") as f:
+                compatible = f.read().decode("utf-8", errors="ignore").lower()
+                if "tegra" in compatible or "jetson" in compatible:
+                    logger.info("Unified memory GPU detected: NVIDIA Jetson/Tegra (sync inference enabled)")
+                    return True
+        # Fallback: check kernel version string
+        if os.path.exists("/proc/version"):
+            with open("/proc/version") as f:
+                if "tegra" in f.read().lower():
+                    logger.info("Unified memory GPU detected: NVIDIA Tegra kernel (sync inference enabled)")
+                    return True
+    except Exception:
+        pass
+
+    # Auto-detect: Apple Silicon (unified memory architecture)
+    if sys.platform == "darwin":
+        import platform
+        if platform.machine() == "arm64":
+            logger.info("Unified memory GPU detected: Apple Silicon (sync inference enabled)")
+            return True
+
+    logger.info("Discrete GPU or CPU-only detected (async inference via ThreadPoolExecutor)")
+    return False
 
 
 class GGUFLanguageModel(BaseModel):
@@ -76,8 +136,10 @@ class GGUFLanguageModel(BaseModel):
                        Set to match CPU core count (e.g., 6 for Jetson Orin Nano).
             flash_attn: Optional flag to enable/disable flash attention. If None,
                         defaults to True for faster inference on supported hardware.
-            use_mmap: Optional flag for memory-mapped file loading. If None, defaults to True.
-                      Recommended True on memory-constrained devices for efficient swapping.
+            use_mmap: Optional flag for memory-mapped file loading. If None, defaults to False.
+                      False is safer for unified memory platforms (Jetson, Apple Silicon) where
+                      mmap can cause compute graph splits. Set to True for discrete GPUs with
+                      separate VRAM if memory swapping is desired.
             use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
                        Set False on 8GB devices to allow OS memory management.
             cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
@@ -105,21 +167,11 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers  # Store requested value (None = auto)
         )
         self.requested_n_threads = n_threads  # Store requested value (None = auto)
-        self.requested_flash_attn = (
-            flash_attn  # Store requested value (None = default True)
-        )
-        self.requested_use_mmap = (
-            use_mmap  # Store requested value (None = default True)
-        )
-        self.requested_use_mlock = (
-            use_mlock  # Store requested value (None = default False)
-        )
-        self.requested_cache_type_k = (
-            cache_type_k  # Store requested value (None = default f16)
-        )
-        self.requested_cache_type_v = (
-            cache_type_v  # Store requested value (None = default f16)
-        )
+        self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
+        self.requested_use_mmap = use_mmap  # Store requested value (None = default False)
+        self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
+        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
+        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
         self.preferred_quantization = preferred_quantization
         self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
         self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
@@ -254,10 +306,11 @@ class GGUFLanguageModel(BaseModel):
         )
         logger.info(f"Using flash_attn: {flash_attn}")
 
-        # Configure memory mapping (default True for efficient memory management)
-        use_mmap = (
-            self.requested_use_mmap if self.requested_use_mmap is not None else True
-        )
+        # Configure memory mapping - default False for unified memory platforms (Jetson, Apple Silicon)
+        # Memory mapping can cause compute graph splits on unified memory systems where CPU and GPU
+        # share the same physical memory. This results in suboptimal performance. For discrete GPUs
+        # with separate VRAM, mmap may be beneficial for memory-constrained scenarios.
+        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else False
         logger.info(f"Using use_mmap: {use_mmap}")
 
         # Configure memory locking (default False to allow OS memory management)
@@ -342,7 +395,14 @@ class GGUFLanguageModel(BaseModel):
                 raise
 
         try:
-            self.llama = await loop.run_in_executor(self._executor, _load_model)
+            # On unified memory platforms (Jetson Tegra, Apple Silicon), load model
+            # synchronously to ensure GPU context is created optimally and avoid
+            # thread context switching overhead in shared memory architecture
+            if _is_unified_memory_gpu():
+                logger.info("Loading model synchronously (unified memory GPU optimization)")
+                self.llama = _load_model()
+            else:
+                self.llama = await loop.run_in_executor(self._executor, _load_model)
 
             # Initialize context management
             self._token_counter = TokenCounter(self.llama)
@@ -676,7 +736,12 @@ class GGUFLanguageModel(BaseModel):
                 raise RuntimeError(f"Completion failed: {e}") from e
 
         try:
-            result = await loop.run_in_executor(self._executor, _generate)
+            # On unified memory platforms (Jetson, Apple Silicon), run synchronously
+            # to avoid ThreadPoolExecutor overhead in shared memory architecture
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
@@ -716,9 +781,13 @@ class GGUFLanguageModel(BaseModel):
         Raises:
             AssertionError: If model not loaded
         """
+        import time
+        _timing_start = time.perf_counter()
+
         assert self.llama is not None, "Model not loaded. Call load() first."
 
         max_tokens = max_tokens or 512
+        logger.info(f"[TIMING] generate() start, max_tokens={max_tokens}")
 
         # Try Jinja2 native tool rendering first (if tools provided)
         if tools:
@@ -783,7 +852,13 @@ class GGUFLanguageModel(BaseModel):
                 raise RuntimeError(f"Chat completion failed: {e}") from e
 
         try:
-            result = await loop.run_in_executor(self._executor, _generate)
+            # On unified memory platforms (Jetson, Apple Silicon), run synchronously
+            # to avoid ThreadPoolExecutor overhead in shared memory architecture.
+            # This provides both performance and stability benefits.
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
