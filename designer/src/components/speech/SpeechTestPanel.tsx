@@ -308,6 +308,19 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     }
   }, [mode, llmAvailable, voiceChat.messages, pcmToWavBlob])
 
+  // Clear transient errors when we receive a successful assistant response
+  // This prevents errors from intermediate failures (like streaming STT) from persisting
+  // when the overall conversation succeeds (via fallback paths)
+  const lastMessageCountRef = useRef(0)
+  useEffect(() => {
+    const assistantMessages = voiceChat.messages.filter(m => m.role === 'assistant')
+    if (assistantMessages.length > lastMessageCountRef.current) {
+      // New assistant message arrived - conversation succeeded, clear transient errors
+      setTranscriptionError(null)
+    }
+    lastMessageCountRef.current = assistantMessages.length
+  }, [voiceChat.messages])
+
   // Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {

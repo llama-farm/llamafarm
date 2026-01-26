@@ -593,6 +593,20 @@ class VoiceChatService:
 
         return messages
 
+    async def _send_error_and_reset(self, websocket: WebSocket, error_msg: str) -> None:
+        """Send error message to client and reset session state.
+
+        Args:
+            websocket: Client WebSocket connection.
+            error_msg: User-friendly error message to send.
+        """
+        try:
+            await websocket.send_json(ErrorMessage(message=error_msg).model_dump())
+            await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+        except Exception:
+            pass  # WebSocket might be closed
+        self.session.set_state(VoiceState.IDLE)
+
     def _filter_thinking_tags(self, text: str) -> str:
         """Filter out <think>...</think> tags from text.
 
@@ -1244,20 +1258,41 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during turn: {e}", exc_info=True)
+            # Check for specific model-not-loaded errors
+            if "not loaded" in error_str.lower():
+                error_msg = f"Model not ready: {error_str}. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = f"Processing error: {error_str}"
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            try:
-                await websocket.send_json(
-                    ErrorMessage(
-                        message="An error occurred while processing your request. Please try again."
-                    ).model_dump()
-                )
-                # Send status update so frontend knows we're back to idle
-                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
-            except Exception:
-                pass  # WebSocket might be closed
-            self.session.set_state(VoiceState.IDLE)
+            # Provide contextual error message based on exception content
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = f"Model error: {error_str}"
+            else:
+                # Generic fallback with the actual error for debugging
+                error_msg = f"Failed to process request: {error_str}"
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def process_turn_native_audio(
         self, websocket: WebSocket, audio_bytes: bytes
@@ -1457,20 +1492,38 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during native audio turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during native audio turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during native audio turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during native audio turn: {e}", exc_info=True)
+            if "not loaded" in error_str.lower():
+                error_msg = f"Model not ready: {error_str}. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = f"Processing error: {error_str}"
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            try:
-                await websocket.send_json(
-                    ErrorMessage(
-                        message="An error occurred while processing your audio. Please try again."
-                    ).model_dump()
-                )
-                # Send status update so frontend knows we're back to idle
-                await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
-            except Exception:
-                pass  # WebSocket might be closed
-            self.session.set_state(VoiceState.IDLE)
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = f"Model error: {error_str}"
+            else:
+                error_msg = f"Failed to process audio: {error_str}"
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def stream_llm_response_with_audio(
         self, audio_bytes: bytes
