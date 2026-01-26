@@ -7,25 +7,27 @@ import gc
 import pytest
 import torch
 
-# Run GC before starting test session to prevent GC during model imports
-# This helps avoid segfaults on Python 3.12+ with transformers/torch
+# Disable automatic garbage collection for the entire test session.
+# On Python 3.11+ in CI environments, GC during or after tests involving
+# torch/numpy/scipy can cause segfaults due to C extension module interactions.
+# The GC is triggered during pytest's fixture teardown, which crashes the process.
+gc.disable()
+
+# Run one final GC while it's still safe (before any torch models are loaded)
 gc.collect()
 
 
-@pytest.fixture(autouse=True, scope="function")
-def gc_between_tests():
-    """Manage garbage collection to prevent segfaults with torch/numpy.
+@pytest.fixture(autouse=True, scope="session")
+def gc_disabled_for_session():
+    """Keep GC disabled for the entire test session to prevent segfaults.
 
-    On Python 3.11+ in CI environments, garbage collection during or after
-    tests involving torch/numpy/scipy can cause segfaults due to C extension
-    module interactions. We disable automatic GC during tests and only run
-    it at controlled points.
+    This is necessary because pytest's fixture teardown triggers GC,
+    and torch/numpy/scipy objects can cause segfaults when collected
+    in CI environments with Python 3.11+.
     """
-    # Disable automatic GC during the test
-    gc.disable()
+    # GC is already disabled at module load time
     yield
-    # Re-enable GC but don't force a collection (let Python handle it naturally)
-    gc.enable()
+    # Don't re-enable GC - let the process exit cleanly
 
 
 @pytest.fixture(scope="session")
