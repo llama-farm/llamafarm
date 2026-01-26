@@ -442,7 +442,8 @@ jobs:
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
             LIB_NAME="libllama.dylib"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
             LIB_NAME="llama.dll"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
@@ -907,7 +908,8 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
           fi
