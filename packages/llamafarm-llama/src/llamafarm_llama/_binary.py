@@ -430,13 +430,19 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
         logger.debug(f"Symlink resolution failed, searching for versioned library")
         # Look for versioned files like libllama.so.0.0.7694 or libllama.0.0.7694.dylib
         if lib_name.endswith(".so"):
-            # Linux: libllama.so.X.Y.Z
+            # Linux: libllama.so.X.Y.Z (e.g., libllama.so.0.0.7694)
             base = lib_name[:-3]  # Remove .so
-            versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*"))
+            # Use multiple patterns to find versioned files
+            versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*.[0-9]*.[0-9]*"))
+            if not versioned_candidates:
+                versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*"))
         elif lib_name.endswith(".dylib"):
-            # macOS: libllama.X.Y.Z.dylib
+            # macOS: libllama.X.Y.Z.dylib (e.g., libllama.0.0.7694.dylib)
             base = lib_name[:-6]  # Remove .dylib
-            versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*dylib"))
+            # Use multiple patterns to find versioned files
+            versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*.[0-9]*.[0-9]*.dylib"))
+            if not versioned_candidates:
+                versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*.dylib"))
         else:
             versioned_candidates = []
 
