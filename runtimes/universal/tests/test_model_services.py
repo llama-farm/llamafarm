@@ -351,5 +351,9 @@ class TestAutoencoderEarlyStopping:
         await model.fit(data, epochs=50, batch_size=32, use_executor=False)
 
         # Model should be in eval mode with best weights restored
-        assert not model._encoder.training
-        assert not model._decoder.training
+        # The encoder/decoder are on the PyOD detector, not the AnomalyModel
+        detector = model.detector
+        assert hasattr(detector, "model_"), "Detector should have model_ after fitting"
+        # PyOD AutoEncoder stores the torch model in model_
+        if hasattr(detector.model_, "training"):
+            assert not detector.model_.training, "Model should be in eval mode"
