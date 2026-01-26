@@ -12,7 +12,25 @@ Run:
     uv run python ../../examples/anomaly/01_quick_start.py
 """
 
+import os
 import httpx
+from pathlib import Path
+
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/")
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
+    return "http://localhost:8000"
+
+BASE_URL = get_llamafarm_url()
 
 # Training data - normal examples
 train_data = [
@@ -32,13 +50,13 @@ test_data = [
 # Step 1: Fit the model on normal data only
 client = httpx.Client(timeout=30)
 client.post(
-    "http://localhost:11545/v1/anomaly/fit",
+    f"{BASE_URL}/v1/ml/anomaly/fit",
     json={"data": train_data, "backend": "ecod", "model": "quickstart"},
 )
 
 # Step 2: Score test data (includes anomaly)
 response = client.post(
-    "http://localhost:11545/v1/anomaly/score",
+    f"{BASE_URL}/v1/ml/anomaly/score",
     json={"data": test_data, "backend": "ecod", "model": "quickstart"},
 )
 result = response.json()

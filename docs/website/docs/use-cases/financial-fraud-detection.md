@@ -53,7 +53,7 @@ Fraud detection requires rich features. Use Polars buffers for per-user behavior
 import httpx
 import asyncio
 
-LLAMAFARM_URL = "http://localhost:8005/v1/ml"
+LLAMAFARM_URL = "http://localhost:8000/v1/ml"
 
 async def setup_user_buffer(user_id: str):
     """Create a per-user behavior buffer."""
@@ -437,7 +437,7 @@ import httpx
 import random
 from datetime import datetime, timedelta
 
-LLAMAFARM_URL = "http://localhost:8005/v1/ml"
+LLAMAFARM_URL = "http://localhost:8000/v1/ml"
 
 async def simulate_transaction() -> dict:
     """Generate realistic transaction data."""

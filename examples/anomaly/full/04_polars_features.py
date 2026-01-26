@@ -18,12 +18,28 @@ Prerequisites:
 """
 
 import asyncio
+import os
 import random
 import httpx
 from datetime import datetime
+from pathlib import Path
 
-# Configuration
-LLAMAFARM_URL = "http://localhost:8005/v1/ml"
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/") + "/v1/ml"
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    url = line.split("=", 1)[1].strip().strip('"\'')
+                    return url.rstrip("/") + "/v1/ml"
+    return "http://localhost:8000/v1/ml"
+
+LLAMAFARM_URL = get_llamafarm_url()
 BUFFER_ID = "sensor-analysis"
 WINDOW_SIZE = 100
 NUM_SAMPLES = 50

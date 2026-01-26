@@ -57,17 +57,17 @@ uv run python examples/anomaly/01_quick_start.py
 
 ```bash
 # Fit a model
-curl -X POST http://localhost:11545/v1/anomaly/fit \
+curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"data": [[1,2], [1,2.1], [10,20]], "backend": "ecod"}'
 
 # Score new data
-curl -X POST http://localhost:11545/v1/anomaly/score \
+curl -X POST http://localhost:8000/v1/ml/anomaly/score \
   -H "Content-Type: application/json" \
   -d '{"data": [[1,2], [100,200]], "backend": "ecod"}'
 
 # One-shot detect (fit + score)
-curl -X POST http://localhost:11545/v1/anomaly/detect \
+curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"data": [[1,2], [1,2.1], [100,200]], "backend": "ecod"}'
 ```
@@ -76,33 +76,33 @@ curl -X POST http://localhost:11545/v1/anomaly/detect \
 
 ```bash
 # Stream a data point (creates detector on first call)
-curl -X POST http://localhost:11545/v1/anomaly/stream \
+curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{"model_id": "my-sensor", "data": {"temp": 45.0, "vibration": 0.5}}'
 
 # List active detectors
-curl http://localhost:11545/v1/anomaly/stream/detectors
+curl http://localhost:8000/v1/ml/anomaly/stream/detectors
 
 # Get detector stats
-curl http://localhost:11545/v1/anomaly/stream/my-sensor
+curl http://localhost:8000/v1/ml/anomaly/stream/my-sensor
 
 # Reset a detector
-curl -X POST http://localhost:11545/v1/anomaly/stream/my-sensor/reset
+curl -X POST http://localhost:8000/v1/ml/anomaly/stream/my-sensor/reset
 ```
 
 ### Model Management
 
 ```bash
 # List saved models
-curl http://localhost:11545/v1/anomaly/models
+curl http://localhost:8000/v1/ml/anomaly/models
 
 # Load a saved model
-curl -X POST http://localhost:11545/v1/anomaly/load \
+curl -X POST http://localhost:8000/v1/ml/anomaly/load \
   -H "Content-Type: application/json" \
   -d '{"model": "fraud-detector", "backend": "ecod"}'
 
 # Get model info
-curl http://localhost:11545/v1/anomaly/models/fraud-detector_ecod.joblib
+curl http://localhost:8000/v1/ml/anomaly/models/fraud-detector_ecod.joblib
 ```
 
 ## Architecture

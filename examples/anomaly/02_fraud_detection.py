@@ -17,10 +17,26 @@ Run:
     uv run python examples/anomaly/02_fraud_detection.py
 """
 
+import os
 import random
 import httpx
+from pathlib import Path
 
-BASE_URL = "http://localhost:11545"
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/")
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
+    return "http://localhost:8000"
+
+BASE_URL = get_llamafarm_url()
 client = httpx.Client(timeout=60)
 
 
@@ -85,7 +101,7 @@ def main():
     # Step 2: Train the fraud detector using ECOD (fast, parameter-free)
     print("Step 2: Training fraud detector with ECOD backend...")
     response = client.post(
-        f"{BASE_URL}/v1/anomaly/fit",
+        f"{BASE_URL}/v1/ml/anomaly/fit",
         json={
             "model": "fraud-detector",
             "backend": "ecod",
@@ -114,7 +130,7 @@ def main():
     # Step 4: Score transactions in real-time
     print("Step 4: Scoring transactions for fraud...")
     response = client.post(
-        f"{BASE_URL}/v1/anomaly/score",
+        f"{BASE_URL}/v1/ml/anomaly/score",
         json={
             "model": "fraud-detector",
             "backend": "ecod",
@@ -143,7 +159,7 @@ def main():
 
     # Train Isolation Forest model
     response = client.post(
-        f"{BASE_URL}/v1/anomaly/fit",
+        f"{BASE_URL}/v1/ml/anomaly/fit",
         json={
             "model": "fraud-detector-iforest",
             "backend": "isolation_forest",
@@ -156,7 +172,7 @@ def main():
 
     # Score with Isolation Forest
     response = client.post(
-        f"{BASE_URL}/v1/anomaly/score",
+        f"{BASE_URL}/v1/ml/anomaly/score",
         json={
             "model": "fraud-detector-iforest",
             "backend": "isolation_forest",
@@ -179,7 +195,7 @@ def main():
     # Step 6: Production usage - load saved model
     print("Step 6: Loading saved model for production...")
     response = client.post(
-        f"{BASE_URL}/v1/anomaly/load",
+        f"{BASE_URL}/v1/ml/anomaly/load",
         json={
             "model": "fraud-detector",
             "backend": "ecod",

@@ -110,7 +110,7 @@ The `fill_null(0.0)` ensures your model always receives valid numeric vectors, e
 ### Create a Buffer
 
 ```bash
-curl -X POST http://localhost:8005/v1/ml/polars/buffers \
+curl -X POST http://localhost:8000/v1/ml/polars/buffers \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -132,7 +132,7 @@ Response:
 
 ```bash
 # Single record
-curl -X POST http://localhost:8005/v1/ml/polars/append \
+curl -X POST http://localhost:8000/v1/ml/polars/append \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -140,7 +140,7 @@ curl -X POST http://localhost:8005/v1/ml/polars/append \
   }'
 
 # Batch append (more efficient)
-curl -X POST http://localhost:8005/v1/ml/polars/append \
+curl -X POST http://localhost:8000/v1/ml/polars/append \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -166,7 +166,7 @@ Response:
 ### Compute Rolling Features
 
 ```bash
-curl -X POST http://localhost:8005/v1/ml/polars/features \
+curl -X POST http://localhost:8000/v1/ml/polars/features \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -376,7 +376,7 @@ class CustomFeaturePipeline:
 
     def __init__(self, buffer_id: str = "custom-features"):
         self.buffer_id = buffer_id
-        self.base_url = "http://localhost:8005/v1/ml/polars"
+        self.base_url = "http://localhost:8000/v1/ml/polars"
         self.client = httpx.AsyncClient()
 
     async def initialize(self, window_size: int = 500):

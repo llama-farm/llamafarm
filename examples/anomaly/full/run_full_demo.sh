@@ -7,6 +7,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
+# Configuration - uses environment variable or .env file, falls back to default
+LLAMAFARM_PORT="${LLAMAFARM_PORT:-8000}"
+RUNTIME_PORT="${RUNTIME_PORT:-11540}"
+
+# Load from .env if exists
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs)
+fi
+
+# Extract port from LLAMAFARM_URL if set
+if [ -n "$LLAMAFARM_URL" ]; then
+    LLAMAFARM_PORT=$(echo "$LLAMAFARM_URL" | sed -E 's|.*:([0-9]+).*|\1|')
+fi
+
+export LLAMAFARM_URL="${LLAMAFARM_URL:-http://localhost:$LLAMAFARM_PORT}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -39,8 +55,8 @@ cleanup() {
     print_step "Stopping servers..."
 
     # Kill by port
-    lsof -ti:8005 2>/dev/null | xargs kill -9 2>/dev/null || true
-    lsof -ti:11540 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -ti:$LLAMAFARM_PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -ti:$RUNTIME_PORT 2>/dev/null | xargs kill -9 2>/dev/null || true
 
     # Kill nx processes
     pkill -9 -f "nx start universal-runtime" 2>/dev/null || true
@@ -99,14 +115,14 @@ nx start universal-runtime > /tmp/universal-runtime.log 2>&1 &
 RUNTIME_PID=$!
 
 # Wait for Universal Runtime to be ready (polling instead of fixed sleep)
-wait_for_server "http://localhost:11540/health" "Universal Runtime"
+wait_for_server "http://localhost:$RUNTIME_PORT/health" "Universal Runtime"
 
 print_step "Starting LlamaFarm Server..."
 nx start server > /tmp/llamafarm-server.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for LlamaFarm Server to be ready
-wait_for_server "http://localhost:8005/health" "LlamaFarm Server"
+wait_for_server "http://localhost:$LLAMAFARM_PORT/health" "LlamaFarm Server"
 
 print_step "Both servers are running!"
 echo ""

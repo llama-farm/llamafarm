@@ -299,10 +299,12 @@ class StreamingAnomalyDetector:
                 rolling_windows=self.rolling_windows,
                 include_lags=self.include_lags,
                 lag_periods=self.lag_periods,
-                fill_null_value=0.0,  # Cold start handling
+                fill_null_value=0.0,  # Cold start handling for derived features
             )
             # Select only numeric columns for the model
             numeric_cols = [c for c in df.columns if df[c].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]]
+            # Fill nulls in base numeric columns too (handles missing data in input)
+            df = df.with_columns([pl.col(c).fill_null(0.0) for c in numeric_cols])
             X = df.select(numeric_cols).to_numpy()
         else:
             X = self._buffer.get_numpy()
@@ -349,9 +351,13 @@ class StreamingAnomalyDetector:
                 rolling_windows=self.rolling_windows,
                 include_lags=self.include_lags,
                 lag_periods=self.lag_periods,
+                fill_null_value=0.0,  # Cold start handling for derived features
             )
             # Get the last row (most recent, which includes the data point we just added)
-            latest = df.tail(1).select(self._feature_columns)
+            # Fill nulls in base columns and select only feature columns
+            latest = df.tail(1).with_columns(
+                [pl.col(c).fill_null(0.0) for c in self._feature_columns]
+            ).select(self._feature_columns)
             X = latest.to_numpy()
         else:
             # Convert to numpy array (raw numeric values)

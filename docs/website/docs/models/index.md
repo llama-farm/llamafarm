@@ -546,7 +546,7 @@ Beyond text generation, the Universal Runtime provides specialized ML capabiliti
 | **Text Classification** | `POST /v1/classify` | Sentiment analysis, routing |
 | **Named Entity Recognition** | `POST /v1/ner` | Extract people, places, organizations |
 | **Reranking** | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| **Anomaly Detection** | `POST /v1/anomaly/*` | Detect outliers in data |
+| **Anomaly Detection** | `POST /v1/ml/anomaly/*` | Detect outliers in data |
 
 See the detailed guides:
 - [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking

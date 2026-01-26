@@ -215,15 +215,17 @@ class AnomalyModel(BaseModel):
         logger.info(f"Loading anomaly model: {self.backend}")
 
         model_path = Path(self.model_id)
-        if model_path.exists() and model_path.suffix in (".pkl", ".joblib"):
+        # Validate path BEFORE checking existence to prevent path traversal attacks
+        if model_path.suffix in (".pkl", ".joblib"):
             try:
                 validated_path = _validate_model_path(model_path)
-                await self._load_pretrained(validated_path)
+                if validated_path.exists():
+                    await self._load_pretrained(validated_path)
+                    return
             except ValueError as e:
-                logger.error(f"Security validation failed: {e}")
-                raise
-        else:
-            await self._initialize_backend()
+                logger.warning(f"Path validation failed, initializing fresh model: {e}")
+
+        await self._initialize_backend()
 
         logger.info(f"Anomaly model initialized: {self.backend}")
 

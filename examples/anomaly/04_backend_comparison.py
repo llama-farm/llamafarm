@@ -32,11 +32,27 @@ Run:
     uv run python examples/anomaly/04_backend_comparison.py
 """
 
+import os
 import random
 import time
 import httpx
+from pathlib import Path
 
-BASE_URL = "http://localhost:11545"
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/")
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
+    return "http://localhost:8000"
+
+BASE_URL = get_llamafarm_url()
 client = httpx.Client(timeout=120)
 
 
@@ -67,7 +83,7 @@ def test_backend(backend: str, train_data: list, test_data: list) -> dict:
         # Fit
         start = time.perf_counter()
         response = client.post(
-            f"{BASE_URL}/v1/anomaly/fit",
+            f"{BASE_URL}/v1/ml/anomaly/fit",
             json={
                 "model": f"compare-{backend}",
                 "backend": backend,
@@ -83,7 +99,7 @@ def test_backend(backend: str, train_data: list, test_data: list) -> dict:
         # Score
         start = time.perf_counter()
         response = client.post(
-            f"{BASE_URL}/v1/anomaly/score",
+            f"{BASE_URL}/v1/ml/anomaly/score",
             json={
                 "model": f"compare-{backend}",
                 "backend": backend,
@@ -117,7 +133,7 @@ def main():
 
     # List available backends
     print("Step 1: Listing available backends...")
-    response = client.get(f"{BASE_URL}/v1/anomaly/backends")
+    response = client.get(f"{BASE_URL}/v1/ml/anomaly/backends")
     backends_info = response.json()
 
     print(f"\nAvailable backends ({backends_info['total']} total):")
