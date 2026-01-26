@@ -84,7 +84,17 @@ jobs:
           npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: npx nx@${{ env.NX_VERSION }} generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli --skip-nx-cache
+
+      - name: Verify types.go was generated correctly
+        run: |
+          if ! grep -q "LlamaFarmConfigPromptsElem" cli/cmd/config/types.go; then
+            echo "ERROR: types.go is missing LlamaFarmConfigPromptsElem"
+            echo "Contents of types.go:"
+            head -100 cli/cmd/config/types.go
+            exit 1
+          fi
+          echo "✓ types.go contains LlamaFarmConfigPromptsElem"
 
       - name: Create dist directory
         run: mkdir -p dist
