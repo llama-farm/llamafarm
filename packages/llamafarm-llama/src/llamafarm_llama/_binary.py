@@ -11,6 +11,7 @@ import platform
 import shlex
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 from importlib import metadata
@@ -53,44 +54,44 @@ def _get_llamafarm_release_version() -> str:
 
 # Binary URLs from llama.cpp GitHub releases
 # Format: https://github.com/ggml-org/llama.cpp/releases/download/{version}/{artifact}
-# Note: All releases are .zip format; paths vary by platform
+# Note: Starting from b7836+, Linux/macOS use .tar.gz format; Windows uses .zip
 BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
     # Linux x86_64
     ("linux", "x86_64", "cpu"): {
-        "artifact": "llama-{version}-bin-ubuntu-x64.zip",
+        "artifact": "llama-{version}-bin-ubuntu-x64.tar.gz",
         "lib": "build/bin/libllama.so",
         "sha256": None,  # Populated at release time
     },
     ("linux", "x86_64", "vulkan"): {
-        "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.zip",
+        "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.tar.gz",
         "lib": "build/bin/libllama.so",
         "sha256": None,
     },
     # Linux ARM64 (LlamaFarm provided - not available from upstream)
     ("linux", "arm64", "cpu"): {
-        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.zip",
+        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.tar.gz",
         "lib": "bin/libllama.so",
         "sha256": None,
     },
     # macOS
     ("darwin", "arm64", "metal"): {
-        "artifact": "llama-{version}-bin-macos-arm64.zip",
+        "artifact": "llama-{version}-bin-macos-arm64.tar.gz",
         "lib": "build/bin/libllama.dylib",
         "sha256": None,
     },
     ("darwin", "x86_64", "cpu"): {
-        "artifact": "llama-{version}-bin-macos-x64.zip",
+        "artifact": "llama-{version}-bin-macos-x64.tar.gz",
         "lib": "build/bin/libllama.dylib",
         "sha256": None,
     },
-    # Windows
+    # Windows (still uses .zip format)
     ("win32", "amd64", "cpu"): {
         "artifact": "llama-{version}-bin-win-cpu-x64.zip",
         "lib": "llama.dll",  # Windows: library is in root
         "sha256": None,
     },
     ("win32", "amd64", "cuda12"): {
-        "artifact": "llama-{version}-bin-win-cuda12.4-x64.zip",
+        "artifact": "llama-{version}-bin-win-cuda-12.4-x64.zip",
         "lib": "llama.dll",
         "sha256": None,
     },
@@ -339,6 +340,30 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
         z.extractall(dest_dir)
 
 
+def _safe_extract_tarball(tar_path: Path, dest_dir: Path) -> None:
+    """Safely extract a tarball, preventing path traversal attacks.
+
+    Validates that all extracted paths stay within the destination directory.
+    """
+    dest_dir = dest_dir.resolve()
+
+    with tarfile.open(tar_path, "r:gz") as tf:
+        for member in tf.getmembers():
+            # Resolve the target path
+            member_path = (dest_dir / member.name).resolve()
+
+            # Ensure the resolved path is within dest_dir
+            try:
+                member_path.relative_to(dest_dir)
+            except ValueError:
+                raise RuntimeError(
+                    f"Path traversal detected: {member.name!r} would extract outside target directory"
+                )
+
+        # All paths validated, safe to extract
+        tf.extractall(dest_dir)
+
+
 def _get_cache_dir() -> Path:
     """Get cache directory for downloaded binaries."""
     if os.environ.get("LLAMAFARM_CACHE_DIR"):
@@ -504,12 +529,14 @@ def download_binary(
                     f"Checksum mismatch: expected {manifest['sha256']}, got {actual}"
                 )
 
-        # Extract (all llama.cpp releases are .zip format)
+        # Extract archive (Linux/macOS use .tar.gz, Windows uses .zip)
         extract_dir = tmpdir_path / "extracted"
         extract_dir.mkdir()
 
         if artifact.endswith(".zip"):
             _safe_extract_zip(archive_path, extract_dir)
+        elif artifact.endswith(".tar.gz") or artifact.endswith(".tgz"):
+            _safe_extract_tarball(archive_path, extract_dir)
         else:
             raise RuntimeError(f"Unknown archive format: {artifact}")
 

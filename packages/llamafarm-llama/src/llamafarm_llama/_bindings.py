@@ -134,7 +134,7 @@ LLAMA_CDEF = """
         bool no_host;
     };
 
-    // Context parameters - must match llama.cpp b7693 layout exactly
+    // Context parameters - must match llama.cpp b7693+ layout exactly
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
