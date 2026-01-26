@@ -59,8 +59,8 @@
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "@vitest/coverage-v8": "^1.1.0",
-    "@vitest/ui": "^1.1.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.16",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -81,7 +81,7 @@
     "tsx": "^4.20.6",
     "typescript": "^5.2.2",
     "vite": "^6.3.5",
-    "vitest": "^1.1.0"
+    "vitest": "^4.0.18"
   },
   "overrides": {
     "strip-ansi": "^7.1.2"
