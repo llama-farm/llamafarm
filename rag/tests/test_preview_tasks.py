@@ -154,7 +154,7 @@ rag:
         from tasks.preview_tasks import preview_document_task
 
         # Call with overrides
-        _result = preview_document_task(
+        preview_document_task(
             project_dir=str(mock_project_dir),
             file_path=str(sample_file),
             database="default",

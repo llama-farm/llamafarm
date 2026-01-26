@@ -154,7 +154,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        _result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_size_override=100,
@@ -176,7 +176,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        _result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_overlap_override=50,
@@ -197,7 +197,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        _result = handler.generate_preview(
+        handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_strategy_override="sentences",

@@ -1986,14 +1986,12 @@ name = "llamafarm-common"
 version = "0.1.0"
 source = { editable = "../../common" }
 dependencies = [
-    { name = "filelock", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "hf-transfer", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "huggingface-hub", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "filelock", specifier = ">=3.16.1" },
     { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "huggingface-hub", specifier = ">=0.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
@@ -5869,7 +5867,7 @@ requires-dist = [
     { name = "paddleocr", marker = "extra == 'ocr-paddleocr'", specifier = ">=2.7.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pocket-tts", marker = "extra == 'tts-pocket'", specifier = ">=0.1.0" },
-    { name = "protobuf", specifier = ">=5.29.3" },
+    { name = "protobuf", specifier = ">=6.33.1" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydub", marker = "extra == 'tts'", specifier = ">=0.25.0" },
