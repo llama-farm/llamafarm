@@ -379,7 +379,7 @@ func newChatModel(projectInfo *config.ProjectInfo, initialMode SessionMode) chat
 	var availableModels []ModelInfo
 	var availableDatabases *DatabasesResponse
 	var availableDatasets []DatasetBrief
-	var availablePrompts []config.PromptSet
+	var availablePrompts []config.LlamaFarmConfigPromptsElem
 	var currentModel string
 	var currentDatabase string
 	var currentStrategy string

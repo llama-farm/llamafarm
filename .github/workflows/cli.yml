@@ -88,13 +88,13 @@ jobs:
 
       - name: Verify types.go was generated correctly
         run: |
-          if ! grep -q "PromptSet" cli/cmd/config/types.go; then
-            echo "ERROR: types.go is missing PromptSet type"
+          if ! grep -q "LlamaFarmConfigPromptsElem" cli/cmd/config/types.go; then
+            echo "ERROR: types.go is missing LlamaFarmConfigPromptsElem type"
             echo "Contents of types.go:"
             head -100 cli/cmd/config/types.go
             exit 1
           fi
-          echo "✓ types.go contains PromptSet type"
+          echo "✓ types.go contains LlamaFarmConfigPromptsElem type"
 
       - name: Create dist directory
         run: mkdir -p dist
