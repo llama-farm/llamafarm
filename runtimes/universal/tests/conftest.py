@@ -7,7 +7,6 @@ import gc
 import pytest
 import torch
 
-
 # Run GC before starting test session to prevent GC during model imports
 # This helps avoid segfaults on Python 3.12+ with transformers/torch
 gc.collect()

@@ -71,7 +71,6 @@ from .pyod_backend import (
     get_all_backends,
     get_backends_response,
     get_decision_scores,
-    get_threshold,
     is_valid_backend,
 )
 

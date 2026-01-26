@@ -289,7 +289,11 @@ class StreamingAnomalyDetector:
 
         Uses rolling features if configured, otherwise uses raw numeric data.
         """
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         # Get data from buffer - optionally with rolling features
         if self.rolling_windows:
