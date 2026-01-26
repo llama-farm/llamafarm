@@ -1,7 +1,49 @@
 from typing import Literal
 
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# ============================================================================
+# Audio Content Types (for STT transcription)
+# ============================================================================
+
+
+class InputAudio(BaseModel):
+    """Audio data for input_audio content parts.
+
+    Audio content is automatically transcribed via STT before LLM processing.
+    """
+
+    data: str = Field(..., description="Base64-encoded audio data")
+    format: Literal["wav", "mp3", "pcm"] = Field(
+        default="wav", description="Audio format (wav recommended for best compatibility)"
+    )
+
+
+class AudioContentPart(BaseModel):
+    """Audio content part for messages with audio.
+
+    Audio is automatically transcribed via STT and the text is passed to the LLM.
+    """
+
+    type: Literal["input_audio"] = "input_audio"
+    input_audio: InputAudio
+
+
+class TextContentPart(BaseModel):
+    """Text content part for messages."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+# Union type for content parts in messages (text, audio, etc.)
+ContentPart = AudioContentPart | TextContentPart | dict
+
+
+# ============================================================================
+# Tool Calling Types
+# ============================================================================
 
 
 class FunctionCall(BaseModel):
@@ -99,3 +141,161 @@ class ChatCompletionResponse(BaseModel):
     thinking: ThinkingContent | None = None
     # Context usage information (extension field)
     x_context_usage: ContextUsageInfo | None = None
+
+
+# ============================================================================
+# Audio Content Extraction Utilities
+# ============================================================================
+
+
+def extract_audio_from_messages(
+    messages: list[ChatCompletionMessageParam],
+) -> list[tuple[int, InputAudio]]:
+    """Extract audio content parts from chat messages.
+
+    Scans messages for input_audio content parts and returns them with
+    their message index for later replacement if STT fallback is needed.
+
+    Args:
+        messages: List of chat completion messages
+
+    Returns:
+        List of (message_index, InputAudio) tuples for each audio part found
+    """
+    audio_parts: list[tuple[int, InputAudio]] = []
+
+    for idx, message in enumerate(messages):
+        # Skip if message is a string or has no content
+        if not isinstance(message, dict):
+            continue
+
+        content = message.get("content")
+        if content is None:
+            continue
+
+        # Handle list of content parts (multimodal message)
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "input_audio":
+                    audio_data = part.get("input_audio", {})
+                    if isinstance(audio_data, dict) and "data" in audio_data:
+                        audio_parts.append(
+                            (
+                                idx,
+                                InputAudio(
+                                    data=audio_data["data"],
+                                    format=audio_data.get("format", "wav"),
+                                ),
+                            )
+                        )
+
+    return audio_parts
+
+
+def has_audio_content(messages: list[ChatCompletionMessageParam]) -> bool:
+    """Check if any messages contain audio content.
+
+    Fast check without extracting the actual audio data.
+
+    Args:
+        messages: List of chat completion messages
+
+    Returns:
+        True if any message contains input_audio content
+    """
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+
+        content = message.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "input_audio":
+                    return True
+
+    return False
+
+
+def replace_audio_with_text(
+    messages: list[ChatCompletionMessageParam],
+    transcriptions: dict[int, str],
+) -> list[dict]:
+    """Replace audio content parts with transcribed text.
+
+    Used when falling back to STT for models that don't support direct audio.
+
+    Args:
+        messages: Original messages with audio content
+        transcriptions: Map of message_index -> transcribed text
+
+    Returns:
+        New messages list with audio replaced by text
+    """
+    result = []
+
+    for idx, message in enumerate(messages):
+        if not isinstance(message, dict):
+            result.append(message)
+            continue
+
+        content = message.get("content")
+
+        # If this message had audio and we have a transcription
+        if idx in transcriptions:
+            if isinstance(content, list):
+                # Build new content parts, replacing audio with text
+                new_parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "input_audio":
+                        # Replace with transcribed text
+                        new_parts.append({"type": "text", "text": transcriptions[idx]})
+                    else:
+                        new_parts.append(part)
+
+                # Consolidate text parts
+                consolidated = _consolidate_text_parts(new_parts)
+                result.append({**message, "content": consolidated})
+            else:
+                # Simple string content - shouldn't happen but handle it
+                result.append(message)
+        else:
+            result.append(dict(message) if isinstance(message, dict) else message)
+
+    return result
+
+
+def _consolidate_text_parts(parts: list[dict]) -> str | list[dict]:
+    """Consolidate adjacent text parts into a single string if possible.
+
+    If the result is all text parts, returns a simple string.
+    Otherwise returns the list with adjacent text parts merged.
+    """
+    if not parts:
+        return ""
+
+    # Check if all parts are text
+    all_text = all(
+        isinstance(p, dict) and p.get("type") == "text" for p in parts
+    )
+
+    if all_text:
+        # Return simple string
+        return " ".join(p.get("text", "") for p in parts if isinstance(p, dict))
+
+    # Otherwise, merge adjacent text parts
+    result = []
+    current_text = []
+
+    for part in parts:
+        if isinstance(part, dict) and part.get("type") == "text":
+            current_text.append(part.get("text", ""))
+        else:
+            if current_text:
+                result.append({"type": "text", "text": " ".join(current_text)})
+                current_text = []
+            result.append(part)
+
+    if current_text:
+        result.append({"type": "text", "text": " ".join(current_text)})
+
+    return result

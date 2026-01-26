@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "huggingface_hub>=0.24.0",
     "hf-transfer>=0.1.9",  # High-speed downloads (set HF_HUB_ENABLE_HF_TRANSFER=1)
+    "filelock>=3.16.1",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +21,19 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["llamafarm_common"]
+
+[tool.uv]
+# Ensure dependencies come from PyPI, not from UV_EXTRA_INDEX_URL (PyTorch CPU index)
+# This prevents issues where the PyTorch index has incompatible versions of common packages
+index-url = "https://pypi.org/simple"
+
+# Ensure dependencies resolve correctly on all target platforms
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

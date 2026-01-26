@@ -511,7 +511,7 @@ async def websocket_transcription(
         speech_model = await load_speech(model_id=model)
 
         if speech_model is None:
-            await websocket.send_json({"error": "Failed to load speech model"})
+            await websocket.send_json({"type": "error", "message": "Failed to load speech model"})
             await websocket.close(code=1011)
             return
 
@@ -553,9 +553,10 @@ async def websocket_transcription(
                             word_timestamps=word_timestamps,
                         )
 
-                        # Send transcription result
+                        # Send transcription result as segment
                         await websocket.send_json(
                             {
+                                "type": "segment",
                                 "text": result.text,
                                 "duration": buffer_duration,
                                 "is_final": False,
@@ -589,8 +590,10 @@ async def websocket_transcription(
                             word_timestamps=word_timestamps,
                         )
 
+                        # Send final segment
                         await websocket.send_json(
                             {
+                                "type": "segment",
                                 "text": result.text,
                                 "duration": len(audio_buffer) / bytes_per_second,
                                 "is_final": True,
@@ -600,6 +603,8 @@ async def websocket_transcription(
                     finally:
                         Path(tmp_path).unlink(missing_ok=True)
 
+                # Signal completion
+                await websocket.send_json({"type": "done"})
                 break
 
         await websocket.close()
@@ -607,7 +612,7 @@ async def websocket_transcription(
     except Exception as e:
         logger.error(f"WebSocket transcription error: {e}", exc_info=True)
         try:
-            await websocket.send_json({"error": str(e)})
+            await websocket.send_json({"type": "error", "message": str(e)})
             await websocket.close(code=1011)
         except Exception:
             pass

@@ -120,6 +120,10 @@ curl http://localhost:8000/health
 curl http://localhost:8000/health/liveness
 ```
 
+## Platform-Specific Guides
+
+- [NVIDIA Jetson](./jetson.md) – Deploy on Jetson Orin, Xavier, TX2, Nano with CUDA acceleration
+
 ## Resources
 
 - [Quickstart](../quickstart/index.md) – Local installation steps

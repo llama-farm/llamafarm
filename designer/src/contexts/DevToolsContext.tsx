@@ -29,6 +29,32 @@ export interface CapturedRequest {
   error?: string
 }
 
+// WebSocket message direction
+export type WebSocketDirection = 'send' | 'receive'
+
+// WebSocket message types
+export interface CapturedWebSocketMessage {
+  id: string
+  connectionId: string
+  direction: WebSocketDirection
+  timestamp: number
+  data: any // Parsed JSON or raw string/binary indicator
+  isBinary: boolean
+  size: number // Bytes
+}
+
+// WebSocket connection state
+export interface CapturedWebSocket {
+  id: string
+  url: string
+  status: 'connecting' | 'open' | 'closed' | 'error'
+  openedAt: number
+  closedAt?: number
+  error?: string
+  messages: CapturedWebSocketMessage[]
+  messageCount: number
+}
+
 type ActiveTab = 'request' | 'response' | 'code'
 
 interface DevToolsContextValue {
@@ -37,6 +63,10 @@ interface DevToolsContextValue {
   selectedRequest: CapturedRequest | null
   isExpanded: boolean
   activeTab: ActiveTab
+
+  // WebSocket state
+  webSockets: CapturedWebSocket[]
+  selectedWebSocket: CapturedWebSocket | null
 
   // Actions
   captureRequest: (req: Omit<CapturedRequest, 'streamChunks' | 'streamComplete'>) => void
@@ -57,6 +87,12 @@ interface DevToolsContextValue {
   setIsExpanded: (expanded: boolean) => void
   setActiveTab: (tab: ActiveTab) => void
   clearHistory: () => void
+
+  // WebSocket actions
+  captureWebSocketOpen: (id: string, url: string) => void
+  captureWebSocketMessage: (connectionId: string, direction: WebSocketDirection, data: any, isBinary: boolean, size: number) => void
+  captureWebSocketClose: (id: string, error?: string) => void
+  selectWebSocket: (ws: CapturedWebSocket | null) => void
 }
 
 const DevToolsContext = createContext<DevToolsContextValue | null>(null)
@@ -96,6 +132,10 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
   })
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('request')
+
+  // WebSocket state
+  const [webSockets, setWebSockets] = useState<CapturedWebSocket[]>([])
+  const [selectedWebSocket, setSelectedWebSocket] = useState<CapturedWebSocket | null>(null)
 
   // Persist expanded state
   useEffect(() => {
@@ -236,9 +276,78 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
     setSelectedRequest(request)
   }, [])
 
+  // WebSocket callbacks
+  const captureWebSocketOpen = useCallback((id: string, url: string) => {
+    const newWs: CapturedWebSocket = {
+      id,
+      url,
+      status: 'open',
+      openedAt: Date.now(),
+      messages: [],
+      messageCount: 0,
+    }
+    setWebSockets(prev => [newWs, ...prev].slice(0, MAX_REQUESTS))
+    setSelectedWebSocket(newWs)
+  }, [])
+
+  const captureWebSocketMessage = useCallback(
+    (connectionId: string, direction: WebSocketDirection, data: any, isBinary: boolean, size: number) => {
+      const message: CapturedWebSocketMessage = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        connectionId,
+        direction,
+        timestamp: Date.now(),
+        data,
+        isBinary,
+        size,
+      }
+      setWebSockets(prev =>
+        prev.map(ws => {
+          if (ws.id !== connectionId) return ws
+          const updated: CapturedWebSocket = {
+            ...ws,
+            messages: [...ws.messages, message].slice(-100), // Keep last 100 messages per connection
+            messageCount: ws.messageCount + 1,
+          }
+          // Update selected if this is the selected WebSocket
+          setSelectedWebSocket(current =>
+            current?.id === connectionId ? updated : current
+          )
+          return updated
+        })
+      )
+    },
+    []
+  )
+
+  const captureWebSocketClose = useCallback((id: string, error?: string) => {
+    setWebSockets(prev =>
+      prev.map(ws => {
+        if (ws.id !== id) return ws
+        const updated: CapturedWebSocket = {
+          ...ws,
+          status: error ? 'error' : 'closed',
+          closedAt: Date.now(),
+          error,
+        }
+        // Update selected if this is the selected WebSocket
+        setSelectedWebSocket(current =>
+          current?.id === id ? updated : current
+        )
+        return updated
+      })
+    )
+  }, [])
+
+  const selectWebSocket = useCallback((ws: CapturedWebSocket | null) => {
+    setSelectedWebSocket(ws)
+  }, [])
+
   const clearHistory = useCallback(() => {
     setRequests([])
     setSelectedRequest(null)
+    setWebSockets([])
+    setSelectedWebSocket(null)
     try {
       sessionStorage.removeItem(STORAGE_KEY)
     } catch {
@@ -250,15 +359,21 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
   const captureRequestRef = useRef(captureRequest)
   const updateResponseRef = useRef(updateResponse)
   const setErrorRef = useRef(setError)
+  const captureWebSocketOpenRef = useRef(captureWebSocketOpen)
+  const captureWebSocketMessageRef = useRef(captureWebSocketMessage)
+  const captureWebSocketCloseRef = useRef(captureWebSocketClose)
 
   // Keep refs in sync with latest callbacks
   useEffect(() => {
     captureRequestRef.current = captureRequest
     updateResponseRef.current = updateResponse
     setErrorRef.current = setError
-  }, [captureRequest, updateResponse, setError])
+    captureWebSocketOpenRef.current = captureWebSocketOpen
+    captureWebSocketMessageRef.current = captureWebSocketMessage
+    captureWebSocketCloseRef.current = captureWebSocketClose
+  }, [captureRequest, updateResponse, setError, captureWebSocketOpen, captureWebSocketMessage, captureWebSocketClose])
 
-  // Subscribe to global DevTools emitter for axios interceptor events
+  // Subscribe to global DevTools emitter for axios interceptor and WebSocket events
   useEffect(() => {
     const unsubscribe = devToolsEmitter.subscribe(event => {
       switch (event.type) {
@@ -271,6 +386,15 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
         case 'error':
           setErrorRef.current(event.id, event.error)
           break
+        case 'ws_open':
+          captureWebSocketOpenRef.current(event.id, event.url)
+          break
+        case 'ws_message':
+          captureWebSocketMessageRef.current(event.connectionId, event.direction, event.data, event.isBinary, event.size)
+          break
+        case 'ws_close':
+          captureWebSocketCloseRef.current(event.id, event.error)
+          break
       }
     })
 
@@ -282,6 +406,8 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
     selectedRequest,
     isExpanded,
     activeTab,
+    webSockets,
+    selectedWebSocket,
     captureRequest,
     updateResponse,
     addStreamChunk,
@@ -291,6 +417,10 @@ export function DevToolsProvider({ children }: DevToolsProviderProps) {
     setIsExpanded,
     setActiveTab,
     clearHistory,
+    captureWebSocketOpen,
+    captureWebSocketMessage,
+    captureWebSocketClose,
+    selectWebSocket,
   }
 
   return (

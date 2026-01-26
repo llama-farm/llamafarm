@@ -15,6 +15,10 @@ declare module 'axios' {
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 const API_HOST = (import.meta.env as any).VITE_APP_API_URL as string | undefined
 
+// Universal Runtime URL for direct TTS/STT calls
+// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+const RUNTIME_BASE_URL = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://127.0.0.1:11540'
+
 function resolveBaseUrl(): string {
   // 1) Explicit host from env
   if (API_HOST && typeof API_HOST === 'string' && API_HOST.trim().length > 0) {
@@ -25,7 +29,8 @@ function resolveBaseUrl(): string {
       typeof window !== 'undefined' &&
       window.location.hostname === 'localhost'
     ) {
-      base = `http://localhost:8000/${API_VERSION}`
+      // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+      base = `http://127.0.0.1:8000/${API_VERSION}`
     }
     return base
   }
@@ -35,7 +40,8 @@ function resolveBaseUrl(): string {
     typeof window !== 'undefined' &&
     window.location.hostname === 'localhost'
   ) {
-    return `http://localhost:8000/${API_VERSION}`
+    // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
+    return `http://127.0.0.1:8000/${API_VERSION}`
   }
 
   // 3) Default to vite proxy
@@ -137,99 +143,86 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 60000, // Timeout for API operations (60 seconds)
 })
 
-// =============================================================================
-// DevTools Request Interceptor - Captures outgoing requests
-// =============================================================================
-apiClient.interceptors.request.use(
-  config => {
-    // Only capture if DevTools has subscribers (context is mounted)
-    if (!devToolsEmitter.hasSubscribers()) {
-      return config
-    }
-
-    // Generate tracking ID and timestamp
-    const id = generateDevToolsId()
-    config._devToolsId = id
-    config._devToolsTimestamp = Date.now()
-
-    // Build full URL
-    const baseURL = config.baseURL || ''
-    const url = config.url || ''
-    const fullUrl = url.startsWith('http') ? url : `${baseURL}${url}`
-
-    // Determine HTTP method
-    const method = (config.method?.toUpperCase() || 'GET') as CapturedRequest['method']
-
-    // Emit request event
-    devToolsEmitter.emit({
-      type: 'request',
-      request: {
-        id,
-        requestId: null,
-        method,
-        url,
-        fullUrl,
-        headers: extractRequestHeaders(config),
-        body: extractRequestBody(config),
-        timestamp: config._devToolsTimestamp,
-        isStreaming: false, // Axios requests are not streaming (fetch is used for streaming)
-      },
-    })
-
-    return config
-  },
-  error => {
-    // Request setup errors are rare but possible
-    return Promise.reject(error)
-  }
-)
+/**
+ * Universal Runtime client for direct TTS/STT calls
+ * Uses the same DevTools interceptors as apiClient
+ */
+export const runtimeClient: AxiosInstance = axios.create({
+  baseURL: RUNTIME_BASE_URL,
+  timeout: 60000,
+})
 
 // =============================================================================
-// DevTools Response Interceptor - Captures responses (runs BEFORE error handler)
+// DevTools Interceptor Setup - Reusable for multiple axios instances
 // =============================================================================
-apiClient.interceptors.response.use(
-  response => {
-    const config = response.config
-    const id = config._devToolsId
 
-    // Only capture if we have a tracking ID
-    if (id && devToolsEmitter.hasSubscribers()) {
-      // Extract response headers
-      const headers: Record<string, string> = {}
-      if (response.headers) {
-        for (const [key, value] of Object.entries(response.headers)) {
-          if (typeof value === 'string') {
-            headers[key] = value
-          }
-        }
+/**
+ * Setup DevTools request/response interceptors for an axios instance
+ */
+function setupDevToolsInterceptors(client: AxiosInstance): void {
+  // Request interceptor - Captures outgoing requests
+  client.interceptors.request.use(
+    config => {
+      // Skip DevTools capture for health check endpoints (they poll frequently)
+      const requestUrl = config.url || ''
+      if (requestUrl === '/health' || requestUrl.endsWith('/health')) {
+        return config
       }
 
+      // Only capture if DevTools has subscribers (context is mounted)
+      if (!devToolsEmitter.hasSubscribers()) {
+        return config
+      }
+
+      // Generate tracking ID and timestamp
+      const id = generateDevToolsId()
+      config._devToolsId = id
+      config._devToolsTimestamp = Date.now()
+
+      // Build full URL
+      const baseURL = config.baseURL || ''
+      const url = config.url || ''
+      const fullUrl = url.startsWith('http') ? url : `${baseURL}${url}`
+
+      // Determine HTTP method
+      const method = (config.method?.toUpperCase() || 'GET') as CapturedRequest['method']
+
+      // Emit request event
       devToolsEmitter.emit({
-        type: 'response',
-        id,
-        response: {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-          body: response.data,
-          requestId: headers['x-request-id'] || headers['X-Request-ID'] || null,
+        type: 'request',
+        request: {
+          id,
+          requestId: null,
+          method,
+          url,
+          fullUrl,
+          headers: extractRequestHeaders(config),
+          body: extractRequestBody(config),
+          timestamp: config._devToolsTimestamp,
+          isStreaming: false, // Axios requests are not streaming (fetch is used for streaming)
         },
       })
+
+      return config
+    },
+    error => {
+      // Request setup errors are rare but possible
+      return Promise.reject(error)
     }
+  )
 
-    return response
-  },
-  (error: AxiosError) => {
-    // Capture error in DevTools before transforming it
-    const config = error.config
-    const id = config?._devToolsId
+  // Response interceptor - Captures responses
+  client.interceptors.response.use(
+    response => {
+      const config = response.config
+      const id = config._devToolsId
 
-    if (id && devToolsEmitter.hasSubscribers()) {
-      // If there's a response, capture it as an error response
-      if (error.response) {
+      // Only capture if we have a tracking ID
+      if (id && devToolsEmitter.hasSubscribers()) {
+        // Extract response headers
         const headers: Record<string, string> = {}
-        if (error.response.headers) {
-          for (const [key, value] of Object.entries(error.response.headers)) {
+        if (response.headers) {
+          for (const [key, value] of Object.entries(response.headers)) {
             if (typeof value === 'string') {
               headers[key] = value
             }
@@ -240,34 +233,81 @@ apiClient.interceptors.response.use(
           type: 'response',
           id,
           response: {
-            status: error.response.status,
-            statusText: error.response.statusText,
+            status: response.status,
+            statusText: response.statusText,
             headers,
-            body: error.response.data,
+            body: response.data,
             requestId: headers['x-request-id'] || headers['X-Request-ID'] || null,
           },
         })
-      } else {
-        // Network error or timeout - no response
-        devToolsEmitter.emit({
-          type: 'error',
-          id,
-          error: error.message || 'Network error',
-        })
       }
-    }
 
-    // Pass through to the next error handler
-    return Promise.reject(error)
-  }
-)
+      return response
+    },
+    (error: AxiosError) => {
+      // Capture error in DevTools before transforming it
+      const config = error.config
+      const id = config?._devToolsId
+
+      if (id && devToolsEmitter.hasSubscribers()) {
+        // If there's a response, capture it as an error response
+        if (error.response) {
+          const headers: Record<string, string> = {}
+          if (error.response.headers) {
+            for (const [key, value] of Object.entries(error.response.headers)) {
+              if (typeof value === 'string') {
+                headers[key] = value
+              }
+            }
+          }
+
+          devToolsEmitter.emit({
+            type: 'response',
+            id,
+            response: {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              headers,
+              body: error.response.data,
+              requestId: headers['x-request-id'] || headers['X-Request-ID'] || null,
+            },
+          })
+        } else {
+          // Network error or timeout - no response
+          devToolsEmitter.emit({
+            type: 'error',
+            id,
+            error: error.message || 'Network error',
+          })
+        }
+      }
+
+      // Pass through to the next error handler
+      return Promise.reject(error)
+    }
+  )
+}
+
+// Apply DevTools interceptors to both clients
+setupDevToolsInterceptors(apiClient)
+setupDevToolsInterceptors(runtimeClient)
 
 // =============================================================================
 // Error Transformation Interceptor - Converts errors to typed exceptions
+// (Only for apiClient - runtimeClient uses simpler error handling)
 // =============================================================================
 apiClient.interceptors.response.use(
   response => response,
   (error: AxiosError) => {
+    // Silently ignore canceled requests (e.g., from AbortController in React's StrictMode cleanup)
+    // These are intentional cancellations, not actual errors
+    if (error.code === 'ERR_CANCELED') {
+      // Re-throw as a special canceled error that callers can detect
+      const canceledError = new Error('Request was canceled')
+      ;(canceledError as any).isCanceled = true
+      throw canceledError
+    }
+
     if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK') {
       throw new NetworkError('Network error occurred', error)
     }

@@ -31,6 +31,7 @@ from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     AnomalyModel,
     BaseModel,
+    ChatterboxConfig,
     ClassifierModel,
     DocumentModel,
     EncoderModel,
@@ -39,6 +40,8 @@ from models import (
     LanguageModel,
     OCRModel,
     SpeechModel,
+    TTSModel,
+    VoiceProfile,
 )
 from routers.anomaly import (
     router as anomaly_router,
@@ -51,6 +54,8 @@ from routers.anomaly import (
 )
 from routers.audio import router as audio_router
 from routers.audio import set_speech_loader
+from routers.audio_chat import router as audio_chat_router
+from routers.audio_speech import router as audio_speech_router
 from routers.chat_completions import router as chat_completions_router
 from routers.classifier import (
     router as classifier_router,
@@ -96,6 +101,93 @@ json_logs = os.getenv("LOG_JSON_FORMAT", "false").lower() in ("true", "1", "yes"
 setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
 
 logger = UniversalRuntimeLogger("universal-runtime")
+
+
+def _init_llama_backend():
+    """Initialize llama.cpp backend in the main thread.
+
+    CRITICAL FOR STABILITY: On NVIDIA Jetson/Tegra devices with unified memory,
+    the CUDA backend MUST be initialized from the main thread before any worker
+    threads attempt to use it. Failure to do so causes a "double free or corruption"
+    crash during ggml_backend_load_all() when the CUDA backend tries to initialize
+    from a ThreadPoolExecutor worker.
+
+    This is a stability fix, NOT a performance optimization. It prevents crashes
+    by ensuring the CUDA context is created in the main thread where GPU state
+    management is most reliable on unified memory architectures.
+
+    Affected platforms:
+        - NVIDIA Jetson Orin Nano/NX (Tegra, unified memory)
+        - NVIDIA Jetson Xavier (Tegra, unified memory)
+        - Potentially other unified memory GPU systems
+
+    Technical details:
+        - ggml_backend_load_all() discovers and initializes compute backends
+        - On Tegra, CUDA initialization from worker threads can corrupt internal state
+        - By initializing at module load time (main thread), we avoid this issue
+    """
+    try:
+        from llamafarm_llama._bindings import ensure_backend
+
+        logger.info("Initializing llama.cpp backend in main thread...")
+        ensure_backend()
+        logger.info("llama.cpp backend initialized successfully")
+    except ImportError:
+        logger.debug("llamafarm_llama not installed, skipping backend init")
+    except Exception as e:
+        logger.warning(f"Failed to initialize llama.cpp backend: {e}")
+
+
+# Initialize llama.cpp backend in main thread - REQUIRED for Jetson/Tegra CUDA stability
+# See _init_llama_backend() docstring for technical details on why this matters
+_init_llama_backend()
+
+
+def _preload_sklearn():
+    """Preload sklearn in the main thread to avoid segfaults on ARM64.
+
+    On Jetson/ARM64 with Python 3.13, importing sklearn's compiled extensions
+    concurrently with active llama.cpp CUDA operations can cause segfaults.
+    By importing sklearn at startup (before any requests), we avoid this issue.
+    """
+    try:
+        from sklearn.ensemble import IsolationForest  # noqa: F401
+
+        logger.info("sklearn preloaded successfully")
+    except ImportError:
+        logger.debug("sklearn not installed, skipping preload")
+    except Exception as e:
+        logger.warning(f"Failed to preload sklearn: {e}")
+
+
+# Preload sklearn in main thread - prevents segfaults on ARM64/Jetson
+_preload_sklearn()
+
+
+def _preload_async_backends():
+    """Preload async backends to avoid segfaults during streaming on ARM64.
+
+    On Jetson/ARM64 with Python 3.13, lazy imports during garbage collection
+    can cause segfaults. The anyio library lazily imports its async backend
+    (asyncio/trio) on first use (e.g., when StreamingResponse starts).
+
+    By importing these at startup, we ensure they're loaded before any
+    concurrent CUDA operations that might trigger GC during import.
+    """
+    try:
+        # Preload anyio's async backend - used by FastAPI StreamingResponse
+        import anyio._backends._asyncio  # noqa: F401
+        import anyio._core._eventloop  # noqa: F401
+
+        logger.info("anyio async backends preloaded successfully")
+    except ImportError:
+        logger.debug("anyio not installed, skipping preload")
+    except Exception as e:
+        logger.warning(f"Failed to preload anyio backends: {e}")
+
+
+# Preload async backends - prevents segfaults during streaming on ARM64/Jetson
+_preload_async_backends()
 
 
 @asynccontextmanager
@@ -170,6 +262,8 @@ app.add_middleware(
 # Include all routers
 app.include_router(anomaly_router)
 app.include_router(audio_router)
+app.include_router(audio_speech_router)
+app.include_router(audio_chat_router)
 app.include_router(chat_completions_router)
 app.include_router(classifier_router)
 app.include_router(files_router)
@@ -584,6 +678,14 @@ async def load_classifier(
 # Speech Model Loading
 # ============================================================================
 
+# Safe audio file extensions (whitelist for security)
+SAFE_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".flac", ".ogg", ".mp4", ".opus", ".pcm",
+})
+
+# Silence detection threshold for decoded Opus audio (higher due to noise floor)
+SILENCE_THRESHOLD_OPUS = 0.03
+
 
 def _make_speech_cache_key(model_id: str, compute_type: str | None = None) -> str:
     """Generate a cache key for a speech model."""
@@ -613,6 +715,104 @@ async def load_speech(
                 await model.load()
                 _models[cache_key] = model
 
+    return _models.get(cache_key)
+
+
+# ==============================================================================
+# TTS (Text-to-Speech) Model Loading
+# ==============================================================================
+
+
+def _make_tts_cache_key(
+    model_id: str,
+    voice: str,
+    voice_profile_path: str | None = None,
+) -> str:
+    """Generate cache key for TTS model.
+
+    Args:
+        model_id: TTS model identifier
+        voice: Default voice for the model
+        voice_profile_path: Path to voice profile audio (for Chatterbox)
+
+    Returns:
+        Cache key string
+    """
+    if voice_profile_path:
+        # Hash the path to keep key reasonable length
+        import hashlib
+
+        path_hash = hashlib.md5(voice_profile_path.encode()).hexdigest()[:8]
+        return f"tts:{model_id}:{voice}:{path_hash}"
+    return f"tts:{model_id}:{voice}"
+
+
+async def load_tts(
+    model_id: str = "kokoro",
+    voice: str = "af_heart",
+    voice_profiles: dict[str, dict] | None = None,
+    temperature: float = 0.8,
+    top_k: int = 1000,
+    top_p: float = 0.95,
+    repetition_penalty: float = 1.2,
+) -> TTSModel:
+    """Load a text-to-speech model.
+
+    Args:
+        model_id: TTS model identifier ("kokoro" or "chatterbox-turbo")
+        voice: Default voice ID (Kokoro) or profile name (Chatterbox)
+        voice_profiles: Dict of {name: {audio_path, description}} for Chatterbox
+        temperature: Chatterbox Turbo temperature (0.1-2.0)
+        top_k: Chatterbox Turbo top-k sampling (1-5000)
+        top_p: Chatterbox Turbo nucleus sampling (0.0-1.0)
+        repetition_penalty: Chatterbox Turbo repetition penalty (1.0-2.0)
+
+    Returns:
+        Loaded TTSModel instance
+    """
+    # Convert voice_profiles dict to VoiceProfile objects
+    profiles: dict[str, VoiceProfile] | None = None
+    voice_profile_path: str | None = None
+
+    if voice_profiles:
+        profiles = {
+            name: VoiceProfile(name=name, audio_path=cfg["audio_path"], description=cfg.get("description", ""))
+            for name, cfg in voice_profiles.items()
+        }
+        # Get the path for the selected voice for cache key
+        if voice in profiles:
+            voice_profile_path = profiles[voice].audio_path
+
+    cache_key = _make_tts_cache_key(model_id, voice, voice_profile_path)
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading TTS model: {model_id} (voice={voice})")
+                device = get_device()
+
+                # Create Chatterbox config if applicable
+                chatterbox_config = None
+                if model_id == "chatterbox-turbo":
+                    chatterbox_config = ChatterboxConfig(
+                        temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
+                    )
+
+                model = TTSModel(
+                    model_id=model_id,
+                    device=device,
+                    voice=voice,
+                    voice_profiles=profiles,
+                    chatterbox_config=chatterbox_config,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    # Return model (get() refreshes TTL automatically)
     return _models.get(cache_key)
 
 

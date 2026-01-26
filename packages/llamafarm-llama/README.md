@@ -75,7 +75,7 @@ embedding = response["data"][0]["embedding"]
 |----------|-------------|
 | `LLAMAFARM_BACKEND` | Force specific backend: `cpu`, `cuda12`, `cuda11`, `metal`, `vulkan` |
 | `LLAMAFARM_CACHE_DIR` | Custom cache directory for downloaded binaries |
-| `LLAMAFARM_LLAMA_VERSION` | Override llama.cpp version (default: b5438) |
+| `LLAMAFARM_LLAMA_VERSION` | Override llama.cpp version (default: b7693) |
 
 ### Binary Info
 
@@ -97,6 +97,59 @@ print(f"Binary location: {info['lib_path']}")
 | macOS | arm64 | Metal |
 | macOS | x86_64 | CPU |
 | Windows | x86_64 | CPU, CUDA 12, Vulkan |
+
+## NVIDIA Jetson Support
+
+Jetson devices (Orin, Xavier, TX2, Nano) require building llama.cpp from source because pre-built ARM64 CUDA binaries are not included in llama.cpp releases.
+
+### Building for Jetson
+
+See the llama.cpp [Jetson Build Guide](https://github.com/ggml-org/llama.cpp/blob/master/docs/build-jetson.md) for complete instructions. Quick start:
+
+```bash
+# Clone and build llama.cpp for Jetson Orin
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+
+# CRITICAL: Disable CUDA graphs for Tegra stability
+cmake -B build \
+    -DGGML_CUDA=ON \
+    -DGGML_CUDA_GRAPHS=OFF \
+    -DCMAKE_CUDA_ARCHITECTURES="87" \
+    -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build --config Release -j$(nproc)
+```
+
+### Jetson-Specific Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LLAMAFARM_SYNC_INFERENCE` | Force sync (`1`) or async (`0`) inference. Default: auto-detect |
+| `LLAMAFARM_LLAMA_LIB_DIR` | Path to custom-built llama.cpp libraries |
+
+### Recommended Settings for Jetson
+
+```python
+from llamafarm_llama import Llama
+
+llm = Llama(
+    model_path="model.gguf",
+    n_ctx=2048,              # Conservative for 8GB memory
+    n_gpu_layers=-1,         # Offload all layers to GPU
+    flash_attn=True,         # Enable flash attention
+    use_mmap=False,          # Disable mmap for unified memory
+    cache_type_k="q4_0",     # 4-bit KV cache for memory savings
+    cache_type_v="q4_0",
+)
+```
+
+### Performance on Jetson Orin Nano (8GB)
+
+With Qwen3-1.7B Q4_K_M:
+- **35+ tokens/second** generation speed
+- **~140ms** time to first token
+- **~2.5GB** memory usage
 
 ## License
 

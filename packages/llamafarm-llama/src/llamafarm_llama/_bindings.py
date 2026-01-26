@@ -134,7 +134,7 @@ LLAMA_CDEF = """
         bool no_host;
     };
 
-    // Context parameters - must match llama.cpp b7376+ layout exactly
+    // Context parameters - must match llama.cpp b7693+ layout exactly
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
@@ -166,6 +166,7 @@ LLAMA_CDEF = """
         bool op_offload;
         bool swa_full;
         bool kv_unified;
+        void * samplers;                     // llama_sampler_seq_config * (NULL = no backend samplers, b7690+)
     };
 
     // Batch
@@ -377,11 +378,134 @@ LLAMA_CDEF = """
     void llama_synchronize(struct llama_context * ctx);
 """
 
+# MTMD (multimodal) C declarations for audio/vision support
+# Based on llama.cpp tools/mtmd/mtmd.h
+MTMD_CDEF = """
+    // Opaque types for multimodal processing
+    typedef struct mtmd_context mtmd_context;
+    typedef struct mtmd_bitmap mtmd_bitmap;
+    typedef struct mtmd_image_tokens mtmd_image_tokens;
+    typedef struct mtmd_input_chunk mtmd_input_chunk;
+    typedef struct mtmd_input_chunks mtmd_input_chunks;
+
+    // Input chunk types
+    enum mtmd_input_chunk_type {
+        MTMD_INPUT_CHUNK_TYPE_TEXT  = 0,
+        MTMD_INPUT_CHUNK_TYPE_IMAGE = 1,
+        MTMD_INPUT_CHUNK_TYPE_AUDIO = 2,
+    };
+
+    // Context parameters for mtmd initialization
+    // IMPORTANT: Must match exact field order from llama.cpp tools/mtmd/mtmd.h
+    struct mtmd_context_params {
+        bool use_gpu;
+        bool print_timings;
+        int n_threads;
+        const char * image_marker;  // Image marker for chat templates
+        const char * media_marker;  // Deprecated, use mtmd_default_marker()
+        int flash_attn_type;        // enum llama_flash_attn_type
+        bool warmup;
+        int image_min_tokens;
+        int image_max_tokens;
+        void * cb_eval;             // ggml_backend_sched_eval_callback
+        void * cb_eval_user_data;
+    };
+
+    // Input text for tokenization
+    struct mtmd_input_text {
+        const char * text;
+        bool add_special;
+        bool parse_special;
+    };
+
+    // Default parameters
+    struct mtmd_context_params mtmd_context_params_default(void);
+
+    // Context lifecycle
+    mtmd_context * mtmd_init_from_file(
+        const char * mmproj_fname,
+        const struct llama_model * text_model,
+        struct mtmd_context_params ctx_params
+    );
+    void mtmd_free(mtmd_context * ctx);
+
+    // Model capability queries
+    bool mtmd_support_vision(mtmd_context * ctx);
+    bool mtmd_support_audio(mtmd_context * ctx);
+    int mtmd_get_audio_bitrate(mtmd_context * ctx);
+    const char * mtmd_default_marker(void);
+    bool mtmd_decode_use_non_causal(mtmd_context * ctx);
+    bool mtmd_decode_use_mrope(mtmd_context * ctx);
+
+    // Bitmap operations (for audio and images)
+    mtmd_bitmap * mtmd_bitmap_init(uint32_t nx, uint32_t ny, const unsigned char * data);
+    mtmd_bitmap * mtmd_bitmap_init_from_audio(size_t n_samples, const float * data);
+    void mtmd_bitmap_free(mtmd_bitmap * bitmap);
+    uint32_t mtmd_bitmap_get_nx(const mtmd_bitmap * bitmap);
+    uint32_t mtmd_bitmap_get_ny(const mtmd_bitmap * bitmap);
+    const unsigned char * mtmd_bitmap_get_data(const mtmd_bitmap * bitmap);
+    size_t mtmd_bitmap_get_n_bytes(const mtmd_bitmap * bitmap);
+    bool mtmd_bitmap_is_audio(const mtmd_bitmap * bitmap);
+    const char * mtmd_bitmap_get_id(const mtmd_bitmap * bitmap);
+    void mtmd_bitmap_set_id(mtmd_bitmap * bitmap, const char * id);
+
+    // Helper functions for loading media files/buffers
+    mtmd_bitmap * mtmd_helper_bitmap_init_from_file(mtmd_context * ctx, const char * fname);
+    mtmd_bitmap * mtmd_helper_bitmap_init_from_buf(
+        mtmd_context * ctx,
+        const unsigned char * buf,
+        size_t len
+    );
+
+    // Input chunks management
+    mtmd_input_chunks * mtmd_input_chunks_init(void);
+    size_t mtmd_input_chunks_size(const mtmd_input_chunks * chunks);
+    const mtmd_input_chunk * mtmd_input_chunks_get(const mtmd_input_chunks * chunks, size_t idx);
+    void mtmd_input_chunks_free(mtmd_input_chunks * chunks);
+
+    // Input chunk data access
+    enum mtmd_input_chunk_type mtmd_input_chunk_get_type(const mtmd_input_chunk * chunk);
+    const llama_token * mtmd_input_chunk_get_tokens_text(
+        const mtmd_input_chunk * chunk,
+        size_t * n_tokens_output
+    );
+    const mtmd_image_tokens * mtmd_input_chunk_get_tokens_image(const mtmd_input_chunk * chunk);
+    size_t mtmd_input_chunk_get_n_tokens(const mtmd_input_chunk * chunk);
+    const char * mtmd_input_chunk_get_id(const mtmd_input_chunk * chunk);
+    llama_pos mtmd_input_chunk_get_n_pos(const mtmd_input_chunk * chunk);
+    mtmd_input_chunk * mtmd_input_chunk_copy(const mtmd_input_chunk * chunk);
+    void mtmd_input_chunk_free(mtmd_input_chunk * chunk);
+
+    // Image tokens info
+    size_t mtmd_image_tokens_get_n_tokens(const mtmd_image_tokens * image_tokens);
+    size_t mtmd_image_tokens_get_nx(const mtmd_image_tokens * image_tokens);
+    size_t mtmd_image_tokens_get_ny(const mtmd_image_tokens * image_tokens);
+    const char * mtmd_image_tokens_get_id(const mtmd_image_tokens * image_tokens);
+    llama_pos mtmd_image_tokens_get_n_pos(const mtmd_image_tokens * image_tokens);
+
+    // Tokenization with media
+    int32_t mtmd_tokenize(
+        mtmd_context * ctx,
+        mtmd_input_chunks * output,
+        const struct mtmd_input_text * text,
+        const mtmd_bitmap ** bitmaps,
+        size_t n_bitmaps
+    );
+
+    // Encoding chunks to embeddings
+    int32_t mtmd_encode_chunk(mtmd_context * ctx, const mtmd_input_chunk * chunk);
+    float * mtmd_get_output_embd(mtmd_context * ctx);
+"""
+
 # Parse the C declarations
 ffi.cdef(LLAMA_CDEF)
 
-# Global library handle
+# Parse MTMD declarations (same FFI instance to share types like llama_model, llama_token)
+ffi.cdef(MTMD_CDEF)
+
+# Global library handles
 _lib = None
+_mtmd_lib = None
 
 
 def get_lib():
@@ -392,15 +516,88 @@ def get_lib():
     return _lib
 
 
+def get_mtmd_lib():
+    """Get the loaded mtmd (multimodal) library.
+
+    Returns None if mtmd library is not available.
+    """
+    global _mtmd_lib
+    if _mtmd_lib is None:
+        _mtmd_lib = _load_mtmd_library()
+    return _mtmd_lib
+
+
+def _load_mtmd_library():
+    """Load the mtmd multimodal library."""
+    import platform
+
+    from ._binary import get_lib_path
+
+    lib_path = get_lib_path()
+    lib_dir = lib_path.parent
+    system = platform.system()
+
+    # Find mtmd library
+    if system == "Darwin":
+        mtmd_patterns = ["libmtmd.dylib", "libmtmd.0.dylib"]
+    elif system == "Windows":
+        mtmd_patterns = ["mtmd.dll"]
+    else:
+        mtmd_patterns = ["libmtmd.so", "libmtmd.so.0"]
+
+    mtmd_path = None
+    for pattern in mtmd_patterns:
+        candidate = lib_dir / pattern
+        if candidate.exists():
+            mtmd_path = candidate
+            break
+
+    if mtmd_path is None:
+        logger.warning(f"mtmd library not found in {lib_dir}")
+        return None
+
+    try:
+        mtmd_lib = ffi.dlopen(str(mtmd_path))
+        logger.info(f"Loaded mtmd library: {mtmd_path}")
+        return mtmd_lib
+    except OSError as e:
+        logger.warning(f"Failed to load mtmd library from {mtmd_path}: {e}")
+        return None
+
+
 def _preload_ggml_with_global(lib_dir, system):
-    """Pre-load libggml with RTLD_GLOBAL so backend registrations are visible.
+    """Pre-load libggml and its dependencies with RTLD_GLOBAL.
 
-    On Linux, when libllama.so is loaded, it pulls in libggml.so as a dependency.
+    CRITICAL FOR LINUX/JETSON: This function ensures proper library loading order
+    and symbol visibility for llama.cpp's backend system.
+
+    Problem: When libllama.so is loaded, it pulls in libggml.so as a dependency.
     If libggml.so is loaded with RTLD_LOCAL (the default), then backend registrations
-    made by ggml_backend_load_all() won't be visible to libllama.so.
+    made by ggml_backend_load_all() won't be visible to libllama.so. This causes
+    compute backends (CPU, CUDA) to fail to register properly.
 
-    By pre-loading libggml.so with RTLD_GLOBAL before libllama.so, we ensure that
-    the backend registry is globally visible.
+    Solution: Pre-load all ggml libraries with RTLD_GLOBAL before libllama.so.
+    This ensures:
+    1. The backend registry is globally visible to all loaded libraries
+    2. All dependencies are resolved from our bundled library directory
+    3. No stale RUNPATH entries from system libraries are used
+
+    Load order matters due to inter-library dependencies:
+        1. libggml-base.so.0 - Foundation library, no ggml dependencies
+        2. libggml-cpu.so.0  - CPU compute backend, depends on base
+        3. libggml-cuda.so.0 - CUDA compute backend, depends on base (optional)
+        4. libggml.so.0      - Main ggml library, depends on all above
+
+    Jetson/Tegra notes:
+        - libggml-cuda.so.0 MUST be loaded for GPU acceleration on Jetson
+        - Build llama.cpp with GGML_CUDA_GRAPHS=OFF for Jetson Orin stability
+        - The CUDA backend initialization should happen from the main thread
+          (see server.py _init_llama_backend for details)
+
+    Thread-safety:
+        - This function should be called once during module initialization
+        - Subsequent calls are safe but redundant (libraries already loaded)
+        - CUDA context creation from worker threads can cause issues on Jetson
     """
     import ctypes
 
@@ -408,36 +605,45 @@ def _preload_ggml_with_global(lib_dir, system):
         # On macOS, everything is usually linked into libllama.dylib
         return
 
-    # Find libggml
-    ggml_lib_path = None
     if system == "Windows":
-        ggml_lib_path = lib_dir / "ggml.dll"
-    elif system == "Linux":
-        # Try versioned first, then unversioned
-        for pattern in ["libggml.so.0", "libggml.so"]:
-            candidate = lib_dir / pattern
-            if candidate.exists():
-                ggml_lib_path = candidate
-                break
-
-    if not ggml_lib_path or not ggml_lib_path.exists():
-        logger.debug(f"libggml not found in {lib_dir}, skipping preload")
+        # Windows uses different loading mechanism
         return
 
-    try:
-        # Platform-specific RTLD flags
-        if system == "Linux":
-            RTLD_GLOBAL = 0x100
-            RTLD_NOW = 0x2
-        else:  # Windows
-            RTLD_GLOBAL = 0
-            RTLD_NOW = 0
+    # Platform-specific RTLD flags for Linux
+    RTLD_GLOBAL = 0x100
+    RTLD_NOW = 0x2
 
-        logger.debug(f"Pre-loading {ggml_lib_path.name} with RTLD_GLOBAL...")
-        ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
-        logger.info(f"Pre-loaded {ggml_lib_path} with RTLD_GLOBAL")
-    except Exception as e:
-        logger.warning(f"Failed to pre-load {ggml_lib_path}: {e}")
+    # Libraries to preload in dependency order
+    # Each entry is (name_patterns, required)
+    preload_order = [
+        (["libggml-base.so.0", "libggml-base.so"], True),
+        (["libggml-cpu.so.0", "libggml-cpu.so"], True),
+        (["libggml-cuda.so.0", "libggml-cuda.so"], False),  # Optional: CUDA backend
+        (["libggml.so.0", "libggml.so"], True),
+    ]
+
+    for patterns, required in preload_order:
+        lib_path = None
+        for pattern in patterns:
+            candidate = lib_dir / pattern
+            if candidate.exists():
+                lib_path = candidate
+                break
+
+        if not lib_path:
+            if required:
+                logger.debug(f"Required library {patterns[0]} not found in {lib_dir}")
+            continue
+
+        try:
+            logger.debug(f"Pre-loading {lib_path.name} with RTLD_GLOBAL...")
+            ctypes.CDLL(str(lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+            logger.info(f"Pre-loaded {lib_path} with RTLD_GLOBAL")
+        except Exception as e:
+            if required:
+                logger.warning(f"Failed to pre-load {lib_path}: {e}")
+            else:
+                logger.debug(f"Optional library {lib_path} failed to load: {e}")
 
 
 def _load_library():
