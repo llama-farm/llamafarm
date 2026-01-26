@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -e
 
+# Ensure Go bin directories are in PATH (for CI environments)
+export PATH="$HOME/go/bin:$GOPATH/bin:$PATH"
+
 # Generate Go types using go-jsonschema
 if ! command -v go-jsonschema >/dev/null 2>&1; then
     echo "Error: go-jsonschema not found. Install with: go install github.com/atombender/go-jsonschema@latest" >&2
