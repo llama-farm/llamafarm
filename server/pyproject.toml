@@ -52,6 +52,7 @@ dependencies = [
   "aiohttp>=3.11.11",
   "starlette>=0.40.0",
   "filelock>=3.16.1",
+  "numpy>=1.26.0",  # Required by voice/vad.py for audio processing
 ]
 
 [project.optional-dependencies]
