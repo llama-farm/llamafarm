@@ -16,16 +16,6 @@ from fastapi import APIRouter, HTTPException
 from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
-
-def _validate_path_param(param: str, name: str = "id") -> None:
-    """Validate path parameter to prevent path injection attacks.
-
-    Raises:
-        HTTPException: If parameter contains invalid characters
-    """
-    if "/" in param or "\\" in param or ".." in param:
-        raise HTTPException(status_code=400, detail=f"Invalid {name}: {param}")
-
 from .types import (
     AnomalyFitRequest,
     AnomalyLoadRequest,
@@ -37,11 +27,21 @@ from .types import (
     ClassifierSaveRequest,
     PolarsBufferAppendRequest,
     PolarsBufferCreateRequest,
+    PolarsBufferDataResponse,
     PolarsBufferFeaturesRequest,
     PolarsBuffersListResponse,
     PolarsBufferStats,
-    PolarsBufferDataResponse,
 )
+
+
+def _validate_path_param(param: str, name: str = "id") -> None:
+    """Validate path parameter to prevent path injection attacks.
+
+    Raises:
+        HTTPException: If parameter contains invalid characters
+    """
+    if "/" in param or "\\" in param or ".." in param:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: {param}")
 
 logger = logging.getLogger(__name__)
 
