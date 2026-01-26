@@ -352,7 +352,7 @@ class TestAutoencoderEarlyStopping:
 
         # Model should be in eval mode with best weights restored
         # The encoder/decoder are on the PyOD detector, not the AnomalyModel
-        detector = model.detector
+        detector = model._detector
         assert hasattr(detector, "model_"), "Detector should have model_ after fitting"
         # PyOD AutoEncoder stores the torch model in model_
         if hasattr(detector.model_, "training"):
