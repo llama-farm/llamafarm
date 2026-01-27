@@ -121,7 +121,12 @@ def pcm_to_opus(
         ) from e
 
     # Convert bytes to numpy array
-    samples = np.frombuffer(pcm_data, dtype=np.int16)
+    # Ensure buffer size is a multiple of 2 bytes (int16 = 2 bytes per sample)
+    usable_bytes = len(pcm_data) - (len(pcm_data) % 2)
+    if usable_bytes < 2:
+        raise ValueError("PCM data too short - need at least 2 bytes")
+    pcm_aligned = pcm_data[:usable_bytes] if usable_bytes < len(pcm_data) else pcm_data
+    samples = np.frombuffer(pcm_aligned, dtype=np.int16)
 
     # Create output container in memory
     output = io.BytesIO()
@@ -214,7 +219,12 @@ def pcm_to_aac(
             "Install it with: uv pip install 'universal-runtime[tts]'"
         ) from e
 
-    samples = np.frombuffer(pcm_data, dtype=np.int16)
+    # Ensure buffer size is a multiple of 2 bytes (int16 = 2 bytes per sample)
+    usable_bytes = len(pcm_data) - (len(pcm_data) % 2)
+    if usable_bytes < 2:
+        raise ValueError("PCM data too short - need at least 2 bytes")
+    pcm_aligned = pcm_data[:usable_bytes] if usable_bytes < len(pcm_data) else pcm_data
+    samples = np.frombuffer(pcm_aligned, dtype=np.int16)
 
     output = io.BytesIO()
     container = av.open(output, mode="w", format="adts")

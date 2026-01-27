@@ -157,8 +157,12 @@ class VoiceSessionConfig(BaseModel):
     stt_model: str = Field(default="base", description="Whisper model size")
     tts_model: str = Field(default="kokoro", description="TTS model ID")
     tts_voice: str = Field(default="af_heart", description="TTS voice ID")
-    llm_model: str = Field(default="", description="LLM model ID (required)")
+    llm_model: str = Field(default="", description="LLM model ID (required unless stt_only)")
     language: str = Field(default="en", description="STT language code")
+    stt_only: bool = Field(
+        default=False,
+        description="STT-only mode - skip LLM and TTS, only return transcriptions.",
+    )
     speed: float = Field(default=0.95, ge=0.5, le=2.0, description="TTS speed (0.95 for natural pace)")
     system_prompt: str | None = Field(
         default=None, description="System prompt for LLM"
@@ -200,21 +204,21 @@ class VoiceSessionConfig(BaseModel):
         "pauses vs actual end of utterance, preventing premature LLM responses.",
     )
     base_silence_duration: float = Field(
-        default=0.4,
+        default=0.1,
         ge=0.1,
         le=2.0,
         description="Base silence duration for complete utterances (seconds). "
         "Used when the transcription appears linguistically complete.",
     )
     thinking_silence_duration: float = Field(
-        default=1.2,
+        default=0.7,
         ge=0.3,
         le=5.0,
         description="Extended silence duration for incomplete utterances (seconds). "
         "Used when linguistic analysis suggests the user is mid-thought.",
     )
     max_silence_duration: float = Field(
-        default=2.5,
+        default=1.5,
         ge=0.5,
         le=10.0,
         description="Maximum silence before forcing end-of-turn (seconds). "

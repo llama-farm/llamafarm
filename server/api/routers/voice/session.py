@@ -581,6 +581,20 @@ class VoiceSession:
         """Check if audio buffer has data."""
         return len(self._audio_buffer) > 0
 
+    def discard_audio(self) -> None:
+        """Discard accumulated audio without returning it.
+
+        Used after barge-in to clear any buffered audio that arrived
+        during TTS playback. This prevents stale/echo audio from being
+        processed in the next utterance.
+        """
+        self._audio_buffer.clear()
+        self._vad.reset()
+        self._format_detect_buffer.clear()
+        if self._turn_detector is not None:
+            self._turn_detector.reset()
+        self._partial_transcript = ""
+
     def flush_and_check_vad(self) -> bool:
         """Flush decoder and do final VAD check.
 
@@ -595,6 +609,8 @@ class VoiceSession:
             remaining_pcm = self._decoder.flush()
             if remaining_pcm:
                 logger.debug(f"Flushed {len(remaining_pcm)} bytes of PCM from decoder")
+                # Add flushed PCM to buffer so it's included in transcription
+                self._audio_buffer.extend(remaining_pcm)
                 return self._vad.process_chunk(remaining_pcm)
         return False
 
@@ -669,6 +685,9 @@ class VoiceSession:
         Assumes client handles echo cancellation, so any detected speech
         is genuine user input.
 
+        Note: Uses a temporary decoder to avoid corrupting the main decoder's
+        state, which would cause issues when processing the actual utterance.
+
         Args:
             chunk: Audio chunk (PCM or encoded WebM/Opus).
 
@@ -682,9 +701,19 @@ class VoiceSession:
 
         # Get PCM for energy analysis
         pcm_chunk: bytes
-        if self._decoder is not None:
-            # Decode to PCM (decoder preserves state across calls)
-            pcm_chunk = self._decoder.feed(chunk)
+        if self._audio_format == AudioFormat.WEBM:
+            # Use temporary decoder to avoid corrupting main decoder state
+            temp_decoder = StreamingAudioDecoder(input_format="webm")
+            pcm_chunk = temp_decoder.feed(chunk)
+            temp_decoder.close()
+            if not pcm_chunk:
+                logger.info(f"Barge-in check: decoder returned empty (chunk={len(chunk)} bytes)")
+                return False
+        elif self._audio_format == AudioFormat.OGG:
+            # Use temporary decoder to avoid corrupting main decoder state
+            temp_decoder = StreamingAudioDecoder(input_format="ogg")
+            pcm_chunk = temp_decoder.feed(chunk)
+            temp_decoder.close()
             if not pcm_chunk:
                 logger.info(f"Barge-in check: decoder returned empty (chunk={len(chunk)} bytes)")
                 return False

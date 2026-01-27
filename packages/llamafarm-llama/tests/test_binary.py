@@ -183,20 +183,20 @@ class TestSourceBuild:
 
         # Mock other file operations to simulate successful extraction
         def fake_extract_zip(zip_path, dest_dir):
-            if "llama-b7376-bin-linux-arm64.zip" in str(zip_path):
-                 # Create dummy lib file
-                 lib_dir = dest_dir / "bin"
-                 lib_dir.mkdir(parents=True, exist_ok=True)
-                 (lib_dir / "libllama.so").touch()
+            if "bin-linux-arm64.zip" in str(zip_path):
+                # Create dummy lib file
+                lib_dir = dest_dir / "bin"
+                lib_dir.mkdir(parents=True, exist_ok=True)
+                (lib_dir / "libllama.so").touch()
 
         monkeypatch.setattr(_binary, "_safe_extract_zip", fake_extract_zip)
-        
+
         # We need to mock _copy_dependencies as well since it runs after extraction
         monkeypatch.setattr(_binary, "_copy_dependencies", lambda src, dest: None)
-        
+
         # Mock extract_with_symlinks
         monkeypatch.setattr(_binary, "_extract_with_symlinks", lambda src, dest: (dest.parent / dest.name).touch())
-        
+
 
         # Run download
         try:
@@ -204,21 +204,21 @@ class TestSourceBuild:
         except Exception:
              # We expect some failures due to deep mocking, but we just want to check the URL
              pass
-        
+
         # Check if it tried to download from the correct URL
         # We need to capture the URL that was passed to urlopen
         # The actual implementation calls urlopen with a Request object
-        
+
         # Let's use a simpler approach: mock BINARY_MANIFEST to verify it's accessed correctly
         # or inspect the log output? No, let's look at the mock we made for urlopen.
-        
+
         # Actually, let's look at how download_binary constructs the URL.
         # It calls BINARY_MANIFEST[platform_key]["artifact"]
-        
+
         manifest = _binary.BINARY_MANIFEST[("linux", "arm64", "cpu")]
         expected_url_pattern = "https://github.com/llama-farm/llamafarm/releases/download"
-        
-        # Since testing the exact URL construction inside download_binary requires mocking 
+
+        # Since testing the exact URL construction inside download_binary requires mocking
         # metadata.version or similar, let's verify the manifest entry itself which is the source of truth
         assert expected_url_pattern in manifest["artifact"]
         assert manifest["lib"] == "bin/libllama.so"

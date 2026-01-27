@@ -432,7 +432,7 @@ properties:
         properties:
           model:
             type: string
-            enum: [tiny, base, small, medium, large-v3]
+            enum: [tiny, base, small, medium, large-v3, distil-large-v3-turbo]
             description: |
               Whisper model size for transcription:
               - tiny (39M, fastest, lower accuracy)
@@ -440,6 +440,7 @@ properties:
               - small (244M, medium speed, better accuracy)
               - medium (769M, slower, high accuracy)
               - large-v3 (1.5B, slowest, highest accuracy)
+              - distil-large-v3-turbo (~800M, fast & accurate, recommended)
             default: base
           language:
             type: string

@@ -220,9 +220,6 @@ class DatasetService:
         supported_data_processing_strategies = (
             cls.get_supported_data_processing_strategies(namespace, project)
         )
-        supported_data_processing_strategies = (
-            supported_data_processing_strategies  # Add default auto strategy
-        )
 
         if data_processing_strategy not in supported_data_processing_strategies:
             raise ValueError(
@@ -230,7 +227,6 @@ class DatasetService:
             )
 
         supported_databases = cls.get_supported_databases(namespace, project)
-        supported_databases = supported_databases  # Add default auto strategy
 
         if database not in supported_databases:
             raise ValueError(f"RAG database {database} not supported")

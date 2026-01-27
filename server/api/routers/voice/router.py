@@ -84,6 +84,11 @@ def _sanitize_system_prompt(prompt: str | None) -> str | None:
 # Cache for model capabilities (avoid querying runtime repeatedly)
 _model_capabilities_cache: dict[str, dict] = {}
 
+# Cache for available TTS models (refreshed periodically)
+_available_tts_models: list[str] = []
+_tts_models_cache_time: float = 0
+TTS_CACHE_TTL = 60.0  # Refresh TTS model list every 60 seconds
+
 
 # Default values when no config is provided
 DEFAULT_STT_MODEL = "base"
@@ -91,6 +96,52 @@ DEFAULT_TTS_MODEL = "kokoro"
 DEFAULT_TTS_VOICE = "af_heart"
 DEFAULT_LANGUAGE = "en"
 DEFAULT_SPEED = 0.95  # Slightly slower for more natural speech
+
+
+async def _get_available_tts_models() -> list[str]:
+    """Get list of TTS models available on the runtime.
+
+    Queries the runtime's /v1/models endpoint and filters for TTS models.
+    Results are cached for TTS_CACHE_TTL seconds.
+
+    Returns:
+        List of available TTS model IDs (e.g., ["kokoro", "pocket-tts"]).
+    """
+    import time
+
+    global _available_tts_models, _tts_models_cache_time
+
+    # Return cached result if fresh
+    if _available_tts_models and (time.time() - _tts_models_cache_time) < TTS_CACHE_TTL:
+        return _available_tts_models
+
+    runtime_url = f"http://{settings.universal_host}:{settings.universal_port}"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{runtime_url}/v1/models")
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get("data", [])
+                # Filter for TTS models and extract the model name
+                # Model IDs are like "tts:kokoro:af_heart" or "tts:pocket-tts:alba"
+                tts_models = set()
+                for model in models:
+                    model_id = model.get("id", "")
+                    model_type = model.get("type", "")
+                    if model_type == "tts" and model_id.startswith("tts:"):
+                        # Extract model name from "tts:model_name:voice"
+                        parts = model_id.split(":")
+                        if len(parts) >= 2:
+                            tts_models.add(parts[1])
+                _available_tts_models = sorted(tts_models)
+                _tts_models_cache_time = time.time()
+                logger.debug(f"Available TTS models: {_available_tts_models}")
+                return _available_tts_models
+    except Exception as e:
+        logger.debug(f"Failed to query available TTS models: {e}")
+
+    return _available_tts_models  # Return stale cache on error
 
 
 async def _check_model_native_audio(model_id: str, base_url: str | None = None) -> bool:
@@ -169,7 +220,7 @@ def _get_voice_config_defaults(
         "max_silence_duration": 2.5,
     }
 
-    if project_config and project_config.voice:
+    if project_config and hasattr(project_config, 'voice') and project_config.voice:
         voice = project_config.voice
 
         # LLM model from voice config
@@ -283,7 +334,7 @@ async def voice_chat_websocket(
         project_config = ProjectService.load_config(namespace, project)
         logger.info(
             f"Loaded voice config from project {namespace}/{project}",
-            extra={"has_voice_config": project_config.voice is not None},
+            extra={"has_voice_config": hasattr(project_config, 'voice') and project_config.voice is not None},
         )
     except Exception as e:
         logger.warning(
@@ -326,7 +377,7 @@ async def voice_chat_websocket(
         return
 
     # Check if voice is explicitly disabled in config
-    if project_config and project_config.voice and project_config.voice.enabled is False:
+    if project_config and hasattr(project_config, 'voice') and project_config.voice and project_config.voice.enabled is False:
         await websocket.send_json(
             ErrorMessage(
                 message="Voice chat is disabled for this project (voice.enabled=false)"
@@ -347,6 +398,22 @@ async def voice_chat_websocket(
             ErrorMessage(message=f"Invalid LLM model: {e}").model_dump()
         )
         await websocket.close(code=1008, reason="Invalid LLM model")
+        return
+
+    # Validate TTS model is available on the runtime
+    # This prevents cryptic errors when the configured TTS model isn't loaded
+    available_tts = await _get_available_tts_models()
+    if available_tts and effective_tts_model not in available_tts:
+        # TTS model not available - provide helpful error with alternatives
+        available_list = ", ".join(available_tts) if available_tts else "none loaded"
+        error_msg = (
+            f"TTS model '{effective_tts_model}' is not loaded on the runtime. "
+            f"Available TTS models: {available_list}. "
+            f"Configure voice.tts.model in your project's llamafarm.yaml or pass tts_model query param."
+        )
+        logger.warning(error_msg)
+        await websocket.send_json(ErrorMessage(message=error_msg).model_dump())
+        await websocket.close(code=1008, reason="TTS model not available")
         return
 
     # Detect if model supports native audio input (e.g., Qwen2.5-Omni)

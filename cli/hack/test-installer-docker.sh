@@ -198,8 +198,8 @@ test_cli_build() {
             fi
             echo 'Schema compiled and copied successfully'
 
-            # Install go-jsonschema
-            go install github.com/atombender/go-jsonschema@latest
+            # Install go-jsonschema (pinned version for consistent type generation)
+            go install github.com/atombender/go-jsonschema@v0.20.0
 
             # Generate Go types
             cd ../cli/cmd/config

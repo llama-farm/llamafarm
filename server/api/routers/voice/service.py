@@ -819,7 +819,9 @@ class VoiceChatService:
                                     )
                             pending_tool_calls.clear()
 
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        # Log malformed JSON for debugging (sanitized to avoid exposing user content)
+                        logger.debug(f"LLM stream: malformed JSON skipped (length={len(data)}), error: {e}")
                         continue
 
             # Yield any remaining tool calls that weren't finalized with finish_reason
@@ -1013,6 +1015,9 @@ class VoiceChatService:
                             break
             except TimeoutError:
                 logger.debug("STT streaming timeout, using collected segments")
+            except websockets.exceptions.ConnectionClosed:
+                # Expected when breaking early from STT loop - generator cleanup closes WebSocket
+                logger.debug("STT WebSocket closed during early exit (expected when starting LLM early)")
 
             # If no segments received, fall back to non-streaming HTTP endpoint
             # This is faster for short utterances where streaming overhead dominates
@@ -1214,6 +1219,11 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal LLM response complete
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -1406,6 +1416,11 @@ class VoiceChatService:
                         LLMTextMessage(text=remaining, is_final=True).model_dump()
                     )
                     await self._synthesize_and_stream_phrase(websocket, remaining)
+                else:
+                    # Always send is_final=True to signal LLM response complete
+                    await websocket.send_json(
+                        LLMTextMessage(text="", is_final=True).model_dump()
+                    )
 
             # Log what the model heard from the audio (captured from <input> tags)
             heard_text = input_filter.get_captured()
@@ -1581,7 +1596,9 @@ class VoiceChatService:
                                     )
                             pending_tool_calls.clear()
 
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        # Log malformed JSON for debugging (truncate to avoid log spam)
+                        logger.debug(f"LLM stream (native audio): malformed JSON skipped: {data[:100]}... error: {e}")
                         continue
 
             # Yield remaining tool calls

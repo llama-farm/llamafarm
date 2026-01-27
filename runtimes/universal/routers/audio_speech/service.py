@@ -197,7 +197,8 @@ class TTSSynthesisService:
         except Exception as e:
             logger.error(f"WebSocket TTS error: {e}")
             with contextlib.suppress(Exception):
-                await websocket.send_json({"type": "error", "message": str(e)})
+                # Send generic error message to avoid exposing internal details
+                await websocket.send_json({"type": "error", "message": "Speech synthesis failed"})
 
     def list_voices(self, model_id: str | None = None) -> list[dict]:
         """List available TTS voices.

@@ -154,7 +154,7 @@ rag:
         from tasks.preview_tasks import preview_document_task
 
         # Call with overrides
-        preview_document_task(
+        _result = preview_document_task(
             project_dir=str(mock_project_dir),
             file_path=str(sample_file),
             database="default",
@@ -240,7 +240,9 @@ rag:
         # Verify _get_blob_processor was called with correct database
         mock_get_processor.assert_called_once()
         call_args = mock_get_processor.call_args
-        assert "custom_db" in str(call_args) or call_args[1].get("database") == "custom_db"
+        assert (
+            "custom_db" in str(call_args) or call_args[1].get("database") == "custom_db"
+        )
 
     @patch("tasks.preview_tasks.PreviewHandler")
     @patch("tasks.preview_tasks._get_blob_processor")
