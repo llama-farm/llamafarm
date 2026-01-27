@@ -1,9 +1,11 @@
 import json
 import re
+import time
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
+import instructor
 from config.datamodel import ToolCallStrategy
 from openai import NOT_GIVEN, AsyncOpenAI
 from openai.types.chat import (
@@ -25,6 +27,7 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     ChatCompletionMessageFunctionToolCall,
     Function,
 )
+from pydantic import BaseModel
 
 from agents.base.history import LFChatCompletionMessageParam
 from agents.base.types import ToolDefinition
@@ -135,6 +138,19 @@ class LFAgentClientOpenAI(LFAgentClient):
         # Create non-streaming request
         stream_param: Literal[False] = False
 
+        if self._response_model:
+            instructor_client = self._wrap_with_instructor(client)
+            structured_response = await instructor_client.chat.completions.create(
+                messages=messages,
+                model=self._model_config.model,
+                tools=openai_tools,
+                **api_params,
+                extra_body=extra_body_params,
+                stream=stream_param,
+                response_model=self._response_model,
+            )
+            return self._structured_to_chat_completion(structured_response)
+
         completion = await client.chat.completions.create(
             messages=messages,
             model=self._model_config.model,
@@ -166,6 +182,8 @@ class LFAgentClientOpenAI(LFAgentClient):
             tools: Tool definitions
             extra_body: Additional parameters to pass to the API (e.g., n_ctx for GGUF models)
         """
+        if self._response_model:
+            raise ValueError("Streaming is not supported for structured responses.")
 
         client = AsyncOpenAI(
             api_key=self._model_config.api_key or "",
@@ -377,6 +395,35 @@ class LFAgentClientOpenAI(LFAgentClient):
                 ),
             ],
             usage=base_chunk.usage,
+        )
+
+    def _wrap_with_instructor(self, client: AsyncOpenAI) -> Any:
+        if self._model_config.instructor_mode:
+            mode = getattr(instructor.Mode, self._model_config.instructor_mode.upper())
+            return instructor.from_openai(client, mode=mode)
+        return instructor.from_openai(client)
+
+    def _structured_to_chat_completion(self, structured: Any) -> ChatCompletion:
+        if isinstance(structured, BaseModel):
+            content = structured.model_dump_json(by_alias=True)
+        else:
+            content = json.dumps(structured)
+
+        return ChatCompletion(
+            id=f"chat-{uuid.uuid4()}",
+            object="chat.completion",
+            created=int(time.time()),
+            model=self._model_config.model,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=content,
+                    ),
+                    finish_reason="stop",
+                )
+            ],
         )
 
     def _update_system_message_with_tools(

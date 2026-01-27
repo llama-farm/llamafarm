@@ -460,6 +460,8 @@ async def chat(
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
     project_config = ProjectService.load_config(namespace, project_id)
+    schema_ref = getattr(project_config, "schema_", None)
+    schema_enabled = bool(schema_ref)
 
     # Parse active project from header (format: "namespace/project")
     active_project_namespace = None
@@ -560,6 +562,11 @@ async def chat(
         ) from e
 
     if request.stream:
+        if schema_enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Streaming is not supported when schema is configured.",
+            )
         return create_streaming_response_from_iterator(
             request,
             project_chat_service.stream_chat(

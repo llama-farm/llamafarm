@@ -1,14 +1,19 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/llamafarm/cli/cmd/config"
 	"github.com/llamafarm/cli/cmd/orchestrator"
 	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -20,6 +25,7 @@ var (
 	runRAGScoreThreshold float64
 	runModel             string
 	dryRun               bool
+	runStructured        bool
 )
 
 // chatCmd represents the `lf chat` command
@@ -143,6 +149,18 @@ Examples:
 		ns = serverCfg.Namespace
 		proj = serverCfg.Project
 
+		if runStructured {
+			schemaRef, err := loadSchemaRef(cwd)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			if strings.TrimSpace(schemaRef) == "" {
+				fmt.Fprintln(os.Stderr, "Error: --structured requires schema to be set in llamafarm.yaml")
+				os.Exit(1)
+			}
+		}
+
 		// Construct configuration for ChatManager
 		cfg := &ChatConfig{
 			ServerURL:            serverURL,
@@ -157,6 +175,7 @@ Examples:
 			RAGRetrievalStrategy: runRetrievalStrategy,
 			RAGTopK:              runRAGTopK,
 			RAGScoreThreshold:    runRAGScoreThreshold,
+			Structured:           runStructured,
 		}
 
 		// Create ChatManager
@@ -214,6 +233,57 @@ func init() {
 	chatCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	chatCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
 	chatCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the equivalent curl command instead of executing the request")
+	chatCmd.Flags().BoolVar(&runStructured, "structured", false, "Use configured schema for structured output (non-streaming)")
 
 	rootCmd.AddCommand(chatCmd)
+}
+
+func loadSchemaRef(projectDir string) (string, error) {
+	configPath, err := config.FindConfigFile(projectDir)
+	if err != nil || configPath == "" {
+		return "", fmt.Errorf("no llamafarm config found in %s", projectDir)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read config: %w", err)
+	}
+
+	ext := strings.ToLower(filepath.Ext(configPath))
+	switch ext {
+	case ".yaml", ".yml":
+		var raw map[interface{}]interface{}
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return "", fmt.Errorf("failed to parse YAML config: %w", err)
+		}
+		if value, ok := raw["schema"]; ok {
+			if schemaRef, ok := value.(string); ok {
+				return schemaRef, nil
+			}
+		}
+	case ".json":
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return "", fmt.Errorf("failed to parse JSON config: %w", err)
+		}
+		if value, ok := raw["schema"]; ok {
+			if schemaRef, ok := value.(string); ok {
+				return schemaRef, nil
+			}
+		}
+	case ".toml":
+		var raw map[string]interface{}
+		if err := toml.Unmarshal(data, &raw); err != nil {
+			return "", fmt.Errorf("failed to parse TOML config: %w", err)
+		}
+		if value, ok := raw["schema"]; ok {
+			if schemaRef, ok := value.(string); ok {
+				return schemaRef, nil
+			}
+		}
+	default:
+		return "", fmt.Errorf("unsupported config format: %s", ext)
+	}
+
+	return "", nil
 }

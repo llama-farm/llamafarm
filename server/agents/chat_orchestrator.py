@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import time
@@ -23,6 +24,7 @@ from openai.types.chat.chat_completion_message import (
 from openai.types.chat.chat_completion_message_tool_call_param import (
     Function,
 )
+from pydantic import BaseModel
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -93,6 +95,7 @@ class ChatOrchestratorAgent(LFAgent):
         history = self._get_history(project_config)
         provider = RuntimeService.get_provider(model_config)
         client = provider.get_client()
+        self._apply_response_model(client)
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
             prompts=self._get_prompt_messages_for_model(model_config.name)
@@ -104,6 +107,47 @@ class ChatOrchestratorAgent(LFAgent):
         )
 
         super().__init__(config=config)
+
+    def _apply_response_model(self, client: Any) -> None:
+        schema_ref = getattr(self._project_config, "schema_", None)
+        if not schema_ref:
+            return
+
+        response_model = self._load_response_model(schema_ref)
+        if hasattr(client, "set_response_model"):
+            client.set_response_model(response_model)
+            return
+        client.response_model = response_model
+
+    def _load_response_model(self, schema_ref: str) -> type[BaseModel]:
+        if "::" not in schema_ref:
+            raise ValueError(
+                "Schema must be in the format 'relative/path.py::ClassName'"
+            )
+
+        schema_path, class_name = schema_ref.split("::", 1)
+        module_path = Path(self._project_dir) / schema_path
+        if not module_path.exists():
+            raise FileNotFoundError(f"Schema file not found: {module_path}")
+
+        spec = importlib.util.spec_from_file_location(
+            f"llamafarm_user_schema_{module_path.stem}", module_path
+        )
+        if not spec or not spec.loader:
+            raise ValueError(f"Could not load schema module from {module_path}")
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        response_model = getattr(module, class_name)
+        if not isinstance(response_model, type) or not issubclass(
+            response_model, BaseModel
+        ):
+            raise ValueError(
+                f"{class_name} is not a Pydantic BaseModel subclass"
+            )
+
+        return response_model
 
     @property
     def config_tools(self) -> list["ToolDefinition"]:
