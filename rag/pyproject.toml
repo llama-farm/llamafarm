@@ -78,6 +78,11 @@ dependencies = [
   "docx2txt>=0.9",
   "spacy>=3.8.7",
   "msg-parser[rtf]>=1.2.0",
+  # Universal parser dependencies (MarkItDown + chunking)
+  "markitdown>=0.1.4",
+  "semchunk>=2.2.0",
+  "tiktoken>=0.7.0",
+  "yake>=0.4.8",
   # LlamaIndex parsers (essential for advanced document processing)
   "llama-index-core>=0.9.0",
   "llama-index-readers-file>=0.1.0",
@@ -103,6 +108,7 @@ dev = [
   "flake8>=6.0.0",
   "mypy>=1.0.0",
   "pre-commit>=3.0.0",
+  "ruff>=0.14.13",
 ]
 
 [project.optional-dependencies]

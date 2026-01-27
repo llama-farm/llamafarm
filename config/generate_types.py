@@ -11,7 +11,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 def run_command(cmd: list[str], cwd: Path) -> None:
     """Run a command and handle errors."""
     try:
@@ -46,7 +45,7 @@ def main() -> int:
             "run",
             "datamodel-codegen",
             "--input",
-            "schema.deref.yaml",
+            "schema.yaml",
             "--output",
             "datamodel.py",
             "--input-file-type=jsonschema",

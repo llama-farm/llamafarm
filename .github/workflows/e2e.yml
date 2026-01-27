@@ -583,7 +583,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets create \
-            -s universal_processor \
+            -s universal_rag \
             -b main_database \
             test_dataset; then
             echo "❌ Dataset creation failed, checking server health..."

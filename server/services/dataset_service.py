@@ -278,15 +278,18 @@ class DatasetService:
         cls, namespace: str, project: str
     ) -> list[str]:
         """
-        Get list of supported data processing strategies
+        Get list of supported data processing strategies.
+
+        Always includes 'universal_rag' as a built-in default strategy.
         """
         project_config = ProjectService.load_config(namespace, project)
         rag_config = project_config.rag
 
-        if rag_config is None:
-            return []
+        # Always include universal_rag as the built-in default
+        strategies: list[str] = ["universal_rag"]
 
-        custom_data_processing_strategies: list[str] = []
+        if rag_config is None:
+            return strategies
 
         # Only support new schema - no backwards compatibility
         if (
@@ -294,18 +297,26 @@ class DatasetService:
             and rag_config.data_processing_strategies
         ):
             for strategy in rag_config.data_processing_strategies:
-                if hasattr(strategy, "name") and strategy.name:
-                    custom_data_processing_strategies.append(strategy.name)
+                if (
+                    hasattr(strategy, "name")
+                    and strategy.name
+                    and strategy.name not in strategies
+                ):
+                    strategies.append(strategy.name)
         elif (
             isinstance(rag_config, dict) and "data_processing_strategies" in rag_config
         ):
-            strategies = rag_config["data_processing_strategies"]
-            if isinstance(strategies, list):
-                for strategy in strategies:
-                    if isinstance(strategy, dict) and "name" in strategy:
-                        custom_data_processing_strategies.append(strategy["name"])
+            strat_list = rag_config["data_processing_strategies"]
+            if isinstance(strat_list, list):
+                for strategy in strat_list:
+                    if (
+                        isinstance(strategy, dict)
+                        and "name" in strategy
+                        and strategy["name"] not in strategies
+                    ):
+                        strategies.append(strategy["name"])
 
-        return custom_data_processing_strategies
+        return strategies
 
     @classmethod
     def get_supported_databases(cls, namespace: str, project: str) -> list[str]:

@@ -24,6 +24,7 @@ import UpgradeModal from './common/UpgradeModal'
 import { projectKeys } from '../hooks/useProjects'
 import { Button } from './ui/button'
 import { useMobileView } from '../contexts/MobileViewContext'
+import { ServiceStatusPanel } from './ServiceStatusPanel'
 
 type HeaderProps = { currentVersion?: string | null }
 
@@ -356,6 +357,7 @@ function Header({ currentVersion }: HeaderProps) {
               </span>
             </button>
           ) : null}
+          <ServiceStatusPanel />
           <div className="flex rounded-lg overflow-hidden border border-border">
             <button
               className={`w-8 h-7 flex items-center justify-center transition-colors ${

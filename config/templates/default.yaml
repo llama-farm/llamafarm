@@ -3,7 +3,7 @@ name: default-project
 namespace: default
 
 # =============================================================================
-# RUNTIME CONFIGURATION (required - most important)
+# RUNTIME CONFIGURATION
 # =============================================================================
 runtime:
   models:
@@ -14,84 +14,6 @@ runtime:
       default: true
       prompt_format: unstructured
       prompts: [default]
-      # instructor_mode: json
-      # api_key: optional, not needed for ollama
-      # model_api_parameters: optional additional parameters
-
-  # ---------------------------------------------------------------------------
-  # LEMONADE RUNTIME - Local models with Universal NPU/GPU acceleration
-  # ---------------------------------------------------------------------------
-  # Lemonade provides high-performance local inference with hardware acceleration.
-  # It's an alternative to Ollama with better performance on some hardware.
-  #
-  # SETUP INSTRUCTIONS:
-  # 1. Install Lemonade SDK:
-  #    uv pip install lemonade-sdk
-  #
-  # 2. Download a model (examples below - choose one or more):
-  #
-  #    # Small & Fast (< 1GB) - Good for quick responses
-  #    uv run lemonade-server-dev pull user.Qwen3-0.6B \
-  #      --checkpoint unsloth/Qwen3-0.6B-GGUF \
-  #      --recipe llamacpp
-  #
-  #    # Balanced (4B) - Recommended for most use cases
-  #    uv run lemonade-server-dev pull user.Qwen3-4B \
-  #      --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M \
-  #      --recipe llamacpp
-  #
-  #    # Powerful (8B) - High-quality reasoning
-  #    uv run lemonade-server-dev pull user.Qwen3-8B \
-  #      --checkpoint unsloth/Qwen3-8B-GGUF:Q4_K_M \
-  #      --recipe llamacpp
-  #
-  #    # Coding Specialist
-  #    uv run lemonade-server-dev pull user.Qwen2.5-Coder-32B \
-  #      --checkpoint unsloth/Qwen2.5-Coder-32B-Instruct-GGUF:Q4_K_M \
-  #      --recipe llamacpp
-  #
-  # 3. Check downloaded models:
-  #    uv run lemonade-server-dev list
-  #
-  # 4. Start Lemonade server:
-  #    LEMONADE_MODEL=user.Qwen3-4B nx start lemonade
-  #
-  # 5. Uncomment the model configuration below and update your config
-  #
-  # For multiple models, run separate Lemonade instances on different ports:
-  #    # Terminal 1:
-  #    LEMONADE_MODEL=user.Qwen3-0.6B LEMONADE_PORT=11534 nx start lemonade
-  #    # Terminal 2:
-  #    LEMONADE_MODEL=user.Qwen3-8B LEMONADE_PORT=11535 nx start lemonade
-  #
-  # More info: runtimes/lemonade/QUICKSTART.md
-  # ---------------------------------------------------------------------------
-
-  # EXAMPLE: Small fast Lemonade model
-  # - name: lemon-fast
-  #   description: "Lemonade - fast local model with NPU/GPU acceleration"
-  #   provider: lemonade
-  #   model: user.Qwen3-0.6B  # Must match downloaded model name
-  #   base_url: "http://127.0.0.1:11534/v1"
-
-  # EXAMPLE: Balanced Lemonade model
-  # - name: lemon-balanced
-  #   description: "Lemonade - balanced 4B model"
-  #   provider: lemonade
-  #   model: user.Qwen3-4B
-  #   base_url: "http://127.0.0.1:11534/v1"
-
-  # EXAMPLE: Powerful Lemonade model (separate instance)
-  # - name: lemon-powerful
-  #   description: "Lemonade - powerful 8B reasoning model"
-  #   provider: lemonade
-  #   model: user.Qwen3-8B
-
-  # EXAMPLE: Coding specialist
-  # - name: lemon-coder
-  #   description: "Lemonade - coding specialist model"
-  #   provider: lemonade
-  #   model: user.Qwen2.5-Coder-32B-Instruct
 
 # =============================================================================
 # PROMPTS CONFIGURATION
@@ -117,237 +39,84 @@ prompts:
 datasets:
   - name: default
     database: main_database
-    data_processing_strategy: universal_processor
+    # Uses universal_rag strategy by default (no need to specify)
     auto_process: true
 
 # =============================================================================
 # RAG CONFIGURATION
 # =============================================================================
 rag:
-  # Default database for RAG queries (optional)
-  # If not specified, uses the first database in the databases array
   default_database: main_database
 
-  # =============================================================================
-  # DATABASE CONFIGURATIONS
-  # =============================================================================
+  # ---------------------------------------------------------------------------
+  # DATABASE
+  # ---------------------------------------------------------------------------
   databases:
-    # Main vector database for general documents
-    - name: "main_database"
-      type: "ChromaStore"
+    - name: main_database
+      type: ChromaStore
       config:
-        persist_directory: "./data/chroma_db"
-        distance_function: "cosine"
-        collection_name: "documents"
-      # Default strategies for this database
-      default_embedding_strategy: "default_embeddings"
-      default_retrieval_strategy: "basic_search"
-      # Available embedding strategies
+        collection_name: documents
+
       embedding_strategies:
-        - name: "default_embeddings"
-          type: "UniversalEmbedder"
+        - name: default_embeddings
+          type: UniversalEmbedder
           priority: 0
           config:
             model: sentence-transformers/all-MiniLM-L6-v2
             dimension: 384
             batch_size: 16
-            timeout: 60
-            auto_pull: true # Available retrieval strategies
+
       retrieval_strategies:
-        - name: "basic_search"
-          type: "BasicSimilarityStrategy"
-          config:
-            distance_metric: "cosine"
-            top_k: 10
+        - name: basic_search
+          type: BasicSimilarityStrategy
           default: true
-        - name: "filtered_search"
-          type: "MetadataFilteredStrategy"
           config:
             top_k: 10
-            filter_mode: "post"
-            fallback_multiplier: 2
 
-  # =============================================================================
-  # DATA PROCESSING STRATEGIES - SINGLE UNIFIED STRATEGY
-  # =============================================================================
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: basic_search
+
+  # ---------------------------------------------------------------------------
+  # DATA PROCESSING STRATEGY (Optional - defaults to universal_rag if omitted)
+  # ---------------------------------------------------------------------------
+  # The universal_rag strategy works out-of-the-box with zero configuration.
+  # Customize below if you need different chunking or extraction settings.
+  #
   data_processing_strategies:
-    # Universal document processor - handles all file types
-    - name: "universal_processor"
-      description: "Unified processor for PDFs, Word docs, CSVs, Markdown, and text files"
+    - name: universal_rag
+      description: "Universal processor for all document types"
+
       parsers:
-        # PDF Parser with robust fallback
-        - type: "PDFParser_LlamaIndex"
-          file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 10 # Primary PDF parser
+        - type: UniversalParser
           config:
-            chunk_strategy: "semantic"
-            chunk_size: 300
-            chunk_overlap: 50
-            extract_metadata: true
-            extract_tables: true
+            # CHUNKING SETTINGS - Adjust these to control chunk size
+            chunk_size: 1000        # Target characters per chunk
+            chunk_overlap: 200      # Overlap between chunks for context
 
-        - type: "PDFParser_PyPDF2"
-          file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 50 # Fallback PDF parser
-          config:
-            chunk_size: 300
-            chunk_overlap: 50
-            chunk_strategy: "paragraphs"
-            extract_metadata: true
-            combine_pages: false # CRITICAL: Must be false to enable chunking
+            # CHUNKING STRATEGY - Options:
+            #   semantic   - AI-based boundaries (best for mixed content)
+            #   sections   - Split on headers (best for structured docs)
+            #   paragraphs - Split on blank lines (best for prose)
+            #   sentences  - Split on sentences (best for dense text)
+            #   characters - Fixed size (fallback)
+            chunk_strategy: sections
 
-        # Word Document Parser
-        - type: "DocxParser_LlamaIndex"
-          file_include_patterns: ["*.docx", "*.DOCX"]
-          priority: 10
-          config:
-            chunk_size: 500
-            chunk_overlap: 100
-            extract_metadata: true
-            extract_tables: true
+            # OCR SETTINGS - For scanned documents and images
+            use_ocr: true
+            # ocr_endpoint: http://127.0.0.1:8000/v1/vision/ocr
 
-        # Markdown Parser
-        - type: "MarkdownParser_Python"
-          file_include_patterns:
-            ["*.md", "*.markdown", "*.mdown", "*.mkd", "README*"]
-          priority: 10
-          config:
-            chunk_size: 400
-            chunk_strategy: "sections"
-            extract_metadata: true
-            extract_code_blocks: true
-            extract_links: true
-
-        # CSV/TSV Parser
-        - type: "CSVParser_Pandas"
-          file_include_patterns: ["*.csv", "*.CSV", "*.tsv", "*.TSV", "*.dat"]
-          priority: 10
-          config:
-            chunk_size: 1000
-            chunk_strategy: "rows"
-            extract_metadata: true
-            encoding: "utf-8"
-
-        # Excel Parser
-        - type: "ExcelParser_Pandas"
-          file_include_patterns: ["*.xlsx", "*.XLSX", "*.xls", "*.XLS"]
-          priority: 10
-          config:
-            chunk_size: 500
-            sheets: null # Process all sheets
-            extract_metadata: true
-
-        # Plain Text Parser (catch-all for text files)
-        - type: "TextParser_Python"
-          file_include_patterns:
-            [
-              "*.txt",
-              "*.text",
-              "*.log",
-              "*.json",
-              "*.xml",
-              "*.yaml",
-              "*.yml",
-              "*.toml",
-              "*.cfg",
-              "*.conf",
-              "*.ini",
-              "*.py",
-              "*.js",
-              "*.java",
-              "*.cpp",
-              "*.c",
-              "*.h",
-              "*.sh",
-              "*.bash",
-              "*.zsh",
-              "LICENSE*",
-              "CHANGELOG*",
-              "AUTHORS*",
-            ]
-          priority: 50 # Lower priority, acts as fallback
-          config:
-            encoding: "utf-8"
-            chunk_size: 500
-            chunk_overlap: 100
-            chunk_strategy: "sentences"
-            clean_text: true
-            extract_metadata: true
-
-      # Extractors with file pattern matching
       extractors:
-        # Universal extractors - work on all file types
-        - type: "ContentStatisticsExtractor"
-          file_include_patterns: ["*"] # Apply to all files
-          priority: 10
+        - type: UniversalExtractor
           config:
-            include_readability: true
-            include_vocabulary: true
-            include_structure: true
+            # KEYWORD EXTRACTION
+            keyword_count: 5        # Keywords per chunk (1-50)
 
-        - type: "EntityExtractor"
-          file_include_patterns: ["*"] # Apply to all files
-          priority: 20
-          config:
-            entity_types:
-              ["PERSON", "ORG", "GPE", "DATE", "PRODUCT", "MONEY", "PERCENT"]
-            use_fallback: true
-            min_entity_length: 2
+            # SUMMARY GENERATION
+            generate_summary: true
+            summary_sentences: 2    # Sentences in summary (1-10)
 
-        - type: "KeywordExtractor"
-          file_include_patterns: ["*"] # Apply to all files
-          priority: 30
-          config:
-            algorithm: "yake"
-            max_keywords: 10
-            min_keyword_length: 3
+            # ENTITY EXTRACTION (slower but useful)
+            extract_entities: false  # Set true for people, orgs, places
 
-        # PDF-specific extractors
-        - type: "TableExtractor"
-          file_include_patterns: ["*.pdf", "*.PDF"]
-          priority: 5
-          config:
-            output_format: "dict"
-            extract_headers: true
-            merge_cells: true
-
-        # CSV/Excel-specific extractors
-        - type: "DateTimeExtractor"
-          file_include_patterns: ["*.csv", "*.xlsx", "*.xls", "*.tsv"]
-          priority: 5
-          config:
-            formats: ["ISO8601", "US", "EU"]
-            extract_relative: true
-            extract_times: true
-
-        # Code file extractors
-        - type: "PatternExtractor"
-          file_include_patterns:
-            ["*.py", "*.js", "*.java", "*.cpp", "*.c", "*.h"]
-          priority: 5
-          config:
-            predefined_patterns: ["email", "url", "ip_address", "version"]
-            custom_patterns:
-              - name: "function_def"
-                pattern: "def\\s+\\w+\\s*\\("
-                description: "Python function definitions"
-              - name: "class_def"
-                pattern: "class\\s+\\w+[\\(\\:]"
-                description: "Class definitions"
-
-        # Markdown-specific extractors
-        - type: "HeadingExtractor"
-          file_include_patterns: ["*.md", "*.markdown", "README*"]
-          priority: 5
-          config:
-            max_level: 6
-            include_hierarchy: true
-            extract_outline: true
-
-        - type: "LinkExtractor"
-          file_include_patterns: ["*.md", "*.markdown", "*.html", "*.htm"]
-          priority: 10
-          config:
-            extract_urls: true
-            extract_emails: true
-            extract_domains: true
+            # LANGUAGE DETECTION
+            detect_language: true

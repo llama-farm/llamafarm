@@ -3,10 +3,15 @@
 import sys
 from pathlib import Path
 
-from config.datamodel import Database, EmbeddingStrategy, RetrievalStrategy
+from config.datamodel import (
+    Database,
+    DatabaseEmbeddingStrategy,
+    DatabaseRetrievalStrategy,
+)
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
+from config.helpers.component_resolver import ComponentResolver
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -75,8 +80,36 @@ class DatabaseService:
             if db.name == database.name:
                 raise ValueError(f"Database '{database.name}' already exists")
 
-        # Add the new database to the project config
-        existing_databases.append(database)
+        # Build a temporary config to resolve only the new database
+        temp_config = project_config.model_copy(deep=True)
+        temp_config.rag.databases = [database]
+
+        # Resolve components to inline definitions for the new database only
+        resolver = ComponentResolver(temp_config)
+        resolved_temp = resolver.resolve_config(temp_config)
+
+        # Extract the resolved database we just added
+        resolved_db = next(
+            (db for db in resolved_temp.rag.databases or [] if db.name == database.name),
+            None,
+        )
+        if resolved_db is None:
+            raise ValueError("Failed to resolve database configuration")
+
+        # Ensure strategies exist after resolution (neither inline nor defaults)
+        if not resolved_db.embedding_strategies:
+            raise ValueError(
+                "No embedding strategy provided or resolved. Specify embedding_strategy reference, "
+                "embedding_strategies inline, or define a default in components.defaults."
+            )
+        if not resolved_db.retrieval_strategies:
+            raise ValueError(
+                "No retrieval strategy provided or resolved. Specify retrieval_strategy reference, "
+                "retrieval_strategies inline, or define a default in components.defaults."
+            )
+
+        # Persist the original config with the resolved database appended
+        existing_databases.append(resolved_db)
         project_config.rag.databases = existing_databases
         ProjectService.save_config(namespace, project, project_config)
 
@@ -85,12 +118,12 @@ class DatabaseService:
             namespace=namespace,
             project=project,
             database=database.name,
-            type=database.type.value
-            if hasattr(database.type, "value")
-            else str(database.type),
+            type=resolved_db.type.value
+            if hasattr(resolved_db.type, "value")
+            else str(resolved_db.type),
         )
 
-        return database
+        return resolved_db
 
     @classmethod
     def update_database(
@@ -99,8 +132,10 @@ class DatabaseService:
         project: str,
         name: str,
         config: dict | None = None,
-        embedding_strategies: list[EmbeddingStrategy] | None = None,
-        retrieval_strategies: list[RetrievalStrategy] | None = None,
+        embedding_strategies: list[DatabaseEmbeddingStrategy] | None = None,
+        retrieval_strategies: list[DatabaseRetrievalStrategy] | None = None,
+        embedding_strategy: str | None = None,
+        retrieval_strategy: str | None = None,
         default_embedding_strategy: str | None = None,
         default_retrieval_strategy: str | None = None,
     ) -> Database:
@@ -109,16 +144,22 @@ class DatabaseService:
 
         Only these fields can be updated:
         - config: Database-specific configuration
-        - embedding_strategies: List of embedding strategies
-        - retrieval_strategies: List of retrieval strategies
+        - embedding_strategies: List of inline embedding strategies
+        - retrieval_strategies: List of inline retrieval strategies
+        - embedding_strategy: Reference to a reusable embedding strategy (from components)
+        - retrieval_strategy: Reference to a reusable retrieval strategy (from components)
         - default_embedding_strategy: Name of default embedding strategy
         - default_retrieval_strategy: Name of default retrieval strategy
 
         Name and type are immutable.
 
+        Component resolution is applied after updates, similar to create_database,
+        ensuring references are resolved and defaults are applied consistently.
+
         Raises:
             DatabaseNotFoundError: If database with given name is not found
-            ValueError: If validation fails (e.g., default strategy doesn't exist)
+            ValueError: If validation fails (e.g., default strategy doesn't exist,
+                       or referenced component not found)
         """
         project_config = ProjectService.load_config(namespace, project)
 
@@ -145,32 +186,69 @@ class DatabaseService:
 
         if embedding_strategies is not None:
             db.embedding_strategies = embedding_strategies
+            # Clear reference field when inline strategies are provided
+            db.embedding_strategy = None
 
         if retrieval_strategies is not None:
             db.retrieval_strategies = retrieval_strategies
+            # Clear reference field when inline strategies are provided
+            db.retrieval_strategy = None
+
+        # Update reference fields (these will be resolved by ComponentResolver)
+        if embedding_strategy is not None:
+            db.embedding_strategy = embedding_strategy
+            # Clear inline strategies when a reference is provided
+            db.embedding_strategies = None
+
+        if retrieval_strategy is not None:
+            db.retrieval_strategy = retrieval_strategy
+            # Clear inline strategies when a reference is provided
+            db.retrieval_strategies = None
 
         if default_embedding_strategy is not None:
-            # Validate that the strategy exists
-            strategy_names = [s.name for s in (db.embedding_strategies or [])]
-            if default_embedding_strategy not in strategy_names:
-                raise ValueError(
-                    f"Embedding strategy '{default_embedding_strategy}' not found. "
-                    f"Available: {strategy_names}"
-                )
             db.default_embedding_strategy = default_embedding_strategy
 
         if default_retrieval_strategy is not None:
-            # Validate that the strategy exists
-            strategy_names = [s.name for s in (db.retrieval_strategies or [])]
-            if default_retrieval_strategy not in strategy_names:
-                raise ValueError(
-                    f"Retrieval strategy '{default_retrieval_strategy}' not found. "
-                    f"Available: {strategy_names}"
-                )
             db.default_retrieval_strategy = default_retrieval_strategy
 
-        # Save updated config
+        # Build a temporary config to resolve only the updated database
         existing_databases[db_index] = db
+        temp_config = project_config.model_copy(deep=True)
+        temp_config.rag.databases = [db]
+
+        # Resolve components to inline definitions for the updated database only
+        resolver = ComponentResolver(temp_config)
+        resolved_temp = resolver.resolve_config(temp_config)
+
+        # Extract the resolved database
+        resolved_db = next(
+            (db for db in resolved_temp.rag.databases or [] if db.name == name),
+            None,
+        )
+        if resolved_db is None:
+            raise ValueError("Failed to resolve database configuration")
+
+        # Validate default strategies after resolution
+        # Check whenever a default exists (not just when updated) because strategy
+        # updates may have removed the strategy that was previously set as default
+        if resolved_db.default_embedding_strategy:
+            strategy_names = [s.name for s in (resolved_db.embedding_strategies or [])]
+            if resolved_db.default_embedding_strategy not in strategy_names:
+                raise ValueError(
+                    f"Embedding strategy '{resolved_db.default_embedding_strategy}' not found. "
+                    f"Available: {strategy_names}"
+                )
+
+        if resolved_db.default_retrieval_strategy:
+            strategy_names = [s.name for s in (resolved_db.retrieval_strategies or [])]
+            if resolved_db.default_retrieval_strategy not in strategy_names:
+                raise ValueError(
+                    f"Retrieval strategy '{resolved_db.default_retrieval_strategy}' not found. "
+                    f"Available: {strategy_names}"
+                )
+
+        # Persist the original config with the resolved database updated
+        existing_databases[db_index] = resolved_db
         project_config.rag.databases = existing_databases
         ProjectService.save_config(namespace, project, project_config)
 
@@ -181,7 +259,7 @@ class DatabaseService:
             database=name,
         )
 
-        return db
+        return resolved_db
 
     @classmethod
     def get_dependent_datasets(

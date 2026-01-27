@@ -10,11 +10,11 @@ from unittest.mock import Mock, patch
 import pytest
 from config.datamodel import (
     Database,
-    EmbeddingStrategy,
-    RetrievalStrategy,
-    Type,
-    Type1,
-    Type2,
+    DatabaseEmbeddingStrategy,
+    DatabaseEmbeddingType,
+    DatabaseRetrievalStrategy,
+    DatabaseRetrievalType,
+    DatabaseType,
 )
 
 from api.errors import DatabaseNotFoundError
@@ -32,19 +32,19 @@ class TestDatabaseService:
         self.mock_rag_config.databases = [
             Database(
                 name="main_db",
-                type=Type.ChromaStore,
+                type=DatabaseType.ChromaStore,
                 config={"collection_name": "documents"},
                 embedding_strategies=[
-                    EmbeddingStrategy(
+                    DatabaseEmbeddingStrategy(
                         name="default_embeddings",
-                        type=Type1.OllamaEmbedder,
+                        type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    RetrievalStrategy(
+                    DatabaseRetrievalStrategy(
                         name="basic_search",
-                        type=Type2.BasicSimilarityStrategy,
+                        type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={"top_k": 10},
                         default=True,
                     )
@@ -54,19 +54,19 @@ class TestDatabaseService:
             ),
             Database(
                 name="secondary_db",
-                type=Type.ChromaStore,
+                type=DatabaseType.ChromaStore,
                 config={"collection_name": "secondary"},
                 embedding_strategies=[
-                    EmbeddingStrategy(
+                    DatabaseEmbeddingStrategy(
                         name="secondary_embeddings",
-                        type=Type1.OllamaEmbedder,
+                        type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    RetrievalStrategy(
+                    DatabaseRetrievalStrategy(
                         name="secondary_search",
-                        type=Type2.BasicSimilarityStrategy,
+                        type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={},
                         default=True,
                     )
@@ -78,6 +78,7 @@ class TestDatabaseService:
         self.mock_project_config = Mock()
         self.mock_project_config.rag = self.mock_rag_config
         self.mock_project_config.datasets = []
+        self.mock_project_config.components = None
 
     # =========================================================================
     # list_databases tests
@@ -126,7 +127,7 @@ class TestDatabaseService:
         result = DatabaseService.get_database("test_ns", "test_proj", "main_db")
 
         assert result.name == "main_db"
-        assert result.type == Type.ChromaStore
+        assert result.type == DatabaseType.ChromaStore
 
     @patch.object(ProjectService, "load_config")
     def test_get_database_raises_not_found(self, mock_load_config):
@@ -140,22 +141,127 @@ class TestDatabaseService:
     # create_database tests
     # =========================================================================
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_create_database_success(self, mock_load_config, mock_save_config):
+    def test_create_database_success(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that create_database adds new database to config."""
         mock_load_config.return_value = self.mock_project_config
 
         new_db = Database(
             name="new_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "new_collection"},
+            embedding_strategies=[
+                DatabaseEmbeddingStrategy(
+                    name="test_embeddings",
+                    type=DatabaseEmbeddingType.OllamaEmbedder,
+                    config={"model": "nomic-embed-text"},
+                )
+            ],
+            retrieval_strategies=[
+                DatabaseRetrievalStrategy(
+                    name="test_retrieval",
+                    type=DatabaseRetrievalType.BasicSimilarityStrategy,
+                    config={"top_k": 10},
+                    default=True,
+                )
+            ],
         )
+
+        # Mock the resolver to return a config with the new database resolved
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = self.mock_rag_config.databases + [new_db]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.create_database("test_ns", "test_proj", new_db)
 
         assert result.name == "new_db"
         mock_save_config.assert_called_once()
+
+    @patch("services.database_service.ComponentResolver")
+    @patch.object(ProjectService, "save_config")
+    @patch.object(ProjectService, "load_config")
+    def test_create_database_preserves_component_references(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
+        """Creating a new database should not flatten existing references."""
+        existing_db = Database(
+            name="existing_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "existing"},
+            embedding_strategy="fast_embed",
+            retrieval_strategy="fast_retrieve",
+        )
+
+        mock_rag_config = Mock()
+        mock_rag_config.databases = [existing_db]
+        mock_project_config = Mock()
+        mock_project_config.rag = mock_rag_config
+
+        new_db = Database(
+            name="new_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "new_collection"},
+            embedding_strategy="fast_embed",
+            retrieval_strategy="fast_retrieve",
+        )
+
+        resolved_db = Database(
+            name="new_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "new_collection"},
+            embedding_strategies=[
+                DatabaseEmbeddingStrategy(
+                    name="fast_embed",
+                    type=DatabaseEmbeddingType.OllamaEmbedder,
+                    config={"model": "nomic-embed-text"},
+                )
+            ],
+            retrieval_strategies=[
+                DatabaseRetrievalStrategy(
+                    name="fast_retrieve",
+                    type=DatabaseRetrievalType.BasicSimilarityStrategy,
+                    config={"top_k": 10},
+                    default=True,
+                )
+            ],
+            default_embedding_strategy="fast_embed",
+            default_retrieval_strategy="fast_retrieve",
+        )
+
+        temp_config = Mock()
+        temp_config.rag = Mock()
+        temp_config.rag.databases = [new_db]
+        mock_project_config.model_copy.return_value = temp_config
+
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [resolved_db]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
+
+        mock_load_config.return_value = mock_project_config
+
+        result = DatabaseService.create_database("test_ns", "test_proj", new_db)
+
+        assert result == resolved_db
+        mock_save_config.assert_called_once()
+
+        saved_config = mock_save_config.call_args.args[2]
+        saved_existing = next(
+            db for db in saved_config.rag.databases if db.name == "existing_db"
+        )
+        assert saved_existing.embedding_strategy == "fast_embed"
+        assert saved_existing.embedding_strategies is None
+        assert saved_existing.retrieval_strategy == "fast_retrieve"
+        assert saved_existing.retrieval_strategies is None
+
+        saved_new = next(db for db in saved_config.rag.databases if db.name == "new_db")
+        assert saved_new.embedding_strategies
+        assert saved_new.retrieval_strategies
 
     @patch.object(ProjectService, "load_config")
     def test_create_database_raises_on_duplicate(self, mock_load_config):
@@ -164,7 +270,7 @@ class TestDatabaseService:
 
         duplicate_db = Database(
             name="main_db",  # Already exists
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
         )
 
         with pytest.raises(ValueError, match="already exists"):
@@ -176,7 +282,7 @@ class TestDatabaseService:
         self.mock_project_config.rag = None
         mock_load_config.return_value = self.mock_project_config
 
-        new_db = Database(name="new_db", type=Type.ChromaStore)
+        new_db = Database(name="new_db", type=DatabaseType.ChromaStore)
 
         with pytest.raises(ValueError, match="RAG not configured"):
             DatabaseService.create_database("test_ns", "test_proj", new_db)
@@ -185,11 +291,29 @@ class TestDatabaseService:
     # update_database tests
     # =========================================================================
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_config(self, mock_load_config, mock_save_config):
+    def test_update_database_config(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database updates config field."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Create updated database with new config
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config={"collection_name": "updated_collection"},
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.update_database(
             "test_ns",
@@ -201,19 +325,37 @@ class TestDatabaseService:
         assert result.config == {"collection_name": "updated_collection"}
         mock_save_config.assert_called_once()
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_strategies(self, mock_load_config, mock_save_config):
+    def test_update_database_strategies(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database updates strategies."""
         mock_load_config.return_value = self.mock_project_config
 
         new_strategies = [
-            RetrievalStrategy(
+            DatabaseRetrievalStrategy(
                 name="new_strategy",
-                type=Type2.CrossEncoderRerankedStrategy,
+                type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
                 config={"model_name": "reranker"},
             )
         ]
+
+        # Create updated database with new strategies
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=new_strategies,
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.update_database(
             "test_ns",
@@ -225,11 +367,30 @@ class TestDatabaseService:
         assert len(result.retrieval_strategies) == 1
         assert result.retrieval_strategies[0].name == "new_strategy"
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "save_config")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_default_strategy(self, mock_load_config, mock_save_config):
+    def test_update_database_default_strategy(
+        self, mock_load_config, mock_save_config, mock_resolver_class
+    ):
         """Test that update_database validates default strategy references."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Create updated database with new default strategy
+        updated_db = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+            default_retrieval_strategy="basic_search",
+        )
+
+        # Mock the resolver to return the updated database
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [updated_db, self.mock_rag_config.databases[1]]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         result = DatabaseService.update_database(
             "test_ns",
@@ -240,10 +401,32 @@ class TestDatabaseService:
 
         assert result.default_retrieval_strategy == "basic_search"
 
+    @patch("services.database_service.ComponentResolver")
     @patch.object(ProjectService, "load_config")
-    def test_update_database_raises_on_invalid_default(self, mock_load_config):
+    def test_update_database_raises_on_invalid_default(
+        self, mock_load_config, mock_resolver_class
+    ):
         """Test that update_database raises ValueError for invalid default strategy."""
         mock_load_config.return_value = self.mock_project_config
+
+        # Create a resolved database with an invalid default (strategy doesn't exist)
+        db_with_invalid_default = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=self.mock_rag_config.databases[0].retrieval_strategies,
+            default_retrieval_strategy="nonexistent_strategy",  # Invalid default
+        )
+
+        # Mock the resolver to return the database with invalid default
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [
+            db_with_invalid_default,
+            self.mock_rag_config.databases[1],
+        ]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
 
         with pytest.raises(ValueError, match="not found"):
             DatabaseService.update_database(
@@ -251,6 +434,56 @@ class TestDatabaseService:
                 "test_proj",
                 "main_db",
                 default_retrieval_strategy="nonexistent_strategy",
+            )
+
+    @patch("services.database_service.ComponentResolver")
+    @patch.object(ProjectService, "load_config")
+    def test_update_database_raises_when_strategy_update_orphans_default(
+        self, mock_load_config, mock_resolver_class
+    ):
+        """Test that updating strategies fails if it would orphan an existing default.
+
+        This tests the scenario where:
+        1. Database has default_retrieval_strategy="basic_search"
+        2. User updates retrieval_strategies to remove "basic_search"
+        3. Validation should fail because the existing default no longer exists
+        """
+        mock_load_config.return_value = self.mock_project_config
+
+        # Create new strategies that don't include "basic_search"
+        new_strategies = [
+            DatabaseRetrievalStrategy(
+                name="new_strategy",
+                type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
+                config={"model_name": "reranker"},
+            )
+        ]
+
+        # The resolved database still has default_retrieval_strategy="basic_search"
+        # but that strategy no longer exists in the list
+        db_with_orphaned_default = Database(
+            name="main_db",
+            type=DatabaseType.ChromaStore,
+            config=self.mock_rag_config.databases[0].config,
+            embedding_strategies=self.mock_rag_config.databases[0].embedding_strategies,
+            retrieval_strategies=new_strategies,  # "basic_search" removed
+            default_retrieval_strategy="basic_search",  # Still points to removed strategy
+        )
+
+        mock_resolved_config = Mock()
+        mock_resolved_config.rag = Mock()
+        mock_resolved_config.rag.databases = [
+            db_with_orphaned_default,
+            self.mock_rag_config.databases[1],
+        ]
+        mock_resolver_class.return_value.resolve_config.return_value = mock_resolved_config
+
+        with pytest.raises(ValueError, match="basic_search.*not found"):
+            DatabaseService.update_database(
+                "test_ns",
+                "test_proj",
+                "main_db",
+                retrieval_strategies=new_strategies,  # User only updates strategies, not default
             )
 
     @patch.object(ProjectService, "load_config")
@@ -418,7 +651,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion success case using RAG abstraction."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
@@ -445,7 +678,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion when collection doesn't exist."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "nonexistent"},
         )
 
@@ -491,7 +724,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test vector store collection deletion failure case."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
@@ -518,7 +751,7 @@ class TestDatabaseServiceCollectionDeletion:
         """Test that import errors are handled gracefully."""
         db = Database(
             name="test_db",
-            type=Type.ChromaStore,
+            type=DatabaseType.ChromaStore,
             config={"collection_name": "test_collection"},
         )
 
