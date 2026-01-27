@@ -137,7 +137,11 @@ def delete_file_task(
 
 
 def _get_first_strategy(config_path: Path) -> str:
-    """Get the first available data processing strategy from config."""
+    """Get the first available data processing strategy from config.
+
+    Returns 'universal_rag' if no strategies are defined, which triggers
+    the built-in default strategy.
+    """
     try:
         from config import load_config
 
@@ -146,4 +150,4 @@ def _get_first_strategy(config_path: Path) -> str:
             return config.rag.data_processing_strategies[0].name
     except Exception:
         pass
-    return "default"
+    return "universal_rag"

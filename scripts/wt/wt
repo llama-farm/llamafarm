@@ -1,0 +1,2584 @@
+#!/usr/bin/env bash
+#
+# wt - LlamaFarm Worktree Manager
+#
+# Manages multiple concurrent LlamaFarm development environments using git worktrees.
+# Enables parallel agent coding sessions without port conflicts or service collisions.
+#
+# Usage: wt <command> [options]
+#
+# See 'wt help' for available commands.
+
+set -euo pipefail
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+WT_ROOT="${WT_ROOT:-$HOME/worktrees/llamafarm}"
+WT_DATA_ROOT="${WT_DATA_ROOT:-$HOME/.llamafarm/worktrees}"
+WT_METADATA_DIR="$WT_ROOT/.wt"
+PORTS_FILE="$WT_METADATA_DIR/ports.json"
+
+# Script and repo locations (resolve symlinks to get real absolute path)
+resolve_symlink() {
+    local path="$1"
+    # First, make the path absolute
+    if [[ "$path" != /* ]]; then
+        path="$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+    fi
+    # Then resolve any symlinks
+    while [[ -L "$path" ]]; do
+        local dir="$(dirname "$path")"
+        path="$(readlink "$path")"
+        # Handle relative symlinks
+        [[ "$path" != /* ]] && path="$dir/$path"
+    done
+    echo "$path"
+}
+
+SCRIPT_PATH="$(resolve_symlink "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Caddy reverse proxy configuration
+WT_CADDYFILE="$WT_METADATA_DIR/Caddyfile"
+WT_LAUNCHDAEMON="/Library/LaunchDaemons/com.llamafarm.wt-proxy.plist"
+WT_LAUNCHDAEMON_LABEL="com.llamafarm.wt-proxy"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+log_info() {
+    echo -e "${BLUE}[info]${NC} $*"
+}
+
+log_success() {
+    echo -e "${GREEN}[ok]${NC} $*"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[warn]${NC} $*" >&2
+}
+
+log_error() {
+    echo -e "${RED}[error]${NC} $*" >&2
+}
+
+die() {
+    log_error "$@"
+    exit 1
+}
+
+# Component-level logging (indented, for sub-steps)
+log_step() {
+    echo -e "  ${BLUE}→${NC} $*"
+}
+
+log_step_done() {
+    echo -e "  ${GREEN}✓${NC} $*"
+}
+
+log_step_fail() {
+    echo -e "  ${RED}✗${NC} $*"
+}
+
+# Sanitize branch name to directory/hostname-safe format
+# feat/rag-visibility -> feat-rag-visibility
+sanitize_name() {
+    local name="$1"
+    echo "$name" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]|-|g'
+}
+
+# Compute port offset using hash of worktree name
+# Returns a value in range 100-999
+compute_port_offset() {
+    local name="$1"
+    local hash
+    hash=$(echo -n "$name" | cksum | cut -d' ' -f1)
+    echo $((hash % 900 + 100))
+}
+
+# Ensure metadata directory exists
+ensure_metadata_dir() {
+    mkdir -p "$WT_METADATA_DIR"
+    if [[ ! -f "$PORTS_FILE" ]]; then
+        echo '{}' > "$PORTS_FILE"
+    fi
+}
+
+# Get port assignment for a worktree (reads from ports.json or computes with collision handling)
+get_port_assignment() {
+    local name="$1"
+    local offset
+
+    ensure_metadata_dir
+
+    # Try to read from ports.json
+    if command -v jq &> /dev/null && [[ -f "$PORTS_FILE" ]]; then
+        offset=$(jq -r --arg name "$name" '.[$name] // empty' "$PORTS_FILE" 2>/dev/null || true)
+    fi
+
+    # If not found, compute with collision detection
+    if [[ -z "${offset:-}" ]]; then
+        offset=$(find_unique_offset "$name")
+    fi
+
+    echo "$offset"
+}
+
+# Save port assignment to ports.json
+save_port_assignment() {
+    local name="$1"
+    local offset="$2"
+
+    ensure_metadata_dir
+
+    if command -v jq &> /dev/null; then
+        local temp_file
+        temp_file=$(mktemp)
+        jq --arg name "$name" --argjson offset "$offset" '.[$name] = $offset' "$PORTS_FILE" > "$temp_file"
+        mv "$temp_file" "$PORTS_FILE"
+    else
+        # Fallback: simple append (not ideal but works)
+        log_warn "jq not found, port assignments may not persist correctly"
+    fi
+}
+
+# Remove port assignment from ports.json
+remove_port_assignment() {
+    local name="$1"
+
+    if command -v jq &> /dev/null && [[ -f "$PORTS_FILE" ]]; then
+        local temp_file
+        temp_file=$(mktemp)
+        jq --arg name "$name" 'del(.[$name])' "$PORTS_FILE" > "$temp_file"
+        mv "$temp_file" "$PORTS_FILE"
+    fi
+}
+
+# Check if a port is in use
+port_in_use() {
+    local port="$1"
+    lsof -i ":$port" &>/dev/null
+}
+
+# Detect current worktree from PWD
+detect_current_worktree() {
+    local current_dir="$PWD"
+
+    # Check if we're inside WT_ROOT
+    if [[ "$current_dir" == "$WT_ROOT"/* ]]; then
+        # Extract the worktree name (first directory component after WT_ROOT)
+        local relative="${current_dir#$WT_ROOT/}"
+        local wt_name="${relative%%/*}"
+        if [[ -d "$WT_ROOT/$wt_name" && "$wt_name" != ".wt" ]]; then
+            echo "$wt_name"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Resolve worktree name - use provided name or detect from PWD
+resolve_worktree_name() {
+    local provided_name="${1:-}"
+
+    if [[ -n "$provided_name" ]]; then
+        sanitize_name "$provided_name"
+    else
+        detect_current_worktree || die "Not in a worktree. Specify a name or run 'wt switch <name>'"
+    fi
+}
+
+# Get worktree path
+get_worktree_path() {
+    local name="$1"
+    echo "$WT_ROOT/$name"
+}
+
+# Get data directory path
+get_data_path() {
+    local name="$1"
+    echo "$WT_DATA_ROOT/$name"
+}
+
+# Check if worktree exists
+worktree_exists() {
+    local name="$1"
+    [[ -d "$(get_worktree_path "$name")" ]]
+}
+
+# Wait for all services to become healthy
+# Polls server's /health endpoint which checks all components
+# Returns 0 if healthy, 1 if timeout
+wait_for_services_healthy() {
+    local wt_name="$1"
+    local timeout="${2:-90}"
+    local interval=3
+    local elapsed=0
+
+    source_env "$wt_name"
+
+    local health_url="http://localhost:$LF_SERVER_PORT/health"
+
+    log_info "Waiting for services to become healthy..."
+
+    while [[ $elapsed -lt $timeout ]]; do
+        local response
+        response=$(curl -sf "$health_url" 2>/dev/null || echo "")
+
+        if [[ -n "$response" ]]; then
+            local status summary
+            status=$(echo "$response" | jq -r '.status // "unknown"' 2>/dev/null)
+            summary=$(echo "$response" | jq -r '.summary // ""' 2>/dev/null)
+
+            if [[ "$status" == "healthy" ]]; then
+                log_success "All services healthy"
+                log_step "$summary"
+                return 0
+            elif [[ "$status" == "degraded" ]]; then
+                # Degraded is acceptable - some optional services may be down
+                log_warn "Services degraded (some optional services unhealthy)"
+                log_step "$summary"
+                return 0
+            fi
+        fi
+
+        sleep $interval
+        ((elapsed += interval))
+        log_step "Waiting... (${elapsed}s/${timeout}s)"
+    done
+
+    log_error "Services failed to become healthy after ${timeout}s"
+    # Try to get final status for debugging
+    local final_response
+    final_response=$(curl -sf "$health_url" 2>/dev/null || echo "")
+    if [[ -n "$final_response" ]]; then
+        local summary
+        summary=$(echo "$final_response" | jq -r '.summary // "no summary"' 2>/dev/null)
+        log_step "Final status: $summary"
+    fi
+    return 1
+}
+
+# =============================================================================
+# Lock File Functions
+# =============================================================================
+
+# Get lock file path for a worktree
+get_lock_file() {
+    local name="$1"
+    echo "$(get_data_path "$name")/.lock"
+}
+
+# Acquire lock for a worktree (prevents concurrent wt start)
+acquire_lock() {
+    local name="$1"
+    local lock_file
+    lock_file=$(get_lock_file "$name")
+    local data_path
+    data_path=$(get_data_path "$name")
+
+    # Ensure data directory exists
+    mkdir -p "$data_path"
+
+    # Check if lock file exists and process is still running
+    if [[ -f "$lock_file" ]]; then
+        local lock_pid
+        lock_pid=$(cat "$lock_file" 2>/dev/null)
+        if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            log_error "Worktree '$name' is locked by PID $lock_pid"
+            log_info "Another 'wt start' may be in progress. Wait or run 'wt stop $name' first."
+            return 1
+        else
+            # Stale lock file, remove it
+            rm -f "$lock_file"
+        fi
+    fi
+
+    # Create lock file with our PID
+    echo $$ > "$lock_file"
+    return 0
+}
+
+# Release lock for a worktree
+release_lock() {
+    local name="$1"
+    local lock_file
+    lock_file=$(get_lock_file "$name")
+
+    # Only remove if we own the lock
+    if [[ -f "$lock_file" ]]; then
+        local lock_pid
+        lock_pid=$(cat "$lock_file" 2>/dev/null)
+        if [[ "$lock_pid" == "$$" ]]; then
+            rm -f "$lock_file"
+        fi
+    fi
+}
+
+# Check if worktree is locked
+is_locked() {
+    local name="$1"
+    local lock_file
+    lock_file=$(get_lock_file "$name")
+
+    if [[ -f "$lock_file" ]]; then
+        local lock_pid
+        lock_pid=$(cat "$lock_file" 2>/dev/null)
+        if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            return 0  # locked
+        fi
+    fi
+    return 1  # not locked
+}
+
+# =============================================================================
+# Port Collision Detection
+# =============================================================================
+
+# Check if a port offset is already assigned to another worktree
+is_offset_in_use() {
+    local offset="$1"
+    local exclude_name="${2:-}"
+
+    if command -v jq &> /dev/null && [[ -f "$PORTS_FILE" ]]; then
+        while IFS= read -r name; do
+            [[ "$name" == "$exclude_name" ]] && continue
+            local assigned_offset
+            assigned_offset=$(jq -r --arg name "$name" '.[$name] // empty' "$PORTS_FILE" 2>/dev/null)
+            if [[ "$assigned_offset" == "$offset" ]]; then
+                return 0  # in use
+            fi
+        done < <(jq -r 'keys[]' "$PORTS_FILE" 2>/dev/null)
+    fi
+    return 1  # not in use
+}
+
+# Find a unique port offset, incrementing if collision detected
+find_unique_offset() {
+    local name="$1"
+    local base_offset
+    base_offset=$(compute_port_offset "$name")
+    local offset="$base_offset"
+    local attempts=0
+    local max_attempts=100
+
+    while is_offset_in_use "$offset" "$name" && [[ $attempts -lt $max_attempts ]]; do
+        ((offset++))
+        # Wrap around if we exceed the range
+        if [[ $offset -ge 1000 ]]; then
+            offset=100
+        fi
+        ((attempts++))
+    done
+
+    if [[ $attempts -ge $max_attempts ]]; then
+        log_warn "Could not find unique port offset after $max_attempts attempts, using $offset"
+    elif [[ $offset -ne $base_offset ]]; then
+        log_info "Port collision detected, using offset $offset instead of $base_offset"
+    fi
+
+    echo "$offset"
+}
+
+# =============================================================================
+# Caddy Reverse Proxy Functions
+# =============================================================================
+
+# Check if Caddy proxy is running
+caddy_is_running() {
+    # Check if caddy process is running (works on both macOS and Linux)
+    pgrep -x "caddy" &>/dev/null || pgrep -f "caddy run" &>/dev/null
+}
+
+# Regenerate Caddyfile based on existing worktrees
+regenerate_caddyfile() {
+    ensure_metadata_dir
+
+    cat > "$WT_CADDYFILE" <<'HEADER'
+{
+    auto_https off
+}
+
+HEADER
+
+    # Generate entries for each worktree
+    for dir in "$WT_ROOT"/*/; do
+        [[ -d "$dir" ]] || continue
+        local name
+        name=$(basename "$dir")
+        [[ "$name" == ".wt" ]] && continue
+
+        local wt_path="$WT_ROOT/$name"
+
+        # Only add routes if env file exists
+        if [[ -f "$wt_path/.env.wt" ]]; then
+            # shellcheck disable=SC1091
+            source "$wt_path/.env.wt"
+
+            cat >> "$WT_CADDYFILE" <<EOF
+# Worktree: $name
+http://server.$name.localhost {
+    reverse_proxy localhost:$LF_SERVER_PORT
+}
+http://designer.$name.localhost {
+    reverse_proxy localhost:$LF_DESIGNER_PORT
+}
+http://runtime.$name.localhost {
+    reverse_proxy localhost:$LF_RUNTIME_PORT
+}
+
+EOF
+        fi
+    done
+
+    log_success "Regenerated Caddyfile at $WT_CADDYFILE"
+}
+
+# Reload Caddy configuration (if running)
+reload_caddy() {
+    if ! caddy_is_running; then
+        return 0
+    fi
+
+    # On Linux, use caddy reload
+    if command -v caddy &>/dev/null; then
+        caddy reload --config "$WT_CADDYFILE" 2>/dev/null || true
+        log_info "Reloaded Caddy configuration"
+    fi
+}
+
+# Generate LaunchDaemon plist for macOS
+generate_launchdaemon_plist() {
+    local caddy_path
+    caddy_path=$(command -v caddy 2>/dev/null || echo "/opt/homebrew/bin/caddy")
+
+    cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$WT_LAUNCHDAEMON_LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$caddy_path</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>$WT_CADDYFILE</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$WT_METADATA_DIR/caddy.log</string>
+    <key>StandardErrorPath</key>
+    <string>$WT_METADATA_DIR/caddy.err</string>
+</dict>
+</plist>
+EOF
+}
+
+cmd_proxy() {
+    local subcmd="${1:-status}"
+    shift || true
+
+    case "$subcmd" in
+        start)
+            cmd_proxy_start "$@"
+            ;;
+        stop)
+            cmd_proxy_stop "$@"
+            ;;
+        status)
+            cmd_proxy_status "$@"
+            ;;
+        install)
+            cmd_proxy_install "$@"
+            ;;
+        uninstall)
+            cmd_proxy_uninstall "$@"
+            ;;
+        reload)
+            regenerate_caddyfile
+            reload_caddy
+            ;;
+        *)
+            die "Unknown proxy subcommand: $subcmd. Use: start|stop|status|install|uninstall|reload"
+            ;;
+    esac
+}
+
+cmd_proxy_start() {
+    if ! command -v caddy &>/dev/null; then
+        die "Caddy not found. Install with: brew install caddy"
+    fi
+
+    if caddy_is_running; then
+        log_info "Caddy proxy is already running"
+        return 0
+    fi
+
+    # Regenerate Caddyfile before starting
+    regenerate_caddyfile
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # Check if LaunchDaemon is installed
+        if [[ ! -f "$WT_LAUNCHDAEMON" ]]; then
+            log_warn "LaunchDaemon not installed. Starting Caddy directly..."
+            log_info "Starting Caddy (requires sudo for port 80)..."
+            sudo caddy start --config "$WT_CADDYFILE"
+        else
+            log_info "Starting Caddy via LaunchDaemon..."
+            # Try modern bootstrap command first, fall back to load
+            if ! sudo launchctl bootstrap system "$WT_LAUNCHDAEMON" 2>/dev/null; then
+                # May already be bootstrapped, try kickstart
+                if ! sudo launchctl kickstart -k "system/$WT_LAUNCHDAEMON_LABEL" 2>/dev/null; then
+                    # Fall back to direct start
+                    log_warn "LaunchDaemon failed, starting Caddy directly..."
+                    sudo caddy start --config "$WT_CADDYFILE"
+                fi
+            fi
+        fi
+    else
+        log_info "Starting Caddy..."
+        sudo caddy start --config "$WT_CADDYFILE"
+    fi
+
+    sleep 1
+
+    if caddy_is_running; then
+        log_success "Caddy proxy started"
+        echo ""
+        echo "Access worktrees via port-free URLs:"
+        for dir in "$WT_ROOT"/*/; do
+            [[ -d "$dir" ]] || continue
+            local name
+            name=$(basename "$dir")
+            [[ "$name" == ".wt" ]] && continue
+            if [[ -f "$WT_ROOT/$name/.env.wt" ]]; then
+                echo "  http://designer.$name.localhost"
+            fi
+        done
+        echo ""
+    else
+        log_error "Failed to start Caddy proxy"
+        return 1
+    fi
+}
+
+cmd_proxy_stop() {
+    if ! caddy_is_running; then
+        log_info "Caddy proxy is not running"
+        return 0
+    fi
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if [[ -f "$WT_LAUNCHDAEMON" ]]; then
+            log_info "Stopping Caddy via LaunchDaemon..."
+            # Try modern bootout command first, fall back to unload
+            sudo launchctl bootout "system/$WT_LAUNCHDAEMON_LABEL" 2>/dev/null || \
+                sudo launchctl unload "$WT_LAUNCHDAEMON" 2>/dev/null || true
+        fi
+        # Also try direct stop in case it was started manually
+        sudo caddy stop 2>/dev/null || sudo pkill -f "caddy.*Caddyfile" 2>/dev/null || true
+    else
+        log_info "Stopping Caddy..."
+        sudo caddy stop 2>/dev/null || sudo pkill -f "caddy.*$WT_CADDYFILE" || true
+    fi
+
+    sleep 1
+    if caddy_is_running; then
+        log_warn "Caddy may still be running, forcing stop..."
+        sudo pkill -9 -f "caddy" 2>/dev/null || true
+    fi
+
+    log_success "Caddy proxy stopped"
+}
+
+cmd_proxy_status() {
+    echo ""
+    echo "Caddy Reverse Proxy Status"
+    echo "--------------------------"
+
+    if ! command -v caddy &>/dev/null; then
+        echo -e "  Caddy: ${RED}not installed${NC}"
+        echo ""
+        echo "Install Caddy with: brew install caddy"
+        return 0
+    fi
+
+    local caddy_version
+    caddy_version=$(caddy version 2>/dev/null | head -1 || echo "unknown")
+    echo "  Caddy version: $caddy_version"
+
+    if caddy_is_running; then
+        echo -e "  Status: ${GREEN}running${NC}"
+    else
+        echo -e "  Status: ${YELLOW}stopped${NC}"
+    fi
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if [[ -f "$WT_LAUNCHDAEMON" ]]; then
+            echo -e "  LaunchDaemon: ${GREEN}installed${NC}"
+        else
+            echo -e "  LaunchDaemon: ${YELLOW}not installed${NC}"
+        fi
+    fi
+
+    echo "  Caddyfile: $WT_CADDYFILE"
+
+    if [[ -f "$WT_CADDYFILE" ]]; then
+        echo ""
+        echo "Configured routes:"
+        grep -E "^http://" "$WT_CADDYFILE" 2>/dev/null | sed 's/ {$//' | sed 's/^/  /' || echo "  (none)"
+    fi
+
+    echo ""
+}
+
+cmd_proxy_install() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        log_warn "LaunchDaemon installation is only supported on macOS"
+        log_info "On Linux, use systemd or run 'wt proxy start' manually"
+        return 0
+    fi
+
+    if ! command -v caddy &>/dev/null; then
+        log_info "Installing Caddy..."
+        if command -v brew &>/dev/null; then
+            brew install caddy
+        else
+            die "Homebrew not found. Install Caddy manually: https://caddyserver.com/docs/install"
+        fi
+    fi
+
+    # Regenerate Caddyfile
+    regenerate_caddyfile
+
+    # Generate and install LaunchDaemon
+    log_info "Installing LaunchDaemon (requires sudo)..."
+
+    local plist_content
+    plist_content=$(generate_launchdaemon_plist)
+
+    echo "$plist_content" | sudo tee "$WT_LAUNCHDAEMON" > /dev/null
+    sudo chown root:wheel "$WT_LAUNCHDAEMON"
+    sudo chmod 644 "$WT_LAUNCHDAEMON"
+
+    log_success "LaunchDaemon installed at $WT_LAUNCHDAEMON"
+    log_info "Caddy will start automatically on boot"
+    echo ""
+    log_info "Start now with: wt proxy start"
+}
+
+cmd_proxy_uninstall() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        log_warn "LaunchDaemon uninstallation is only supported on macOS"
+        return 0
+    fi
+
+    # Stop if running
+    cmd_proxy_stop 2>/dev/null || true
+
+    if [[ -f "$WT_LAUNCHDAEMON" ]]; then
+        log_info "Removing LaunchDaemon..."
+        sudo rm -f "$WT_LAUNCHDAEMON"
+        log_success "LaunchDaemon removed"
+    else
+        log_info "LaunchDaemon not installed"
+    fi
+}
+
+# =============================================================================
+# Environment Generation
+# =============================================================================
+
+generate_env_file() {
+    local wt_name="$1"
+    local wt_path
+    local data_path
+    local offset
+
+    wt_path=$(get_worktree_path "$wt_name")
+    data_path=$(get_data_path "$wt_name")
+    offset=$(get_port_assignment "$wt_name")
+
+    local server_port=$((8000 + offset))
+    local designer_port=$((5000 + offset))
+    local runtime_port=$((11000 + offset))
+
+    # Save the port assignment
+    save_port_assignment "$wt_name" "$offset"
+
+    cat > "$wt_path/.env.wt" <<EOF
+# Auto-generated by wt for worktree: $wt_name
+# DO NOT EDIT - regenerate with: wt install $wt_name
+
+# Worktree Identity
+WT_NAME=$wt_name
+WT_ROOT=$WT_ROOT
+WT_PATH=$wt_path
+
+# Port Assignments
+LF_SERVER_PORT=$server_port
+LF_DESIGNER_PORT=$designer_port
+LF_RUNTIME_PORT=$runtime_port
+
+# Host Configuration
+HOST=0.0.0.0
+PORT=$server_port
+LF_RUNTIME_HOST=127.0.0.1
+
+# Service URLs (for inter-service communication)
+LF_SERVER_URL=http://localhost:$server_port
+LF_RUNTIME_URL=http://127.0.0.1:$runtime_port
+
+# Data Isolation
+LF_DATA_DIR=$data_path
+export LF_DATA_DIR
+
+# Celery Configuration (filesystem broker, isolated per worktree)
+CELERY_BROKER_URL=filesystem://
+CELERY_BROKER_FOLDER=$data_path/broker
+CELERY_RESULT_BACKEND=file://$data_path/broker/results
+
+# Designer API URL (used at build time)
+VITE_APP_API_URL=http://localhost:$server_port
+EOF
+
+    log_success "Generated .env.wt (server:$server_port, designer:$designer_port, runtime:$runtime_port)"
+}
+
+# Source the env file for a worktree
+source_env() {
+    local wt_name="$1"
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if [[ -f "$wt_path/.env.wt" ]]; then
+        # shellcheck disable=SC1091
+        source "$wt_path/.env.wt"
+    else
+        die "No .env.wt found for worktree '$wt_name'. Run 'wt install $wt_name'"
+    fi
+}
+
+# =============================================================================
+# Worktree Management Commands
+# =============================================================================
+
+cmd_create() {
+    local branch_name=""
+    local print_dir=false
+    local go_flag=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --print-dir)
+                print_dir=true
+                shift
+                ;;
+            --go)
+                go_flag=true
+                print_dir=true
+                shift
+                ;;
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                branch_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$branch_name" ]]; then
+        die "Usage: wt create <branch-name>"
+    fi
+
+    local wt_name
+    wt_name=$(sanitize_name "$branch_name")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    if worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' already exists at $wt_path"
+    fi
+
+    # Ensure root directories exist
+    mkdir -p "$WT_ROOT"
+    mkdir -p "$WT_DATA_ROOT"
+    ensure_metadata_dir
+
+    log_info "Creating worktree '$wt_name'..."
+
+    # Create the git worktree
+    cd "$REPO_DIR"
+    if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+        # Branch exists, use it
+        git worktree add "$wt_path" "$branch_name"
+    else
+        # Branch doesn't exist, create new branch from current HEAD
+        git worktree add -b "$branch_name" "$wt_path"
+    fi
+
+    log_success "Created git worktree at $wt_path"
+
+    # Create data directory structure
+    mkdir -p "$data_path"/{logs,pids,broker/{in,processed,results},projects}
+    log_success "Created data directory at $data_path"
+
+    # Generate environment file
+    generate_env_file "$wt_name"
+
+    # Run install
+    log_info "Installing dependencies..."
+    cmd_install "$wt_name"
+
+    # Run build
+    log_info "Building services..."
+    cmd_build "$wt_name"
+
+    # Regenerate Caddyfile and reload if proxy is running
+    if caddy_is_running; then
+        regenerate_caddyfile
+        reload_caddy
+    fi
+
+    # Start services automatically
+    log_info "Starting services..."
+    cmd_start "$wt_name"
+
+    log_success "Worktree '$wt_name' created successfully!"
+
+    # Print directory for shell wrapper
+    if [[ "$print_dir" == true ]]; then
+        echo "$wt_path"
+    fi
+
+    # Change into the worktree directory
+    cd "$wt_path"
+}
+
+cmd_list() {
+    ensure_metadata_dir
+
+    if [[ ! -d "$WT_ROOT" ]]; then
+        log_info "No worktrees found. Create one with: wt create <name>"
+        return 0
+    fi
+
+    local current_wt=""
+    current_wt=$(detect_current_worktree 2>/dev/null || true)
+
+    # Check if Caddy proxy is running for port-free URLs
+    local proxy_running=false
+    if caddy_is_running; then
+        proxy_running=true
+    fi
+
+    echo ""
+    if [[ "$proxy_running" == true ]]; then
+        printf "%-20s %-10s %-40s %-40s\n" "WORKTREE" "STATUS" "SERVER" "DESIGNER"
+        printf "%-20s %-10s %-40s %-40s\n" "--------" "------" "------" "--------"
+    else
+        printf "%-25s %-10s %-8s %-8s %-8s %s\n" "WORKTREE" "STATUS" "SERVER" "DESIGNER" "RUNTIME" "PATH"
+        printf "%-25s %-10s %-8s %-8s %-8s %s\n" "--------" "------" "------" "--------" "-------" "----"
+    fi
+
+    for dir in "$WT_ROOT"/*/; do
+        [[ -d "$dir" ]] || continue
+        local name
+        name=$(basename "$dir")
+        [[ "$name" == ".wt" ]] && continue
+
+        local wt_path="$WT_ROOT/$name"
+        local data_path="$WT_DATA_ROOT/$name"
+        local status="stopped"
+        local server_port="-"
+        local designer_port="-"
+        local runtime_port="-"
+
+        # Check if env file exists and read ports
+        if [[ -f "$wt_path/.env.wt" ]]; then
+            # shellcheck disable=SC1091
+            source "$wt_path/.env.wt"
+            server_port="${LF_SERVER_PORT:-?}"
+            designer_port="${LF_DESIGNER_PORT:-?}"
+            runtime_port="${LF_RUNTIME_PORT:-?}"
+
+            # Check if services are running
+            if [[ -f "$data_path/pids/server.pid" ]] && kill -0 "$(cat "$data_path/pids/server.pid" 2>/dev/null)" 2>/dev/null; then
+                status="running"
+            fi
+        else
+            status="no-env"
+        fi
+
+        # Mark current worktree
+        local marker=""
+        if [[ "$name" == "$current_wt" ]]; then
+            marker="* "
+        else
+            marker="  "
+        fi
+
+        if [[ "$proxy_running" == true ]]; then
+            # Show port-free URLs when proxy is running
+            local server_url="http://server.$name.localhost"
+            local designer_url="http://designer.$name.localhost"
+            printf "%s%-18s %-10s %-40s %-40s\n" "$marker" "$name" "$status" "$server_url" "$designer_url"
+        else
+            # Show ports when proxy is not running
+            printf "%s%-23s %-10s %-8s %-8s %-8s %s\n" "$marker" "$name" "$status" "$server_port" "$designer_port" "$runtime_port" "$wt_path"
+        fi
+    done
+
+    if [[ "$proxy_running" == true ]]; then
+        echo ""
+        echo -e "${CYAN}Proxy running - URLs are port-free. Run 'wt url <name>' for all service URLs.${NC}"
+    fi
+    echo ""
+}
+
+cmd_delete() {
+    local wt_name=""
+    local force=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -f|--force)
+                force=true
+                shift
+                ;;
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                wt_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    wt_name=$(resolve_worktree_name "${wt_name:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    # Stop services first
+    log_info "Stopping services for '$wt_name'..."
+    cmd_stop "$wt_name" 2>/dev/null || true
+
+    # Confirm deletion
+    if [[ "$force" != true ]]; then
+        echo ""
+        log_warn "This will delete:"
+        echo "  - Git worktree: $wt_path"
+        echo "  - Data directory: $data_path"
+        echo ""
+        read -r -p "Are you sure? [y/N] " response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_info "Cancelled"
+            return 0
+        fi
+    fi
+
+    # Remove git worktree
+    log_info "Removing git worktree..."
+    cd "$REPO_DIR"
+    git worktree remove "$wt_path" --force 2>/dev/null || rm -rf "$wt_path"
+
+    # Remove data directory
+    log_info "Removing data directory..."
+    rm -rf "$data_path"
+
+    # Remove port assignment
+    remove_port_assignment "$wt_name"
+
+    # Regenerate Caddyfile and reload if proxy is running
+    if caddy_is_running; then
+        regenerate_caddyfile
+        reload_caddy
+    fi
+
+    log_success "Worktree '$wt_name' deleted"
+}
+
+cmd_switch() {
+    local wt_name=""
+    local print_dir=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --print-dir)
+                print_dir=true
+                shift
+                ;;
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                wt_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$wt_name" ]]; then
+        # Interactive picker if fzf is available
+        if command -v fzf &> /dev/null && [[ -d "$WT_ROOT" ]]; then
+            wt_name=$(ls -1 "$WT_ROOT" 2>/dev/null | grep -v "^\.wt$" | fzf --prompt="Select worktree: " || true)
+            if [[ -z "$wt_name" ]]; then
+                die "No worktree selected"
+            fi
+        else
+            die "Usage: wt switch <name>"
+        fi
+    fi
+
+    wt_name=$(sanitize_name "$wt_name")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist. Run 'wt list' to see available worktrees."
+    fi
+
+    if [[ "$print_dir" == true ]]; then
+        echo "$wt_path"
+    else
+        log_info "Switched to: $wt_path"
+    fi
+}
+
+# =============================================================================
+# Install & Build Commands
+# =============================================================================
+
+cmd_install() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if [[ -z "$wt_name" ]]; then
+        die "Usage: wt install <name>"
+    fi
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    # Generate env file if it doesn't exist
+    if [[ ! -f "$wt_path/.env.wt" ]]; then
+        generate_env_file "$wt_name"
+    fi
+
+    log_info "Installing dependencies for '$wt_name' (parallel)..."
+
+    local pids=()
+    local names=()
+
+    # CLI (Go)
+    if [[ -d "$wt_path/cli" ]]; then
+        log_step "CLI (go mod download)"
+        (cd "$wt_path/cli" && go mod download >/dev/null 2>&1) &
+        pids+=($!)
+        names+=("CLI")
+    fi
+
+    # Server (Python/uv)
+    if [[ -d "$wt_path/server" ]]; then
+        log_step "Server (uv sync)"
+        (cd "$wt_path/server" && uv sync >/dev/null 2>&1) &
+        pids+=($!)
+        names+=("Server")
+    fi
+
+    # RAG (Python/uv)
+    if [[ -d "$wt_path/rag" ]]; then
+        log_step "RAG (uv sync)"
+        (cd "$wt_path/rag" && uv sync >/dev/null 2>&1) &
+        pids+=($!)
+        names+=("RAG")
+    fi
+
+    # Universal Runtime (Python/uv with extras)
+    if [[ -d "$wt_path/runtimes/universal" ]]; then
+        log_step "Runtime (uv sync)"
+        (cd "$wt_path/runtimes/universal" && uv sync --extra classification --extra anomaly --extra document >/dev/null 2>&1) &
+        pids+=($!)
+        names+=("Runtime")
+    fi
+
+    # Designer (Node/npm)
+    if [[ -d "$wt_path/designer" ]]; then
+        log_step "Designer (npm install)"
+        (cd "$wt_path/designer" && npm install >/dev/null 2>&1) &
+        pids+=($!)
+        names+=("Designer")
+    fi
+
+    # Wait for all and report completion status
+    local failed=false
+    for i in "${!pids[@]}"; do
+        if wait "${pids[$i]}"; then
+            log_step_done "${names[$i]}"
+        else
+            log_step_fail "${names[$i]}"
+            failed=true
+        fi
+    done
+
+    if [[ "$failed" == true ]]; then
+        log_warn "Some installations failed"
+    else
+        log_success "Dependencies installed"
+    fi
+}
+
+cmd_build() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    source_env "$wt_name"
+
+    log_info "Building CLI for '$wt_name'..."
+
+    # Build CLI using nx wrapper
+    cd "$wt_path"
+    # Generate types first (nx dependency resolution can be flaky on fresh worktrees)
+    ./nx run cli:generate-types
+    ./nx build cli
+
+    log_success "CLI built at $wt_path/dist/lf"
+
+    ./nx generate-types config
+}
+
+# =============================================================================
+# Service Lifecycle Commands
+# =============================================================================
+
+check_ports() {
+    local wt_name="$1"
+    source_env "$wt_name"
+
+    local conflicts=false
+
+    if port_in_use "$LF_SERVER_PORT"; then
+        log_error "Server port $LF_SERVER_PORT is already in use"
+        conflicts=true
+    fi
+
+    if port_in_use "$LF_DESIGNER_PORT"; then
+        log_error "Designer port $LF_DESIGNER_PORT is already in use"
+        conflicts=true
+    fi
+
+    if port_in_use "$LF_RUNTIME_PORT"; then
+        log_error "Runtime port $LF_RUNTIME_PORT is already in use"
+        conflicts=true
+    fi
+
+    if [[ "$conflicts" == true ]]; then
+        return 1
+    fi
+    return 0
+}
+
+start_server() {
+    local wt_name="$1"
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    source_env "$wt_name"
+
+    log_info "Starting server on port $LF_SERVER_PORT..."
+
+    cd "$wt_path/server"
+    PORT="$LF_SERVER_PORT" \
+    HOST="0.0.0.0" \
+    LF_DATA_DIR="$data_path" \
+    LOG_FILE="$data_path/logs/server.log" \
+    nohup uv run python main.py > "$data_path/logs/server.log" 2>&1 &
+    echo $! > "$data_path/pids/server.pid"
+
+    log_success "Server started (PID: $(cat "$data_path/pids/server.pid"))"
+}
+
+start_runtime() {
+    local wt_name="$1"
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    source_env "$wt_name"
+
+    log_info "Starting runtime on port $LF_RUNTIME_PORT..."
+
+    cd "$wt_path/runtimes/universal"
+    LF_RUNTIME_PORT="$LF_RUNTIME_PORT" \
+    LF_RUNTIME_HOST="127.0.0.1" \
+    LOG_FILE="$data_path/logs/runtime.log" \
+    nohup uv run python server.py > "$data_path/logs/runtime.log" 2>&1 &
+    echo $! > "$data_path/pids/runtime.pid"
+
+    log_success "Runtime started (PID: $(cat "$data_path/pids/runtime.pid"))"
+}
+
+start_rag() {
+    local wt_name="$1"
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    source_env "$wt_name"
+
+    log_info "Starting RAG worker..."
+
+    cd "$wt_path/rag"
+    CELERY_BROKER_URL="filesystem://" \
+    CELERY_BROKER_FOLDER="$data_path/broker" \
+    CELERY_RESULT_BACKEND="file://$data_path/broker/results" \
+    LF_DATA_DIR="$data_path" \
+    nohup uv run celery -A celery_app worker --loglevel=INFO > "$data_path/logs/rag.log" 2>&1 &
+    echo $! > "$data_path/pids/rag.pid"
+
+    log_success "RAG worker started (PID: $(cat "$data_path/pids/rag.pid"))"
+}
+
+start_designer() {
+    local wt_name="$1"
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    source_env "$wt_name"
+
+    log_info "Starting designer on port $LF_DESIGNER_PORT..."
+
+    cd "$wt_path/designer"
+    VITE_APP_API_URL="http://localhost:$LF_SERVER_PORT" \
+    nohup npm run dev -- --port "$LF_DESIGNER_PORT" > "$data_path/logs/designer.log" 2>&1 &
+    echo $! > "$data_path/pids/designer.pid"
+
+    log_success "Designer started (PID: $(cat "$data_path/pids/designer.pid"))"
+}
+
+stop_service() {
+    local service="$1"
+    local data_path="$2"
+    local pid_file="$data_path/pids/$service.pid"
+
+    if [[ ! -f "$pid_file" ]]; then
+        return 0
+    fi
+
+    local pid
+    pid=$(cat "$pid_file")
+
+    if kill -0 "$pid" 2>/dev/null; then
+        log_info "Stopping $service (PID: $pid)..."
+        kill "$pid" 2>/dev/null || true
+
+        # Wait up to 5 seconds for graceful shutdown
+        local wait_count=0
+        while kill -0 "$pid" 2>/dev/null && [[ $wait_count -lt 10 ]]; do
+            sleep 0.5
+            ((wait_count++))
+        done
+
+        # Force kill if still running
+        if kill -0 "$pid" 2>/dev/null; then
+            log_warn "Force killing $service..."
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    rm -f "$pid_file"
+}
+
+cmd_start() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    # Acquire lock to prevent concurrent starts
+    if ! acquire_lock "$wt_name"; then
+        die "Could not acquire lock for worktree '$wt_name'"
+    fi
+
+    # Ensure lock is released on exit (trap for this specific function)
+    trap "release_lock '$wt_name'" EXIT
+
+    # Ensure data directories exist
+    mkdir -p "$data_path"/{logs,pids,broker/{in,processed,results}}
+
+    # Check ports
+    if ! check_ports "$wt_name"; then
+        release_lock "$wt_name"
+        trap - EXIT
+        die "Port conflict detected. Stop conflicting services first."
+    fi
+
+    log_info "Starting services for '$wt_name'..."
+
+    start_server "$wt_name"
+    start_runtime "$wt_name"
+    start_rag "$wt_name"
+    start_designer "$wt_name"
+
+    # Release lock before health checks (services are started)
+    release_lock "$wt_name"
+    trap - EXIT
+
+    # Wait for services to become healthy
+    echo ""
+    if wait_for_services_healthy "$wt_name" 90; then
+        echo ""
+        log_success "All services started for '$wt_name'"
+    else
+        echo ""
+        log_warn "Services started but health check failed for '$wt_name'"
+        log_info "Check logs with: wt logs server"
+    fi
+
+    cmd_url "$wt_name"
+}
+
+cmd_stop() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    log_info "Stopping services for '$wt_name'..."
+
+    stop_service "designer" "$data_path"
+    stop_service "rag" "$data_path"
+    stop_service "runtime" "$data_path"
+    stop_service "server" "$data_path"
+
+    log_success "All services stopped for '$wt_name'"
+}
+
+cmd_restart() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+
+    cmd_stop "$wt_name"
+    sleep 1
+    cmd_start "$wt_name"
+}
+
+cmd_logs() {
+    local wt_name=""
+    local service="server"
+
+    # Parse arguments
+    if [[ $# -ge 1 ]]; then
+        # Check if first arg is a service name
+        if [[ "$1" =~ ^(server|rag|runtime|designer|all)$ ]]; then
+            service="$1"
+            shift
+        fi
+    fi
+
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    if [[ "$service" == "all" ]]; then
+        # Tail all logs
+        tail -f "$data_path/logs/"*.log 2>/dev/null || log_error "No logs found"
+    else
+        local log_file="$data_path/logs/$service.log"
+        if [[ -f "$log_file" ]]; then
+            tail -f "$log_file"
+        else
+            die "Log file not found: $log_file"
+        fi
+    fi
+}
+
+cmd_status() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    local data_path
+    data_path=$(get_data_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    source_env "$wt_name"
+
+    echo ""
+    echo "Worktree: $wt_name"
+    echo "Path: $wt_path"
+    echo "Data: $data_path"
+    echo ""
+
+    printf "%-12s %-8s %-12s %s\n" "SERVICE" "STATUS" "PORT" "PID"
+    printf "%-12s %-8s %-12s %s\n" "-------" "------" "----" "---"
+
+    for service in server runtime rag designer; do
+        local pid_file="$data_path/pids/$service.pid"
+        local status="stopped"
+        local pid="-"
+        local port="-"
+
+        case "$service" in
+            server) port="$LF_SERVER_PORT" ;;
+            runtime) port="$LF_RUNTIME_PORT" ;;
+            designer) port="$LF_DESIGNER_PORT" ;;
+            rag) port="(worker)" ;;
+        esac
+
+        if [[ -f "$pid_file" ]]; then
+            pid=$(cat "$pid_file")
+            if kill -0 "$pid" 2>/dev/null; then
+                status="${GREEN}running${NC}"
+            else
+                status="${RED}dead${NC}"
+            fi
+        fi
+
+        printf "%-12s %-8b %-12s %s\n" "$service" "$status" "$port" "$pid"
+    done
+    echo ""
+}
+
+# =============================================================================
+# CLI Wrapper & Utility Commands
+# =============================================================================
+
+cmd_lf() {
+    local wt_name
+    wt_name=$(detect_current_worktree 2>/dev/null || true)
+
+    # Check if first arg looks like a worktree name
+    if [[ $# -ge 1 && -d "$WT_ROOT/$1" ]]; then
+        wt_name="$1"
+        shift
+    fi
+
+    if [[ -z "$wt_name" ]]; then
+        die "Not in a worktree. Specify worktree name or cd into one."
+    fi
+
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+    source_env "$wt_name"
+
+    local lf_binary="$wt_path/dist/lf"
+    if [[ ! -x "$lf_binary" ]]; then
+        die "CLI not built. Run 'wt build $wt_name' first."
+    fi
+
+    "$lf_binary" --server-url "http://localhost:$LF_SERVER_PORT" --auto-start=false "$@"
+}
+
+cmd_url() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+
+    source_env "$wt_name"
+
+    echo ""
+    echo "Service URLs for '$wt_name':"
+    echo ""
+
+    if caddy_is_running; then
+        echo "  Port-free (via Caddy proxy):"
+        echo "    Server:   http://server.$wt_name.localhost"
+        echo "    Designer: http://designer.$wt_name.localhost"
+        echo "    Runtime:  http://runtime.$wt_name.localhost"
+        echo ""
+    fi
+
+    echo "  Direct (with ports):"
+    echo "    Server:   http://localhost:$LF_SERVER_PORT"
+    echo "    Designer: http://localhost:$LF_DESIGNER_PORT"
+    echo "    Runtime:  http://localhost:$LF_RUNTIME_PORT"
+    echo ""
+}
+
+cmd_open() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+
+    source_env "$wt_name"
+
+    local url="http://localhost:$LF_DESIGNER_PORT"
+    if caddy_is_running; then
+        url="http://designer.$wt_name.localhost"
+    fi
+
+    log_info "Opening Designer at $url"
+
+    if command -v open &> /dev/null; then
+        open "$url"
+    elif command -v xdg-open &> /dev/null; then
+        xdg-open "$url"
+    else
+        log_info "Visit: $url"
+    fi
+}
+
+cmd_health() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+
+    source_env "$wt_name"
+
+    echo ""
+    echo "Health check for '$wt_name':"
+    echo ""
+
+    # Check server
+    printf "  Server (:%s): " "$LF_SERVER_PORT"
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LF_SERVER_PORT/health" 2>/dev/null | grep -q "200"; then
+        echo -e "${GREEN}healthy${NC}"
+    else
+        echo -e "${RED}unreachable${NC}"
+    fi
+
+    # Check runtime
+    printf "  Runtime (:%s): " "$LF_RUNTIME_PORT"
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LF_RUNTIME_PORT/health" 2>/dev/null | grep -q "200"; then
+        echo -e "${GREEN}healthy${NC}"
+    else
+        echo -e "${RED}unreachable${NC}"
+    fi
+
+    # Check designer
+    printf "  Designer (:%s): " "$LF_DESIGNER_PORT"
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LF_DESIGNER_PORT/" 2>/dev/null | grep -q "200"; then
+        echo -e "${GREEN}healthy${NC}"
+    else
+        echo -e "${RED}unreachable${NC}"
+    fi
+
+    echo ""
+}
+
+cmd_vscode() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    source_env "$wt_name"
+
+    # Generate .vscode/settings.json
+    local vscode_dir="$wt_path/.vscode"
+    mkdir -p "$vscode_dir"
+
+    log_info "Generating VS Code settings for '$wt_name'..."
+
+    cat > "$vscode_dir/settings.json" <<EOF
+{
+    "python.defaultInterpreterPath": "${wt_path}/server/.venv/bin/python",
+    "python.analysis.extraPaths": [
+        "${wt_path}/server",
+        "${wt_path}/rag",
+        "${wt_path}/runtimes/universal",
+        "${wt_path}/common",
+        "${wt_path}/config"
+    ],
+    "go.goroot": "$(go env GOROOT 2>/dev/null || echo "")",
+    "go.toolsManagement.autoUpdate": true,
+    "typescript.tsdk": "${wt_path}/designer/node_modules/typescript/lib",
+    "editor.formatOnSave": true,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.venv": true,
+        "**/node_modules": true,
+        "**/.pytest_cache": true
+    },
+    "terminal.integrated.env.osx": {
+        "LF_SERVER_PORT": "${LF_SERVER_PORT}",
+        "LF_DESIGNER_PORT": "${LF_DESIGNER_PORT}",
+        "LF_RUNTIME_PORT": "${LF_RUNTIME_PORT}",
+        "LF_DATA_DIR": "${LF_DATA_DIR}",
+        "WT_NAME": "${wt_name}"
+    },
+    "terminal.integrated.env.linux": {
+        "LF_SERVER_PORT": "${LF_SERVER_PORT}",
+        "LF_DESIGNER_PORT": "${LF_DESIGNER_PORT}",
+        "LF_RUNTIME_PORT": "${LF_RUNTIME_PORT}",
+        "LF_DATA_DIR": "${LF_DATA_DIR}",
+        "WT_NAME": "${wt_name}"
+    }
+}
+EOF
+
+    log_success "Generated $vscode_dir/settings.json"
+
+    # Open in VS Code
+    if command -v code &> /dev/null; then
+        log_info "Opening '$wt_name' in VS Code..."
+        code "$wt_path"
+    else
+        log_warn "VS Code CLI (code) not found in PATH"
+        log_info "Install it from VS Code: Cmd+Shift+P -> 'Shell Command: Install code command'"
+        log_info "Settings generated at: $vscode_dir/settings.json"
+    fi
+}
+
+cmd_cursor() {
+    local wt_name
+    wt_name=$(resolve_worktree_name "${1:-}")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    if ! worktree_exists "$wt_name"; then
+        die "Worktree '$wt_name' does not exist"
+    fi
+
+    source_env "$wt_name"
+
+    # Generate .cursor/settings.json
+    local cursor_dir="$wt_path/.cursor"
+    mkdir -p "$cursor_dir"
+
+    log_info "Generating Cursor settings for '$wt_name'..."
+
+    cat > "$cursor_dir/settings.json" <<EOF
+{
+    "python.defaultInterpreterPath": "${wt_path}/server/.venv/bin/python",
+    "python.analysis.extraPaths": [
+        "${wt_path}/server",
+        "${wt_path}/rag",
+        "${wt_path}/runtimes/universal",
+        "${wt_path}/common",
+        "${wt_path}/config"
+    ],
+    "go.goroot": "$(go env GOROOT 2>/dev/null || echo "")",
+    "go.toolsManagement.autoUpdate": true,
+    "typescript.tsdk": "${wt_path}/designer/node_modules/typescript/lib",
+    "editor.formatOnSave": true,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.venv": true,
+        "**/node_modules": true,
+        "**/.pytest_cache": true
+    },
+    "terminal.integrated.env.osx": {
+        "LF_SERVER_PORT": "${LF_SERVER_PORT}",
+        "LF_DESIGNER_PORT": "${LF_DESIGNER_PORT}",
+        "LF_RUNTIME_PORT": "${LF_RUNTIME_PORT}",
+        "LF_DATA_DIR": "${LF_DATA_DIR}",
+        "WT_NAME": "${wt_name}"
+    },
+    "terminal.integrated.env.linux": {
+        "LF_SERVER_PORT": "${LF_SERVER_PORT}",
+        "LF_DESIGNER_PORT": "${LF_DESIGNER_PORT}",
+        "LF_RUNTIME_PORT": "${LF_RUNTIME_PORT}",
+        "LF_DATA_DIR": "${LF_DATA_DIR}",
+        "WT_NAME": "${wt_name}"
+    }
+}
+EOF
+
+    log_success "Generated $cursor_dir/settings.json"
+
+    # Open in Cursor
+    if command -v cursor &> /dev/null; then
+        log_info "Opening '$wt_name' in Cursor..."
+        cursor "$wt_path"
+    else
+        log_warn "Cursor CLI (cursor) not found in PATH"
+        log_info "Install it from Cursor: Cmd+P -> 'Install Shell Command: Install cursor command'"
+        log_info "Settings generated at: $cursor_dir/settings.json"
+    fi
+}
+
+cmd_gc() {
+    log_info "Scanning for orphaned data directories..."
+
+    local orphaned=()
+
+    # Find data directories that don't have corresponding worktrees
+    if [[ -d "$WT_DATA_ROOT" ]]; then
+        for data_dir in "$WT_DATA_ROOT"/*/; do
+            [[ -d "$data_dir" ]] || continue
+            local name
+            name=$(basename "$data_dir")
+
+            # Check if corresponding worktree exists
+            if [[ ! -d "$WT_ROOT/$name" ]]; then
+                orphaned+=("$name")
+            fi
+        done
+    fi
+
+    # Check for stale port assignments
+    local stale_ports=()
+    if command -v jq &> /dev/null && [[ -f "$PORTS_FILE" ]]; then
+        while IFS= read -r name; do
+            if [[ ! -d "$WT_ROOT/$name" ]]; then
+                stale_ports+=("$name")
+            fi
+        done < <(jq -r 'keys[]' "$PORTS_FILE" 2>/dev/null)
+    fi
+
+    if [[ ${#orphaned[@]} -eq 0 && ${#stale_ports[@]} -eq 0 ]]; then
+        log_success "No orphaned data or stale port assignments found"
+        return 0
+    fi
+
+    echo ""
+    if [[ ${#orphaned[@]} -gt 0 ]]; then
+        echo "Orphaned data directories (no matching worktree):"
+        for name in "${orphaned[@]}"; do
+            local size
+            size=$(du -sh "$WT_DATA_ROOT/$name" 2>/dev/null | cut -f1)
+            echo "  - $name ($size)"
+        done
+        echo ""
+    fi
+
+    if [[ ${#stale_ports[@]} -gt 0 ]]; then
+        echo "Stale port assignments:"
+        for name in "${stale_ports[@]}"; do
+            echo "  - $name"
+        done
+        echo ""
+    fi
+
+    read -r -p "Clean up these items? [y/N] " response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        # Remove orphaned data directories
+        for name in "${orphaned[@]}"; do
+            log_info "Removing orphaned data: $WT_DATA_ROOT/$name"
+            rm -rf "$WT_DATA_ROOT/$name"
+        done
+
+        # Remove stale port assignments
+        for name in "${stale_ports[@]}"; do
+            log_info "Removing stale port assignment: $name"
+            remove_port_assignment "$name"
+        done
+
+        log_success "Cleanup complete"
+    else
+        log_info "Cleanup cancelled"
+    fi
+}
+
+cmd_doctor() {
+    echo ""
+    echo "wt doctor - Diagnosing common issues"
+    echo "====================================="
+    echo ""
+
+    local issues_found=0
+
+    # Check required tools
+    echo "Required tools:"
+    for tool in git go uv npm jq curl; do
+        printf "  %-10s " "$tool"
+        if command -v "$tool" &> /dev/null; then
+            local version
+            case "$tool" in
+                git) version=$(git --version | head -1) ;;
+                go) version=$(go version | awk '{print $3}') ;;
+                uv) version=$(uv --version 2>/dev/null | head -1) ;;
+                npm) version="v$(npm --version 2>/dev/null)" ;;
+                jq) version=$(jq --version 2>/dev/null) ;;
+                curl) version=$(curl --version | head -1 | awk '{print $2}') ;;
+            esac
+            echo -e "${GREEN}✓${NC} $version"
+        else
+            echo -e "${RED}✗ not found${NC}"
+            ((issues_found++))
+        fi
+    done
+    echo ""
+
+    # Check optional tools
+    echo "Optional tools:"
+    for tool in caddy fzf code; do
+        printf "  %-10s " "$tool"
+        if command -v "$tool" &> /dev/null; then
+            echo -e "${GREEN}✓${NC} installed"
+        else
+            echo -e "${YELLOW}○${NC} not installed"
+        fi
+    done
+    echo ""
+
+    # Check directories
+    echo "Directories:"
+    printf "  %-30s " "WT_ROOT ($WT_ROOT)"
+    if [[ -d "$WT_ROOT" ]]; then
+        local wt_count
+        wt_count=$(find "$WT_ROOT" -maxdepth 1 -type d ! -name ".wt" ! -path "$WT_ROOT" 2>/dev/null | wc -l | tr -d ' ')
+        echo -e "${GREEN}✓${NC} ($wt_count worktrees)"
+    else
+        echo -e "${YELLOW}○${NC} does not exist (will be created on first use)"
+    fi
+
+    printf "  %-30s " "WT_DATA_ROOT ($WT_DATA_ROOT)"
+    if [[ -d "$WT_DATA_ROOT" ]]; then
+        echo -e "${GREEN}✓${NC}"
+    else
+        echo -e "${YELLOW}○${NC} does not exist (will be created on first use)"
+    fi
+
+    printf "  %-30s " "Ports registry"
+    if [[ -f "$PORTS_FILE" ]]; then
+        local port_count
+        port_count=$(jq 'length' "$PORTS_FILE" 2>/dev/null || echo "0")
+        echo -e "${GREEN}✓${NC} ($port_count assignments)"
+    else
+        echo -e "${YELLOW}○${NC} not created yet"
+    fi
+    echo ""
+
+    # Check for port conflicts
+    echo "Port conflicts:"
+    local has_conflicts=false
+    if [[ -d "$WT_ROOT" ]]; then
+        for dir in "$WT_ROOT"/*/; do
+            [[ -d "$dir" ]] || continue
+            local name
+            name=$(basename "$dir")
+            [[ "$name" == ".wt" ]] && continue
+
+            if [[ -f "$WT_ROOT/$name/.env.wt" ]]; then
+                # shellcheck disable=SC1091
+                source "$WT_ROOT/$name/.env.wt"
+
+                # Check if ports are in use by something other than this worktree
+                for port_var in LF_SERVER_PORT LF_DESIGNER_PORT LF_RUNTIME_PORT; do
+                    local port="${!port_var}"
+                    if port_in_use "$port"; then
+                        local pid
+                        pid=$(lsof -ti ":$port" 2>/dev/null | head -1)
+                        local data_path
+                        data_path=$(get_data_path "$name")
+
+                        # Check if it's our own process
+                        local is_own=false
+                        case "$port_var" in
+                            LF_SERVER_PORT)
+                                [[ -f "$data_path/pids/server.pid" ]] && [[ "$(cat "$data_path/pids/server.pid" 2>/dev/null)" == "$pid" ]] && is_own=true
+                                ;;
+                            LF_DESIGNER_PORT)
+                                [[ -f "$data_path/pids/designer.pid" ]] && [[ "$(cat "$data_path/pids/designer.pid" 2>/dev/null)" == "$pid" ]] && is_own=true
+                                ;;
+                            LF_RUNTIME_PORT)
+                                [[ -f "$data_path/pids/runtime.pid" ]] && [[ "$(cat "$data_path/pids/runtime.pid" 2>/dev/null)" == "$pid" ]] && is_own=true
+                                ;;
+                        esac
+
+                        if [[ "$is_own" != true ]]; then
+                            echo -e "  ${RED}✗${NC} Port $port ($port_var) for '$name' is in use by PID $pid"
+                            has_conflicts=true
+                            ((issues_found++))
+                        fi
+                    fi
+                done
+            fi
+        done
+    fi
+    if [[ "$has_conflicts" != true ]]; then
+        echo -e "  ${GREEN}✓${NC} No conflicts detected"
+    fi
+    echo ""
+
+    # Check for stale PID files
+    echo "Stale PID files:"
+    local has_stale=false
+    if [[ -d "$WT_DATA_ROOT" ]]; then
+        for data_dir in "$WT_DATA_ROOT"/*/; do
+            [[ -d "$data_dir" ]] || continue
+            local name
+            name=$(basename "$data_dir")
+
+            for pid_file in "$data_dir/pids/"*.pid; do
+                [[ -f "$pid_file" ]] || continue
+                local pid
+                pid=$(cat "$pid_file")
+                local service
+                service=$(basename "$pid_file" .pid)
+
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    echo -e "  ${YELLOW}○${NC} $name/$service.pid (PID $pid not running)"
+                    has_stale=true
+                fi
+            done
+        done
+    fi
+    if [[ "$has_stale" != true ]]; then
+        echo -e "  ${GREEN}✓${NC} No stale PID files"
+    fi
+    echo ""
+
+    # Check for lock files
+    echo "Lock files:"
+    local has_locks=false
+    if [[ -d "$WT_DATA_ROOT" ]]; then
+        for lock_file in "$WT_DATA_ROOT"/*/.lock; do
+            [[ -f "$lock_file" ]] || continue
+            local name
+            name=$(basename "$(dirname "$lock_file")")
+            local lock_pid
+            lock_pid=$(cat "$lock_file" 2>/dev/null)
+
+            if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
+                echo -e "  ${YELLOW}○${NC} $name is locked (PID $lock_pid)"
+            else
+                echo -e "  ${YELLOW}○${NC} $name has stale lock file"
+            fi
+            has_locks=true
+        done
+    fi
+    if [[ "$has_locks" != true ]]; then
+        echo -e "  ${GREEN}✓${NC} No lock files"
+    fi
+    echo ""
+
+    # Summary
+    echo "====================================="
+    if [[ $issues_found -eq 0 ]]; then
+        echo -e "${GREEN}No issues found!${NC}"
+    else
+        echo -e "${RED}Found $issues_found issue(s)${NC}"
+    fi
+    echo ""
+}
+
+cmd_self_install() {
+    local install_path="/usr/local/bin/wt"
+
+    log_info "Installing wt to $install_path..."
+
+    # Check if already installed
+    if [[ -L "$install_path" ]]; then
+        local current_target
+        current_target=$(readlink "$install_path")
+        if [[ "$current_target" == "$SCRIPT_PATH" ]]; then
+            log_success "Symlink already exists"
+        else
+            log_warn "Existing symlink points to: $current_target"
+            log_info "Updating to point to: $SCRIPT_PATH"
+        fi
+    elif [[ -f "$install_path" ]]; then
+        log_warn "Existing file at $install_path will be replaced"
+    fi
+
+    # Create symlink (may need sudo)
+    if [[ ! -L "$install_path" ]] || [[ "$(readlink "$install_path")" != "$SCRIPT_PATH" ]]; then
+        if [[ -w "$(dirname "$install_path")" ]]; then
+            ln -sf "$SCRIPT_PATH" "$install_path"
+        else
+            log_info "Requesting sudo to create symlink..."
+            sudo ln -sf "$SCRIPT_PATH" "$install_path"
+        fi
+    fi
+
+    if [[ ! -L "$install_path" ]]; then
+        die "Failed to create symlink"
+    fi
+
+    log_success "Installed: $install_path -> $SCRIPT_PATH"
+
+    # Add shell initialization line
+    install_shell_init
+}
+
+install_shell_init() {
+    local shell_rc=""
+    local shell_name=""
+
+    # Detect shell from $SHELL
+    shell_name=$(detect_shell)
+
+    case "$shell_name" in
+        zsh)  shell_rc="$HOME/.zshrc" ;;
+        bash) shell_rc="$HOME/.bashrc" ;;
+        fish) shell_rc="$HOME/.config/fish/config.fish" ;;
+        *)    shell_rc="$HOME/.bashrc" ;;
+    esac
+
+    # The init line - auto-detects shell at runtime
+    local init_line='eval "$(wt init)"'
+    if [[ "$shell_name" == "fish" ]]; then
+        init_line='wt init fish | source'
+    fi
+
+    if [[ -z "$shell_rc" ]]; then
+        log_warn "Could not detect shell config file"
+        log_info "Add this to your shell config for full wt support:"
+        echo "  $init_line"
+        return 0
+    fi
+
+    # Ensure parent directory exists (for fish)
+    mkdir -p "$(dirname "$shell_rc")"
+
+    # Remove old-style wt function if present (migration from old install)
+    if [[ -f "$shell_rc" ]] && grep -q "# wt - LlamaFarm Worktree Manager (cd wrapper)" "$shell_rc" 2>/dev/null; then
+        log_info "Removing old wt shell function from $shell_rc..."
+        # Create backup
+        cp "$shell_rc" "$shell_rc.bak"
+        # Remove old function block (from comment to closing brace)
+        sed -i.tmp '/# wt - LlamaFarm Worktree Manager (cd wrapper)/,/^}$/d' "$shell_rc"
+        rm -f "$shell_rc.tmp"
+        log_success "Old function removed (backup at $shell_rc.bak)"
+    fi
+
+    # Check if new-style init already present
+    if [[ -f "$shell_rc" ]] && grep -q 'eval "\$(wt init' "$shell_rc" 2>/dev/null; then
+        log_success "Shell init already in $shell_rc"
+    elif [[ -f "$shell_rc" ]] && grep -q 'wt init.*| source' "$shell_rc" 2>/dev/null; then
+        log_success "Shell init already in $shell_rc"
+    else
+        echo "" >> "$shell_rc"
+        echo "# LlamaFarm Worktree Manager" >> "$shell_rc"
+        echo "$init_line" >> "$shell_rc"
+        log_success "Added to $shell_rc: $init_line"
+    fi
+
+    echo ""
+    log_info "Run 'source $shell_rc' or start a new terminal to enable wt"
+}
+
+cmd_prune() {
+    log_info "Checking for worktrees with merged branches..."
+
+    cd "$REPO_DIR"
+    local merged_branches
+    merged_branches=$(git branch --merged main 2>/dev/null | grep -v "^\*" | grep -v "main" | tr -d ' ' || true)
+
+    if [[ -z "$merged_branches" ]]; then
+        log_info "No merged branches found"
+        return 0
+    fi
+
+    echo ""
+    echo "The following worktrees have merged branches:"
+    for branch in $merged_branches; do
+        local wt_name
+        wt_name=$(sanitize_name "$branch")
+        if worktree_exists "$wt_name"; then
+            echo "  - $wt_name (branch: $branch)"
+        fi
+    done
+    echo ""
+
+    read -r -p "Delete these worktrees? [y/N] " response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        for branch in $merged_branches; do
+            local wt_name
+            wt_name=$(sanitize_name "$branch")
+            if worktree_exists "$wt_name"; then
+                cmd_delete "$wt_name" --force
+            fi
+        done
+    fi
+}
+
+# =============================================================================
+# Shell Init (wt init)
+# =============================================================================
+
+# Auto-detect user's shell from $SHELL env var
+# Allows override via argument or WT_SHELL env var
+detect_shell() {
+    local explicit="${1:-}"
+
+    # Priority 1: Explicit argument (wt init bash)
+    if [[ -n "$explicit" ]]; then
+        echo "$explicit"
+        return
+    fi
+
+    # Priority 2: WT_SHELL environment variable
+    if [[ -n "${WT_SHELL:-}" ]]; then
+        echo "${WT_SHELL##*/}"
+        return
+    fi
+
+    # Priority 3: $SHELL (user's login shell from /etc/passwd)
+    if [[ -n "${SHELL:-}" ]]; then
+        echo "${SHELL##*/}"
+        return
+    fi
+
+    # Fallback: bash (most common)
+    echo "bash"
+}
+
+cmd_init() {
+    local shell
+    shell=$(detect_shell "${1:-}")
+
+    case "$shell" in
+        bash) output_bash_init ;;
+        zsh)  output_zsh_init ;;
+        fish) output_fish_init ;;
+        *)    die "Unsupported shell: $shell. Use: wt init [bash|zsh|fish]" ;;
+    esac
+}
+
+output_bash_init() {
+    cat <<'BASH_EOF'
+# wt - LlamaFarm Worktree Manager
+wt() {
+    local cmd="${1:-}"
+    # switch/cd: always change directory
+    if [[ "$cmd" == "switch" || "$cmd" == "cd" ]]; then
+        local output dir exit_code
+        # Run once with --print-dir, capture everything
+        output=$(command wt "$@" --print-dir 2>&1)
+        exit_code=$?
+        # Extract directory (last line starting with /)
+        dir=$(echo "$output" | grep "^/" | tail -1)
+        # Display output without the directory line
+        echo "$output" | grep -v "^${dir}$"
+        # cd if successful
+        if [[ $exit_code -eq 0 && -n "$dir" && -d "$dir" ]]; then
+            cd "$dir" || return 1
+            echo "Changed to: $dir"
+        fi
+        return $exit_code
+    # create: only change directory if --go flag is present
+    elif [[ "$cmd" == "create" ]]; then
+        local has_go=false
+        for arg in "$@"; do [[ "$arg" == "--go" ]] && has_go=true; done
+        if [[ "$has_go" == true ]]; then
+            local output dir exit_code
+            # Run once with --print-dir, capture everything
+            output=$(command wt "$@" --print-dir 2>&1)
+            exit_code=$?
+            # Extract directory (last line starting with /)
+            dir=$(echo "$output" | grep "^/" | tail -1)
+            # Display output without the directory line
+            echo "$output" | grep -v "^${dir}$"
+            # cd if successful
+            if [[ $exit_code -eq 0 && -n "$dir" && -d "$dir" ]]; then
+                cd "$dir" || return 1
+                echo "Changed to: $dir"
+            fi
+            return $exit_code
+        else
+            command wt "$@"
+        fi
+    else
+        command wt "$@"
+    fi
+}
+
+_wt_completions() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local cmd="${COMP_WORDS[1]:-}"
+
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        # Complete commands
+        COMPREPLY=($(compgen -W "create list delete switch install build start stop restart logs status proxy lf url open health vscode cursor prune gc doctor init self-install help" -- "$cur"))
+    elif [[ $COMP_CWORD -eq 2 ]]; then
+        # Complete worktree names for commands that take them
+        case "$cmd" in
+            switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor)
+                local wt_root="${WT_ROOT:-$HOME/worktrees/llamafarm}"
+                if [[ -d "$wt_root" ]]; then
+                    local worktrees=$(ls -1 "$wt_root" 2>/dev/null | grep -v "^\.wt$")
+                    COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
+                fi
+                ;;
+            logs)
+                COMPREPLY=($(compgen -W "server rag runtime designer all" -- "$cur"))
+                ;;
+            proxy)
+                COMPREPLY=($(compgen -W "start stop status install uninstall reload" -- "$cur"))
+                ;;
+            init)
+                COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))
+                ;;
+        esac
+    fi
+}
+complete -F _wt_completions wt
+BASH_EOF
+}
+
+output_zsh_init() {
+    cat <<'ZSH_EOF'
+# wt - LlamaFarm Worktree Manager
+wt() {
+    local cmd="${1:-}"
+    # switch/cd: always change directory
+    if [[ "$cmd" == "switch" || "$cmd" == "cd" ]]; then
+        local output dir exit_code
+        # Run once with --print-dir, capture everything
+        output=$(command wt "$@" --print-dir 2>&1)
+        exit_code=$?
+        # Extract directory (last line starting with /)
+        dir=$(echo "$output" | grep "^/" | tail -1)
+        # Display output without the directory line
+        echo "$output" | grep -v "^${dir}$"
+        # cd if successful
+        if [[ $exit_code -eq 0 && -n "$dir" && -d "$dir" ]]; then
+            cd "$dir" || return 1
+            echo "Changed to: $dir"
+        fi
+        return $exit_code
+    # create: only change directory if --go flag is present
+    elif [[ "$cmd" == "create" ]]; then
+        local has_go=false
+        for arg in "$@"; do [[ "$arg" == "--go" ]] && has_go=true; done
+        if [[ "$has_go" == true ]]; then
+            local output dir exit_code
+            # Run once with --print-dir, capture everything
+            output=$(command wt "$@" --print-dir 2>&1)
+            exit_code=$?
+            # Extract directory (last line starting with /)
+            dir=$(echo "$output" | grep "^/" | tail -1)
+            # Display output without the directory line
+            echo "$output" | grep -v "^${dir}$"
+            # cd if successful
+            if [[ $exit_code -eq 0 && -n "$dir" && -d "$dir" ]]; then
+                cd "$dir" || return 1
+                echo "Changed to: $dir"
+            fi
+            return $exit_code
+        else
+            command wt "$@"
+        fi
+    else
+        command wt "$@"
+    fi
+}
+
+_wt() {
+    local -a commands
+    commands=(
+        'create:Create worktree, install deps, build'
+        'list:List all worktrees with status'
+        'delete:Stop services and remove worktree'
+        'switch:Switch to worktree directory'
+        'install:Install all dependencies'
+        'build:Build CLI with correct server URL'
+        'start:Start all services'
+        'stop:Stop all services'
+        'restart:Restart all services'
+        'logs:Tail service logs'
+        'status:Show detailed service status'
+        'proxy:Manage Caddy reverse proxy for port-free URLs'
+        'lf:Run lf CLI targeting worktree server'
+        'url:Print service URLs'
+        'open:Open Designer in browser'
+        'health:Check health of all services'
+        'vscode:Open worktree in VS Code with proper settings'
+        'cursor:Open worktree in Cursor with proper settings'
+        'prune:Remove worktrees for merged branches'
+        'gc:Clean up orphaned data directories'
+        'doctor:Diagnose common issues'
+        'init:Output shell initialization code'
+        'self-install:Install wt to /usr/local/bin'
+        'help:Show help'
+    )
+
+    local -a worktrees
+    local wt_root="${WT_ROOT:-$HOME/worktrees/llamafarm}"
+    if [[ -d "$wt_root" ]]; then
+        worktrees=(${(f)"$(ls -1 "$wt_root" 2>/dev/null | grep -v "^\.wt$")"})
+    fi
+
+    local -a services
+    services=('server' 'rag' 'runtime' 'designer' 'all')
+
+    local -a proxy_subcommands
+    proxy_subcommands=(
+        'start:Start Caddy reverse proxy'
+        'stop:Stop Caddy reverse proxy'
+        'status:Show proxy status'
+        'install:Install as LaunchDaemon'
+        'uninstall:Remove LaunchDaemon'
+        'reload:Regenerate Caddyfile and reload'
+    )
+
+    local -a shells
+    shells=('bash' 'zsh' 'fish')
+
+    _arguments -C \
+        '1: :->command' \
+        '2: :->argument' \
+        '*: :->rest'
+
+    case "$state" in
+        command)
+            _describe -t commands 'wt command' commands
+            ;;
+        argument)
+            case "${words[2]}" in
+                switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor)
+                    _describe -t worktrees 'worktree' worktrees
+                    ;;
+                logs)
+                    _describe -t services 'service' services
+                    ;;
+                proxy)
+                    _describe -t proxy_subcommands 'proxy subcommand' proxy_subcommands
+                    ;;
+                init)
+                    _describe -t shells 'shell' shells
+                    ;;
+            esac
+            ;;
+    esac
+}
+compdef _wt wt
+ZSH_EOF
+}
+
+output_fish_init() {
+    cat <<'FISH_EOF'
+# wt - LlamaFarm Worktree Manager
+function wt
+    set -l cmd $argv[1]
+    # switch/cd: always change directory
+    if test "$cmd" = "switch" -o "$cmd" = "cd"
+        set -l output (command wt $argv --print-dir 2>&1)
+        set -l exit_code $status
+        # Extract directory (last line starting with /)
+        set -l dir (echo "$output" | grep "^/" | tail -1)
+        # Display output without the directory line
+        echo "$output" | grep -v "^$dir\$"
+        # cd if successful
+        if test $exit_code -eq 0 -a -n "$dir" -a -d "$dir"
+            cd "$dir"
+            echo "Changed to: $dir"
+        end
+        return $exit_code
+    # create: only change directory if --go flag is present
+    else if test "$cmd" = "create"
+        if contains -- "--go" $argv
+            set -l output (command wt $argv --print-dir 2>&1)
+            set -l exit_code $status
+            # Extract directory (last line starting with /)
+            set -l dir (echo "$output" | grep "^/" | tail -1)
+            # Display output without the directory line
+            echo "$output" | grep -v "^$dir\$"
+            # cd if successful
+            if test $exit_code -eq 0 -a -n "$dir" -a -d "$dir"
+                cd "$dir"
+                echo "Changed to: $dir"
+            end
+            return $exit_code
+        else
+            command wt $argv
+        end
+    else
+        command wt $argv
+    end
+end
+
+# Fish completions
+complete -c wt -f
+complete -c wt -n "__fish_use_subcommand" -a "create" -d "Create worktree, install deps, build"
+complete -c wt -n "__fish_use_subcommand" -a "list" -d "List all worktrees with status"
+complete -c wt -n "__fish_use_subcommand" -a "delete" -d "Stop services and remove worktree"
+complete -c wt -n "__fish_use_subcommand" -a "switch" -d "Switch to worktree directory"
+complete -c wt -n "__fish_use_subcommand" -a "install" -d "Install all dependencies"
+complete -c wt -n "__fish_use_subcommand" -a "build" -d "Build CLI with correct server URL"
+complete -c wt -n "__fish_use_subcommand" -a "start" -d "Start all services"
+complete -c wt -n "__fish_use_subcommand" -a "stop" -d "Stop all services"
+complete -c wt -n "__fish_use_subcommand" -a "restart" -d "Restart all services"
+complete -c wt -n "__fish_use_subcommand" -a "logs" -d "Tail service logs"
+complete -c wt -n "__fish_use_subcommand" -a "status" -d "Show detailed service status"
+complete -c wt -n "__fish_use_subcommand" -a "proxy" -d "Manage Caddy reverse proxy"
+complete -c wt -n "__fish_use_subcommand" -a "lf" -d "Run lf CLI targeting worktree server"
+complete -c wt -n "__fish_use_subcommand" -a "url" -d "Print service URLs"
+complete -c wt -n "__fish_use_subcommand" -a "open" -d "Open Designer in browser"
+complete -c wt -n "__fish_use_subcommand" -a "health" -d "Check health of all services"
+complete -c wt -n "__fish_use_subcommand" -a "vscode" -d "Open in VS Code with settings"
+complete -c wt -n "__fish_use_subcommand" -a "cursor" -d "Open in Cursor with settings"
+complete -c wt -n "__fish_use_subcommand" -a "prune" -d "Remove worktrees for merged branches"
+complete -c wt -n "__fish_use_subcommand" -a "gc" -d "Clean up orphaned data"
+complete -c wt -n "__fish_use_subcommand" -a "doctor" -d "Diagnose common issues"
+complete -c wt -n "__fish_use_subcommand" -a "init" -d "Output shell initialization code"
+complete -c wt -n "__fish_use_subcommand" -a "self-install" -d "Install wt to /usr/local/bin"
+complete -c wt -n "__fish_use_subcommand" -a "help" -d "Show help"
+
+# Worktree name completions
+function __wt_worktrees
+    set -l wt_root "$WT_ROOT"
+    test -z "$wt_root"; and set wt_root "$HOME/worktrees/llamafarm"
+    if test -d "$wt_root"
+        ls -1 "$wt_root" 2>/dev/null | grep -v "^\.wt\$"
+    end
+end
+
+complete -c wt -n "__fish_seen_subcommand_from switch cd delete rm install build start stop restart status lf url open health vscode cursor" -a "(__wt_worktrees)"
+complete -c wt -n "__fish_seen_subcommand_from logs" -a "server rag runtime designer all"
+complete -c wt -n "__fish_seen_subcommand_from proxy" -a "start stop status install uninstall reload"
+complete -c wt -n "__fish_seen_subcommand_from init" -a "bash zsh fish"
+FISH_EOF
+}
+
+# =============================================================================
+# Help & Main
+# =============================================================================
+
+cmd_help() {
+    cat <<EOF
+wt - LlamaFarm Worktree Manager
+
+Manages multiple concurrent LlamaFarm development environments using git worktrees.
+
+USAGE:
+    wt <command> [options]
+
+WORKTREE MANAGEMENT:
+    create <name>       Create worktree, install deps, build
+      --go              Automatically switch to new worktree after creation
+    list                List all worktrees with status
+    delete [name]       Stop services and remove worktree
+    switch <name>       Print path to worktree (use wt.sh for cd)
+
+BUILD & INSTALL:
+    install [name]      Install all dependencies (parallel)
+    build [name]        Build CLI with correct server URL
+
+SERVICE LIFECYCLE:
+    start [name]        Start all services
+    stop [name]         Stop all services
+    restart [name]      Restart all services
+    logs [service]      Tail service logs (server|rag|runtime|designer|all)
+    status [name]       Show detailed service status
+
+REVERSE PROXY (port-free URLs):
+    proxy start         Start Caddy reverse proxy (requires sudo)
+    proxy stop          Stop Caddy reverse proxy
+    proxy status        Show proxy status and configured routes
+    proxy install       Install as macOS LaunchDaemon (auto-start on boot)
+    proxy uninstall     Remove LaunchDaemon
+    proxy reload        Regenerate Caddyfile and reload
+
+CLI WRAPPER:
+    lf [name] <args>    Run lf CLI targeting worktree's server
+
+UTILITIES:
+    url [name]          Print service URLs
+    open [name]         Open Designer in browser
+    health [name]       Check health of all services
+    vscode [name]       Open worktree in VS Code with proper settings
+    cursor [name]       Open worktree in Cursor with proper settings
+    prune               Remove worktrees for merged branches
+    gc                  Clean up orphaned data directories
+    doctor              Diagnose common issues (ports, deps, etc.)
+
+SHELL SETUP:
+    init [shell]        Output shell init code (bash|zsh|fish, auto-detects)
+    self-install        Install wt to /usr/local/bin and configure shell
+
+OPTIONS:
+    -f, --force         Skip confirmation prompts
+
+ENVIRONMENT:
+    WT_ROOT             Worktree directory (default: ~/worktrees/llamafarm)
+    WT_DATA_ROOT        Data directory (default: ~/.llamafarm/worktrees)
+
+EXAMPLES:
+    wt create feat/new-feature    # Create and setup new worktree
+    wt create --go feat/bugfix    # Create and automatically switch to worktree
+    wt start                      # Start services (auto-detects worktree)
+    wt lf chat "hello"            # Chat with current worktree's server
+    wt logs server                # Tail server logs
+    wt switch main                # Switch to main worktree
+
+    # Port-free URLs with Caddy proxy:
+    wt proxy install              # One-time setup (macOS)
+    wt proxy start                # Start proxy
+    # Access: http://designer.feat-new-feature.localhost
+
+EOF
+}
+
+# Main entry point
+main() {
+    local cmd="${1:-help}"
+    shift || true
+
+    case "$cmd" in
+        create)     cmd_create "$@" ;;
+        list|ls)    cmd_list "$@" ;;
+        delete|rm)  cmd_delete "$@" ;;
+        switch|cd)  cmd_switch "$@" ;;
+        install)    cmd_install "$@" ;;
+        build)      cmd_build "$@" ;;
+        start)      cmd_start "$@" ;;
+        stop)       cmd_stop "$@" ;;
+        restart)    cmd_restart "$@" ;;
+        logs)       cmd_logs "$@" ;;
+        status)     cmd_status "$@" ;;
+        proxy)      cmd_proxy "$@" ;;
+        lf)         cmd_lf "$@" ;;
+        url)        cmd_url "$@" ;;
+        open)       cmd_open "$@" ;;
+        health)     cmd_health "$@" ;;
+        vscode)     cmd_vscode "$@" ;;
+        cursor)     cmd_cursor "$@" ;;
+        prune)      cmd_prune "$@" ;;
+        gc)         cmd_gc "$@" ;;
+        doctor)     cmd_doctor "$@" ;;
+        init)       cmd_init "$@" ;;
+        self-install) cmd_self_install "$@" ;;
+        help|--help|-h) cmd_help ;;
+        *)          die "Unknown command: $cmd. Run 'wt help' for usage." ;;
+    esac
+}
+
+main "$@"

@@ -17,11 +17,24 @@ from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from queue import Empty, Queue
+from threading import Thread
+from typing import TYPE_CHECKING, Literal
 
 from .base import BaseModel
 
+if TYPE_CHECKING:
+    import numpy as np
+
 logger = logging.getLogger(__name__)
+
+# Queue size limit to prevent unbounded memory growth during streaming
+MAX_SEGMENT_QUEUE_SIZE = 100
+
+# Allowed file extensions for temp files (security: prevent arbitrary file creation)
+ALLOWED_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".m4a", ".webm", ".ogg", ".flac", ".aiff", ".mp4", ".opus"
+})
 
 # Model size to HuggingFace model ID mapping
 MODEL_SIZES = {
@@ -44,7 +57,8 @@ MODEL_SIZES = {
 }
 
 # Default model for best speed/quality tradeoff
-DEFAULT_MODEL = "distil-large-v3"
+# distil-large-v3-turbo is ~2x faster than distil-large-v3 with minimal quality loss
+DEFAULT_MODEL = "distil-large-v3-turbo"
 
 
 @dataclass
@@ -95,6 +109,8 @@ class SpeechModel(BaseModel):
         self.model_type = "speech"
         self.supports_streaming = True
         self._whisper_model = None
+        # Persistent thread pool for transcription (avoids ~50-100ms overhead per request)
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
         # Resolve model size alias
         self._resolved_model = MODEL_SIZES.get(model_id, model_id)
@@ -147,6 +163,11 @@ class SpeechModel(BaseModel):
             del self._whisper_model
             self._whisper_model = None
 
+        # Shutdown thread pool - wait for pending tasks to complete
+        if self._executor is not None:
+            self._executor.shutdown(wait=True)
+            self._executor = None
+
         # Call parent cleanup for CUDA/MPS cache clearing
         await super().unload()
 
@@ -160,8 +181,8 @@ class SpeechModel(BaseModel):
         word_timestamps: bool = False,
         initial_prompt: str | None = None,
         vad_filter: bool = True,
-        beam_size: int = 5,
-        best_of: int = 5,
+        beam_size: int = 1,
+        best_of: int = 1,
         temperature: float | list[float] | None = None,
     ) -> TranscriptionResult:
         """Transcribe an audio file.
@@ -233,12 +254,11 @@ class SpeechModel(BaseModel):
 
             return segments, full_text_parts, info
 
-        # Run transcription in thread pool to avoid blocking the event loop
+        # Run transcription in persistent thread pool to avoid blocking the event loop
         loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            segments, full_text_parts, info = await loop.run_in_executor(
-                pool, _sync_transcribe
-            )
+        segments, full_text_parts, info = await loop.run_in_executor(
+            self._executor, _sync_transcribe
+        )
 
         return TranscriptionResult(
             text="".join(full_text_parts).strip(),
@@ -256,15 +276,16 @@ class SpeechModel(BaseModel):
         word_timestamps: bool = False,
         initial_prompt: str | None = None,
         vad_filter: bool = True,
-        beam_size: int = 5,
+        beam_size: int = 1,
     ) -> AsyncGenerator[TranscriptionSegment, None]:
         """Transcribe audio and yield segments as they're processed.
 
-        This is useful for streaming responses - segments are yielded
-        as soon as they're transcribed rather than waiting for completion.
+        This enables true streaming - segments are yielded immediately as
+        they're transcribed, not collected and returned at the end.
 
-        Transcription runs in a background thread while segments are yielded
-        via an asyncio.Queue, enabling true streaming behavior.
+        Uses a Thread + Queue pattern for low-latency segment delivery,
+        allowing downstream processing (LLM, TTS) to start on the first
+        segment while transcription continues.
 
         Args:
             audio_path: Path to audio file
@@ -281,13 +302,15 @@ class SpeechModel(BaseModel):
         if self._whisper_model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        # Queue for passing segments from thread to async generator
-        # None signals completion, Exception signals error
-        queue: asyncio.Queue[TranscriptionSegment | None | Exception] = asyncio.Queue()
-        loop = asyncio.get_running_loop()
+        # Queue for streaming segments from thread to async generator
+        # Can contain: TranscriptionSegment, None (completion), or Exception (error)
+        # Use maxsize to prevent unbounded memory growth
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue(
+            maxsize=MAX_SEGMENT_QUEUE_SIZE
+        )
 
         def _sync_transcribe_stream():
-            """Run transcription synchronously and push segments to queue."""
+            """Run transcription in thread and put segments in queue immediately."""
             try:
                 segments_generator, _info = self._whisper_model.transcribe(
                     str(audio_path),
@@ -312,7 +335,122 @@ class SpeechModel(BaseModel):
                             for w in segment.words
                         ]
 
-                    transcription_segment = TranscriptionSegment(
+                    # Put segment in queue immediately for streaming
+                    segment_queue.put(
+                        TranscriptionSegment(
+                            id=segment.id,
+                            start=segment.start,
+                            end=segment.end,
+                            text=segment.text,
+                            words=words,
+                            avg_logprob=segment.avg_logprob,
+                            no_speech_prob=segment.no_speech_prob,
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"STT streaming error: {e}")
+                # Signal error to consumer
+                segment_queue.put(e)
+            finally:
+                # Signal completion
+                segment_queue.put(None)
+
+        # Start transcription in background thread
+        thread = Thread(target=_sync_transcribe_stream, daemon=True)
+        thread.start()
+
+        # Yield segments as they arrive (true streaming)
+        while True:
+            try:
+                # Very short timeout for low latency
+                segment = segment_queue.get(timeout=0.005)
+                if segment is None:
+                    # Transcription complete
+                    break
+                if isinstance(segment, Exception):
+                    # Propagate error from transcription thread
+                    raise segment
+                yield segment
+            except Empty:
+                # No segment ready yet, yield control to event loop
+                await asyncio.sleep(0)
+
+        # Ensure thread completes
+        thread.join(timeout=1.0)
+
+    async def transcribe_audio(
+        self,
+        audio: "np.ndarray",
+        language: str | None = None,
+        task: Literal["transcribe", "translate"] = "transcribe",
+        word_timestamps: bool = False,
+        initial_prompt: str | None = None,
+        vad_filter: bool = True,
+        beam_size: int = 1,
+        best_of: int = 1,
+        temperature: float | list[float] | None = None,
+    ) -> TranscriptionResult:
+        """Transcribe audio from a numpy array directly (no file I/O).
+
+        This is the most efficient transcription method for raw PCM data,
+        as it avoids writing to disk and file format parsing.
+
+        Args:
+            audio: Numpy array of audio samples (float32, mono).
+                   Values should be normalized to [-1.0, 1.0].
+                   Can be any sample rate (Whisper resamples to 16kHz internally).
+            language: Language code (e.g., "en", "es", "fr"). If None, auto-detected.
+            task: "transcribe" for same-language output, "translate" for English output
+            word_timestamps: Whether to include word-level timestamps
+            initial_prompt: Optional text to condition the model
+            vad_filter: Use voice activity detection to filter out silence
+            beam_size: Beam size for decoding (higher = more accurate, slower)
+            best_of: Number of candidates to consider (higher = more accurate, slower)
+            temperature: Temperature(s) for sampling. List enables fallback on failure.
+
+        Returns:
+            TranscriptionResult with full text, segments, and metadata
+        """
+        if self._whisper_model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        if temperature is None:
+            temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+        def _sync_transcribe():
+            """Run transcription synchronously in thread pool."""
+            # faster-whisper accepts numpy array directly
+            segments_generator, info = self._whisper_model.transcribe(
+                audio,
+                language=language,
+                task=task,
+                word_timestamps=word_timestamps,
+                initial_prompt=initial_prompt,
+                vad_filter=vad_filter,
+                beam_size=beam_size,
+                best_of=best_of,
+                temperature=temperature,
+            )
+
+            # Collect all segments
+            segments = []
+            full_text_parts = []
+
+            for segment in segments_generator:
+                words = None
+                if word_timestamps and segment.words:
+                    words = [
+                        {
+                            "word": w.word,
+                            "start": w.start,
+                            "end": w.end,
+                            "probability": w.probability,
+                        }
+                        for w in segment.words
+                    ]
+
+                segments.append(
+                    TranscriptionSegment(
                         id=segment.id,
                         start=segment.start,
                         end=segment.end,
@@ -321,32 +459,130 @@ class SpeechModel(BaseModel):
                         avg_logprob=segment.avg_logprob,
                         no_speech_prob=segment.no_speech_prob,
                     )
-                    # Thread-safe put to async queue
-                    loop.call_soon_threadsafe(queue.put_nowait, transcription_segment)
+                )
+                full_text_parts.append(segment.text)
 
-                # Signal completion
-                loop.call_soon_threadsafe(queue.put_nowait, None)
+            return segments, full_text_parts, info
+
+        # Run transcription in persistent thread pool to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+        segments, full_text_parts, info = await loop.run_in_executor(
+            self._executor, _sync_transcribe
+        )
+
+        return TranscriptionResult(
+            text="".join(full_text_parts).strip(),
+            segments=segments,
+            language=info.language,
+            language_probability=info.language_probability,
+            duration=info.duration,
+        )
+
+    async def transcribe_audio_stream(
+        self,
+        audio: "np.ndarray",
+        language: str | None = None,
+        task: Literal["transcribe", "translate"] = "transcribe",
+        word_timestamps: bool = False,
+        initial_prompt: str | None = None,
+        vad_filter: bool = True,
+        beam_size: int = 1,
+    ) -> AsyncGenerator[TranscriptionSegment, None]:
+        """Stream transcription segments from numpy array.
+
+        Like transcribe_audio but yields segments immediately as they're
+        transcribed, enabling parallel processing downstream.
+
+        Args:
+            audio: Numpy array of audio samples (float32, mono, normalized [-1, 1]).
+            language: Language code (if None, auto-detected)
+            task: "transcribe" or "translate"
+            word_timestamps: Include word-level timestamps
+            initial_prompt: Optional conditioning text
+            vad_filter: Use voice activity detection
+            beam_size: Beam size for decoding
+
+        Yields:
+            TranscriptionSegment objects as they're transcribed
+        """
+        if self._whisper_model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        # Queue for streaming segments from thread to async generator
+        # Can contain: TranscriptionSegment, None (completion), or Exception (error)
+        # Use maxsize to prevent unbounded memory growth
+        segment_queue: Queue[TranscriptionSegment | None | Exception] = Queue(
+            maxsize=MAX_SEGMENT_QUEUE_SIZE
+        )
+
+        def _sync_transcribe_stream():
+            """Run transcription in thread and put segments in queue immediately."""
+            try:
+                segments_generator, _info = self._whisper_model.transcribe(
+                    audio,
+                    language=language,
+                    task=task,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=initial_prompt,
+                    vad_filter=vad_filter,
+                    beam_size=beam_size,
+                )
+
+                for segment in segments_generator:
+                    words = None
+                    if word_timestamps and segment.words:
+                        words = [
+                            {
+                                "word": w.word,
+                                "start": w.start,
+                                "end": w.end,
+                                "probability": w.probability,
+                            }
+                            for w in segment.words
+                        ]
+
+                    # Put segment in queue immediately for streaming
+                    segment_queue.put(
+                        TranscriptionSegment(
+                            id=segment.id,
+                            start=segment.start,
+                            end=segment.end,
+                            text=segment.text,
+                            words=words,
+                            avg_logprob=segment.avg_logprob,
+                            no_speech_prob=segment.no_speech_prob,
+                        )
+                    )
             except Exception as e:
-                # Signal error
-                loop.call_soon_threadsafe(queue.put_nowait, e)
+                logger.error(f"STT streaming error: {e}")
+                # Signal error to consumer
+                segment_queue.put(e)
+            finally:
+                # Signal completion
+                segment_queue.put(None)
 
         # Start transcription in background thread
-        with ThreadPoolExecutor() as pool:
-            future = pool.submit(_sync_transcribe_stream)
+        thread = Thread(target=_sync_transcribe_stream, daemon=True)
+        thread.start()
 
-            # Yield segments as they arrive
-            while True:
-                item = await queue.get()
-                if item is None:
-                    # Completion signal
+        # Yield segments as they arrive (true streaming)
+        while True:
+            try:
+                # Very short timeout for low latency
+                segment = segment_queue.get(timeout=0.005)
+                if segment is None:
+                    # Transcription complete
                     break
-                if isinstance(item, Exception):
-                    # Re-raise exception from thread
-                    raise item
-                yield item
+                if isinstance(segment, Exception):
+                    # Propagate error from transcription thread
+                    raise segment
+                yield segment
+            except Empty:
+                # No segment ready yet, yield control to event loop
+                await asyncio.sleep(0)
 
-            # Ensure thread completes (propagate any uncaught exceptions)
-            future.result()
+        # Ensure thread completes
+        thread.join(timeout=1.0)
 
     async def transcribe_bytes(
         self,
@@ -358,18 +594,29 @@ class SpeechModel(BaseModel):
 
         Args:
             audio_bytes: Raw audio file bytes
-            file_extension: File extension hint for format detection
+            file_extension: File extension hint for format detection (must be in ALLOWED_AUDIO_EXTENSIONS)
             **kwargs: Additional arguments passed to transcribe()
 
         Returns:
             TranscriptionResult
+
+        Raises:
+            ValueError: If file_extension is not in ALLOWED_AUDIO_EXTENSIONS.
         """
+        # Validate file extension to prevent arbitrary file creation
+        ext_lower = file_extension.lower()
+        if ext_lower not in ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file extension: {file_extension}. "
+                f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}"
+            )
+
         # Write to temporary file (faster-whisper requires file path)
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
+                suffix=ext_lower, delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
                 tmp_file.write(audio_bytes)
@@ -390,18 +637,29 @@ class SpeechModel(BaseModel):
 
         Args:
             audio_bytes: Raw audio file bytes
-            file_extension: File extension hint
+            file_extension: File extension hint (must be in ALLOWED_AUDIO_EXTENSIONS)
             **kwargs: Additional arguments passed to transcribe_stream()
 
         Yields:
             TranscriptionSegment objects
+
+        Raises:
+            ValueError: If file_extension is not in ALLOWED_AUDIO_EXTENSIONS.
         """
+        # Validate file extension to prevent arbitrary file creation
+        ext_lower = file_extension.lower()
+        if ext_lower not in ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file extension: {file_extension}. "
+                f"Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}"
+            )
+
         # Write to temporary file
         # Assign tmp_path before write to ensure cleanup even if write fails
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
+                suffix=ext_lower, delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
                 tmp_file.write(audio_bytes)

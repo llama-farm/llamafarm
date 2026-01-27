@@ -22,8 +22,7 @@ properties:
       $ref: "#/definitions/Database"
   data_processing_strategies:
     type: array
-    description: Processing pipelines for parsers and extractors
-    minItems: 1
+    description: Processing pipelines for parsers and extractors. If empty or not specified, the built-in 'universal_rag' strategy is used automatically.
     items:
       $ref: "#/definitions/dataProcessingStrategyDefinition"
 
@@ -59,6 +58,7 @@ definitions:
           - $ref: "#/definitions/parsers/textParserPythonConfig"
           - $ref: "#/definitions/parsers/textParserLlamaIndexConfig"
           - $ref: "#/definitions/parsers/msgParserExtractMsgConfig"
+          - $ref: "#/definitions/parsers/universalParserConfig"
   parsers:
     # Auto-detection parser configuration
     autoParserConfig:
@@ -714,6 +714,54 @@ definitions:
           type: string
           default: utf-8
           description: Encoding
+    # Universal parser using MarkItDown with configurable chunking
+    universalParserConfig:
+      type: object
+      description: Universal parser using MarkItDown with configurable chunking strategies
+      defaultExtensions: [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".html", ".htm", ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".xml", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp", ".rtf", ".epub", ".mobi", ".eml", ".msg"]
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          default: 1024
+          minimum: 100
+          maximum: 50000
+          description: Target chunk size in characters
+        chunk_overlap:
+          type: integer
+          default: 100
+          minimum: 0
+          maximum: 5000
+          description: Overlap between chunks in characters
+        chunk_strategy:
+          type: string
+          enum: [semantic, sections, paragraphs, sentences, characters]
+          default: semantic
+          description: "Chunking strategy: semantic (AI boundaries), sections (headers), paragraphs, sentences, or characters"
+        use_ocr:
+          type: boolean
+          default: true
+          description: Enable OCR fallback for scanned documents and images
+        ocr_endpoint:
+          type: string
+          default: "http://127.0.0.1:8000/v1/vision/ocr"
+          description: LlamaFarm API OCR endpoint URL
+        extract_metadata:
+          type: boolean
+          default: true
+          description: Extract document metadata (author, title, dates)
+        min_chunk_size:
+          type: integer
+          default: 50
+          minimum: 10
+          maximum: 1000
+          description: Minimum chunk size to emit
+        max_chunk_size:
+          type: integer
+          default: 8000
+          minimum: 1000
+          maximum: 50000
+          description: Maximum chunk size before forced splitting
   extractorConfig:
     type: object
     additionalProperties: false
@@ -736,6 +784,7 @@ definitions:
           - TFIDFExtractor
           - TableExtractor
           - YAKEExtractor
+          - UniversalExtractor
       priority:
         type: integer
         minimum: 1
@@ -757,6 +806,7 @@ definitions:
           - $ref: "#/definitions/extractors/sentimentExtractorConfig"
           - $ref: "#/definitions/extractors/yakeExtractorConfig"
           - $ref: "#/definitions/extractors/contentStatisticsExtractorConfig"
+          - $ref: "#/definitions/extractors/universalExtractorConfig"
   extractors:
     keywordExtractorConfig:
       type: object
@@ -1225,6 +1275,44 @@ definitions:
           default: 2
           minimum: 1
           description: Minimum rows for table
+        enabled:
+          type: boolean
+          default: true
+          description: Enable this extractor
+    # Universal extractor for comprehensive metadata extraction
+    universalExtractorConfig:
+      type: object
+      description: Universal metadata extractor with keywords, summary, and document features
+      additionalProperties: false
+      properties:
+        keyword_count:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+          description: Number of keywords to extract per chunk
+        use_gliner:
+          type: boolean
+          default: false
+          description: Enable GLiNER entity extraction (slower but more accurate)
+        extract_entities:
+          type: boolean
+          default: true
+          description: Extract named entities (people, orgs, locations)
+        generate_summary:
+          type: boolean
+          default: true
+          description: Generate chunk summaries
+        summary_sentences:
+          type: integer
+          default: 3
+          minimum: 1
+          maximum: 10
+          description: Number of sentences in generated summary
+        detect_language:
+          type: boolean
+          default: true
+          description: Detect document language
         enabled:
           type: boolean
           default: true

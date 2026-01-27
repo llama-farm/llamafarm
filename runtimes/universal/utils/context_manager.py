@@ -253,7 +253,10 @@ class ContextManager:
             result.pop(0)
 
         # If still over budget (single huge message), truncate content
-        if self._counter.estimate_prompt_tokens(result) > self._budget.max_prompt_tokens:
+        if (
+            self._counter.estimate_prompt_tokens(result)
+            > self._budget.max_prompt_tokens
+        ):
             logger.warning(
                 "Message removal insufficient in sliding_window, "
                 "applying content truncation"
@@ -292,10 +295,11 @@ class ContextManager:
         result = system_msgs + other_msgs
 
         # If still over budget, apply aggressive content truncation
-        if self._counter.estimate_prompt_tokens(result) > self._budget.max_prompt_tokens:
-            logger.warning(
-                "Message removal insufficient, applying content truncation"
-            )
+        if (
+            self._counter.estimate_prompt_tokens(result)
+            > self._budget.max_prompt_tokens
+        ):
+            logger.warning("Message removal insufficient, applying content truncation")
             result = self._truncate_message_contents(result)
 
         return result
@@ -340,7 +344,10 @@ class ContextManager:
                 result = system_msgs + first_msg + remaining
 
         # If still over budget (huge messages), truncate content
-        if self._counter.estimate_prompt_tokens(result) > self._budget.max_prompt_tokens:
+        if (
+            self._counter.estimate_prompt_tokens(result)
+            > self._budget.max_prompt_tokens
+        ):
             logger.warning(
                 "Message removal insufficient in middle_out, "
                 "applying content truncation"
@@ -391,9 +398,8 @@ class ContextManager:
                 continue
             tokens = self._counter.count_tokens(content)
             # Mark if this is the last user message
-            is_last_user = (
-                msg.get("role") == "user"
-                and all(m.get("role") != "user" for m in result[i + 1 :])
+            is_last_user = msg.get("role") == "user" and all(
+                m.get("role") != "user" for m in result[i + 1 :]
             )
             messages_with_size.append((i, tokens, is_last_user))
 
@@ -442,7 +448,10 @@ class ContextManager:
         emergency_iterations = 0
         max_emergency_iterations = len(result) * 2  # Safety limit
 
-        while final_tokens > max_tokens and emergency_iterations < max_emergency_iterations:
+        while (
+            final_tokens > max_tokens
+            and emergency_iterations < max_emergency_iterations
+        ):
             emergency_iterations += 1
             logger.warning(
                 f"Content truncation incomplete: {final_tokens} > {max_tokens}. "
@@ -469,9 +478,10 @@ class ContextManager:
 
             # Truncate the largest message to 50 tokens
             content = result[largest_idx]["content"]
-            result[largest_idx]["content"] = self._counter.truncate_to_tokens(
-                content, 50
-            ) + "\n[... heavily truncated ...]"
+            result[largest_idx]["content"] = (
+                self._counter.truncate_to_tokens(content, 50)
+                + "\n[... heavily truncated ...]"
+            )
 
             final_tokens = self._counter.estimate_prompt_tokens(result)
             logger.info(

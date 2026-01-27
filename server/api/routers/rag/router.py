@@ -18,6 +18,7 @@ from core.logging import FastAPIStructLogger
 from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
+from .preview import router as preview_router
 from .rag_health import RAGHealthResponse, handle_rag_health
 from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
 from .rag_stats import RAGStatsResponse, handle_rag_stats
@@ -28,6 +29,9 @@ router = APIRouter(
     prefix="/projects/{namespace}/{project}/rag",
     tags=["rag"],
 )
+
+# Include preview routes
+router.include_router(preview_router)
 
 
 class EmbeddingStrategyInfo(BaseModel):

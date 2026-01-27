@@ -21,7 +21,7 @@ import logging
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 # Import binary management
-from ._binary import (
+from ._binary import (  # noqa: E402
     LLAMA_CPP_VERSION,
     clear_cache,
     get_binary_info,
@@ -32,17 +32,16 @@ from ._binary import (
 # Ensure binary is available (downloads if needed)
 _lib_path = get_lib_path()
 
-# Import main classes
-from .llama import Llama
-from .types import (
+# Import main classes (after binary is ensured available)
+# Import logging control
+from ._bindings import set_llama_log_level  # noqa: E402
+from .llama import Llama  # noqa: E402
+from .types import (  # noqa: E402
     ChatCompletionChunk,
     ChatCompletionResponse,
     ChatMessage,
     EmbeddingResponse,
 )
-
-# Import logging control
-from ._bindings import set_llama_log_level
 
 __version__ = "0.1.0"
 __llama_cpp_version__ = LLAMA_CPP_VERSION

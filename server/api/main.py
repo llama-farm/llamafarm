@@ -17,6 +17,7 @@ from core.logging import FastAPIStructLogger
 from core.mcp_registry import cleanup_all_mcp_services
 from core.settings import settings
 from core.version import version
+from services.universal_runtime_service import close_runtime_client
 
 logger = FastAPIStructLogger()
 
@@ -33,6 +34,7 @@ async def lifespan(app: fastapi.FastAPI):
     # Shutdown
     logger.info("Shutting down LlamaFarm API")
     await cleanup_all_mcp_services()
+    await close_runtime_client()
     logger.info("Shutdown complete")
 
 
@@ -91,7 +93,10 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.event_logs_router, prefix=API_PREFIX)
     app.include_router(routers.models_router, prefix=API_PREFIX)
     app.include_router(routers.ml_router, prefix=API_PREFIX)
+    app.include_router(routers.nlp_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
+    # Voice chat WebSocket - no prefix needed (path already includes /v1)
+    app.include_router(routers.voice_router)
     # Health endpoints are exposed at the root (no version prefix)
     app.include_router(routers.health_router)
 

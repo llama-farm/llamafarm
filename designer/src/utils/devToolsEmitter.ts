@@ -6,9 +6,10 @@
  *
  * Architecture:
  *   Axios Interceptor ──emit──> DevToolsEmitter ──subscribe──> DevToolsContext
+ *   WebSocket wrapper ──emit──> DevToolsEmitter ──subscribe──> DevToolsContext
  */
 
-import type { CapturedRequest } from '../contexts/DevToolsContext'
+import type { CapturedRequest, WebSocketDirection } from '../contexts/DevToolsContext'
 
 // Response data structure for the emitter
 export interface DevToolsResponseData {
@@ -21,9 +22,14 @@ export interface DevToolsResponseData {
 
 // Event types that can be emitted
 export type DevToolsEvent =
+  // HTTP events
   | { type: 'request'; request: Omit<CapturedRequest, 'streamChunks' | 'streamComplete'> }
   | { type: 'response'; id: string; response: DevToolsResponseData }
   | { type: 'error'; id: string; error: string }
+  // WebSocket events
+  | { type: 'ws_open'; id: string; url: string }
+  | { type: 'ws_message'; connectionId: string; direction: WebSocketDirection; data: any; isBinary: boolean; size: number }
+  | { type: 'ws_close'; id: string; error?: string }
 
 type DevToolsEventListener = (event: DevToolsEvent) => void
 

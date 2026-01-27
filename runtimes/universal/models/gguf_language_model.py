@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
@@ -25,6 +27,58 @@ if TYPE_CHECKING:
     from llamafarm_llama import Llama
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _is_unified_memory_gpu() -> bool:
+    """Detect NVIDIA Jetson/Tegra unified memory GPU platforms.
+
+    Jetson devices have unified memory where CPU and GPU share RAM. On these systems,
+    running inference through ThreadPoolExecutor can cause performance issues due to
+    thread context switching overhead. Running synchronously avoids this overhead and
+    provides stability benefits by keeping CUDA operations in predictable thread contexts.
+
+    Supported platforms:
+        - NVIDIA Jetson Orin (Nano, NX, AGX)
+        - NVIDIA Jetson Xavier (NX, AGX)
+        - NVIDIA Jetson TX2, Nano
+
+    Environment variable override:
+        LLAMAFARM_SYNC_INFERENCE=1  # Force synchronous inference
+        LLAMAFARM_SYNC_INFERENCE=0  # Force asynchronous inference (ThreadPoolExecutor)
+
+    Returns:
+        True if synchronous inference should be used (Jetson/Tegra or override)
+    """
+    # Check for environment variable override first
+    override = os.environ.get("LLAMAFARM_SYNC_INFERENCE", "").lower()
+    if override in ("1", "true", "yes"):
+        logger.info("Sync inference ENABLED via LLAMAFARM_SYNC_INFERENCE=1")
+        return True
+    if override in ("0", "false", "no"):
+        logger.info("Sync inference DISABLED via LLAMAFARM_SYNC_INFERENCE=0")
+        return False
+
+    # Auto-detect: NVIDIA Tegra/Jetson (unified memory iGPU)
+    try:
+        if os.path.exists("/proc/device-tree/compatible"):
+            with open("/proc/device-tree/compatible", "rb") as f:
+                compatible = f.read().decode("utf-8", errors="ignore").lower()
+                if "tegra" in compatible or "jetson" in compatible:
+                    logger.info("NVIDIA Jetson/Tegra detected (sync inference enabled)")
+                    return True
+        # Fallback: check kernel version string
+        if os.path.exists("/proc/version"):
+            with open("/proc/version") as f:
+                if "tegra" in f.read().lower():
+                    logger.info("NVIDIA Tegra kernel detected (sync inference enabled)")
+                    return True
+    except Exception:
+        pass
+
+    # Apple Silicon and other platforms use async inference (ThreadPoolExecutor)
+    # which was the original behavior before Jetson optimizations
+    return False
 
 
 class GGUFLanguageModel(BaseModel):
@@ -57,6 +111,8 @@ class GGUFLanguageModel(BaseModel):
         cache_type_k: str | None = None,
         cache_type_v: str | None = None,
         preferred_quantization: str | None = None,
+        mmproj_path: str | None = None,
+        auto_detect_mmproj: bool = True,
     ):
         """Initialize GGUF language model.
 
@@ -74,8 +130,10 @@ class GGUFLanguageModel(BaseModel):
                        Set to match CPU core count (e.g., 6 for Jetson Orin Nano).
             flash_attn: Optional flag to enable/disable flash attention. If None,
                         defaults to True for faster inference on supported hardware.
-            use_mmap: Optional flag for memory-mapped file loading. If None, defaults to True.
-                      Recommended True on memory-constrained devices for efficient swapping.
+            use_mmap: Optional flag for memory-mapped file loading. If None, defaults to False.
+                      False is safer for unified memory platforms (Jetson, Apple Silicon) where
+                      mmap can cause compute graph splits. Set to True for discrete GPUs with
+                      separate VRAM if memory swapping is desired.
             use_mlock: Optional flag to lock model in RAM. If None, defaults to False.
                        Set False on 8GB devices to allow OS memory management.
             cache_type_k: Optional KV cache key quantization type (e.g., "q4_0", "q8_0", "f16").
@@ -86,6 +144,11 @@ class GGUFLanguageModel(BaseModel):
             preferred_quantization: Optional quantization preference (e.g., "Q4_K_M", "Q8_0").
                                     If None, defaults to Q4_K_M. Only downloads the specified
                                     quantization to save disk space.
+            mmproj_path: Optional path to multimodal projector file for audio/vision models.
+                         If None and auto_detect_mmproj is True, will try to find mmproj
+                         file in the same repository.
+            auto_detect_mmproj: If True (default), automatically detect and download mmproj
+                                files for multimodal models like Qwen2.5-Omni.
         """
         super().__init__(model_id, device, token=token)
         self.model_type = "language"
@@ -94,14 +157,18 @@ class GGUFLanguageModel(BaseModel):
         self.requested_n_ctx = self.n_ctx = n_ctx  # Store requested value
         self.actual_n_ctx: int | None = None  # Will be computed during load()
         self.requested_n_batch = n_batch  # Store requested value (None = default 2048)
-        self.requested_n_gpu_layers = n_gpu_layers  # Store requested value (None = auto)
+        self.requested_n_gpu_layers = (
+            n_gpu_layers  # Store requested value (None = auto)
+        )
         self.requested_n_threads = n_threads  # Store requested value (None = auto)
         self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
-        self.requested_use_mmap = use_mmap  # Store requested value (None = default True)
+        self.requested_use_mmap = use_mmap  # Store requested value (None = default False)
         self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
         self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
         self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
         self.preferred_quantization = preferred_quantization
+        self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
+        self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
         self._executor = ThreadPoolExecutor(max_workers=1)
 
         # Context management (initialized during load())
@@ -111,6 +178,10 @@ class GGUFLanguageModel(BaseModel):
         # Cached GGUF metadata (extracted once during load())
         self._chat_template: str | None = None
         self._special_tokens: dict[str, str] | None = None
+
+        # Multimodal support (set during load() if mmproj is loaded)
+        self._supports_audio: bool = False
+        self._supports_vision: bool = False
 
     def _get_available_memory_mb(self) -> int | None:
         """Get available system memory in MB for Memory Guard check.
@@ -224,15 +295,22 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Using configured n_threads: {n_threads}")
 
         # Configure flash attention (default True for faster inference)
-        flash_attn = self.requested_flash_attn if self.requested_flash_attn is not None else True
+        flash_attn = (
+            self.requested_flash_attn if self.requested_flash_attn is not None else True
+        )
         logger.info(f"Using flash_attn: {flash_attn}")
 
-        # Configure memory mapping (default True for efficient memory management)
-        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else True
+        # Configure memory mapping - default False for unified memory platforms (Jetson, Apple Silicon)
+        # Memory mapping can cause compute graph splits on unified memory systems where CPU and GPU
+        # share the same physical memory. This results in suboptimal performance. For discrete GPUs
+        # with separate VRAM, mmap may be beneficial for memory-constrained scenarios.
+        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else False
         logger.info(f"Using use_mmap: {use_mmap}")
 
         # Configure memory locking (default False to allow OS memory management)
-        use_mlock = self.requested_use_mlock if self.requested_use_mlock is not None else False
+        use_mlock = (
+            self.requested_use_mlock if self.requested_use_mlock is not None else False
+        )
         logger.info(f"Using use_mlock: {use_mlock}")
 
         # Configure KV cache quantization (None = default f16, use q4_0 for memory savings)
@@ -242,6 +320,18 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Using cache_type_k: {cache_type_k}")
         if cache_type_v is not None:
             logger.info(f"Using cache_type_v: {cache_type_v}")
+
+        # Detect or use explicit mmproj path for multimodal models
+        mmproj_path = self.requested_mmproj_path
+        if mmproj_path is None and self.auto_detect_mmproj:
+            try:
+                from llamafarm_common import get_mmproj_file_path
+
+                mmproj_path = get_mmproj_file_path(self.model_id, self.token)
+                if mmproj_path:
+                    logger.info(f"Auto-detected mmproj file: {mmproj_path}")
+            except Exception as e:
+                logger.debug(f"mmproj auto-detection failed: {e}")
 
         # Load model using llama-cpp
         # Run in thread pool since Llama() initialization is blocking
@@ -270,6 +360,7 @@ class GGUFLanguageModel(BaseModel):
             try:
                 return Llama(
                     model_path=gguf_path,
+                    mmproj_path=mmproj_path,  # Multimodal projector for audio/vision
                     n_ctx=self.actual_n_ctx,  # Use computed context size
                     n_batch=n_batch,  # Batch size for prompt processing
                     n_gpu_layers=n_gpu_layers,  # GPU layer offloading
@@ -298,7 +389,14 @@ class GGUFLanguageModel(BaseModel):
                 raise
 
         try:
-            self.llama = await loop.run_in_executor(self._executor, _load_model)
+            # On unified memory platforms (Jetson Tegra, Apple Silicon), load model
+            # synchronously to ensure GPU context is created optimally and avoid
+            # thread context switching overhead in shared memory architecture
+            if _is_unified_memory_gpu():
+                logger.info("Loading model synchronously (unified memory GPU optimization)")
+                self.llama = _load_model()
+            else:
+                self.llama = await loop.run_in_executor(self._executor, _load_model)
 
             # Initialize context management
             self._token_counter = TokenCounter(self.llama)
@@ -334,6 +432,16 @@ class GGUFLanguageModel(BaseModel):
                 self._chat_template = None
                 self._special_tokens = None
 
+            # Check multimodal capabilities
+            if self.llama and hasattr(self.llama, "supports_audio"):
+                self._supports_audio = self.llama.supports_audio
+                self._supports_vision = getattr(self.llama, "supports_vision", False)
+                if self._supports_audio or self._supports_vision:
+                    logger.info(
+                        f"Multimodal capabilities: audio={self._supports_audio}, "
+                        f"vision={self._supports_vision}"
+                    )
+
             logger.info(
                 f"GGUF model loaded successfully on {self.device} "
                 f"with {n_gpu_layers} GPU layers and context size {self.actual_n_ctx}"
@@ -343,6 +451,24 @@ class GGUFLanguageModel(BaseModel):
             if hasattr(self, "_executor"):
                 self._executor.shutdown(wait=False)
             raise
+
+    @property
+    def supports_audio(self) -> bool:
+        """Whether this model supports direct audio input.
+
+        Returns True if the model was loaded with a multimodal projector
+        that supports audio processing (e.g., Qwen2.5-Omni).
+        """
+        return self._supports_audio
+
+    @property
+    def supports_vision(self) -> bool:
+        """Whether this model supports direct image/vision input.
+
+        Returns True if the model was loaded with a multimodal projector
+        that supports vision processing.
+        """
+        return self._supports_vision
 
     def format_messages(self, messages: list[dict]) -> str:
         """Format chat messages into a prompt string.
@@ -540,7 +666,9 @@ class GGUFLanguageModel(BaseModel):
         # Inject tools into messages using prompt-based approach
         from utils.tool_calling import inject_tools_into_messages
 
-        logger.debug(f"Using prompt-based tool injection with tool_choice={tool_choice}")
+        logger.debug(
+            f"Using prompt-based tool injection with tool_choice={tool_choice}"
+        )
         return inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
 
     async def _generate_from_prompt(
@@ -602,7 +730,12 @@ class GGUFLanguageModel(BaseModel):
                 raise RuntimeError(f"Completion failed: {e}") from e
 
         try:
-            result = await loop.run_in_executor(self._executor, _generate)
+            # On unified memory platforms (Jetson, Apple Silicon), run synchronously
+            # to avoid ThreadPoolExecutor overhead in shared memory architecture
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
@@ -642,9 +775,13 @@ class GGUFLanguageModel(BaseModel):
         Raises:
             AssertionError: If model not loaded
         """
+        import time
+        _timing_start = time.perf_counter()
+
         assert self.llama is not None, "Model not loaded. Call load() first."
 
         max_tokens = max_tokens or 512
+        logger.info(f"[TIMING] generate() start, max_tokens={max_tokens}")
 
         # Try Jinja2 native tool rendering first (if tools provided)
         if tools:
@@ -667,7 +804,9 @@ class GGUFLanguageModel(BaseModel):
                 )
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+        prepared_messages = self._prepare_messages_with_tools(
+            messages, tools, tool_choice
+        )
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):
@@ -707,7 +846,13 @@ class GGUFLanguageModel(BaseModel):
                 raise RuntimeError(f"Chat completion failed: {e}") from e
 
         try:
-            result = await loop.run_in_executor(self._executor, _generate)
+            # On unified memory platforms (Jetson, Apple Silicon), run synchronously
+            # to avoid ThreadPoolExecutor overhead in shared memory architecture.
+            # This provides both performance and stability benefits.
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
@@ -740,11 +885,39 @@ class GGUFLanguageModel(BaseModel):
         """
         assert self.llama is not None, "Model not loaded"
 
-        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
         # Capture llama reference for nested function (type checker can't see through closures)
         llama = self.llama
+
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching
+        # overhead in unified memory architecture
+        if _is_unified_memory_gpu():
+            logits_processor = None
+            if thinking_budget is not None:
+                from utils.thinking import ThinkingBudgetProcessor
+
+                logits_processor = ThinkingBudgetProcessor(
+                    llama, max_thinking_tokens=thinking_budget
+                )
+
+            for chunk in llama.create_completion(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+                logits_processor=logits_processor,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
 
         def _generate_stream():
             """Run completion in separate thread."""
@@ -875,7 +1048,9 @@ class GGUFLanguageModel(BaseModel):
                 return
 
         # Fallback: use prompt injection + chat completion
-        prepared_messages = self._prepare_messages_with_tools(messages, tools, tool_choice)
+        prepared_messages = self._prepare_messages_with_tools(
+            messages, tools, tool_choice
+        )
 
         # Debug log the prepared messages (prompt injection path)
         if logger.isEnabledFor(logging.DEBUG):
@@ -886,6 +1061,34 @@ class GGUFLanguageModel(BaseModel):
                 f"{'=' * 60}\n{json.dumps(prepared_messages, indent=2)}\n{'=' * 60}"
             )
 
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching
+        # overhead in unified memory architecture
+        if _is_unified_memory_gpu():
+            logits_processor = None
+            if thinking_budget is not None:
+                from utils.thinking import ThinkingBudgetProcessor
+
+                logits_processor = ThinkingBudgetProcessor(
+                    self.llama, max_thinking_tokens=thinking_budget
+                )
+
+            for chunk in self.llama.create_chat_completion(
+                messages=prepared_messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+                logits_processor=logits_processor,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
         queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -955,12 +1158,191 @@ class GGUFLanguageModel(BaseModel):
             else:
                 yield item
 
+    async def generate_with_audio(
+        self,
+        messages: list[dict],
+        audio_data: bytes,
+        audio_format: str = "wav",
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> str:
+        """Generate chat completion with audio input (non-streaming).
+
+        This method uses the model's native multimodal capabilities to process
+        audio input directly without STT transcription, enabling audio-to-text
+        generation for models like Qwen2.5-Omni.
+
+        Args:
+            messages: List of message dicts. Audio marker in user message content
+                      will be replaced with encoded audio embeddings.
+            audio_data: Raw audio bytes (WAV, MP3, or PCM format)
+            audio_format: Format of audio_data ("wav", "mp3", or "pcm")
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+
+        Returns:
+            Generated text as a string
+
+        Raises:
+            RuntimeError: If model doesn't support audio input
+            AssertionError: If model not loaded
+        """
+        if not self._supports_audio:
+            raise RuntimeError(
+                f"Model {self.model_id} does not support audio input. "
+                "Load with mmproj_path for audio-capable models like Qwen2.5-Omni."
+            )
+
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+        loop = asyncio.get_running_loop()
+
+        def _generate():
+            try:
+                return self.llama.create_chat_completion_with_audio(
+                    messages=messages,
+                    audio_data=audio_data,
+                    audio_format=audio_format,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                )
+            except Exception as e:
+                logger.error(f"Error during audio chat completion: {e}", exc_info=True)
+                raise RuntimeError(f"Audio chat completion failed: {e}") from e
+
+        try:
+            # On Jetson/Tegra, run synchronously to avoid thread context switching overhead
+            if _is_unified_memory_gpu():
+                result = _generate()
+            else:
+                result = await loop.run_in_executor(self._executor, _generate)
+            content = result["choices"][0]["message"]["content"]
+            return content.strip() if content else ""
+        except Exception as e:
+            logger.error(f"Error extracting audio completion result: {e}", exc_info=True)
+            raise ValueError(f"Unexpected result from audio completion: {e}") from e
+
+    async def generate_stream_with_audio(
+        self,
+        messages: list[dict],
+        audio_data: bytes,
+        audio_format: str = "wav",
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Generate chat completion with audio input (streaming).
+
+        This method uses the model's native multimodal capabilities to process
+        audio input directly and streams the response token by token.
+
+        Args:
+            messages: List of message dicts with audio markers
+            audio_data: Raw audio bytes (WAV, MP3, or PCM format)
+            audio_format: Format of audio_data ("wav", "mp3", or "pcm")
+            max_tokens: Maximum tokens to generate (default: 512)
+            temperature: Sampling temperature
+            top_p: Nucleus sampling threshold
+            stop: List of stop sequences
+
+        Yields:
+            Generated text tokens as strings
+
+        Raises:
+            RuntimeError: If model doesn't support audio input
+            AssertionError: If model not loaded
+        """
+        if not self._supports_audio:
+            raise RuntimeError(
+                f"Model {self.model_id} does not support audio input. "
+                "Load with mmproj_path for audio-capable models like Qwen2.5-Omni."
+            )
+
+        assert self.llama is not None, "Model not loaded. Call load() first."
+
+        max_tokens = max_tokens or 512
+
+        # On Jetson/Tegra, stream synchronously to avoid thread context switching overhead
+        if _is_unified_memory_gpu():
+            for chunk in self.llama.create_chat_completion_with_audio(
+                messages=messages,
+                audio_data=audio_data,
+                audio_format=audio_format,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop or [],
+                stream=True,
+            ):
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+                    await asyncio.sleep(0)
+            return
+
+        # Async path: use ThreadPoolExecutor (Apple Silicon, discrete GPUs, CPU)
+        queue: asyncio.Queue[str | Exception | None] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def _generate_stream():
+            try:
+                for chunk in self.llama.create_chat_completion_with_audio(
+                    messages=messages,
+                    audio_data=audio_data,
+                    audio_format=audio_format,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop or [],
+                    stream=True,
+                ):
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        future = asyncio.run_coroutine_threadsafe(
+                            queue.put(content), loop
+                        )
+                        future.result()
+            except Exception as e:
+                logger.error(f"Error in audio chat stream: {e}", exc_info=True)
+                future = asyncio.run_coroutine_threadsafe(queue.put(e), loop)
+                future.result()
+            finally:
+                future = asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+                future.result()
+
+        loop.run_in_executor(self._executor, _generate_stream)
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            elif isinstance(item, Exception):
+                raise item
+            else:
+                yield item
+
     async def unload(self) -> None:
         """Unload GGUF model and free resources."""
         logger.info(f"Unloading GGUF language model: {self.model_id}")
 
         # Clear llama-cpp instance
         self.llama = None
+
+        # Reset multimodal flags to prevent use-after-free
+        # If these remain True after unload, callers checking supports_audio/supports_vision
+        # would see stale values and might attempt to use the freed model
+        self._supports_audio = False
+        self._supports_vision = False
 
         # Shutdown thread pool executor
         if hasattr(self, "_executor"):

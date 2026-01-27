@@ -32,7 +32,8 @@ const api = {
       ipcRenderer.on('splash-status', listener)
       // Return cleanup function to remove listener
       return () => ipcRenderer.removeListener('splash-status', listener)
-    }
+    },
+    minimize: () => ipcRenderer.send('splash-minimize')
   },
 
   // System info

@@ -802,3 +802,208 @@ export const RERANKING_SAMPLES = [
     ],
   },
 ]
+
+// =============================================================================
+// Speech Types (STT, TTS, Voice Cloning)
+// =============================================================================
+
+export type SpeechModelStatus = 'ready' | 'downloading' | 'not_downloaded' | 'error'
+
+// Speech-to-Text (STT) Models - faster-whisper models
+export interface STTModel {
+  id: string
+  name: string
+  size: string
+  description?: string
+}
+
+// Available Whisper models from the Universal Runtime (faster-whisper)
+// Valid model IDs from backend MODEL_SIZES dict
+export const STT_MODELS: STTModel[] = [
+  { id: 'distil-large-v3-turbo', name: 'Whisper Distil Large V3 Turbo', size: '~800M', description: 'Default - fast & accurate' },
+  { id: 'large-v3-turbo', name: 'Whisper Large V3 Turbo', size: '~800M', description: 'Recommended - fast & accurate' },
+  { id: 'distil-large-v3', name: 'Whisper Distil Large V3', size: '~800M', description: 'Distilled, high quality' },
+  { id: 'large-v3', name: 'Whisper Large V3', size: '1.5B', description: 'Best accuracy, slower' },
+  { id: 'large-v2', name: 'Whisper Large V2', size: '1.5B', description: 'Previous best' },
+  { id: 'large-v1', name: 'Whisper Large V1', size: '1.5B', description: 'Original large' },
+  { id: 'medium', name: 'Whisper Medium', size: '769M', description: 'High accuracy' },
+  { id: 'medium.en', name: 'Whisper Medium (English)', size: '769M', description: 'English-only' },
+  { id: 'small', name: 'Whisper Small', size: '244M', description: 'Good accuracy' },
+  { id: 'small.en', name: 'Whisper Small (English)', size: '244M', description: 'English-only' },
+  { id: 'base', name: 'Whisper Base', size: '74M', description: 'Basic accuracy' },
+  { id: 'base.en', name: 'Whisper Base (English)', size: '74M', description: 'English-only' },
+  { id: 'tiny', name: 'Whisper Tiny', size: '39M', description: 'Fastest, lowest accuracy' },
+  { id: 'tiny.en', name: 'Whisper Tiny (English)', size: '39M', description: 'English-only, fast' },
+  { id: 'distil-medium.en', name: 'Whisper Distil Medium (English)', size: '~400M', description: 'Smaller distilled' },
+  { id: 'distil-small.en', name: 'Whisper Distil Small (English)', size: '~200M', description: 'Smallest distilled' },
+]
+
+// Text-to-Speech (TTS) Models
+export interface TTSModel {
+  id: string
+  name: string
+  size: string
+  description?: string
+  supportsVoiceCloning?: boolean
+  supportsSpeed?: boolean
+}
+
+// Available TTS models from the Universal Runtime
+export const TTS_MODELS: TTSModel[] = [
+  { id: 'kokoro', name: 'Kokoro', size: '82M', description: 'Fast, GPU-optimized (~100ms)', supportsVoiceCloning: false, supportsSpeed: true },
+  { id: 'chatterbox-turbo', name: 'Chatterbox Turbo', size: '350M', description: 'Voice cloning, sub-200ms', supportsVoiceCloning: true, supportsSpeed: false },
+  { id: 'pocket-tts', name: 'Pocket TTS', size: '100M', description: 'CPU-only, ~6x realtime', supportsVoiceCloning: false, supportsSpeed: false },
+]
+
+// Voice info from backend
+export interface VoiceInfo {
+  id: string
+  name: string
+  language: string
+  model: string
+  preview_url?: string | null
+}
+
+// Voice presets - matches backend voices
+export interface VoicePreset {
+  id: string
+  name: string
+  gender: 'male' | 'female' | 'neutral'
+  language: string
+  model: string
+  isCustom?: boolean
+  duration?: number // in seconds, for custom voices
+  createdAt?: string
+}
+
+// Kokoro built-in voices (American and British English)
+export const KOKORO_VOICES: VoicePreset[] = [
+  // American English
+  { id: 'af_heart', name: 'Heart (American Female)', gender: 'female', language: 'en-US', model: 'kokoro' },
+  { id: 'af_bella', name: 'Bella (American Female)', gender: 'female', language: 'en-US', model: 'kokoro' },
+  { id: 'af_nicole', name: 'Nicole (American Female)', gender: 'female', language: 'en-US', model: 'kokoro' },
+  { id: 'af_sarah', name: 'Sarah (American Female)', gender: 'female', language: 'en-US', model: 'kokoro' },
+  { id: 'af_sky', name: 'Sky (American Female)', gender: 'female', language: 'en-US', model: 'kokoro' },
+  { id: 'am_adam', name: 'Adam (American Male)', gender: 'male', language: 'en-US', model: 'kokoro' },
+  { id: 'am_michael', name: 'Michael (American Male)', gender: 'male', language: 'en-US', model: 'kokoro' },
+  // British English
+  { id: 'bf_emma', name: 'Emma (British Female)', gender: 'female', language: 'en-GB', model: 'kokoro' },
+  { id: 'bf_isabella', name: 'Isabella (British Female)', gender: 'female', language: 'en-GB', model: 'kokoro' },
+  { id: 'bm_george', name: 'George (British Male)', gender: 'male', language: 'en-GB', model: 'kokoro' },
+  { id: 'bm_lewis', name: 'Lewis (British Male)', gender: 'male', language: 'en-GB', model: 'kokoro' },
+]
+
+// Chatterbox Turbo built-in voices
+export const CHATTERBOX_VOICES: VoicePreset[] = [
+  { id: 'cb_male_calm', name: 'Male Calm', gender: 'male', language: 'en', model: 'chatterbox-turbo' },
+  { id: 'cb_female_warm', name: 'Female Warm', gender: 'female', language: 'en', model: 'chatterbox-turbo' },
+  { id: 'cb_male_energetic', name: 'Male Energetic', gender: 'male', language: 'en', model: 'chatterbox-turbo' },
+  { id: 'cb_female_professional', name: 'Female Professional', gender: 'female', language: 'en', model: 'chatterbox-turbo' },
+]
+
+// Pocket TTS built-in voices
+export const POCKET_TTS_VOICES: VoicePreset[] = [
+  { id: 'alba', name: 'Alba', gender: 'female', language: 'en', model: 'pocket-tts' },
+  { id: 'marius', name: 'Marius', gender: 'male', language: 'en', model: 'pocket-tts' },
+  { id: 'javert', name: 'Javert', gender: 'male', language: 'en', model: 'pocket-tts' },
+  { id: 'jean', name: 'Jean', gender: 'male', language: 'en', model: 'pocket-tts' },
+  { id: 'fantine', name: 'Fantine', gender: 'female', language: 'en', model: 'pocket-tts' },
+  { id: 'cosette', name: 'Cosette', gender: 'female', language: 'en', model: 'pocket-tts' },
+  { id: 'eponine', name: 'Eponine', gender: 'female', language: 'en', model: 'pocket-tts' },
+  { id: 'azelma', name: 'Azelma', gender: 'female', language: 'en', model: 'pocket-tts' },
+]
+
+// All preset voices combined
+export const PRESET_VOICES: VoicePreset[] = [
+  ...KOKORO_VOICES,
+  ...CHATTERBOX_VOICES,
+  ...POCKET_TTS_VOICES,
+]
+
+// Get voices for a specific TTS model
+export function getVoicesForModel(modelId: string): VoicePreset[] {
+  switch (modelId) {
+    case 'kokoro':
+      return KOKORO_VOICES
+    case 'chatterbox-turbo':
+      return CHATTERBOX_VOICES
+    case 'pocket-tts':
+      return POCKET_TTS_VOICES
+    default:
+      return KOKORO_VOICES // Default to kokoro
+  }
+}
+
+// Languages for STT
+export const STT_LANGUAGES: Array<{ code: string; name: string }> = [
+  { code: 'auto', name: 'Auto-detect' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'it', name: 'Italian' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'ar', name: 'Arabic' },
+]
+
+// Microphone permission states
+export type MicPermissionState = 'prompt' | 'granted' | 'denied' | 'error'
+
+// Recording states
+export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
+
+// Custom voice clone
+export interface VoiceClone {
+  id: string
+  name: string
+  duration: number // in seconds
+  createdAt: string
+  audioBlob?: Blob
+}
+
+// Transcription result
+export interface TranscriptionResult {
+  text: string
+  language?: string
+  confidence?: number
+  duration?: number
+  segments?: TranscriptionSegment[]
+}
+
+export interface TranscriptionSegment {
+  id: number
+  start: number
+  end: number
+  text: string
+  confidence?: number
+}
+
+// Speech message for conversation view
+export interface SpeechMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  audioUrl?: string
+  timestamp: Date
+  transcription?: TranscriptionResult
+}
+
+// Speech test history entry
+export interface SpeechHistoryEntry {
+  id: string
+  timestamp: Date
+  mode: 'stt' | 'tts' | 'conversation'
+  // STT fields
+  transcription?: TranscriptionResult
+  inputAudioUrl?: string
+  // TTS fields
+  inputText?: string
+  outputAudioUrl?: string
+  voiceId?: string
+  // Shared
+  error?: string
+}

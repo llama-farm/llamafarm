@@ -1,0 +1,16 @@
+name: universal_rag
+title: Universal RAG - Zero Config Document Processing
+description: |
+  Demonstrates zero-config RAG using the built-in universal_rag strategy.
+  Processes 90%+ of document formats without any parser configuration.
+tags:
+  - rag
+  - universal
+  - zero-config
+  - documents
+difficulty: beginner
+estimated_time: 5m
+prerequisites:
+  - LlamaFarm server
+  - Universal runtime
+  - LlamaFarm CLI

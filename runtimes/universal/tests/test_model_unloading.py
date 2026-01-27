@@ -231,7 +231,9 @@ async def test_load_encoder_tracks_access(reset_server_globals):
         await server.load_encoder(model_id, task="embedding")
 
         # Verify model is tracked (new cache key includes quantization and max_length)
-        cache_key = "encoder:embedding:transformers:test/embedding-model:quantdefault:lenauto"
+        cache_key = (
+            "encoder:embedding:transformers:test/embedding-model:quantdefault:lenauto"
+        )
         assert cache_key in server._models
 
 

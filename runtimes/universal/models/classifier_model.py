@@ -219,8 +219,44 @@ class ClassifierModel(BaseModel):
         labels: list[str],
         num_iterations: int = 20,
         batch_size: int = 16,
+        use_executor: bool = True,
     ) -> ClassifierFitResult:
         """Fit the classifier on labeled training data.
+
+        This method offloads CPU-bound training to a thread pool to avoid
+        blocking the async event loop.
+
+        Args:
+            texts: List of training texts
+            labels: List of corresponding labels
+            num_iterations: Number of training iterations (default: 20)
+            batch_size: Training batch size
+            use_executor: If True, run training in thread pool (default: True)
+
+        Returns:
+            ClassifierFitResult with training statistics
+        """
+        if use_executor:
+            # Offload training to thread pool
+            from services.training_executor import run_in_executor
+
+            return await run_in_executor(
+                self._fit_sync, texts, labels, num_iterations, batch_size
+            )
+        else:
+            return self._fit_sync(texts, labels, num_iterations, batch_size)
+
+    def _fit_sync(
+        self,
+        texts: list[str],
+        labels: list[str],
+        num_iterations: int = 20,
+        batch_size: int = 16,
+    ) -> ClassifierFitResult:
+        """Synchronous fit method for thread pool execution.
+
+        This is the actual training logic, separated from the async wrapper
+        to allow execution in a thread pool.
 
         Args:
             texts: List of training texts

@@ -13,6 +13,9 @@ export default function DevToolsDrawer() {
     setActiveTab,
     selectRequest,
     clearHistory,
+    webSockets,
+    selectedWebSocket,
+    selectWebSocket,
   } = useDevTools()
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -71,6 +74,9 @@ export default function DevToolsDrawer() {
             onSelectRequest={selectRequest}
             onClearHistory={clearHistory}
             onClose={() => setIsExpanded(false)}
+            webSockets={webSockets}
+            selectedWebSocket={selectedWebSocket}
+            onSelectWebSocket={selectWebSocket}
           />
         ) : (
           <DevToolsCollapsedBar

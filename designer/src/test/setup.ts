@@ -40,6 +40,21 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+// Mock scrollIntoView (not supported by JSDOM)
+Element.prototype.scrollIntoView = vi.fn()
+
+// Mock ResizeObserver (not supported by JSDOM, needed by Radix UI)
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}))
+
+// Mock pointer capture methods (not supported by JSDOM, needed by Radix UI Select)
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+Element.prototype.setPointerCapture = vi.fn()
+Element.prototype.releasePointerCapture = vi.fn()
+
 // Start MSW server before all tests
 beforeAll(() => {
   server.listen({

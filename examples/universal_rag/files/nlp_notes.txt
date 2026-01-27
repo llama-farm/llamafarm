@@ -1,0 +1,49 @@
+Natural Language Processing Notes
+==================================
+
+NLP is a branch of AI that helps computers understand human language.
+
+Key Concepts
+------------
+
+Tokenization: Breaking text into words or subwords. This is the first step
+in most NLP pipelines. Common tokenizers include WordPiece, BPE, and SentencePiece.
+
+Embeddings: Vector representations of words or sentences. Word2Vec, GloVe,
+and FastText are classic embedding methods. Modern approaches use contextual
+embeddings from transformers.
+
+Transformers: Modern architecture for sequence modeling. The attention mechanism
+allows the model to focus on relevant parts of the input when generating output.
+BERT uses encoder-only transformers, while GPT uses decoder-only architecture.
+
+Attention: Mechanism for focusing on relevant parts of input. Self-attention
+computes relationships between all positions in a sequence. Multi-head attention
+allows the model to attend to different representation subspaces.
+
+Popular NLP Models
+------------------
+
+BERT (Bidirectional Encoder Representations from Transformers):
+- Pre-trained on masked language modeling
+- Good for classification, NER, and question answering
+- 110M parameters (base) to 340M (large)
+
+GPT (Generative Pre-trained Transformer):
+- Auto-regressive language model
+- Excellent for text generation
+- GPT-4 has reportedly over 1 trillion parameters
+
+T5 (Text-to-Text Transfer Transformer):
+- Frames all NLP tasks as text-to-text
+- Unified approach simplifies fine-tuning
+- Available in multiple sizes
+
+Common NLP Tasks
+----------------
+
+1. Text Classification: Sentiment analysis, spam detection, topic categorization
+2. Named Entity Recognition: Extracting people, places, organizations
+3. Machine Translation: Converting text between languages
+4. Question Answering: Extracting answers from context
+5. Summarization: Creating concise versions of longer documents

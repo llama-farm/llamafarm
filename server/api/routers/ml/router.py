@@ -45,12 +45,12 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
     SetFit uses contrastive learning to fine-tune a sentence-transformer,
     then trains a small classification head.
 
-    Models are stored in ~/.llamafarm/models/classifier/
+    Models are automatically saved to ~/.llamafarm/models/classifier/ after training.
 
     Args:
         model: Base name for the model
-        overwrite: If False (default), creates versioned model {model}_{timestamp}
-                   If True, overwrites existing model with same name
+        overwrite: If True (default), overwrites existing model with same name
+                   If False, creates versioned model {model}_{timestamp}
 
     Example request:
     ```json
@@ -63,11 +63,11 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
             {"text": "What's the weather?", "label": "weather"}
         ],
         "num_iterations": 20,
-        "overwrite": false
+        "overwrite": true
     }
     ```
 
-    After fitting, use /v1/ml/classifier/save to persist the model (with optional description).
+    Model is automatically saved after fitting - no separate save step needed.
     Use /v1/ml/classifier/predict to classify new texts.
     Use "{model}-latest" in predict/load to get the most recent version.
     """
@@ -238,12 +238,12 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
     Train an anomaly detection model on data assumed to be mostly normal.
     The model learns what "normal" looks like and can then detect deviations.
 
-    Models are stored in ~/.llamafarm/models/anomaly/
+    Models are automatically saved to ~/.llamafarm/models/anomaly/ after training.
 
     Args:
         model: Base name for the model
-        overwrite: If False (default), creates versioned model {model}_{timestamp}
-                   If True, overwrites existing model with same name
+        overwrite: If True (default), overwrites existing model with same name
+                   If False, creates versioned model {model}_{timestamp}
 
     Backends:
     - isolation_forest: Fast, works well out of the box (recommended)
@@ -258,11 +258,11 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         "backend": "isolation_forest",
         "data": [[1.0, 2.0], [1.1, 2.1], [0.9, 1.9]],
         "contamination": 0.1,
-        "overwrite": false
+        "overwrite": true
     }
     ```
 
-    After fitting, use /v1/ml/anomaly/save to persist the model (with optional description).
+    Model is automatically saved after fitting - no separate save step needed.
     Use /v1/ml/anomaly/score or /v1/ml/anomaly/detect for inference.
     Use "{model}-latest" in score/detect/load to get the most recent version.
     """

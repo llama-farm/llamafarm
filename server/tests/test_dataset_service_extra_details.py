@@ -238,7 +238,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to return appropriate metadata for each hash
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -319,7 +319,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = config_with_various_files
 
         # Configure metadata with different file types
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1  # PDF
             elif file_content_hash == self.file_hash_2:
@@ -393,7 +393,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to fail for second file
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -480,7 +480,7 @@ class TestDatasetServiceExtraDetails:
         """Test DatasetWithFileDetails contains all expected fields."""
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:

@@ -148,6 +148,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "build/splash-logo.png",
+        "to": "splash-logo.png"
       }
     ]
   }
