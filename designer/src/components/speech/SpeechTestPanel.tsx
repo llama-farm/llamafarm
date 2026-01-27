@@ -298,8 +298,11 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       })
 
       // Clean up blob URLs for voice messages that no longer exist
+      // Note: Don't clean up typed message URLs (msg- prefix) here - they're managed separately
       const currentIds = new Set(voiceChat.messages.map(m => m.id))
       for (const [id, url] of blobUrlsRef.current.entries()) {
+        // Skip typed message URLs - they're not in voiceChat.messages
+        if (id.startsWith('msg-')) continue
         if (!currentIds.has(id)) {
           URL.revokeObjectURL(url)
           blobUrlsRef.current.delete(id)
@@ -1086,6 +1089,14 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const handleClearConversation = useCallback(() => {
     // Stop any ongoing audio playback and backend generation
     voiceChat.interrupt()
+
+    // Clean up blob URLs for typed messages before clearing
+    for (const [id, url] of blobUrlsRef.current.entries()) {
+      if (id.startsWith('msg-')) {
+        URL.revokeObjectURL(url)
+        blobUrlsRef.current.delete(id)
+      }
+    }
 
     // Clear conversation mode state
     setMessages([])
