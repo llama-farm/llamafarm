@@ -16,9 +16,12 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs)
 fi
 
-# Extract port from LLAMAFARM_URL if set
+# Extract port from LLAMAFARM_URL if set (only if URL contains a port)
 if [ -n "$LLAMAFARM_URL" ]; then
-    LLAMAFARM_PORT=$(echo "$LLAMAFARM_URL" | sed -E 's|.*:([0-9]+).*|\1|')
+    EXTRACTED_PORT=$(echo "$LLAMAFARM_URL" | sed -nE 's|.*:([0-9]+).*|\1|p')
+    if [ -n "$EXTRACTED_PORT" ]; then
+        LLAMAFARM_PORT="$EXTRACTED_PORT"
+    fi
 fi
 
 export LLAMAFARM_URL="${LLAMAFARM_URL:-http://localhost:$LLAMAFARM_PORT}"
