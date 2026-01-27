@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { SAMPLE_DATASETS } from './sampleData'
+import StreamingModeToggle from './StreamingModeToggle'
+import StreamingModePanel from './StreamingModePanel'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -271,6 +273,9 @@ function AnomalyModel() {
   const [modelName, setModelName] = useState('')
   const [description, setDescription] = useState('')
   const [nameExistsWarning, setNameExistsWarning] = useState(false)
+
+  // Streaming mode state
+  const [isStreamingMode, setIsStreamingMode] = useState(false)
 
   // Input mode: text (textarea) or table
   const [inputMode, setInputMode] = useState<InputMode>('text')
@@ -1364,7 +1369,29 @@ function AnomalyModel() {
           </div>
         </div>
 
-        {/* Training Data & Settings Card */}
+        {/* Streaming Mode Toggle - only show for new models */}
+        {isNewModel && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
+            <StreamingModeToggle
+              isStreamingMode={isStreamingMode}
+              onToggle={setIsStreamingMode}
+              disabled={trainingState === 'training'}
+            />
+            {isStreamingMode && (
+              <span className="text-xs text-muted-foreground">
+                Real-time anomaly detection with auto-rolling retraining
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Streaming Mode Panel - shown when streaming mode is active */}
+        {isStreamingMode ? (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <StreamingModePanel modelName={modelName} />
+          </div>
+        ) : (
+        /* Training Data & Settings Card */
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your anomaly detector..." />}
           {/* Collapsed view - show when not a new model and not expanded */}
@@ -1842,8 +1869,10 @@ MX`}
             </>
           )}
         </div>
+        )}
 
-        {/* Test Panel */}
+        {/* Test Panel - hidden in streaming mode */}
+        {!isStreamingMode && (
         <div
           className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 ${
             !canTest ? 'opacity-50' : ''
@@ -1975,6 +2004,7 @@ MX`}
             </div>
           )}
         </div>
+        )}
 
         {/* Model Versions */}
         <div className="flex flex-col gap-3">

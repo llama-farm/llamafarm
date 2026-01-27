@@ -1054,3 +1054,69 @@ export interface SpeechHistoryEntry {
   // Shared
   error?: string
 }
+
+// ============================================================================
+// Streaming Anomaly Detection
+// ============================================================================
+
+// Status of the streaming detector
+export type StreamingStatus = 'collecting' | 'ready' | 'retraining'
+
+// Request to process data through a streaming detector
+export interface StreamingAnomalyRequest {
+  model: string
+  data: Record<string, unknown> | Record<string, unknown>[]
+  backend?: AnomalyBackend
+  min_samples?: number // default: 50
+  retrain_interval?: number // default: 100
+  window_size?: number // default: 1000
+  threshold?: number // default: 0.5
+  contamination?: number // default: 0.1
+  // Polars feature engineering
+  rolling_windows?: number[] // e.g., [5, 10, 20]
+  include_lags?: boolean
+  lag_periods?: number[] // e.g., [1, 2, 5]
+}
+
+// Result for a single data point
+export interface StreamingAnomalyResult {
+  index: number
+  score: number | null // null during cold start
+  is_anomaly: boolean | null // null during cold start
+  raw_score: number | null
+  status: StreamingStatus
+  samples_collected: number
+  samples_until_ready: number // 0 when ready
+  model_version: number
+}
+
+// Response from streaming anomaly endpoint
+export interface StreamingAnomalyResponse {
+  status: StreamingStatus
+  results: StreamingAnomalyResult[]
+  model_version: number
+  samples_collected: number
+  threshold: number
+  processing_time_ms: number
+}
+
+// Stats for a streaming detector
+export interface StreamingDetectorStats {
+  model_id: string
+  backend: AnomalyBackend
+  status: StreamingStatus
+  model_version: number
+  samples_collected: number
+  total_processed: number
+  samples_since_retrain: number
+  min_samples: number
+  retrain_interval: number
+  window_size: number
+  threshold: number
+  is_ready: boolean
+}
+
+// Response from list detectors endpoint
+export interface StreamingDetectorListResponse {
+  detectors: StreamingDetectorStats[]
+}
