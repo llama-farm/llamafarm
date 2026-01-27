@@ -478,8 +478,8 @@ class ToolAwareParserFactory:
 
         class MockParser(BaseParser):
             def __init__(self, name: str | None = None, config: dict | None = None):
+                super().__init__(config)
                 self.name = name or parser_type
-                self.config = config or {}
 
             def _load_metadata(self):
                 return ParserConfig(

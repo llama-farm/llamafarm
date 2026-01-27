@@ -102,6 +102,93 @@ setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
 logger = UniversalRuntimeLogger("universal-runtime")
 
 
+def _init_llama_backend():
+    """Initialize llama.cpp backend in the main thread.
+
+    CRITICAL FOR STABILITY: On NVIDIA Jetson/Tegra devices with unified memory,
+    the CUDA backend MUST be initialized from the main thread before any worker
+    threads attempt to use it. Failure to do so causes a "double free or corruption"
+    crash during ggml_backend_load_all() when the CUDA backend tries to initialize
+    from a ThreadPoolExecutor worker.
+
+    This is a stability fix, NOT a performance optimization. It prevents crashes
+    by ensuring the CUDA context is created in the main thread where GPU state
+    management is most reliable on unified memory architectures.
+
+    Affected platforms:
+        - NVIDIA Jetson Orin Nano/NX (Tegra, unified memory)
+        - NVIDIA Jetson Xavier (Tegra, unified memory)
+        - Potentially other unified memory GPU systems
+
+    Technical details:
+        - ggml_backend_load_all() discovers and initializes compute backends
+        - On Tegra, CUDA initialization from worker threads can corrupt internal state
+        - By initializing at module load time (main thread), we avoid this issue
+    """
+    try:
+        from llamafarm_llama._bindings import ensure_backend
+
+        logger.info("Initializing llama.cpp backend in main thread...")
+        ensure_backend()
+        logger.info("llama.cpp backend initialized successfully")
+    except ImportError:
+        logger.debug("llamafarm_llama not installed, skipping backend init")
+    except Exception as e:
+        logger.warning(f"Failed to initialize llama.cpp backend: {e}")
+
+
+# Initialize llama.cpp backend in main thread - REQUIRED for Jetson/Tegra CUDA stability
+# See _init_llama_backend() docstring for technical details on why this matters
+_init_llama_backend()
+
+
+def _preload_sklearn():
+    """Preload sklearn in the main thread to avoid segfaults on ARM64.
+
+    On Jetson/ARM64 with Python 3.13, importing sklearn's compiled extensions
+    concurrently with active llama.cpp CUDA operations can cause segfaults.
+    By importing sklearn at startup (before any requests), we avoid this issue.
+    """
+    try:
+        from sklearn.ensemble import IsolationForest  # noqa: F401
+
+        logger.info("sklearn preloaded successfully")
+    except ImportError:
+        logger.debug("sklearn not installed, skipping preload")
+    except Exception as e:
+        logger.warning(f"Failed to preload sklearn: {e}")
+
+
+# Preload sklearn in main thread - prevents segfaults on ARM64/Jetson
+_preload_sklearn()
+
+
+def _preload_async_backends():
+    """Preload async backends to avoid segfaults during streaming on ARM64.
+
+    On Jetson/ARM64 with Python 3.13, lazy imports during garbage collection
+    can cause segfaults. The anyio library lazily imports its async backend
+    (asyncio/trio) on first use (e.g., when StreamingResponse starts).
+
+    By importing these at startup, we ensure they're loaded before any
+    concurrent CUDA operations that might trigger GC during import.
+    """
+    try:
+        # Preload anyio's async backend - used by FastAPI StreamingResponse
+        import anyio._backends._asyncio  # noqa: F401
+        import anyio._core._eventloop  # noqa: F401
+
+        logger.info("anyio async backends preloaded successfully")
+    except ImportError:
+        logger.debug("anyio not installed, skipping preload")
+    except Exception as e:
+        logger.warning(f"Failed to preload anyio backends: {e}")
+
+
+# Preload async backends - prevents segfaults during streaming on ARM64/Jetson
+_preload_async_backends()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""

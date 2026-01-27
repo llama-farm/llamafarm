@@ -18,8 +18,8 @@ class MarkdownParser_Python(BaseParser):
         name: str = "MarkdownParser_Python",
         config: dict[str, Any] | None = None,
     ):
+        super().__init__(config)
         self.name = name
-        self.config = config or {}
         self.chunk_size = self.config.get("chunk_size", 1000)
         self.chunk_strategy = self.config.get("chunk_strategy", "sections")
         self.extract_metadata = self.config.get("extract_metadata", True)

@@ -26,6 +26,7 @@ classifiers = [
 keywords = ["llama", "llm", "gguf", "inference", "ai"]
 dependencies = [
     "cffi>=1.15.0",
+    "numpy>=1.20.0",
 ]
 
 [project.optional-dependencies]
