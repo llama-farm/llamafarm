@@ -119,7 +119,7 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-	if err := createSchemaScaffold(projectDir); err != nil {
+		if err := createSchemaScaffold(absProjectDir); err != nil {
 		utils.OutputError("Failed to scaffold schemas directory: %v", err)
 		os.Exit(1)
 	}
