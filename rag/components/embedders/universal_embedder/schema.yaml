@@ -36,6 +36,22 @@ properties:
     default: 120
     minimum: 10
     description: Request timeout (seconds) - longer for initial model loading
+  validation_timeout:
+    type: integer
+    default: 10
+    minimum: 1
+    description: Timeout (seconds) for validation health/model checks
+  validation_retries:
+    type: integer
+    default: 2
+    minimum: 0
+    maximum: 5
+    description: Number of retries for validation checks
+  validation_retry_backoff:
+    type: number
+    default: 1.0
+    minimum: 0
+    description: Backoff (seconds) between validation retries
   normalize:
     type: boolean
     default: true

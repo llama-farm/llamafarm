@@ -9,6 +9,9 @@ general_purpose:
     api_key: universal
     batch_size: 32
     timeout: 120
+    validation_timeout: 10
+    validation_retries: 2
+    validation_retry_backoff: 1.0
     normalize: true
   recommended_for:
     - Local deployment
@@ -25,6 +28,9 @@ high_quality:
     api_key: universal
     batch_size: 16
     timeout: 120
+    validation_timeout: 10
+    validation_retries: 2
+    validation_retry_backoff: 1.0
     normalize: true
   recommended_for:
     - Production RAG systems
@@ -41,6 +47,9 @@ long_context:
     api_key: universal
     batch_size: 16
     timeout: 120
+    validation_timeout: 10
+    validation_retries: 2
+    validation_retry_backoff: 1.0
     normalize: true
   recommended_for:
     - Long documents

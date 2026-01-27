@@ -1,6 +1,7 @@
 """Universal Runtime-based embedding generator with circuit breaker protection."""
 
 from pathlib import Path
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -66,6 +67,15 @@ class UniversalEmbedder(Embedder):
         self.timeout = config.get(
             "timeout", 120
         )  # Longer timeout for initial model loading
+        self.validation_timeout = max(
+            int(config.get("validation_timeout", 10)), 1
+        )
+        self.validation_retries = max(
+            int(config.get("validation_retries", 2)), 0
+        )
+        self.validation_retry_backoff = max(
+            float(config.get("validation_retry_backoff", 1.0)), 0.0
+        )
 
         # Normalization (Universal Runtime doesn't normalize by default)
         self.normalize = config.get("normalize", True)
@@ -75,28 +85,48 @@ class UniversalEmbedder(Embedder):
 
     def validate_config(self) -> bool:
         """Validate configuration and check Universal Runtime availability."""
-        try:
-            # Check if server is available
-            health_url = self.base_url.replace("/v1", "/health")
-            response = requests.get(health_url, timeout=5)
-            if response.status_code != 200:
-                logger.warning(f"Universal Runtime not available at {health_url}")
-                return False
+        health_url = self.base_url.replace("/v1", "/health")
+        models_url = f"{self.base_url}/models"
+        last_error: Exception | None = None
 
-            # Optionally check if embeddings endpoint is available
-            # by listing models
-            models_url = f"{self.base_url}/models"
-            response = requests.get(models_url, timeout=5)
-            if response.status_code == 200:
-                logger.info(f"Universal Runtime available at {self.base_url}")
-                return True
-            else:
-                logger.warning("Could not list models from Universal Runtime")
-                return False
+        for attempt in range(self.validation_retries + 1):
+            try:
+                # Check if server is available
+                response = requests.get(
+                    health_url, timeout=self.validation_timeout
+                )
+                if response.status_code != 200:
+                    logger.warning(
+                        f"Universal Runtime not available at {health_url}"
+                    )
+                else:
+                    # Optionally check if embeddings endpoint is available
+                    # by listing models
+                    response = requests.get(
+                        models_url, timeout=self.validation_timeout
+                    )
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Universal Runtime available at {self.base_url}"
+                        )
+                        return True
+                    logger.warning("Could not list models from Universal Runtime")
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"Failed to validate Universal Runtime embedder config: {e}"
+                )
 
-        except Exception as e:
-            logger.warning(f"Failed to validate Universal Runtime embedder config: {e}")
-            return False
+            if attempt < self.validation_retries:
+                backoff = self.validation_retry_backoff * (2**attempt)
+                if backoff > 0:
+                    time.sleep(backoff)
+
+        if last_error is not None:
+            logger.warning(
+                "Universal Runtime validation failed after retries"
+            )
+        return False
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts using Universal Runtime.
