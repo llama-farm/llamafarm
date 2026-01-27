@@ -120,16 +120,48 @@ class ChatOrchestratorAgent(LFAgent):
         client.response_model = response_model
 
     def _load_response_model(self, schema_ref: str) -> type[BaseModel]:
+        """Load a Pydantic model from a user schema file.
+
+        Security: Only loads files from schemas/ directory within project.
+        Prevents directory traversal and arbitrary code execution.
+        """
         if "::" not in schema_ref:
             raise ValueError(
-                "Schema must be in the format 'relative/path.py::ClassName'"
+                "Schema must be in the format 'schemas/file.py::ClassName'"
             )
 
         schema_path, class_name = schema_ref.split("::", 1)
-        module_path = Path(self._project_dir) / schema_path
+
+        # Security: Reject obviously malicious paths early
+        if schema_path.startswith("/") or ".." in Path(schema_path).parts:
+            raise ValueError(
+                "Schema path must be relative and cannot contain '..'"
+            )
+
+        # Security: Only allow loading from schemas/ directory
+        if not schema_path.startswith("schemas/"):
+            raise ValueError(
+                f"Schema must be in schemas/ directory. Got: {schema_path}"
+            )
+
+        schemas_dir = (Path(self._project_dir) / "schemas").resolve()
+        relative_schema_path = Path(schema_path).relative_to("schemas")
+        module_path = (schemas_dir / relative_schema_path).resolve()
+
+        # Security: Verify final path is still inside schemas/
+        if not module_path.is_relative_to(schemas_dir):
+            raise ValueError(
+                f"Schema must be in schemas/ directory. Got: {schema_path}"
+            )
+
+        # Security: Only allow .py files
+        if module_path.suffix != ".py":
+            raise ValueError("Schema file must be a .py file")
+
         if not module_path.exists():
             raise FileNotFoundError(f"Schema file not found: {module_path}")
 
+        # Safe to load now
         spec = importlib.util.spec_from_file_location(
             f"llamafarm_user_schema_{module_path.stem}", module_path
         )
@@ -140,11 +172,13 @@ class ChatOrchestratorAgent(LFAgent):
         spec.loader.exec_module(module)
 
         response_model = getattr(module, class_name)
+
+        # Security: Verify it's actually a BaseModel
         if not isinstance(response_model, type) or not issubclass(
             response_model, BaseModel
         ):
-            raise ValueError(
-                f"{class_name} is not a Pydantic BaseModel subclass"
+            raise TypeError(
+                f"{class_name} must be a Pydantic BaseModel class"
             )
 
         return response_model
