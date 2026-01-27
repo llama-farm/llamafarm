@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from config.datamodel import DataProcessingStrategyDefinition
+from config.datamodel import DataProcessingStrategyDefinition, Parser
 
 from core.blob_processor import BlobProcessor
 from core.ingest_handler import IngestHandler
@@ -19,7 +19,7 @@ class TestCoreModules:
         strategy_config = DataProcessingStrategyDefinition(
             name="test_strategy",
             description="Test strategy for unit test",
-            parsers=[Parsers(type="TextParser_Python", config={})],
+            parsers=[Parser(type="TextParser_Python", config={})],
         )
 
         processor = BlobProcessor(strategy_config)
@@ -32,7 +32,7 @@ class TestCoreModules:
         strategy_config = DataProcessingStrategyDefinition(
             name="test_strategy",
             description="Test strategy for unit test",
-            parsers=[Parsers(type="TextParser_Python", config={})],
+            parsers=[Parser(type="TextParser_Python", config={})],
         )
         processor = BlobProcessor(strategy_config)
 
