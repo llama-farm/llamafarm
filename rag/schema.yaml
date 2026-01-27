@@ -2239,7 +2239,6 @@ definitions:
         description: Unique strategy identifier
       description:
         type: string
-        minLength: 10
         maxLength: 500
         description: Strategy description
       parsers:
