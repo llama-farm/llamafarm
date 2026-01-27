@@ -4,6 +4,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from config.datamodel import (
+    DataProcessingStrategyDefinition,
+    LlamaFarmConfig,
+    RAGStrategyConfigurationSchema,
+)
+
 # Use the common config module instead of direct YAML loading
 # Add the repo root to the path to find the config module
 from core.logging import RAGStructLogger
@@ -32,18 +38,23 @@ except ImportError as e:
 logger = RAGStructLogger("rag.core.strategies.handler")
 
 
-def _create_default_universal_rag_strategy() -> DataProcessingStrategy:
+def _create_default_universal_rag_strategy() -> DataProcessingStrategyDefinition:
     """Create the default universal_rag data processing strategy.
 
     This provides a sensible default for zero-config RAG that handles
     90% of document types with no configuration needed.
     """
-    return DataProcessingStrategy(
+    return DataProcessingStrategyDefinition(
         name="universal_rag",
         description="Universal RAG pipeline using MarkItDown parser with semantic chunking and comprehensive metadata extraction",
         parsers=[
             Parser(
                 type="UniversalParser",
+                file_include_patterns=None,
+                fallback_parser=None,
+                priority=None,
+                file_extensions=None,
+                mime_types=None,
                 config={
                     "chunk_size": 1024,
                     "chunk_overlap": 100,
@@ -67,6 +78,10 @@ def _create_default_universal_rag_strategy() -> DataProcessingStrategy:
                     "summary_sentences": 3,
                     "detect_language": True,
                 },
+                condition=None,
+                file_include_patterns=None,
+                priority=None,
+                required_for=None,
             )
         ],
     )
@@ -91,11 +106,12 @@ class DbProcessingConfig:
 class SchemaHandler:
     """Handle new RAG schema directly with global config support."""
 
+    global_config: LlamaFarmConfig
+    rag_config: RAGStrategyConfigurationSchema
+
     def __init__(self, config_source: str):
         """Initialize with global LlamaFarm config file only."""
         self.config_source = Path(config_source)
-        self.global_config = None
-        self.rag_config = None
 
         try:
             # Use the common config loader instead of direct YAML loading
@@ -149,7 +165,7 @@ class SchemaHandler:
 
         return strategies
 
-    def get_default_processing_strategy(self) -> DataProcessingStrategy:
+    def get_default_processing_strategy(self) -> DataProcessingStrategyDefinition:
         """Get the default processing strategy.
 
         Returns universal_rag if no strategies are defined, otherwise
@@ -178,7 +194,9 @@ class SchemaHandler:
                 return db
         raise ValueError(f"Database '{database_name}' not found")
 
-    def create_processing_config(self, strategy_name: str) -> DataProcessingStrategy:
+    def create_processing_config(
+        self, strategy_name: str
+    ) -> DataProcessingStrategyDefinition:
         """Create data processing strategy configuration.
 
         If the strategy is 'universal_rag' and not explicitly defined,
@@ -236,7 +254,7 @@ class SchemaHandler:
 
     def get_processing_strategy_config(
         self, proc_name: str
-    ) -> DataProcessingStrategy | None:
+    ) -> DataProcessingStrategyDefinition | None:
         """Get processing strategy configuration by name.
 
         If the strategy is 'universal_rag' and not explicitly defined,
@@ -270,7 +288,7 @@ class SchemaHandler:
 
     def get_combined_config(
         self, strategy_name: str, source_path: Path | None = None
-    ) -> DbProcessingConfig:
+    ) -> DbProcessingConfig | None:
         """Get combined configuration for a strategy (processing + database).
 
         Returns the actual new schema config without any conversion.
@@ -291,11 +309,11 @@ class SchemaHandler:
 
         if not proc_config:
             logger.error(f"Processing strategy not found: {proc_name}")
-            return {}
+            return None
 
         if not db_config:
             logger.error(f"Database not found: {db_name}")
-            return {}
+            return None
 
         # Return the actual new schema configuration
         return DbProcessingConfig(proc_config, db_config, strategy_name, source_path)
@@ -370,7 +388,15 @@ class SchemaHandler:
         parsers = self.get_parsers_config(proc_config)
         if parsers:
             return parsers[0]
-        return Parser(type="TextParser_Python", config={})
+        return Parser(
+            type="TextParser_Python",
+            fallback_parser=None,
+            file_extensions=None,
+            file_include_patterns=None,
+            mime_types=None,
+            priority=None,
+            config={},
+        )
 
     def get_extractors_config(
         self, proc_config: DataProcessingStrategyDefinition
@@ -391,8 +417,8 @@ class SchemaHandler:
         if not combined:
             return {}
 
-        db_config = combined.database or {}
-        proc_config = combined.processing_strategy or {}
+        db_config: Database = combined.database
+        proc_config: DataProcessingStrategyDefinition = combined.processing_strategy
 
         # Get individual component configs
         embedder = self.get_embedder_config(db_config)

@@ -309,7 +309,7 @@ class TestBatchProcessingContinuesOnFailure:
 
     def test_blob_processor_raises_unsupported_file_type_error(self):
         """BlobProcessor raises UnsupportedFileTypeError for files with no matching parser.
-        
+
         This exception is caught by IngestHandler.ingest_file() which returns
         a skipped status instead of propagating the exception.
         """
@@ -325,18 +325,18 @@ class TestBatchProcessingContinuesOnFailure:
                 )
             ],
         )
-        
+
         processor = BlobProcessor(strategy)
-        
+
         # Try to process a text file - should raise UnsupportedFileTypeError
         with pytest.raises(UnsupportedFileTypeError):
             processor.process_blob(b"Hello", {"filename": "test.txt"})
 
     def test_batch_continues_after_individual_failure(self):
         """Batch processing should continue after individual file failures."""
-        # This tests that the exception handling in ingest_file catches 
+        # This tests that the exception handling in ingest_file catches
         # the exceptions and returns error/skipped status instead of raising
-        
+
         strategy = DataProcessingStrategyDefinition(
             name="pdf_only",
             description="Only handles PDF files for testing",
@@ -349,7 +349,7 @@ class TestBatchProcessingContinuesOnFailure:
             ],
         )
         processor = BlobProcessor(strategy)
-        
+
         # Simulate batch processing with mixed results
         results = []
         files_to_process = [
@@ -357,34 +357,40 @@ class TestBatchProcessingContinuesOnFailure:
             (b"Hello", {"filename": "text.txt"}),  # Will fail - no parser
             (b"More text", {"filename": "another.md"}),  # Will fail - no parser
         ]
-        
+
         for file_data, metadata in files_to_process:
             try:
                 processor.process_blob(file_data, metadata)
                 results.append({"status": "success", "filename": metadata["filename"]})
             except UnsupportedFileTypeError:
                 # This is the expected behavior - exception caught, batch continues
-                results.append({
-                    "status": "skipped",
-                    "filename": metadata["filename"],
-                    "reason": "unsupported_file_type",
-                })
+                results.append(
+                    {
+                        "status": "skipped",
+                        "filename": metadata["filename"],
+                        "reason": "unsupported_file_type",
+                    }
+                )
             except ParserFailedError:
-                results.append({
-                    "status": "error",
-                    "filename": metadata["filename"],
-                    "reason": "parser_failed",
-                })
+                results.append(
+                    {
+                        "status": "error",
+                        "filename": metadata["filename"],
+                        "reason": "parser_failed",
+                    }
+                )
             except Exception as e:
-                results.append({
-                    "status": "error",
-                    "filename": metadata["filename"],
-                    "reason": str(e),
-                })
-        
+                results.append(
+                    {
+                        "status": "error",
+                        "filename": metadata["filename"],
+                        "reason": str(e),
+                    }
+                )
+
         # All 3 files should have been processed (not stopped after first failure)
         assert len(results) == 3
-        
+
         # text.txt and another.md should be skipped (unsupported)
         skipped = [r for r in results if r["status"] == "skipped"]
         assert len(skipped) == 2
@@ -439,32 +445,37 @@ class TestExplicitConfiguration:
     @patch("core.blob_processor.BlobProcessor._get_parser_class")
     def test_multiple_parsers_tried_in_priority_order(self, mock_get_parser_class):
         """Multiple matching parsers should be tried in priority order.
-        
+
         This test verifies that parsers are tried in priority order (lower number = higher priority).
         We use mock parsers where the high-priority one fails and the low-priority one succeeds,
         then verify both were tried in the correct order.
         """
         call_order = []
-        
+
         class HighPriorityParser:
             """Parser with priority=1 (high priority) that fails."""
+
             def __init__(self, name=None, config=None):
                 self.name = name
-            
+
             def parse_blob(self, data, metadata):
                 call_order.append("high_priority")
                 raise ValueError("High priority parser intentionally failed")
-        
+
         class LowPriorityParser:
             """Parser with priority=10 (low priority) that succeeds."""
+
             def __init__(self, name=None, config=None):
                 self.name = name
-            
+
             def parse_blob(self, data, metadata):
                 call_order.append("low_priority")
                 from core.base import Document
-                return [Document(content="Success from low priority parser", metadata={})]
-        
+
+                return [
+                    Document(content="Success from low priority parser", metadata={})
+                ]
+
         # Return different parser classes based on the parser type
         def get_parser_class(parser_type):
             if parser_type == "MockHighPriorityParser":
@@ -472,9 +483,9 @@ class TestExplicitConfiguration:
             elif parser_type == "MockLowPriorityParser":
                 return LowPriorityParser
             raise ValueError(f"Unknown parser type: {parser_type}")
-        
+
         mock_get_parser_class.side_effect = get_parser_class
-        
+
         strategy = DataProcessingStrategyDefinition(
             name="multi_parser_strategy",
             description="Multiple parsers with different priorities",
@@ -502,7 +513,7 @@ class TestExplicitConfiguration:
             f"Expected parsers tried in priority order ['high_priority', 'low_priority'], "
             f"but got {call_order}"
         )
-        
+
         # Verify the low-priority parser's result was returned
         assert len(result) == 1
         assert "low priority parser" in result[0].content

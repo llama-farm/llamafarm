@@ -718,7 +718,37 @@ definitions:
     universalParserConfig:
       type: object
       description: Universal parser using MarkItDown with configurable chunking strategies
-      defaultExtensions: [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".html", ".htm", ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".xml", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp", ".rtf", ".epub", ".mobi", ".eml", ".msg"]
+      defaultExtensions:
+        [
+          ".pdf",
+          ".docx",
+          ".doc",
+          ".xlsx",
+          ".xls",
+          ".pptx",
+          ".ppt",
+          ".html",
+          ".htm",
+          ".txt",
+          ".md",
+          ".markdown",
+          ".csv",
+          ".tsv",
+          ".json",
+          ".xml",
+          ".png",
+          ".jpg",
+          ".jpeg",
+          ".gif",
+          ".bmp",
+          ".tiff",
+          ".webp",
+          ".rtf",
+          ".epub",
+          ".mobi",
+          ".eml",
+          ".msg",
+        ]
       additionalProperties: false
       properties:
         chunk_size:
