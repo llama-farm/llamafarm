@@ -2,7 +2,7 @@ name: End-to-End Tests
 permissions:
   contents: read
   actions: read # Required to download artifacts and check workflow status
-  pull-requests: write # Can post PR comments
+  pull-requests: write # Can post PR comments (only works for non-fork PRs)
 
 on:
   push:
@@ -19,10 +19,13 @@ env:
 jobs:
   # ============================================================
   # Notify PR that E2E tests are starting
+  # Note: This job is skipped for fork PRs due to GitHub's security model
+  # which limits GITHUB_TOKEN to read-only for workflows triggered by forks.
   # ============================================================
   notify-start:
     name: Notify E2E Starting
-    if: github.event_name == 'pull_request'
+    # Only run for non-fork PRs (fork PRs have head.repo.fork = true)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - name: Get PR info
@@ -211,7 +214,9 @@ jobs:
             binary: lf.exe
     env:
       # Use the current branch/ref being tested instead of main
-      LF_VERSION_REF: ${{ github.head_ref || github.ref_name }}
+      # For PRs (including fork PRs), use the merge ref which is always accessible
+      # For pushes to main, use the branch name directly
+      LF_VERSION_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.ref_name }}
       # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Allow uv to search all indexes for best version match (needed because PyTorch index
@@ -437,14 +442,16 @@ jobs:
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
             LIB_NAME="libllama.dylib"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
             LIB_NAME="llama.dll"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
             LIB_NAME="libllama.so"
           fi
 
-          LLAMA_VERSION="b7376"
+          # Strip both LF and CR to handle Windows CRLF line endings
+          LLAMA_VERSION=$(cat llama-cpp-version.txt | tr -d '\r\n')
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
           echo "Expected binary location: $LIB_PATH"
@@ -576,7 +583,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets create \
-            -s universal_processor \
+            -s universal_rag \
             -b main_database \
             test_dataset; then
             echo "❌ Dataset creation failed, checking server health..."
@@ -902,7 +909,8 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
           fi
@@ -929,11 +937,14 @@ jobs:
 
   # ============================================================
   # Aggregated PR Comment Job
+  # Note: This job is skipped for fork PRs due to GitHub's security model
+  # which limits GITHUB_TOKEN to read-only for workflows triggered by forks.
   # ============================================================
   report-results:
     name: Report E2E Results
     needs: e2e-test
-    if: always() && github.event_name == 'pull_request'
+    # Only run for non-fork PRs (fork PRs have head.repo.fork = true)
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - name: Download all result artifacts

@@ -8,9 +8,13 @@ import hashlib
 import logging
 import os
 import platform
+import shlex
 import shutil
+import subprocess
+import tarfile
 import tempfile
 import zipfile
+from importlib import metadata
 from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
@@ -19,51 +23,78 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 # Pin to specific llama.cpp release
-LLAMA_CPP_VERSION = "b7376"
+# Version is read from llama-cpp-version.txt at repo root (single source of truth)
+def _read_llama_cpp_version() -> str:
+    """Read llama.cpp version from centralized version file."""
+    # Try to find version file relative to repo root
+    # Walk up from this file to find llama-cpp-version.txt
+    current = Path(__file__).resolve()
+    for _ in range(10):  # Max 10 levels up
+        current = current.parent
+        version_file = current / "llama-cpp-version.txt"
+        if version_file.exists():
+            return version_file.read_text().strip()
+    # Fallback to hardcoded version if file not found (e.g., installed package)
+    return "b7694"
+
+LLAMA_CPP_VERSION = _read_llama_cpp_version()
 LLAMA_CPP_REPO = "ggml-org/llama.cpp"
+
+
+def _get_llamafarm_release_version() -> str:
+    """Get LlamaFarm release version for ARM64 binary downloads."""
+    try:
+        version = metadata.version("llamafarm-llama")
+        if version and not version.startswith("0.0.0"):
+            return f"v{version}"
+    except metadata.PackageNotFoundError:
+        pass
+    # Fallback for dev installs
+    return "v0.0.1"
 
 # Binary URLs from llama.cpp GitHub releases
 # Format: https://github.com/ggml-org/llama.cpp/releases/download/{version}/{artifact}
-# Note: All releases are .zip format; paths vary by platform
+# Note: Starting from b7836+, Linux/macOS use .tar.gz format; Windows uses .zip
 BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
     # Linux x86_64
+    # Note: Upstream tar.gz extracts to llama-{version}/ subdirectory with libs at root level
     ("linux", "x86_64", "cpu"): {
-        "artifact": "llama-{version}-bin-ubuntu-x64.zip",
-        "lib": "build/bin/libllama.so",
+        "artifact": "llama-{version}-bin-ubuntu-x64.tar.gz",
+        "lib": "libllama.so",  # Libs are in llama-{version}/ subdir, we use rglob to find
         "sha256": None,  # Populated at release time
     },
     ("linux", "x86_64", "vulkan"): {
-        "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.zip",
-        "lib": "build/bin/libllama.so",
+        "artifact": "llama-{version}-bin-ubuntu-vulkan-x64.tar.gz",
+        "lib": "libllama.so",
         "sha256": None,
     },
-    # Note: Linux ARM64 binaries are not published by llama.cpp
-    # Users on ARM64 Linux will need to compile from source or use
-    # a different inference backend
+    # Linux ARM64 (LlamaFarm provided - not available from upstream)
+    ("linux", "arm64", "cpu"): {
+        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.tar.gz",
+        "lib": "libllama.so",
+        "sha256": None,
+    },
     # macOS
     ("darwin", "arm64", "metal"): {
-        "artifact": "llama-{version}-bin-macos-arm64.zip",
-        "lib": "build/bin/libllama.dylib",
+        "artifact": "llama-{version}-bin-macos-arm64.tar.gz",
+        "lib": "libllama.dylib",  # Libs are in llama-{version}/ subdir, we use rglob to find
         "sha256": None,
     },
     ("darwin", "x86_64", "cpu"): {
-        "artifact": "llama-{version}-bin-macos-x64.zip",
-        "lib": "build/bin/libllama.dylib",
+        "artifact": "llama-{version}-bin-macos-x64.tar.gz",
+        "lib": "libllama.dylib",
         "sha256": None,
     },
-    # Windows
+    # Windows (still uses .zip format)
+    # Note: CUDA 11 is no longer provided by upstream llama.cpp (b7694+).
+    # Users with CUDA 11 will fall back to CPU. See docs for building custom binaries.
     ("win32", "amd64", "cpu"): {
         "artifact": "llama-{version}-bin-win-cpu-x64.zip",
         "lib": "llama.dll",  # Windows: library is in root
         "sha256": None,
     },
     ("win32", "amd64", "cuda12"): {
-        "artifact": "llama-{version}-bin-win-cuda12.4-x64.zip",
-        "lib": "llama.dll",
-        "sha256": None,
-    },
-    ("win32", "amd64", "cuda11"): {
-        "artifact": "llama-{version}-bin-win-cuda11.7-x64.zip",
+        "artifact": "llama-{version}-bin-win-cuda-12.4-x64.zip",
         "lib": "llama.dll",
         "sha256": None,
     },
@@ -73,6 +104,90 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "sha256": None,
     },
 }
+
+
+def _should_build_from_source(platform_key: tuple[str, str, str]) -> bool:
+    """Return True when llama.cpp should be built from source."""
+    return False
+
+
+
+def _build_from_source(dest_dir: Path, version: str, backend: str) -> Path:
+    """Build llama.cpp from source and install it into dest_dir."""
+    source_url = f"https://github.com/{LLAMA_CPP_REPO}/archive/refs/tags/{version}.zip"
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        archive_path = tmpdir_path / f"llama.cpp-{version}.zip"
+
+        logger.info(f"Downloading llama.cpp source {version} for source build...")
+        req = Request(source_url, headers={"User-Agent": "llamafarm-llama"})
+        try:
+            with urlopen(req, timeout=300) as response:
+                archive_path.write_bytes(response.read())
+        except (URLError, HTTPError) as e:
+            raise RuntimeError(f"Failed to download source archive {source_url}: {e}") from e
+
+        extract_dir = tmpdir_path / "source"
+        extract_dir.mkdir()
+        _safe_extract_zip(archive_path, extract_dir)
+
+        source_root = next(
+            (p for p in extract_dir.iterdir() if p.is_dir()),
+            None,
+        )
+        if source_root is None:
+            raise RuntimeError("Failed to locate llama.cpp source directory after extraction")
+
+        build_dir = source_root / "build"
+        cmake_args = [
+            "cmake",
+            "-S",
+            str(source_root),
+            "-B",
+            str(build_dir),
+            "-DBUILD_SHARED_LIBS=ON",
+            "-DLLAMA_BUILD_TESTS=OFF",
+            "-DLLAMA_BUILD_EXAMPLES=OFF",
+        ]
+
+        if backend.startswith("cuda"):
+            cmake_args.append("-DGGML_CUDA=ON")
+        elif backend == "vulkan":
+            cmake_args.append("-DGGML_VULKAN=ON")
+
+        extra_args = os.environ.get("LLAMAFARM_LLAMA_CMAKE_ARGS")
+        if extra_args:
+            cmake_args.extend(shlex.split(extra_args))
+
+        logger.info(f"Configuring llama.cpp build (backend={backend})...")
+        subprocess.run(cmake_args, check=True)
+
+        build_cmd = ["cmake", "--build", str(build_dir), "--config", "Release"]
+        jobs = os.environ.get("LLAMAFARM_LLAMA_BUILD_JOBS")
+        if jobs:
+            build_cmd.extend(["--parallel", jobs])
+        else:
+            build_cmd.append("--parallel")
+
+        logger.info("Building llama.cpp from source...")
+        subprocess.run(build_cmd, check=True)
+
+        lib_name = _get_lib_name()
+        candidates = list(build_dir.rglob(lib_name))
+        if not candidates:
+            raise RuntimeError(f"Could not find {lib_name} in build output")
+
+        lib_src = next((c for c in candidates if c.parent.name == "bin"), candidates[0])
+        lib_dest = dest_dir / lib_name
+
+        _extract_with_symlinks(lib_src, lib_dest)
+        _copy_dependencies(build_dir, dest_dir)
+
+        logger.info(f"Installed llama.cpp from source to: {lib_dest}")
+        return lib_dest
 
 
 def get_platform_key(backend_override: Optional[str] = None) -> tuple[str, str, str]:
@@ -104,10 +219,12 @@ def _detect_backend(system: str, machine: str) -> str:
     if system == "darwin" and machine == "arm64":
         return "metal"  # Apple Silicon always has Metal
 
-    # Check for CUDA
+    # Check for CUDA (only CUDA 12+ is supported; CUDA 11 falls back to CPU)
     if _has_cuda():
         cuda_version = _get_cuda_version()
-        return "cuda12" if cuda_version >= 12 else "cuda11"
+        if cuda_version >= 12:
+            return "cuda12"
+        # CUDA 11 not supported by upstream llama.cpp b7694+, fall through to CPU
 
     # Check for Vulkan
     if _has_vulkan():
@@ -223,6 +340,30 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
         z.extractall(dest_dir)
 
 
+def _safe_extract_tarball(tar_path: Path, dest_dir: Path) -> None:
+    """Safely extract a tarball, preventing path traversal attacks.
+
+    Validates that all extracted paths stay within the destination directory.
+    """
+    dest_dir = dest_dir.resolve()
+
+    with tarfile.open(tar_path, "r:gz") as tf:
+        for member in tf.getmembers():
+            # Resolve the target path
+            member_path = (dest_dir / member.name).resolve()
+
+            # Ensure the resolved path is within dest_dir
+            try:
+                member_path.relative_to(dest_dir)
+            except ValueError:
+                raise RuntimeError(
+                    f"Path traversal detected: {member.name!r} would extract outside target directory"
+                )
+
+        # All paths validated, safe to extract
+        tf.extractall(dest_dir)
+
+
 def _get_cache_dir() -> Path:
     """Get cache directory for downloaded binaries."""
     if os.environ.get("LLAMAFARM_CACHE_DIR"):
@@ -245,8 +386,13 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
 
     Handles cases where libllama.dylib -> libllama.0.dylib -> libllama.0.0.7376.dylib
     by following the chain, copying the actual file, and recreating symlinks.
+
+    Also handles cases where tarfile extraction creates 0-byte placeholder files
+    instead of proper symlinks (can happen on some systems/CI environments).
     """
     dest_dir = dest_path.parent
+    src_dir = src_path.parent
+    lib_name = dest_path.name  # e.g., "libllama.so" or "libllama.dylib"
 
     # Follow symlink chain to find the actual file
     current = src_path
@@ -277,6 +423,37 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
             break
         else:
             break
+
+    # If we couldn't resolve the symlink chain (e.g., 0-byte file on CI),
+    # search for the versioned library directly
+    if not current.exists() or current.stat().st_size < 1000:
+        logger.debug(f"Symlink resolution failed, searching for versioned library")
+        # Look for versioned files like libllama.so.0.0.7694 or libllama.0.0.7694.dylib
+        if lib_name.endswith(".so"):
+            # Linux: libllama.so.X.Y.Z (e.g., libllama.so.0.0.7694)
+            base = lib_name[:-3]  # Remove .so
+            # Use multiple patterns to find versioned files
+            versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*.[0-9]*.[0-9]*"))
+            if not versioned_candidates:
+                versioned_candidates = list(src_dir.glob(f"{base}.so.[0-9]*"))
+        elif lib_name.endswith(".dylib"):
+            # macOS: libllama.X.Y.Z.dylib (e.g., libllama.0.0.7694.dylib)
+            base = lib_name[:-6]  # Remove .dylib
+            # Use multiple patterns to find versioned files
+            versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*.[0-9]*.[0-9]*.dylib"))
+            if not versioned_candidates:
+                versioned_candidates = list(src_dir.glob(f"{base}.[0-9]*.dylib"))
+        else:
+            versioned_candidates = []
+
+        # Find the most versioned file (largest file size is usually the real one)
+        versioned_candidates = [f for f in versioned_candidates if f.is_file() and f.stat().st_size > 1000]
+        if versioned_candidates:
+            # Sort by version number to get the full version
+            current = max(versioned_candidates, key=lambda f: f.stat().st_size)
+            logger.debug(f"Found versioned library: {current} ({current.stat().st_size} bytes)")
+            # Build symlink chain from filename patterns
+            symlink_chain = _build_symlink_chain(lib_name, current.name, current.parent)
 
     # Verify we found an actual file
     if not current.exists():
@@ -311,6 +488,46 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
         logger.debug(f"Copied file: {current.name} -> {dest_path.name}")
 
 
+def _build_symlink_chain(base_name: str, versioned_name: str, src_dir: Path) -> list[tuple[Path, str]]:
+    """Build a symlink chain from base name to versioned file.
+
+    For example, for libllama.so -> libllama.so.0 -> libllama.so.0.0.7694
+    returns [(libllama.so, libllama.so.0), (libllama.so.0, libllama.so.0.0.7694)]
+    """
+    import re
+
+    chain = []
+
+    if base_name.endswith(".so"):
+        # Linux: libllama.so -> libllama.so.0 -> libllama.so.0.0.7694
+        match = re.match(r"^(.+\.so)\.(\d+)\.(\d+)\.(\d+)$", versioned_name)
+        if match:
+            so_base = match.group(1)  # libllama.so
+            major = match.group(2)
+            # libllama.so -> libllama.so.0
+            major_name = f"{so_base}.{major}"
+            if (src_dir / major_name).exists() or True:  # Always create chain
+                chain.append((src_dir / base_name, major_name))
+                chain.append((src_dir / major_name, versioned_name))
+            else:
+                chain.append((src_dir / base_name, versioned_name))
+    elif base_name.endswith(".dylib"):
+        # macOS: libllama.dylib -> libllama.0.dylib -> libllama.0.0.7694.dylib
+        match = re.match(r"^(.+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", versioned_name)
+        if match:
+            lib_base = match.group(1)  # libllama
+            major = match.group(2)
+            # libllama.dylib -> libllama.0.dylib
+            major_name = f"{lib_base}.{major}.dylib"
+            if (src_dir / major_name).exists() or True:  # Always create chain
+                chain.append((src_dir / base_name, major_name))
+                chain.append((src_dir / major_name, versioned_name))
+            else:
+                chain.append((src_dir / base_name, versioned_name))
+
+    return chain
+
+
 def download_binary(
     dest_dir: Path, platform_key: Optional[tuple[str, str, str]] = None
 ) -> Path:
@@ -318,7 +535,14 @@ def download_binary(
     if platform_key is None:
         platform_key = get_platform_key()
 
+    version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
+
     if platform_key not in BINARY_MANIFEST:
+        if _should_build_from_source(platform_key):
+            logger.warning(
+                f"No pre-built binary for {platform_key}; building from source instead."
+            )
+            return _build_from_source(dest_dir, version, platform_key[2])
         # Try falling back to CPU
         system, machine, _ = platform_key
         cpu_key = (system, machine, "cpu")
@@ -329,9 +553,14 @@ def download_binary(
             raise RuntimeError(f"No pre-built binary available for {platform_key}")
 
     manifest = BINARY_MANIFEST[platform_key]
-    version = os.environ.get("LLAMAFARM_LLAMA_VERSION", LLAMA_CPP_VERSION)
-    artifact = manifest["artifact"].format(version=version)
-    url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
+    if platform_key == ("linux", "arm64", "cpu"):
+        # Use full URL from manifest for our custom builds (hosted on LlamaFarm releases)
+        llamafarm_version = _get_llamafarm_release_version()
+        url = manifest["artifact"].format(version=version, llamafarm_version=llamafarm_version)
+        artifact = url.split("/")[-1]
+    else:
+        artifact = manifest["artifact"].format(version=version)
+        url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
 
     print(f"Downloading llama.cpp {version} for {platform_key}...")
     print(f"  URL: {url}")
@@ -376,12 +605,14 @@ def download_binary(
                     f"Checksum mismatch: expected {manifest['sha256']}, got {actual}"
                 )
 
-        # Extract (all llama.cpp releases are .zip format)
+        # Extract archive (Linux/macOS use .tar.gz, Windows uses .zip)
         extract_dir = tmpdir_path / "extracted"
         extract_dir.mkdir()
 
         if artifact.endswith(".zip"):
             _safe_extract_zip(archive_path, extract_dir)
+        elif artifact.endswith(".tar.gz") or artifact.endswith(".tgz"):
+            _safe_extract_tarball(archive_path, extract_dir)
         else:
             raise RuntimeError(f"Unknown archive format: {artifact}")
 
@@ -431,6 +662,7 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
         # macOS: version before extension (libggml.0.0.0.dylib)
         patterns.extend([
             "libggml*.*.*.*dylib",
+            "libmtmd*.*.*.*dylib",  # Multimodal library for audio/vision
         ])
     else:
         # Linux: version after extension (libggml.so.0.0.0)
@@ -439,6 +671,8 @@ def _copy_dependencies(src_dir: Path, dest_dir: Path):
             "libggml*.so.*",      # Versioned: libggml.so.0.0.0
             "libggml*.so",        # Unversioned: libggml.so, libggml-cpu.so
             "ggml-*.so",          # Backend plugins: ggml-cpu.so, ggml-cuda.so
+            "libmtmd*.so.*",      # Multimodal library (versioned)
+            "libmtmd*.so",        # Multimodal library (unversioned)
             "libcublas*.so.*",
             "libcudart*.so.*",
             "libcublasLt*.so.*",

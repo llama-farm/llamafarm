@@ -62,3 +62,20 @@ class TestStrategies:
             # New schema structure - check for 'config' instead of 'vector_store'
             assert db_config.config is not None
             assert db_config.embedding_strategies is not None
+
+    def test_processing_config_isolation(self, test_config_path):
+        """Ensure processing configs are not mutated across invocations."""
+        handler = SchemaHandler(test_config_path)
+
+        first = handler.create_processing_config("quick_test")
+        assert first.parsers
+        assert first.parsers[0].config is not None
+
+        # Mutate the returned config (simulating overrides)
+        first.parsers[0].config["chunk_size"] = 999
+
+        # Fetch again and confirm original values are preserved
+        second = handler.create_processing_config("quick_test")
+        assert second.parsers
+        assert second.parsers[0].config is not None
+        assert second.parsers[0].config.get("chunk_size") == 500

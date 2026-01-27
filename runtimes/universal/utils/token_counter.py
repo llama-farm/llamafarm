@@ -57,6 +57,9 @@ class TokenCounter:
         The overhead accounts for role markers (e.g., "<|user|>") and
         other formatting added by chat templates.
 
+        Handles both text-only messages (content is string) and multimodal
+        messages (content is list of content parts).
+
         Args:
             message: A message dict with 'role' and 'content' keys.
 
@@ -64,6 +67,28 @@ class TokenCounter:
             Estimated token count for the message.
         """
         content = message.get("content") or ""
+
+        # Handle multimodal messages (content is a list of parts)
+        if isinstance(content, list):
+            total_tokens = 0
+            for part in content:
+                if isinstance(part, dict):
+                    part_type = part.get("type", "")
+                    if part_type == "text":
+                        # Count tokens in text parts
+                        text = part.get("text", "")
+                        total_tokens += self.count_tokens(text)
+                    elif part_type == "input_audio":
+                        # Audio parts don't contribute text tokens
+                        # Use a small estimate for the audio marker/placeholder
+                        total_tokens += 10
+                    elif part_type == "image_url":
+                        # Image parts - use a moderate estimate
+                        total_tokens += 50
+                    # Skip other unknown types
+            return total_tokens + self.MESSAGE_OVERHEAD
+
+        # Handle simple string content
         return self.count_tokens(content) + self.MESSAGE_OVERHEAD
 
     def count_messages_tokens(self, messages: list[dict]) -> int:

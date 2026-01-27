@@ -150,14 +150,16 @@ Useful options:
 # Create a dataset
 lf datasets create -s pdf_ingest -b main_db research-notes
 
-# Upload documents (supports globs/directories)
+# Upload documents (supports globs/directories); auto-processes by default
 lf datasets upload research-notes ./examples/fda_rag/files/*.pdf
+# For batching without processing:
+# lf datasets upload research-notes ./examples/fda_rag/files/*.pdf --no-process
 ```
 
 ## 8. Process Documents
 
 ```bash
-lf datasets process research-notes
+lf datasets process research-notes    # Only needed if you skipped auto-processing
 ```
 
 This sends documents through the RAG pipeline—parsing, chunking, embedding, and indexing.

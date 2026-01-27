@@ -189,6 +189,10 @@ Common HTTP status codes:
 - `GET /v1/ml/anomaly/models` - List saved anomaly models
 - `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
 
+### Voice Chat (Real-time Voice Assistant)
+
+- `WebSocket /v1/{namespace}/{project}/voice/chat` - Full-duplex voice chat (Speech → STT → LLM → TTS → Speech)
+
 ### Health
 
 - `GET /health` - Overall health check
@@ -1819,6 +1823,199 @@ curl -X POST http://localhost:8000/v1/examples/fda_rag/import-data \
 
 ---
 
+## Voice Chat API
+
+The Voice Chat API provides a full-duplex WebSocket endpoint for real-time voice assistant functionality. It orchestrates Speech-to-Text (STT), LLM inference, and Text-to-Speech (TTS) into a seamless voice conversation pipeline.
+
+### Configuration (llamafarm.yaml)
+
+Voice settings can be configured in your project's `llamafarm.yaml` file. Query parameters override config defaults.
+
+```yaml
+# Voice chat configuration
+voice:
+  enabled: true                    # Enable/disable voice chat (default: true)
+  llm_model: chat-model            # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro                  # TTS model ID
+    voice: af_heart                # Voice ID (see available voices below)
+    speed: 1.0                     # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base                    # Whisper model (tiny/base/small/medium/large-v3)
+    language: en                   # Language code
+
+# The llm_model references a model in runtime.models[]
+# Prompts attached to that model apply to voice conversations
+runtime:
+  models:
+    - name: chat-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      prompts: [voice_assistant]   # System prompts apply to voice chat
+
+prompts:
+  - name: voice_assistant
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational for spoken output.
+```
+
+**Available TTS Voices:**
+
+| Voice ID | Description |
+|----------|-------------|
+| `af_heart` | Heart (American Female) - default |
+| `af_bella`, `af_nicole`, `af_sarah`, `af_sky` | American Female voices |
+| `am_adam`, `am_michael` | American Male voices |
+| `bf_emma`, `bf_isabella` | British Female voices |
+| `bm_george`, `bm_lewis` | British Male voices |
+
+**STT Model Sizes:**
+
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| `tiny` | 39M | Fastest | Lower |
+| `base` | 74M | Fast | Good (default) |
+| `small` | 244M | Medium | Better |
+| `medium` | 769M | Slower | High |
+| `large-v3` | 1.5B | Slowest | Highest |
+
+### Voice Chat WebSocket
+
+Real-time voice chat with stateful conversation sessions.
+
+**Endpoint:** `WebSocket /v1/{namespace}/{project}/voice/chat`
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace |
+| `project` | string | Project name |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `session_id` | string | auto | Resume existing session (optional) |
+| `stt_model` | string | `"base"` | Whisper model size (overrides config) |
+| `tts_model` | string | `"kokoro"` | TTS model ID (overrides config) |
+| `tts_voice` | string | `"af_heart"` | TTS voice ID (overrides config) |
+| `llm_model` | string | from config | LLM model ID (required if not in config) |
+| `language` | string | `"en"` | STT language code (overrides config) |
+| `speed` | float | `1.0` | TTS speed multiplier (overrides config) |
+| `system_prompt` | string | none | System prompt for LLM (optional) |
+
+**Client → Server Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Audio | Binary | PCM 16kHz 16-bit mono, or WebM/Opus |
+| Interrupt | `{"type": "interrupt"}` | Stop current TTS playback (barge-in) |
+| End | `{"type": "end"}` | Process accumulated audio |
+| Config | `{"type": "config", ...}` | Update session settings |
+
+**Server → Client Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Session Info | `{"type": "session_info", "session_id": "..."}` | Session created/resumed |
+| Transcription | `{"type": "transcription", "text": "...", "is_final": bool}` | STT result |
+| LLM Text | `{"type": "llm_text", "text": "...", "is_final": bool}` | LLM response phrase (for display) |
+| TTS Audio | Binary | PCM 24kHz 16-bit mono audio chunks |
+| TTS Start | `{"type": "tts_start", "phrase_index": N}` | Phrase synthesis starting |
+| TTS Done | `{"type": "tts_done", "phrase_index": N, "duration": N}` | Phrase synthesis complete |
+| Status | `{"type": "status", "state": "..."}` | Pipeline state change |
+| Error | `{"type": "error", "message": "..."}` | Error occurred |
+| Closed | `{"type": "closed"}` | Session ended |
+
+**Pipeline States:**
+
+- `idle` - Waiting for input
+- `listening` - Receiving audio input
+- `processing` - STT + LLM in progress
+- `speaking` - TTS output playing
+- `interrupted` - Barge-in occurred
+
+**Example (JavaScript):**
+
+```javascript
+// Connect using project config (voice settings from llamafarm.yaml)
+const ws = new WebSocket(
+  'ws://localhost:8000/v1/default/my-voice-app/voice/chat'
+);
+
+// Override specific settings via query params
+const ws2 = new WebSocket(
+  'ws://localhost:8000/v1/default/my-voice-app/voice/chat?' +
+  'tts_voice=am_adam&' +  // Override voice from config
+  'speed=1.2'             // Override speed from config
+);
+
+// Handle session info
+ws.onopen = () => console.log('Connected');
+
+// Handle messages
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary TTS audio chunk - play it
+    playAudioChunk(event.data);
+  } else {
+    const msg = JSON.parse(event.data);
+    switch (msg.type) {
+      case 'session_info':
+        console.log('Session:', msg.session_id);
+        break;
+      case 'transcription':
+        console.log('You said:', msg.text);
+        break;
+      case 'llm_text':
+        console.log('Assistant:', msg.text);
+        break;
+      case 'status':
+        console.log('State:', msg.state);
+        break;
+      case 'error':
+        console.error('Error:', msg.message);
+        break;
+    }
+  }
+};
+
+// Send audio from microphone
+navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+  const mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
+  mediaRecorder.ondataavailable = (e) => ws.send(e.data);
+  mediaRecorder.start(100); // Send chunks every 100ms
+});
+
+// Signal end of speech (triggers processing)
+function endSpeech() {
+  ws.send(JSON.stringify({type: 'end'}));
+}
+
+// Barge-in: interrupt current TTS
+function interrupt() {
+  ws.send(JSON.stringify({type: 'interrupt'}));
+}
+```
+
+**Features:**
+
+- **Config-Driven**: Define voice settings in `llamafarm.yaml` for reproducible deployments
+- **Stateful Sessions**: Conversation history is maintained across turns
+- **Barge-in Support**: User can interrupt TTS playback to speak
+- **Low-Latency Streaming**: TTS starts as soon as LLM generates complete phrases
+- **Phrase Boundary Detection**: Natural speech pacing with intelligent text segmentation
+- **Session Resume**: Reconnect with `session_id` to continue conversations
+- **Prompt Inheritance**: System prompts from the LLM model config apply to voice chat
+
+---
+
 ## Health API
 
 ### Overall Health Check
@@ -2752,6 +2949,12 @@ The ML API provides custom text classification and anomaly detection capabilitie
 
 :::tip Model Versioning
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
+
+**Endpoints supporting `-latest` resolution:**
+- `/v1/ml/classifier/predict`, `/v1/ml/classifier/load`
+- `/v1/ml/anomaly/score`, `/v1/ml/anomaly/detect`, `/v1/ml/anomaly/load`
+
+Note: The `fit` endpoints do NOT support `-latest` since they create new models.
 :::
 
 ### Custom Text Classification (SetFit)
@@ -2794,6 +2997,10 @@ Train a new text classifier.
 | `num_iterations` | int | No | 20 | Contrastive learning iterations |
 | `batch_size` | int | No | 16 | Training batch size |
 | `overwrite` | bool | No | false | If false, version with timestamp |
+
+:::note Description Field
+To add a description to a model, use the `/v1/ml/classifier/save` endpoint after fitting. The `description` parameter in fit requests is not persisted.
+:::
 
 **Response:**
 
@@ -2976,6 +3183,8 @@ Load a previously saved classifier.
 
 **Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
 
+The `model_name` is the directory name (e.g., `intent-classifier_20251215_155054`). SetFit classifiers are stored as directories under `~/.llamafarm/models/classifier/`.
+
 ---
 
 ### Anomaly Detection
@@ -3031,7 +3240,7 @@ Train an anomaly detection model.
 | `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
 | `data` | array | Yes | - | Training data (numeric arrays or dicts) |
 | `schema` | object | No | - | Feature encoding schema (required for dict data) |
-| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (must be >0 and ≤0.5) |
 | `overwrite` | bool | No | false | If false, version with timestamp |
 
 **Response:**
@@ -3196,6 +3405,8 @@ The anomalies detected are:
 
 **Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
 
+The `filename` includes the file extension (e.g., `sensor-detector_isolation_forest.pkl`). Anomaly models are stored as `.pkl` files under `~/.llamafarm/models/anomaly/`.
+
 ---
 
 ## Universal Runtime API
@@ -3247,6 +3458,11 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+
+:::info Classification Endpoints
+- **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
+- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:8000`.
+:::
 
 ### Quick Examples
 

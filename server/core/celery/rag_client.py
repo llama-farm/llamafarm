@@ -24,7 +24,7 @@ def build_ingest_signature(
     source_path: str,
     filename: str | None = None,
     dataset_name: str | None = None,
-    parser_overrides: dict[str, dict[str, Any]] | None = None,
+    parser_overrides: dict[str, Any] | None = None,
 ):
     """
     Build a Celery signature for the rag.ingest_file task.
@@ -41,7 +41,7 @@ def build_ingest_signature(
             source_path,
             filename,
             dataset_name,
-            parser_overrides,
+            parser_overrides or {},
         ],
         app=app,
     )
@@ -155,7 +155,7 @@ async def ingest_file_with_rag(
     source_path: str,
     filename: str | None = None,
     dataset_name: str | None = None,
-    parser_overrides: dict[str, dict[str, Any]] | None = None,
+    parser_overrides: dict[str, Any] | None = None,
     timeout: int = 300,
     poll_interval: float = 2.0,
 ) -> tuple[bool, dict[str, Any]]:
@@ -371,6 +371,61 @@ def batch_search(
     )
     timeout = max(30, len(queries) * 10)
     return _run_sync_task_with_polling(task, timeout=timeout, poll_interval=1) or []
+
+
+def preview_document(
+    project_dir: str,
+    file_path: str,
+    database: str | None = None,
+    data_processing_strategy_name: str | None = None,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+    chunk_strategy: str | None = None,
+    original_filename: str | None = None,
+) -> dict[str, Any]:
+    """
+    Dispatch rag.preview_document task and wait for result.
+
+    Args:
+        project_dir: Path to the project directory
+        file_path: Path to the file to preview
+        database: Name of the database (for config lookup)
+        data_processing_strategy_name: Data processing strategy to use for preview.
+            If not provided, falls back to the first available strategy.
+        chunk_size: Override chunk size
+        chunk_overlap: Override chunk overlap
+        chunk_strategy: Override chunk strategy
+        original_filename: Original filename with extension (for parser detection)
+
+    Returns:
+        Dict with preview results including chunks and statistics
+    """
+    task = signature(
+        "rag.preview_document",
+        args=[project_dir, file_path],
+        kwargs={
+            "database": database,
+            "data_processing_strategy_name": data_processing_strategy_name,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "chunk_strategy": chunk_strategy,
+            "original_filename": original_filename,
+        },
+        app=app,
+    )
+    return _run_sync_task_with_polling(task, timeout=60.0, poll_interval=0.5) or {
+        "original_text": "",
+        "chunks": [],
+        "file_info": {"filename": "unknown", "size": 0},
+        "parser_used": "unknown",
+        "chunk_strategy": "unknown",
+        "chunk_size": 0,
+        "chunk_overlap": 0,
+        "total_chunks": 0,
+        "avg_chunk_size": 0.0,
+        "total_size_with_overlaps": 0,
+        "warnings": ["Preview task timed out or failed"],
+    }
 
 
 def _run_sync_task_with_polling(task_signature, timeout: float, poll_interval: float):

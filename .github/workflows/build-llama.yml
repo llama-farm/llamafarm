@@ -1,0 +1,95 @@
+name: Build llama.cpp Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_version:
+        description: 'llama.cpp version (e.g., b7693). Leave empty to use llama-cpp-version.txt'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-llama-cpp:
+    name: Build llama.cpp
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout LlamaFarm (for version file)
+        uses: actions/checkout@v4
+        with:
+          path: llamafarm
+          sparse-checkout: |
+            llama-cpp-version.txt
+
+      - name: Determine llama.cpp version
+        id: version
+        run: |
+          if [ -n "${{ inputs.llama_version }}" ]; then
+            echo "version=${{ inputs.llama_version }}" >> $GITHUB_OUTPUT
+            echo "Using input version: ${{ inputs.llama_version }}"
+          else
+            VERSION=$(cat llamafarm/llama-cpp-version.txt | tr -d '\n')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from llama-cpp-version.txt: $VERSION"
+          fi
+
+      - name: Checkout llama.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ steps.version.outputs.version }}
+          path: llama.cpp
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Configure CMake
+        run: |
+          cd llama.cpp
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DGGML_NATIVE=OFF \
+            -DGGML_CPU_ARM_ARCH=armv8-a
+
+      - name: Build
+        run: |
+          cd llama.cpp
+          cmake --build build --config Release -j $(nproc)
+
+      - name: Prepare Artifact
+        id: artifact
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT_NAME="llama-${VERSION}-bin-linux-arm64.zip"
+          echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
+          cd llama.cpp
+          mkdir -p dist/bin
+          cp build/bin/libllama.so dist/bin/
+          # Copy dependencies (like libggml.so) if they exist
+          find build/bin -name "*.so*" -not -name "libllama.so" -exec cp {} dist/bin/ \;
+
+          cd dist
+          zip -r ../$ARTIFACT_NAME .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: llama.cpp/${{ steps.artifact.outputs.name }}
+
+      - name: Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: llama.cpp/${{ steps.artifact.outputs.name }}

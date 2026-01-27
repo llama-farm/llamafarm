@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from config.datamodel import DataProcessingStrategy, Parsers
+from config.datamodel import DataProcessingStrategyDefinition
 
 from core.blob_processor import BlobProcessor
 from core.ingest_handler import IngestHandler
@@ -16,7 +16,7 @@ class TestCoreModules:
     def test_blob_processor_initialization(self):
         """Test BlobProcessor initialization."""
         # Create a minimal LlamaFarmConfig instance with a data_processing_strategy
-        strategy_config = DataProcessingStrategy(
+        strategy_config = DataProcessingStrategyDefinition(
             name="test_strategy",
             description="Test strategy for unit test",
             parsers=[Parsers(type="TextParser_Python", config={})],
@@ -29,7 +29,7 @@ class TestCoreModules:
 
     def test_blob_processor_text_file(self):
         """Test processing a text blob."""
-        strategy_config = DataProcessingStrategy(
+        strategy_config = DataProcessingStrategyDefinition(
             name="test_strategy",
             description="Test strategy for unit test",
             parsers=[Parsers(type="TextParser_Python", config={})],
@@ -74,8 +74,8 @@ class TestCoreModules:
         """Test creating parsers via factory."""
         from core.factories import create_parser_from_config
 
-        # Test creating text parser
-        config = {"type": "text", "config": {}}
+        # Test creating text parser using proper parser name
+        config = {"type": "TextParser_Python", "config": {}}
         parser = create_parser_from_config(config)
         assert parser is not None
 

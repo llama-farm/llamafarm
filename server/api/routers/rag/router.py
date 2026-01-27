@@ -6,8 +6,8 @@ from typing import Any
 
 from config.datamodel import (
     Database,
-    EmbeddingStrategy2,
-    RetrievalStrategy2,
+    DatabaseEmbeddingStrategy,
+    DatabaseRetrievalStrategy,
 )
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ from core.logging import FastAPIStructLogger
 from services.database_service import DatabaseService
 from services.project_service import ProjectService
 
+from .preview import router as preview_router
 from .rag_health import RAGHealthResponse, handle_rag_health
 from .rag_query import QueryResponse, RAGQueryRequest, handle_rag_query
 from .rag_stats import RAGStatsResponse, handle_rag_stats
@@ -28,6 +29,9 @@ router = APIRouter(
     prefix="/projects/{namespace}/{project}/rag",
     tags=["rag"],
 )
+
+# Include preview routes
+router.include_router(preview_router)
 
 
 class EmbeddingStrategyInfo(BaseModel):
@@ -589,14 +593,14 @@ async def create_database(
         embedding_strategies = None
         if request.embedding_strategies:
             embedding_strategies = [
-                EmbeddingStrategy2(**s) for s in request.embedding_strategies
+                DatabaseEmbeddingStrategy(**s) for s in request.embedding_strategies
             ]
 
         # Build retrieval strategies if provided
         retrieval_strategies = None
         if request.retrieval_strategies:
             retrieval_strategies = [
-                RetrievalStrategy2(**s) for s in request.retrieval_strategies
+                DatabaseRetrievalStrategy(**s) for s in request.retrieval_strategies
             ]
 
         database = Database(
@@ -691,7 +695,7 @@ async def update_database(
     if request.embedding_strategies is not None:
         try:
             embedding_strategies = [
-                EmbeddingStrategy2(**s) for s in request.embedding_strategies
+                DatabaseEmbeddingStrategy(**s) for s in request.embedding_strategies
             ]
         except Exception as e:
             raise HTTPException(
@@ -702,7 +706,7 @@ async def update_database(
     if request.retrieval_strategies is not None:
         try:
             retrieval_strategies = [
-                RetrievalStrategy2(**s) for s in request.retrieval_strategies
+                DatabaseRetrievalStrategy(**s) for s in request.retrieval_strategies
             ]
         except Exception as e:
             raise HTTPException(

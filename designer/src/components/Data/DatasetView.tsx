@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { Button } from '../ui/button'
@@ -70,6 +70,7 @@ import {
   loadReprocessingFileHash,
   clearReprocessingFileHash,
 } from '../../utils/datasetStorage'
+import { DocumentPreviewModal } from '../Rag/Preview'
 
 type Dataset = {
   id: string
@@ -88,6 +89,10 @@ function DatasetView() {
   const { datasetId } = useParams()
   const { toast } = useToast()
   const [mode, setMode] = useModeWithReset('designer')
+  const location = useLocation()
+  const navigationState =
+    (location.state as { taskId?: string | null; pendingProcessing?: boolean } | null) ||
+    null
 
   // Get current active project for API calls
   const activeProject = useActiveProject()
@@ -140,6 +145,52 @@ function DatasetView() {
   const [reprocessingFileHash, setReprocessingFileHash] = useState<
     string | null
   >(null)
+  // Track which file to preview
+  const [previewFile, setPreviewFile] = useState<{
+    hash: string
+    filename: string
+  } | null>(null)
+  const [pendingProcessing, setPendingProcessing] = useState<boolean>(
+    Boolean(navigationState?.pendingProcessing)
+  )
+  const initialNavigationStateRef = useRef(navigationState)
+
+  // Handle navigation state from uploads (task id or pending processing flag)
+  useEffect(() => {
+    const state = initialNavigationStateRef.current
+    if (
+      !state ||
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !datasetId
+    ) {
+      return
+    }
+
+    if (state.taskId && !currentTaskId) {
+      setCurrentTaskId(state.taskId)
+      saveDatasetTaskId(
+        activeProject.namespace,
+        activeProject.project,
+        datasetId,
+        state.taskId
+      )
+    }
+
+    if (state.pendingProcessing) {
+      setPendingProcessing(true)
+    }
+
+    // Clear the navigation state once consumed to avoid re-processing
+    navigate('.', { replace: true, state: null })
+    initialNavigationStateRef.current = null
+  }, [
+    activeProject?.namespace,
+    activeProject?.project,
+    datasetId,
+    currentTaskId,
+    navigate,
+  ])
 
   // Transform async task result from [bool, {...}] format to normalized structure
   const normalizeTaskResult = (rawResult: any): ProcessDatasetResponse => {
@@ -275,9 +326,33 @@ function DatasetView() {
         datasetId,
         result.task_id
       )
+      setPendingProcessing(false)
     }
     return result
   }, [activeProject?.namespace, activeProject?.project, datasetId, processMutation])
+
+  const handleProcessNow = useCallback(async () => {
+    try {
+      const result = await startProcessingAndSaveTask()
+      if (result?.task_id) {
+        setPendingProcessing(false)
+        toast({ message: 'Processing started', variant: 'default' })
+      }
+    } catch (error) {
+      console.error('Failed to start processing:', error)
+      toast({
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to start processing. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }, [startProcessingAndSaveTask, toast])
+
+  const handleDismissPendingProcessing = useCallback(() => {
+    setPendingProcessing(false)
+  }, [])
 
   // Helper to clear reprocessing file hash from state and storage
   const clearReprocessingState = useCallback(() => {
@@ -471,6 +546,7 @@ function DatasetView() {
           lastModified: new Date(fileObj.timestamp * 1000).toLocaleString(),
           type: fileObj.mime_type,
           fullHash: fileObj.hash, // Store full hash for operations
+          chunkCount: fileObj.chunk_count ?? null, // Chunk count from vector DB
         }
       }
 
@@ -1137,43 +1213,59 @@ function DatasetView() {
 
   // Helper function to get processing status for a file
   const getFileProcessingStatus = (fileHash: string | undefined): boolean => {
-    if (!fileHash || !processingResult?.details) {
-      return false // Not processed if no hash or no processing data
+    if (!fileHash) {
+      return false // Not processed if no hash
     }
 
-    const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) =>
-        detail.hash === fileHash || (detail as any).file_hash === fileHash
-    )
+    // First check localStorage processing result
+    if (processingResult?.details) {
+      const fileDetail = processingResult.details.find(
+        (detail: FileProcessingDetail) =>
+          detail.hash === fileHash || (detail as any).file_hash === fileHash
+      )
 
-    if (!fileDetail) {
-      return false // Not processed if not in results
+      if (fileDetail) {
+        // Check if file was successfully processed or skipped
+        const isSkipped = fileDetail.status === 'skipped'
+        const isProcessed = fileDetail.success === true
+        return isProcessed || isSkipped
+      }
     }
 
-    // Check if file was successfully processed or skipped
-    const isSkipped = fileDetail.status === 'skipped'
-    const isProcessed = fileDetail.success === true
+    // Fallback: check chunk_count from API data (persisted in vector DB)
+    const fileFromApi = files.find(f => f.fullHash === fileHash)
+    if (fileFromApi && typeof fileFromApi.chunkCount === 'number' && fileFromApi.chunkCount > 0) {
+      return true // Has chunks in vector DB = processed
+    }
 
-    return isProcessed || isSkipped
+    return false // Not processed
   }
 
   // Helper function to get chunk count for a file
   const getFileChunkCount = (fileHash: string | undefined): number | null => {
-    if (!fileHash || !processingResult?.details) {
-      return null // No chunk count available if no hash or no processing data
+    if (!fileHash) {
+      return null // No chunk count available if no hash
     }
 
-    const fileDetail = processingResult.details.find(
-      (detail: FileProcessingDetail) =>
-        detail.hash === fileHash || (detail as any).file_hash === fileHash
-    )
+    // First check localStorage processing result for detailed chunks info
+    if (processingResult?.details) {
+      const fileDetail = processingResult.details.find(
+        (detail: FileProcessingDetail) =>
+          detail.hash === fileHash || (detail as any).file_hash === fileHash
+      )
 
-    if (!fileDetail) {
-      return null // No chunk count if not in results
+      if (fileDetail && fileDetail.chunks != null) {
+        return fileDetail.chunks
+      }
     }
 
-    // Return chunk count if available
-    return fileDetail.chunks ?? null
+    // Fallback: check chunk_count from API data (persisted in vector DB)
+    const fileFromApi = files.find(f => f.fullHash === fileHash)
+    if (fileFromApi && typeof fileFromApi.chunkCount === 'number') {
+      return fileFromApi.chunkCount
+    }
+
+    return null // No chunk count available
   }
 
   const handleDeleteFile = (fileHash: string) => {
@@ -1455,6 +1547,26 @@ function DatasetView() {
             </div>
           ) : (
             <>
+              {pendingProcessing && !currentTaskId && (
+                <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-amber-900 dark:text-amber-100">
+                    Uploads are pending processing. Start now to index newly added files.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={handleProcessNow}>
+                      Process now
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      onClick={handleDismissPendingProcessing}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              )}
               {/* Combined Overview Card */}
               <div className="rounded-lg border border-border bg-card p-4">
                 {/* Header Section */}
@@ -1522,6 +1634,20 @@ function DatasetView() {
                           {currentStrategy}
                         </Badge>
                       </div>
+                      {(currentApiDataset as any)?.auto_process !== undefined && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            Auto-process:
+                          </span>
+                          <Badge
+                            variant={(currentApiDataset as any)?.auto_process ? 'default' : 'secondary'}
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            {(currentApiDataset as any)?.auto_process ? 'On' : 'Off'}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2914,6 +3040,17 @@ function DatasetView() {
                                         <DropdownMenuItem
                                           onClick={() =>
                                             f.fullHash &&
+                                            setPreviewFile({
+                                              hash: f.fullHash,
+                                              filename: f.name,
+                                            })
+                                          }
+                                        >
+                                          Preview Chunking
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            f.fullHash &&
                                             handleReprocessFile(f.fullHash)
                                           }
                                           disabled={isReprocessing || !!currentTaskId}
@@ -2951,6 +3088,18 @@ function DatasetView() {
           )}
         </div>
       )}
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        namespace={activeProject?.namespace || ''}
+        project={activeProject?.project || ''}
+        database={(currentApiDataset as any)?.database || 'default'}
+        fileHash={previewFile?.hash}
+        filename={previewFile?.filename}
+        datasetId={datasetId}
+      />
     </div>
   )
 }

@@ -18,13 +18,17 @@ def main():
     binary_path = Path("/app/packages/llamafarm-llama/src/llamafarm_llama/_binary.py")
     if not binary_path.exists():
         # Fallback for local development
-        binary_path = Path(__file__).resolve().parents[3] / "packages/llamafarm-llama/src/llamafarm_llama/_binary.py"
+        binary_path = (
+            Path(__file__).resolve().parents[3]
+            / "packages/llamafarm-llama/src/llamafarm_llama/_binary.py"
+        )
 
     spec = importlib.util.spec_from_file_location("_binary", binary_path)
     _binary = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(_binary)
 
     BINARY_MANIFEST = _binary.BINARY_MANIFEST
+    _should_build_from_source = _binary._should_build_from_source
     LLAMA_CPP_VERSION = _binary.LLAMA_CPP_VERSION
     _get_cache_dir = _binary._get_cache_dir
     download_binary = _binary.download_binary
@@ -34,13 +38,15 @@ def main():
     print(f"Platform: {platform_key}")
     print(f"llama.cpp version: {LLAMA_CPP_VERSION}")
 
-    # Check if binary is available for this platform
-    if platform_key not in BINARY_MANIFEST:
+    # Check if binary is available for this platform or can be built
+    if platform_key not in BINARY_MANIFEST and not _should_build_from_source(platform_key):
         # Check CPU fallback
         system, machine, _ = platform_key
         cpu_key = (system, machine, "cpu")
         if cpu_key not in BINARY_MANIFEST:
-            print(f"WARNING: No pre-built llama.cpp binary available for {platform_key}")
+            print(
+                f"WARNING: No pre-built llama.cpp binary available for {platform_key}"
+            )
             print("The binary will be downloaded at runtime if needed.")
             print("Skipping pre-download step.")
             return

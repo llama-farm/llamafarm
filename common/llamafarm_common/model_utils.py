@@ -20,8 +20,129 @@ if "HF_XET_HIGH_PERFORMANCE" not in os.environ:
     os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
 
 from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub.constants import HF_HUB_CACHE
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_model_id(model_id: str) -> str:
+    """
+    Validate and sanitize a HuggingFace model ID to prevent path traversal.
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+    Returns:
+        Sanitized model_id safe for use in file paths
+
+    Raises:
+        ValueError: If model_id contains path traversal attempts or invalid characters
+    """
+    # Check for path traversal attempts
+    if ".." in model_id or model_id.startswith("/") or model_id.startswith("\\"):
+        raise ValueError(f"Invalid model_id: path traversal not allowed: {model_id}")
+
+    # Valid HuggingFace model IDs: org/repo or just repo
+    # Allow alphanumeric, hyphens, underscores, periods, and single forward slash
+    if not re.match(r"^[a-zA-Z0-9_.\-]+(/[a-zA-Z0-9_.\-]+)?$", model_id):
+        raise ValueError(f"Invalid model_id format: {model_id}")
+
+    return model_id
+
+
+def _get_cached_gguf_files(model_id: str) -> list[str]:
+    """
+    Check local HuggingFace cache for GGUF files.
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-1.7B-GGUF")
+
+    Returns:
+        List of .gguf filenames found in local cache, or empty list if not cached
+
+    Raises:
+        ValueError: If model_id contains path traversal attempts
+    """
+    # Validate model_id to prevent path traversal
+    _validate_model_id(model_id)
+
+    # HuggingFace cache structure: ~/.cache/huggingface/hub/models--{org}--{repo}/snapshots/{hash}/
+    cache_dir = os.path.join(
+        HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
+    )
+
+    if not os.path.exists(cache_dir):
+        return []
+
+    snapshots_dir = os.path.join(cache_dir, "snapshots")
+    if not os.path.exists(snapshots_dir):
+        return []
+
+    # Find GGUF files in any snapshot
+    gguf_files: set[str] = set()  # Use set to avoid duplicates efficiently
+    try:
+        for snapshot_hash in os.listdir(snapshots_dir):
+            snapshot_path = os.path.join(snapshots_dir, snapshot_hash)
+            if os.path.isdir(snapshot_path):
+                for filename in os.listdir(snapshot_path):
+                    if filename.endswith(".gguf") and filename not in gguf_files:
+                        # Verify it's a real file with content
+                        # Use single getsize() call which fails on broken symlinks
+                        file_path = os.path.join(snapshot_path, filename)
+                        try:
+                            if os.path.getsize(file_path) > 0:
+                                gguf_files.add(filename)
+                        except (OSError, FileNotFoundError):
+                            # Broken symlink or file removed - skip silently
+                            pass
+    except OSError as e:
+        logger.debug(f"Error scanning cache directory {cache_dir}: {e}")
+        return []
+
+    return sorted(gguf_files)
+
+
+def _get_cached_gguf_path(model_id: str, filename: str) -> str | None:
+    """
+    Get the full path to a cached GGUF file.
+
+    Args:
+        model_id: HuggingFace model identifier
+        filename: GGUF filename to find
+
+    Returns:
+        Full path to the cached file, or None if not found
+
+    Raises:
+        ValueError: If model_id or filename contains path traversal attempts
+    """
+    # Validate inputs to prevent path traversal
+    _validate_model_id(model_id)
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise ValueError(f"Invalid filename: path traversal not allowed: {filename}")
+
+    cache_dir = os.path.join(
+        HF_HUB_CACHE, f"models--{model_id.replace('/', '--')}"
+    )
+    snapshots_dir = os.path.join(cache_dir, "snapshots")
+
+    if not os.path.exists(snapshots_dir):
+        return None
+
+    try:
+        for snapshot_hash in os.listdir(snapshots_dir):
+            file_path = os.path.join(snapshots_dir, snapshot_hash, filename)
+            try:
+                # Single getsize() call - fails on broken symlinks or missing files
+                if os.path.getsize(file_path) > 0:
+                    return file_path
+            except (OSError, FileNotFoundError):
+                # File doesn't exist or is broken symlink - continue to next snapshot
+                continue
+    except OSError:
+        pass
+
+    return None
 
 # Default preference order for GGUF quantization (best balance of size/quality)
 GGUF_QUANTIZATION_PREFERENCE_ORDER = [
@@ -135,6 +256,17 @@ def parse_quantization_from_filename(filename: str) -> str | None:
     return None
 
 
+def is_split_gguf_file(filename: str) -> bool:
+    """Check if a GGUF file is a split file (part of a multi-file model).
+
+    Split files have patterns like:
+    - model-00001-of-00002.gguf
+    - model-00001-of-00002.Q4_K_M.gguf
+    - qwen2.5-coder-7b-instruct-q4_k_m-00001-of-00002.gguf
+    """
+    return bool(re.search(r"-\d{5}-of-\d{5}[.\-]", filename, re.IGNORECASE))
+
+
 def select_gguf_file(
     gguf_files: list[str], preferred_quantization: str | None = None
 ) -> str | None:
@@ -142,9 +274,10 @@ def select_gguf_file(
     Select the best GGUF file from a list based on quantization preference.
 
     Selection logic:
-    1. If preferred_quantization is specified and found, use it
-    2. Otherwise, use default preference order: Q4_K_M > Q4_K > Q5_K_M > Q5_K > Q8_0 > others
-    3. Fall back to first file if no quantized versions found
+    1. Filter out split files when a non-split version with same quantization exists
+    2. If preferred_quantization is specified and found, use it
+    3. Otherwise, use default preference order: Q4_K_M > Q4_K > Q5_K_M > Q5_K > Q8_0 > others
+    4. Fall back to first file if no quantized versions found
 
     Args:
         gguf_files: List of .gguf filenames from the repository
@@ -167,10 +300,18 @@ def select_gguf_file(
     if len(gguf_files) == 1:
         return gguf_files[0]
 
-    # Parse quantization types for all files
+    # Separate split and non-split files
+    non_split_files = [f for f in gguf_files if not is_split_gguf_file(f)]
+    split_files = [f for f in gguf_files if is_split_gguf_file(f)]
+
+    # Prefer non-split files; only use split files if no non-split version exists
+    # for the desired quantization
+    working_files = non_split_files if non_split_files else split_files
+
+    # Parse quantization types for working files
     file_quantizations = [
         (filename, parse_quantization_from_filename(filename))
-        for filename in gguf_files
+        for filename in working_files
     ]
 
     # If preferred quantization specified, try to find exact match
@@ -179,6 +320,12 @@ def select_gguf_file(
         for filename, quant in file_quantizations:
             if quant and quant.upper() == preferred_upper:
                 return filename
+        # If not found in non-split, check split files
+        if non_split_files and split_files:
+            for filename in split_files:
+                quant = parse_quantization_from_filename(filename)
+                if quant and quant.upper() == preferred_upper:
+                    return filename
 
     # Use default preference order
     for preferred in GGUF_QUANTIZATION_PREFERENCE_ORDER:
@@ -187,7 +334,7 @@ def select_gguf_file(
                 return filename
 
     # No quantized version found in preference order - use first file
-    return gguf_files[0]
+    return working_files[0] if working_files else gguf_files[0]
 
 
 def list_gguf_files(model_id: str, token: str | None = None) -> list[str]:
@@ -329,15 +476,47 @@ def get_gguf_file_path(
 
     logger.info(f"Locating GGUF file for model: {base_model_id}")
 
-    # Step 1: List all GGUF files in the repository (without downloading)
-    available_gguf_files = list_gguf_files(base_model_id, token)
+    # Step 1: Check local cache first (enables offline operation)
+    cached_gguf_files = _get_cached_gguf_files(base_model_id)
+    if cached_gguf_files:
+        logger.info(f"Found {len(cached_gguf_files)} GGUF files in local cache")
+        # Try to select from cached files
+        selected_filename = select_gguf_file(cached_gguf_files, preferred_quantization)
+        if selected_filename:
+            cached_path = _get_cached_gguf_path(base_model_id, selected_filename)
+            if cached_path:
+                quant = parse_quantization_from_filename(selected_filename)
+                logger.info(
+                    f"Using cached GGUF file: {selected_filename} "
+                    f"(quantization: {quant or 'unknown'})"
+                )
+                return cached_path
+
+    # Step 2: List all GGUF files in the repository (requires network)
+    try:
+        available_gguf_files = list_gguf_files(base_model_id, token)
+    except Exception as e:
+        # If we have cached files but network failed, use cached version
+        if cached_gguf_files:
+            logger.warning(
+                f"Network error listing files, falling back to cache: {e}"
+            )
+            selected_filename = select_gguf_file(
+                cached_gguf_files, preferred_quantization
+            )
+            if selected_filename:
+                cached_path = _get_cached_gguf_path(base_model_id, selected_filename)
+                if cached_path:
+                    logger.info(f"Using cached GGUF file (offline): {cached_path}")
+                    return cached_path
+        raise
 
     if not available_gguf_files:
         raise FileNotFoundError(
             f"No GGUF files found in model repository: {base_model_id}"
         )
 
-    # Step 2: Select the best GGUF file based on preference
+    # Step 3: Select the best GGUF file based on preference
     selected_filename = select_gguf_file_with_logging(
         available_gguf_files, preferred_quantization
     )
@@ -347,14 +526,14 @@ def get_gguf_file_path(
         f"(from {len(available_gguf_files)} available files)"
     )
 
-    # Step 3: Download only the selected file using allow_patterns
+    # Step 4: Download only the selected file using allow_patterns
     local_path = snapshot_download(
         repo_id=base_model_id,
         token=token,
         allow_patterns=[selected_filename],  # Only download this specific file
     )
 
-    # Step 4: Construct full path to the downloaded file
+    # Step 5: Construct full path to the downloaded file
     gguf_path = os.path.join(local_path, selected_filename)
 
     # Verify the file exists
@@ -363,3 +542,125 @@ def get_gguf_file_path(
 
     logger.info(f"GGUF file ready: {gguf_path}")
     return gguf_path
+
+
+def get_mmproj_file_path(
+    model_id: str,
+    token: str | None = None,
+) -> str | None:
+    """
+    Get the full path to a multimodal projector (mmproj) GGUF file.
+
+    Multimodal projector files enable audio/vision input for models like Qwen2.5-Omni.
+    These files are typically named with patterns like:
+    - mmproj-{model}-f16.gguf
+    - mmproj-{model}-f32.gguf
+    - {model}-mmproj-f16.gguf
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "ggml-org/Qwen2.5-Omni-7B-GGUF")
+        token: Optional HuggingFace authentication token for gated models
+
+    Returns:
+        Full absolute path to the mmproj .gguf file, or None if not found
+
+    Examples:
+        >>> path = get_mmproj_file_path("ggml-org/Qwen2.5-Omni-7B-GGUF")
+        >>> path  # Could be None or a path like ".../mmproj-Qwen2.5-Omni-7B-f16.gguf"
+    """
+    # Parse model ID to extract base model
+    base_model_id, _ = parse_model_with_quantization(model_id)
+
+    logger.debug(f"Looking for mmproj file in: {base_model_id}")
+
+    # Step 1: Check local cache first
+    cached_gguf_files = _get_cached_gguf_files(base_model_id)
+    mmproj_files = [f for f in cached_gguf_files if _is_mmproj_file(f)]
+
+    if mmproj_files:
+        # Prefer f16 precision for mmproj
+        selected = _select_mmproj_file(mmproj_files)
+        cached_path = _get_cached_gguf_path(base_model_id, selected)
+        if cached_path:
+            logger.info(f"Using cached mmproj file: {selected}")
+            return cached_path
+
+    # Step 2: List all GGUF files in the repository (requires network)
+    try:
+        available_gguf_files = list_gguf_files(base_model_id, token)
+    except Exception as e:
+        logger.debug(f"Could not list files for mmproj detection: {e}")
+        return None
+
+    # Find mmproj files
+    mmproj_files = [f for f in available_gguf_files if _is_mmproj_file(f)]
+
+    if not mmproj_files:
+        logger.debug(f"No mmproj files found in {base_model_id}")
+        return None
+
+    # Select best mmproj file (prefer f16)
+    selected_filename = _select_mmproj_file(mmproj_files)
+    logger.info(f"Found mmproj file: {selected_filename}")
+
+    # Step 3: Download the mmproj file
+    local_path = snapshot_download(
+        repo_id=base_model_id,
+        token=token,
+        allow_patterns=[selected_filename],
+    )
+
+    mmproj_path = os.path.join(local_path, selected_filename)
+
+    if not os.path.exists(mmproj_path):
+        logger.warning(f"mmproj file not found after download: {mmproj_path}")
+        return None
+
+    logger.info(f"mmproj file ready: {mmproj_path}")
+    return mmproj_path
+
+
+def _is_mmproj_file(filename: str) -> bool:
+    """Check if a filename is a multimodal projector file."""
+    filename_lower = filename.lower()
+    # Common patterns for mmproj files
+    return (
+        filename_lower.endswith(".gguf")
+        and ("mmproj" in filename_lower or "multimodal" in filename_lower)
+        # Exclude main model files that might have "multimodal" in the name
+        and not any(q in filename_lower for q in ["q4_", "q5_", "q8_", "q2_", "q3_", "q6_"])
+    )
+
+
+def _select_mmproj_file(mmproj_files: list[str]) -> str:
+    """Select the best mmproj file, preferring f16 precision.
+
+    On Mac, F16 is the safest choice as BF16 has limited hardware support.
+    F32 always works but is 2x larger.
+
+    Preference order: F16 > BF16 > FP16 > F32 > FP32
+    """
+    if not mmproj_files:
+        raise ValueError("No mmproj files provided")
+
+    if len(mmproj_files) == 1:
+        return mmproj_files[0]
+
+    # Prefer f16 (best Mac compatibility), then bf16, then f32 (larger)
+    # Use precise matching with delimiters to avoid "f16" matching "bf16"
+    for precision in ["f16", "bf16", "fp16", "f32", "fp32"]:
+        for f in mmproj_files:
+            f_lower = f.lower()
+            # Match with common delimiters: -f16., _f16., -f16-, _f16_
+            if (
+                f"-{precision}." in f_lower
+                or f"_{precision}." in f_lower
+                or f"-{precision}-" in f_lower
+                or f"_{precision}_" in f_lower
+                or f_lower.endswith(f"-{precision}.gguf")
+                or f_lower.endswith(f"_{precision}.gguf")
+            ):
+                return f
+
+    # Fall back to first file
+    return mmproj_files[0]

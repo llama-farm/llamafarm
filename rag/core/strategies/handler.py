@@ -4,7 +4,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from rag.core.base import Parser
+from config.datamodel import (
+    DataProcessingStrategyDefinition,
+    LlamaFarmConfig,
+    RAGStrategyConfigurationSchema,
+)
 
 # Use the common config module instead of direct YAML loading
 # Add the repo root to the path to find the config module
@@ -18,11 +22,13 @@ try:
     from config import load_config
     from config.datamodel import (
         Database,
-        DataProcessingStrategy,
-        EmbeddingStrategy,
+        DatabaseEmbeddingStrategy,
+        DatabaseEmbeddingType,
+        DatabaseRetrievalStrategy,
+        DatabaseRetrievalType,
+        DataProcessingStrategyDefinition,
         Extractor,
         Parser,
-        RetrievalStrategy,
     )
 except ImportError as e:
     raise ImportError(
@@ -32,10 +38,59 @@ except ImportError as e:
 logger = RAGStructLogger("rag.core.strategies.handler")
 
 
+def _create_default_universal_rag_strategy() -> DataProcessingStrategyDefinition:
+    """Create the default universal_rag data processing strategy.
+
+    This provides a sensible default for zero-config RAG that handles
+    90% of document types with no configuration needed.
+    """
+    return DataProcessingStrategyDefinition(
+        name="universal_rag",
+        description="Universal RAG pipeline using MarkItDown parser with semantic chunking and comprehensive metadata extraction",
+        parsers=[
+            Parser(
+                type="UniversalParser",
+                file_include_patterns=None,
+                fallback_parser=None,
+                priority=None,
+                file_extensions=None,
+                mime_types=None,
+                config={
+                    "chunk_size": 1024,
+                    "chunk_overlap": 100,
+                    "chunk_strategy": "semantic",
+                    "use_ocr": True,
+                    "ocr_endpoint": "http://127.0.0.1:8000/v1/vision/ocr",
+                    "extract_metadata": True,
+                    "min_chunk_size": 50,
+                    "max_chunk_size": 8000,
+                },
+            )
+        ],
+        extractors=[
+            Extractor(
+                type="UniversalExtractor",
+                config={
+                    "keyword_count": 10,
+                    "use_gliner": False,
+                    "extract_entities": True,
+                    "generate_summary": True,
+                    "summary_sentences": 3,
+                    "detect_language": True,
+                },
+                condition=None,
+                file_include_patterns=None,
+                priority=None,
+                required_for=None,
+            )
+        ],
+    )
+
+
 class DbProcessingConfig:
     def __init__(
         self,
-        processing_strategy: DataProcessingStrategy,
+        processing_strategy: DataProcessingStrategyDefinition,
         database: Database,
         strategy_name: str,
         source_path: Path | None,
@@ -51,11 +106,12 @@ class DbProcessingConfig:
 class SchemaHandler:
     """Handle new RAG schema directly with global config support."""
 
+    global_config: LlamaFarmConfig
+    rag_config: RAGStrategyConfigurationSchema
+
     def __init__(self, config_source: str):
         """Initialize with global LlamaFarm config file only."""
         self.config_source = Path(config_source)
-        self.global_config = None
-        self.rag_config = None
 
         try:
             # Use the common config loader instead of direct YAML loading
@@ -94,11 +150,30 @@ class SchemaHandler:
         return [db.name for db in self.rag_config.databases or []]
 
     def get_data_processing_strategy_names(self) -> list[str]:
-        """Get list of available data processing strategy names."""
-        return [
+        """Get list of available data processing strategy names.
+
+        Always includes 'universal_rag' as the default strategy.
+        """
+        strategies = [
             strategy.name
             for strategy in self.rag_config.data_processing_strategies or []
         ]
+
+        # Always include universal_rag as an available strategy
+        if "universal_rag" not in strategies:
+            strategies.append("universal_rag")
+
+        return strategies
+
+    def get_default_processing_strategy(self) -> DataProcessingStrategyDefinition:
+        """Get the default processing strategy.
+
+        Returns universal_rag if no strategies are defined, otherwise
+        returns the first defined strategy.
+        """
+        if self.rag_config and self.rag_config.data_processing_strategies:
+            return self.rag_config.data_processing_strategies[0]
+        return _create_default_universal_rag_strategy()
 
     def get_database_retrieval_strategies(self, database_name: str) -> list[str]:
         """Get available retrieval strategies for a database."""
@@ -119,14 +194,26 @@ class SchemaHandler:
                 return db
         raise ValueError(f"Database '{database_name}' not found")
 
-    def create_processing_config(self, strategy_name: str) -> DataProcessingStrategy:
-        """Create data processing strategy configuration."""
-        if not self.rag_config or not self.rag_config.data_processing_strategies:
-            raise ValueError("No data processing strategies found")
+    def create_processing_config(
+        self, strategy_name: str
+    ) -> DataProcessingStrategyDefinition:
+        """Create data processing strategy configuration.
 
+        If the strategy is 'universal_rag' and not explicitly defined,
+        returns the default universal_rag strategy.
+        """
+        # Search for explicitly defined strategy
         for strategy in self.rag_config.data_processing_strategies or []:
             if strategy.name == strategy_name:
-                return strategy
+                # Return a deep copy so downstream mutations (e.g., parser overrides)
+                # do not affect the cached configuration on the handler
+                return strategy.model_copy(deep=True)
+
+        # If universal_rag is requested but not defined, return the default
+        if strategy_name == "universal_rag":
+            logger.info("Using default universal_rag strategy")
+            return _create_default_universal_rag_strategy()
+
         raise ValueError(f"Data processing strategy '{strategy_name}' not found")
 
     def parse_strategy_name(self, strategy_name: str) -> tuple[str | None, str | None]:
@@ -167,23 +254,41 @@ class SchemaHandler:
 
     def get_processing_strategy_config(
         self, proc_name: str
-    ) -> DataProcessingStrategy | None:
-        """Get processing strategy configuration by name."""
+    ) -> DataProcessingStrategyDefinition | None:
+        """Get processing strategy configuration by name.
+
+        If the strategy is 'universal_rag' and not explicitly defined,
+        returns the default universal_rag strategy.
+        """
         if not self.rag_config:
+            # Even without rag_config, universal_rag is available
+            if proc_name == "universal_rag":
+                return _create_default_universal_rag_strategy()
             return None
 
-        return next(
+        # Search for explicitly defined strategy
+        strategy = next(
             (
-                strategy
-                for strategy in (self.rag_config.data_processing_strategies or [])
-                if strategy.name == proc_name
+                s
+                for s in (self.rag_config.data_processing_strategies or [])
+                if s.name == proc_name
             ),
             None,
         )
 
+        if strategy:
+            return strategy
+
+        # If universal_rag is requested but not defined, return the default
+        if proc_name == "universal_rag":
+            logger.info("Using default universal_rag strategy")
+            return _create_default_universal_rag_strategy()
+
+        return None
+
     def get_combined_config(
         self, strategy_name: str, source_path: Path | None = None
-    ) -> DbProcessingConfig:
+    ) -> DbProcessingConfig | None:
         """Get combined configuration for a strategy (processing + database).
 
         Returns the actual new schema config without any conversion.
@@ -204,16 +309,16 @@ class SchemaHandler:
 
         if not proc_config:
             logger.error(f"Processing strategy not found: {proc_name}")
-            return {}
+            return None
 
         if not db_config:
             logger.error(f"Database not found: {db_name}")
-            return {}
+            return None
 
         # Return the actual new schema configuration
         return DbProcessingConfig(proc_config, db_config, strategy_name, source_path)
 
-    def get_embedder_config(self, database: Database) -> EmbeddingStrategy:
+    def get_embedder_config(self, database: Database) -> DatabaseEmbeddingStrategy:
         """Get embedder configuration from database config."""
         default_name = database.default_embedding_strategy
         strategies = database.embedding_strategies or []
@@ -230,14 +335,18 @@ class SchemaHandler:
         if strategies:
             return strategies[0]
 
-        return EmbeddingStrategy(type="OllamaEmbedder", config={})
+        return DatabaseEmbeddingStrategy(
+            type=DatabaseEmbeddingType.OllamaEmbedder, config={}
+        )
 
     def get_vector_store_config(self, database: Database) -> Database:
         """Get vector store configuration from database config."""
         # Database config has 'type' and 'config' at the top level
         return database
 
-    def get_retrieval_strategy_config(self, database: Database) -> RetrievalStrategy:
+    def get_retrieval_strategy_config(
+        self, database: Database
+    ) -> DatabaseRetrievalStrategy:
         """Get retrieval strategy configuration from database config."""
         default_name = database.default_retrieval_strategy
         strategies = database.retrieval_strategies or []
@@ -254,9 +363,13 @@ class SchemaHandler:
         if strategies:
             return strategies[0]
 
-        return RetrievalStrategy(type="BasicSimilarityStrategy", config={})
+        return DatabaseRetrievalStrategy(
+            type=DatabaseRetrievalType.BasicSimilarityStrategy, config={}
+        )
 
-    def get_parsers_config(self, proc_config: DataProcessingStrategy) -> list[Parser]:
+    def get_parsers_config(
+        self, proc_config: DataProcessingStrategyDefinition
+    ) -> list[Parser]:
         """Get all parser configurations from processing strategy.
 
         Returns all parsers configured for the strategy.
@@ -264,7 +377,9 @@ class SchemaHandler:
         return proc_config.parsers or []
 
     def get_parser_config(
-        self, proc_config: DataProcessingStrategy, source_path: Path | None = None
+        self,
+        proc_config: DataProcessingStrategyDefinition,
+        source_path: Path | None = None,
     ) -> Parser:
         """Get first parser configuration (for backward compatibility).
 
@@ -273,10 +388,18 @@ class SchemaHandler:
         parsers = self.get_parsers_config(proc_config)
         if parsers:
             return parsers[0]
-        return Parser(type="TextParser_Python", config={})
+        return Parser(
+            type="TextParser_Python",
+            fallback_parser=None,
+            file_extensions=None,
+            file_include_patterns=None,
+            mime_types=None,
+            priority=None,
+            config={},
+        )
 
     def get_extractors_config(
-        self, proc_config: DataProcessingStrategy
+        self, proc_config: DataProcessingStrategyDefinition
     ) -> list[Extractor]:
         """Get extractors configuration from processing strategy."""
         return proc_config.extractors or []
@@ -294,8 +417,8 @@ class SchemaHandler:
         if not combined:
             return {}
 
-        db_config = combined.database or {}
-        proc_config = combined.processing_strategy or {}
+        db_config: Database = combined.database
+        proc_config: DataProcessingStrategyDefinition = combined.processing_strategy
 
         # Get individual component configs
         embedder = self.get_embedder_config(db_config)
@@ -307,23 +430,44 @@ class SchemaHandler:
         # Return in the format the CLI expects
         # The CLI's select_parser_config and select_component_config expect
         # components to be in dictionaries with the component name as key
+        parser_type = (
+            parser.type.value
+            if parser and hasattr(parser.type, "value")
+            else (parser.type if parser else None)
+        )
+        embedder_type = (
+            embedder.type.value
+            if embedder and hasattr(embedder.type, "value")
+            else (embedder.type if embedder else None)
+        )
+        retrieval_type = (
+            retrieval.type.value
+            if retrieval and hasattr(retrieval.type, "value")
+            else None
+        )
+        vector_store_type = (
+            vector_store.type.value
+            if vector_store and hasattr(vector_store.type, "value")
+            else (vector_store.type if vector_store else None)
+        )
+
         return {
             "version": "v1",  # Indicate this is from new schema
             "rag": {
-                "parsers": {parser.type.value: parser} if parser else {},
-                "embedders": {embedder.type.value: embedder} if embedder else {},
-                "vector_stores": {vector_store.type.value: vector_store}
+                "parsers": {parser_type: parser} if parser_type else {},
+                "embedders": {embedder_type: embedder} if embedder_type else {},
+                "vector_stores": {vector_store_type: vector_store}
                 if vector_store
                 else {},
-                "retrieval_strategies": {retrieval.type.value: retrieval}
-                if retrieval
+                "retrieval_strategies": {retrieval_type: retrieval}
+                if retrieval_type
                 else {},
                 "extractors": extractors if extractors else [],
                 "defaults": {
-                    "parser": parser.type.value if parser else None,
-                    "embedder": embedder.type.value if embedder else None,
-                    "vector_store": vector_store.type.value if vector_store else None,
-                    "retrieval_strategy": retrieval.type.value if retrieval else None,
+                    "parser": parser_type,
+                    "embedder": embedder_type,
+                    "vector_store": vector_store_type,
+                    "retrieval_strategy": retrieval_type,
                 },
             },
             "metadata": {

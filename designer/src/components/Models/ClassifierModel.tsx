@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -503,6 +503,7 @@ interface ClassifierTableRow {
 function ClassifierModel() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isNewModel = !id || id === 'new'
 
   // Form state - modelName will be set after loading existing models
@@ -608,6 +609,61 @@ function ClassifierModel() {
       setModelName(uniqueName)
     }
   }, [isNewModel, modelName, isLoadingModels, existingBaseNames])
+
+  // Auto-import sample data from URL parameter (from onboarding flow)
+  useEffect(() => {
+    const sampleDataId = searchParams.get('sampleData')
+    if (sampleDataId && isNewModel) {
+      const dataset = CLASSIFIER_SAMPLE_DATASETS.find(d => d.id === sampleDataId)
+      if (dataset?.data) {
+        // Group data by label to create class labels
+        const classMap = new Map<string, string[]>()
+        for (const item of dataset.data) {
+          const existing = classMap.get(item.label) || []
+          existing.push(item.text)
+          classMap.set(item.label, existing)
+        }
+
+        // Create class labels from the sample data
+        const newClassLabels: ClassLabel[] = Array.from(classMap.entries()).map(([name, examples], idx) => ({
+          id: String(Date.now()) + idx,
+          name,
+          examples,
+        }))
+
+        // Update state
+        setClassLabels(newClassLabels)
+        if (newClassLabels.length > 0) {
+          setActiveClassId(newClassLabels[0].id)
+          setTrainingDataInput(newClassLabels[0].examples.join('\n'))
+        }
+
+        // Also update table rows for table view
+        const newTableRows: ClassifierTableRow[] = dataset.data.map((item, idx) => ({
+          id: String(Date.now()) + idx + Math.random(),
+          example: item.text,
+          className: item.label,
+        }))
+        setTableRows(newTableRows)
+
+        // Switch to table view after importing sample data
+        setInputMode('table')
+
+        // Clear the URL parameter so it doesn't re-trigger
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, setSearchParams, isNewModel])
+
+  // Show sample data modal from URL parameter (from onboarding checklist)
+  useEffect(() => {
+    const showModal = searchParams.get('showSampleModal')
+    if (showModal === 'true' && isNewModel) {
+      setShowSampleDataModal(true)
+      // Clear the URL parameter so it doesn't re-trigger
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, isNewModel])
 
   // Check if model name already exists (for warning display)
   useEffect(() => {
@@ -1251,12 +1307,22 @@ function ClassifierModel() {
       // Switch to table view after importing sample data
       setInputMode('table')
 
+      // Auto-set model name based on the sample dataset (if model name is empty or auto-generated default)
+      if (!modelName || modelName.startsWith('new-classifier-model')) {
+        // Convert dataset name to a valid model name (lowercase, replace spaces with hyphens)
+        const suggestedName = dataset.name
+          .toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9-]/g, '')
+        setModelName(suggestedName)
+      }
+
       // Close modal and reset
       setShowSampleDataModal(false)
       setSelectedSampleDataset(null)
       setIsImportingSampleData(false)
     }, 600)
-  }, [selectedSampleDataset, toast])
+  }, [selectedSampleDataset, toast, modelName])
 
   // Training area drag handlers
   const handleTrainingAreaDragEnter = useCallback(
@@ -1445,7 +1511,7 @@ function ClassifierModel() {
             </div>
           ) : (
             <>
-              {/* Base model row with collapse button */}
+              {/* Base model row with Train button */}
               <div className="flex items-center justify-between pb-3 border-b border-border">
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="base-model" className="text-xs text-muted-foreground">
@@ -1476,17 +1542,30 @@ function ClassifierModel() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-                {hasVersions && (
+                <div className="flex items-center gap-2">
+                  {/* Primary Train button at top for visibility */}
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsTrainingExpanded(false)}
-                    className="h-6 w-6 p-0"
-                    title="Collapse"
+                    onClick={handleTrain}
+                    disabled={!canTrain || trainingState === 'training'}
                   >
-                    <FontIcon type="chevron-up" className="w-4 h-4" />
+                    {trainingState === 'training'
+                      ? 'Training...'
+                      : hasVersions
+                        ? `Retrain as v${versions.length + 1}`
+                        : 'Train'}
                   </Button>
-                )}
+                  {hasVersions && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsTrainingExpanded(false)}
+                      className="h-6 w-6 p-0"
+                      title="Collapse"
+                    >
+                      <FontIcon type="chevron-up" className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Training data header */}

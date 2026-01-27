@@ -53,6 +53,33 @@ function Chat() {
     }
   }, [location.pathname])
 
+  // Close chat panel when a new project is selected (starts fresh)
+  useEffect(() => {
+    const handleProjectChange = () => {
+      // Close the chat panel when switching projects
+      setIsPanelOpen(false)
+    }
+
+    window.addEventListener('lf-active-project', handleProjectChange)
+    return () => {
+      window.removeEventListener('lf-active-project', handleProjectChange)
+    }
+  }, [])
+
+  // Close chat panel when onboarding wizard starts or resets
+  useEffect(() => {
+    const handleOnboardingStart = () => {
+      setIsPanelOpen(false)
+    }
+
+    window.addEventListener('lf-onboarding-started', handleOnboardingStart)
+    window.addEventListener('lf-onboarding-reset', handleOnboardingStart)
+    return () => {
+      window.removeEventListener('lf-onboarding-started', handleOnboardingStart)
+      window.removeEventListener('lf-onboarding-reset', handleOnboardingStart)
+    }
+  }, [])
+
   // Mobile detection is provided by context
 
   // Initialize default chat width (25% of viewport) with min/max bounds when panel opens on desktop

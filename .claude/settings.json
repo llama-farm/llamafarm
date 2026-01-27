@@ -1,9 +1,9 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(**:**)"
-    ],
+    "allow": [],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledPlugins": {},
+  "hooks": {}
 }

@@ -17,8 +17,8 @@ class MarkdownParser_LlamaIndex(BaseParser):
         name: str = "MarkdownParser_LlamaIndex",
         config: dict[str, Any] | None = None,
     ):
+        super().__init__(config)
         self.name = name
-        self.config = config or {}
 
         # Chunking configuration
         self.chunk_size = self.config.get("chunk_size", 1000)

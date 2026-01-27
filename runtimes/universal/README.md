@@ -41,20 +41,24 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 
 ## Features
 
-✅ **6 Model Categories**
+✅ **7 Model Categories**
+
 - Text generation (CausalLM: GPT, Llama, Mistral, Qwen, Phi)
 - Text embeddings & classification (Encoder: BERT, sentence-transformers)
 - Image generation (Diffusion: Stable Diffusion, SDXL, FLUX)
 - Image understanding (Vision: ViT, CLIP, DINOv2)
-- Speech-to-text (Audio: Whisper, Wav2Vec2)
+- Speech-to-text (Audio STT: faster-whisper, Whisper)
+- Text-to-speech (Audio TTS: Kokoro)
 - Vision-language (Multimodal: BLIP, LLaVA, Florence)
 
 ✅ **Smart Hardware Detection**
+
 - Auto-detects Apple Silicon (MPS), NVIDIA GPUs (CUDA), or CPU
 - Platform-specific optimizations (Metal Performance Shaders, cuDNN)
 - Configurable precision (FP32, FP16, BF16, INT8)
 
 ✅ **Developer Experience**
+
 - Lazy model loading (models load on first request)
 - Model caching (keeps frequently-used models in memory)
 - Automatic model unloading (frees VRAM/RAM after 5 minutes of inactivity)
@@ -63,6 +67,7 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 - Comprehensive error messages and logging
 
 ✅ **Production Ready**
+
 - OpenAI API compatibility (drop-in replacement)
 - Async/await for concurrent requests
 - Health and status endpoints
@@ -70,6 +75,7 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 - Comprehensive test suite
 
 ✅ **Advanced Features**
+
 - **GGUF model support** with llama-cpp-python (see [GGUF Support](#gguf-model-support))
 - ONNX runtime support (planned, see [ONNX_STRATEGY.md](./ONNX_STRATEGY.md))
 - Custom schedulers for diffusion models
@@ -80,18 +86,20 @@ The Universal Runtime is a FastAPI-based inference server that bridges HuggingFa
 
 ## Supported Model Types
 
-The Universal Runtime supports 6 major model categories. See [MODEL_TYPES.md](./MODEL_TYPES.md) for detailed information on each type.
+The Universal Runtime supports 7 major model categories. See [MODEL_TYPES.md](./MODEL_TYPES.md) for detailed information on each type.
 
-| Model Type | API Endpoint | Example Models | Use Cases |
-|------------|--------------|----------------|-----------|
-| **CausalLM** | `/v1/chat/completions` | GPT-2, Llama, Mistral, Qwen, Phi | Text generation, chat, code completion |
-| **Encoder** | `/v1/embeddings` | BERT, sentence-transformers, BGE | Semantic search, RAG, classification |
-| **Diffusion** | `/v1/images/generations` | Stable Diffusion, SDXL, FLUX | Image generation, editing, inpainting |
-| **Vision** | `/v1/vision/classify` | ViT, CLIP, DINOv2, ResNet | Image classification, zero-shot |
-| **Audio** | `/v1/audio/transcriptions` | Whisper, Wav2Vec2 | Speech-to-text, translation |
-| **Multimodal** | `/v1/multimodal/caption` | BLIP, LLaVA, Florence | Image captioning, visual QA |
+| Model Type      | API Endpoint               | Example Models                   | Use Cases                              |
+| --------------- | -------------------------- | -------------------------------- | -------------------------------------- |
+| **CausalLM**    | `/v1/chat/completions`     | GPT-2, Llama, Mistral, Qwen, Phi | Text generation, chat, code completion |
+| **Encoder**     | `/v1/embeddings`           | BERT, sentence-transformers, BGE | Semantic search, RAG, classification   |
+| **Diffusion**   | `/v1/images/generations`   | Stable Diffusion, SDXL, FLUX     | Image generation, editing, inpainting  |
+| **Vision**      | `/v1/vision/classify`      | ViT, CLIP, DINOv2, ResNet        | Image classification, zero-shot        |
+| **Audio (STT)** | `/v1/audio/transcriptions` | Whisper, faster-whisper          | Speech-to-text, translation            |
+| **Audio (TTS)** | `/v1/audio/speech`         | Kokoro                           | Text-to-speech, voice synthesis        |
+| **Multimodal**  | `/v1/multimodal/caption`   | BLIP, LLaVA, Florence            | Image captioning, visual QA            |
 
 **Quick Model Recommendations:**
+
 - **RAG Embeddings**: `BAAI/bge-base-en-v1.5` or `nomic-ai/nomic-embed-text-v1.5`
 - **RAG Embeddings (GGUF/Quantized)**: `nomic-ai/nomic-embed-text-v1.5-GGUF` or `mixedbread-ai/mxbai-embed-xsmall-v1`
 - **Chat (Quality)**: `meta-llama/Llama-3.1-8B-Instruct`
@@ -126,6 +134,7 @@ model = "unsloth/Qwen3-4B-GGUF"
 ```
 
 The runtime automatically:
+
 1. Detects the GGUF format from model files
 2. Uses llama-cpp-python for optimized inference
 3. Configures appropriate hardware acceleration (Metal/CUDA/CPU)
@@ -144,6 +153,7 @@ model = "unsloth/Qwen3-1.7B-GGUF"
 ```
 
 **Selection priority order:**
+
 1. Q4_K_M (default - best balance)
 2. Q4_K, Q5_K_M, Q5_K
 3. Q8_0 (higher quality, larger)
@@ -158,15 +168,17 @@ model = "unsloth/Qwen3-1.7B-GGUF"
 Specify your preferred quantization in `llamafarm.yaml` or via API:
 
 **In llamafarm.yaml:**
+
 ```yaml
 runtime:
   models:
     - name: default
       provider: universal
-      model: unsloth/Qwen3-1.7B-GGUF:Q8_0  # Use higher quality 8-bit quantization
+      model: unsloth/Qwen3-1.7B-GGUF:Q8_0 # Use higher quality 8-bit quantization
 ```
 
 **Via OpenAI-compatible API:**
+
 ```python
 from openai import OpenAI
 
@@ -178,12 +190,14 @@ response = client.chat.completions.create(
 ```
 
 **Common quantization types:**
+
 - **Q4_K_M**: 4-bit, medium variant (default, ~50-60% size reduction)
 - **Q5_K_M**: 5-bit, medium variant (~40-50% size reduction)
 - **Q8_0**: 8-bit (minimal quality loss, ~50% size vs F16)
 - **F16**: Full 16-bit precision (largest, highest quality)
 
 **Benefits:**
+
 - ✅ Only downloads the specific quantization you need
 - ✅ Saves disk space (no unused variants)
 - ✅ Explicit control over quality/size trade-off
@@ -191,13 +205,13 @@ response = client.chat.completions.create(
 
 ### Recommended GGUF Models
 
-| Model | Size | Quantization | Best For |
-|-------|------|--------------|----------|
-| `unsloth/Qwen3-0.6B-GGUF` | ~400MB | Q4_K_M | Fast responses, testing |
-| `unsloth/Qwen3-1.7B-GGUF` | ~1GB | Q4_K_M | Balanced performance |
-| `unsloth/Qwen3-4B-GGUF` | ~2.5GB | Q4_K_M | High quality (recommended) |
-| `unsloth/Qwen3-8B-GGUF` | ~5GB | Q4_K_M | Best quality |
-| `unsloth/Llama-3.2-3B-Instruct-GGUF` | ~2GB | Q4_K_M | Instruction-tuned |
+| Model                                | Size   | Quantization | Best For                   |
+| ------------------------------------ | ------ | ------------ | -------------------------- |
+| `unsloth/Qwen3-0.6B-GGUF`            | ~400MB | Q4_K_M       | Fast responses, testing    |
+| `unsloth/Qwen3-1.7B-GGUF`            | ~1GB   | Q4_K_M       | Balanced performance       |
+| `unsloth/Qwen3-4B-GGUF`              | ~2.5GB | Q4_K_M       | High quality (recommended) |
+| `unsloth/Qwen3-8B-GGUF`              | ~5GB   | Q4_K_M       | Best quality               |
+| `unsloth/Llama-3.2-3B-Instruct-GGUF` | ~2GB   | Q4_K_M       | Instruction-tuned          |
 
 ### Platform-Specific Acceleration
 
@@ -236,10 +250,12 @@ Context size is determined in this order (highest to lowest):
 #### 2. Memory-Based Computation & Model Training Context
 
 The runtime automatically:
+
 - **Reads the model's training context** (`n_ctx_train`) from GGUF metadata using the `gguf` library
 - **Computes maximum safe context size** based on available memory
 
 **Priority for determining context size:**
+
 1. **User Configuration** (explicit value in config/API)
 2. **Model's n_ctx_train** (what the model was trained for) - NEW! 🎯
 3. **Pattern Match Defaults** (from config file)
@@ -249,6 +265,7 @@ The runtime automatically:
 All choices are automatically capped by available memory to prevent OOM errors.
 
 **Memory calculation formula:**
+
 ```
 usable_memory = (available_memory * 0.8) - model_file_size
 max_context = usable_memory / (bytes_per_token * overhead_factor)
@@ -263,7 +280,7 @@ max_context = usable_memory / (bytes_per_token * overhead_factor)
 Default context sizes are defined in `runtimes/universal/config/model_context_defaults.yaml`:
 
 ```yaml
-memory_usage_factor: 0.8  # Use 80% of available memory
+memory_usage_factor: 0.8 # Use 80% of available memory
 
 model_defaults:
   # Exact match (highest priority)
@@ -295,7 +312,7 @@ runtime:
       provider: universal
       model: unsloth/Qwen3-4B-GGUF
       extra_body:
-        n_ctx: 16384  # Explicit context size
+        n_ctx: 16384 # Explicit context size
 ```
 
 **Via API request** (OpenAI SDK):
@@ -323,11 +340,13 @@ curl -X POST http://localhost:11540/v1/chat/completions \
 #### 5. Warnings and Logs
 
 Context size warnings are logged to stderr when:
+
 - Requested size exceeds computed maximum (falls back to maximum)
 - No pattern match found (using fallback default)
 - Low memory detected (using minimal context)
 
 Example log output:
+
 ```
 INFO: Using context size: 8192
 WARNING: Requested context size 32768 exceeds computed maximum 16384 based on available memory (12.50 GB). Using 16384 instead.
@@ -394,13 +413,13 @@ response = client.chat.completions.create(
 
 Typical performance gains with GGUF vs. standard transformers:
 
-| Hardware | Standard FP16 | GGUF Q4_K_M | Speedup |
-|----------|---------------|-------------|---------|
-| Apple M2 Max | ~15 tokens/s | ~40 tokens/s | **2.7x** |
-| NVIDIA RTX 4090 | ~60 tokens/s | ~85 tokens/s | **1.4x** |
-| Intel Core i9 (CPU) | ~3 tokens/s | ~12 tokens/s | **4x** |
+| Hardware            | Standard FP16 | GGUF Q4_K_M  | Speedup  |
+| ------------------- | ------------- | ------------ | -------- |
+| Apple M2 Max        | ~15 tokens/s  | ~40 tokens/s | **2.7x** |
+| NVIDIA RTX 4090     | ~60 tokens/s  | ~85 tokens/s | **1.4x** |
+| Intel Core i9 (CPU) | ~3 tokens/s   | ~12 tokens/s | **4x**   |
 
-*Results with Qwen3-4B on typical chat prompts*
+_Results with Qwen3-4B on typical chat prompts_
 
 ### Technical Details
 
@@ -429,11 +448,11 @@ GGUF embedding models offer significant advantages over standard transformers-ba
 
 #### Recommended GGUF Embedding Models
 
-| Model | Size | Dimensions | Languages | Best For |
-|-------|------|------------|-----------|----------|
-| `nomic-ai/nomic-embed-text-v1.5-GGUF` | ~250MB | 768 | 100+ | Multilingual RAG, semantic search |
-| `mixedbread-ai/mxbai-embed-xsmall-v1` | ~30MB | 384 | English | Fast embeddings, resource-constrained |
-| `CompendiumLabs/bge-base-en-v1.5-gguf` | ~130MB | 768 | English | High-quality English embeddings |
+| Model                                  | Size   | Dimensions | Languages | Best For                              |
+| -------------------------------------- | ------ | ---------- | --------- | ------------------------------------- |
+| `nomic-ai/nomic-embed-text-v1.5-GGUF`  | ~250MB | 768        | 100+      | Multilingual RAG, semantic search     |
+| `mixedbread-ai/mxbai-embed-xsmall-v1`  | ~30MB  | 384        | English   | Fast embeddings, resource-constrained |
+| `CompendiumLabs/bge-base-en-v1.5-gguf` | ~130MB | 768        | English   | High-quality English embeddings       |
 
 #### Example Usage
 
@@ -491,13 +510,13 @@ rag:
 
 Typical performance with GGUF vs. transformers embedding models:
 
-| Hardware | Transformers FP16 | GGUF Q8_0 | Speedup |
-|----------|-------------------|-----------|---------|
-| Apple M3 Pro | ~1200 docs/s | ~3000 docs/s | **2.5x** |
-| NVIDIA RTX 4090 | ~3500 docs/s | ~4800 docs/s | **1.4x** |
-| Intel Core i9 (CPU) | ~150 docs/s | ~600 docs/s | **4x** |
+| Hardware            | Transformers FP16 | GGUF Q8_0    | Speedup  |
+| ------------------- | ----------------- | ------------ | -------- |
+| Apple M3 Pro        | ~1200 docs/s      | ~3000 docs/s | **2.5x** |
+| NVIDIA RTX 4090     | ~3500 docs/s      | ~4800 docs/s | **1.4x** |
+| Intel Core i9 (CPU) | ~150 docs/s       | ~600 docs/s  | **4x**   |
 
-*Results with nomic-embed-text-v1.5, batch size 32, 128-token documents*
+_Results with nomic-embed-text-v1.5, batch size 32, 128-token documents_
 
 #### Technical Details
 
@@ -607,6 +626,7 @@ uv run python server.py
 **Server runs at:** `http://127.0.0.1:11540`
 
 The server will:
+
 - Auto-detect your hardware (MPS/CUDA/CPU)
 - Load models on-demand when first requested
 - Cache models in memory for subsequent requests
@@ -694,6 +714,7 @@ print(response.data[0].url)
 Check server health and hardware information.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -717,12 +738,13 @@ Check server health and hardware information.
 OpenAI-compatible chat completions endpoint.
 
 **Request:**
+
 ```json
 {
   "model": "microsoft/phi-2",
   "messages": [
-    {"role": "system", "content": "You are a helpful assistant"},
-    {"role": "user", "content": "Explain quantum computing"}
+    { "role": "system", "content": "You are a helpful assistant" },
+    { "role": "user", "content": "Explain quantum computing" }
   ],
   "temperature": 0.7,
   "max_tokens": 512,
@@ -731,6 +753,7 @@ OpenAI-compatible chat completions endpoint.
 ```
 
 **Response:**
+
 ```json
 {
   "id": "chatcmpl-123",
@@ -766,6 +789,7 @@ OpenAI-compatible chat completions endpoint.
 OpenAI-compatible embeddings endpoint.
 
 **Request:**
+
 ```json
 {
   "model": "sentence-transformers/all-MiniLM-L6-v2",
@@ -774,6 +798,7 @@ OpenAI-compatible embeddings endpoint.
 ```
 
 **Response:**
+
 ```json
 {
   "object": "list",
@@ -806,6 +831,7 @@ OpenAI-compatible embeddings endpoint.
 Generate images from text prompts.
 
 **Request:**
+
 ```json
 {
   "prompt": "a serene mountain lake at sunset, photorealistic, 8k",
@@ -820,6 +846,7 @@ Generate images from text prompts.
 ```
 
 **Response:**
+
 ```json
 {
   "created": 1760640000,
@@ -836,6 +863,7 @@ Generate images from text prompts.
 Edit images using inpainting.
 
 **Request:**
+
 ```json
 {
   "prompt": "Add glowing holographic displays",
@@ -853,6 +881,7 @@ Edit images using inpainting.
 Create variations of an image (img2img).
 
 **Request:**
+
 ```json
 {
   "prompt": "Transform into a cyberpunk version",
@@ -874,6 +903,7 @@ Create variations of an image (img2img).
 Classify images using vision models.
 
 **Request:**
+
 ```json
 {
   "model": "google/vit-base-patch16-224",
@@ -887,6 +917,7 @@ Classify images using vision models.
 Zero-shot classification with CLIP.
 
 **Request:**
+
 ```json
 {
   "model": "openai/clip-vit-base-patch32",
@@ -904,6 +935,7 @@ Zero-shot classification with CLIP.
 Transcribe audio to text (OpenAI-compatible).
 
 **Request:**
+
 ```json
 {
   "file": "<base64_encoded_audio>",
@@ -914,6 +946,7 @@ Transcribe audio to text (OpenAI-compatible).
 ```
 
 **Response:**
+
 ```json
 {
   "text": "This is the transcribed audio content..."
@@ -925,12 +958,222 @@ Transcribe audio to text (OpenAI-compatible).
 Translate audio to English.
 
 **Request:**
+
 ```json
 {
   "file": "<base64_encoded_audio>",
   "model": "openai/whisper-large-v3"
 }
 ```
+
+---
+
+### Audio (Text-to-Speech)
+
+Generate speech from text using neural TTS models. Supports multiple output formats and streaming for low-latency playback.
+
+#### `POST /v1/audio/speech`
+
+Generate audio from text (OpenAI-compatible).
+
+**Request:**
+
+```json
+{
+  "model": "kokoro",
+  "input": "Hello, this is a test of text-to-speech synthesis.",
+  "voice": "af_heart",
+  "response_format": "mp3",
+  "speed": 1.0,
+  "stream": false
+}
+```
+
+**Parameters:**
+
+- `model` (string): TTS model ID. Currently supports `"kokoro"`.
+- `input` (string): Text to synthesize (max 4096 characters recommended).
+- `voice` (string): Voice ID. See available voices below.
+- `response_format` (string): Output format: `"mp3"`, `"opus"`, `"wav"`, `"flac"`, `"aac"`, or `"pcm"`. Default: `"mp3"`.
+- `speed` (float): Speed multiplier (0.5 to 2.0). Default: 1.0.
+- `stream` (bool): Enable SSE streaming for low-latency playback. Default: false.
+
+**Response (Non-Streaming):**
+Returns binary audio data with appropriate Content-Type header.
+
+**Response (Streaming, `stream: true`):**
+Returns Server-Sent Events with base64-encoded PCM audio chunks:
+
+```
+data: {"type": "audio", "data": "<base64_pcm>", "format": "pcm", "sample_rate": 24000}
+data: {"type": "audio", "data": "<base64_pcm>", "format": "pcm", "sample_rate": 24000}
+data: {"type": "done", "duration": 2.5}
+```
+
+**Example:**
+
+```bash
+# Generate MP3 audio
+curl -X POST http://localhost:11540/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kokoro",
+    "input": "Hello world!",
+    "voice": "af_heart"
+  }' \
+  --output speech.mp3
+
+# Generate with different voice and format
+curl -X POST http://localhost:11540/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kokoro",
+    "input": "Testing text-to-speech",
+    "voice": "am_adam",
+    "response_format": "wav",
+    "speed": 1.2
+  }' \
+  --output speech.wav
+```
+
+**Python Example:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11540/v1", api_key="not-used")
+
+# Generate speech
+response = client.audio.speech.create(
+    model="kokoro",
+    input="Hello, this is a test!",
+    voice="af_heart",
+    response_format="mp3"
+)
+
+# Save to file
+response.stream_to_file("output.mp3")
+```
+
+#### `GET /v1/audio/voices`
+
+List available TTS voices.
+
+**Parameters:**
+
+- `model` (query, optional): Filter voices by model ID.
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "af_heart",
+      "name": "Heart (American Female)",
+      "language": "en-US",
+      "model": "kokoro"
+    },
+    {
+      "id": "af_bella",
+      "name": "Bella (American Female)",
+      "language": "en-US",
+      "model": "kokoro"
+    },
+    {
+      "id": "am_adam",
+      "name": "Adam (American Male)",
+      "language": "en-US",
+      "model": "kokoro"
+    },
+    {
+      "id": "bf_emma",
+      "name": "Emma (British Female)",
+      "language": "en-GB",
+      "model": "kokoro"
+    },
+    {
+      "id": "bm_george",
+      "name": "George (British Male)",
+      "language": "en-GB",
+      "model": "kokoro"
+    }
+  ]
+}
+```
+
+#### `WebSocket /v1/audio/speech/stream`
+
+Real-time TTS streaming via WebSocket for ultra-low-latency applications.
+
+**Query Parameters:**
+
+- `model`: TTS model ID (default: `"kokoro"`)
+- `voice`: Voice ID (default: `"af_heart"`)
+- `response_format`: Audio format (default: `"pcm"`)
+- `sample_rate`: Output sample rate (default: `24000`)
+
+**Protocol:**
+
+1. Connect with query params
+2. Send JSON: `{"text": "Hello world", "speed": 1.0, "final": true}`
+3. Receive binary PCM audio chunks
+4. Receive JSON: `{"type": "done", "duration": 1.5}` when complete
+
+**Example (JavaScript):**
+
+```javascript
+const ws = new WebSocket(
+  "ws://localhost:11540/v1/audio/speech/stream?voice=af_heart",
+);
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({ text: "Hello world!", final: true }));
+};
+
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary audio chunk - play it
+    playAudioChunk(event.data);
+  } else {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "done") {
+      console.log(`Audio duration: ${msg.duration}s`);
+    }
+  }
+};
+```
+
+#### Available Voices (Kokoro)
+
+| Voice ID      | Name     | Language         | Gender |
+| ------------- | -------- | ---------------- | ------ |
+| `af_heart`    | Heart    | American English | Female |
+| `af_bella`    | Bella    | American English | Female |
+| `af_nicole`   | Nicole   | American English | Female |
+| `af_sarah`    | Sarah    | American English | Female |
+| `af_sky`      | Sky      | American English | Female |
+| `am_adam`     | Adam     | American English | Male   |
+| `am_michael`  | Michael  | American English | Male   |
+| `bf_emma`     | Emma     | British English  | Female |
+| `bf_isabella` | Isabella | British English  | Female |
+| `bm_george`   | George   | British English  | Male   |
+| `bm_lewis`    | Lewis    | British English  | Male   |
+
+#### Installation
+
+TTS requires additional dependencies. Install with:
+
+```bash
+uv pip install "universal-runtime[tts]"
+```
+
+This installs:
+
+- `kokoro`: High-quality neural TTS (~82M parameters)
+- `spacy` + `en_core_web_sm`: For text processing
+- `pydub` + `av`: For audio format conversion
 
 ---
 
@@ -941,6 +1184,7 @@ Translate audio to English.
 Generate captions for images.
 
 **Request:**
+
 ```json
 {
   "model": "Salesforce/blip-image-captioning-base",
@@ -954,6 +1198,7 @@ Generate captions for images.
 Visual question answering.
 
 **Request:**
+
 ```json
 {
   "model": "Salesforce/blip-vqa-base",
@@ -968,15 +1213,15 @@ Visual question answering.
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `UNIVERSAL_RUNTIME_HOST` | `127.0.0.1` | Server host |
-| `UNIVERSAL_RUNTIME_PORT` | `11540` | Server port |
-| `TRANSFORMERS_CACHE` | `~/.cache/huggingface` | Model cache directory |
-| `HF_TOKEN` | None | HuggingFace token (for gated models) |
-| `RUNTIME_BACKEND` | `pytorch` | Backend (future: `onnx`) |
-| `MODEL_UNLOAD_TIMEOUT` | `300` | Seconds of inactivity before unloading models (5 minutes) |
-| `CLEANUP_CHECK_INTERVAL` | `30` | Seconds between cleanup checks for idle models |
+| Variable                 | Default                | Description                                               |
+| ------------------------ | ---------------------- | --------------------------------------------------------- |
+| `UNIVERSAL_RUNTIME_HOST` | `127.0.0.1`            | Server host                                               |
+| `UNIVERSAL_RUNTIME_PORT` | `11540`                | Server port                                               |
+| `TRANSFORMERS_CACHE`     | `~/.cache/huggingface` | Model cache directory                                     |
+| `HF_TOKEN`               | None                   | HuggingFace token (for gated models)                      |
+| `RUNTIME_BACKEND`        | `pytorch`              | Backend (future: `onnx`)                                  |
+| `MODEL_UNLOAD_TIMEOUT`   | `300`                  | Seconds of inactivity before unloading models (5 minutes) |
+| `CLEANUP_CHECK_INTERVAL` | `30`                   | Seconds between cleanup checks for idle models            |
 
 ### LlamaFarm Integration
 
@@ -1046,17 +1291,17 @@ See [examples/universal-embedder-rag/](../../examples/universal-embedder-rag/) f
 
 ## Hardware Requirements
 
-| Model Type | Min RAM | Recommended | GPU VRAM | Notes |
-|------------|---------|-------------|----------|-------|
-| **CausalLM (small)** | 4GB | 8GB | 4GB+ | Phi-2, Qwen-0.5B |
-| **CausalLM (medium)** | 8GB | 16GB | 8GB+ | Llama-3B, Mistral-7B |
-| **CausalLM (large)** | 16GB | 32GB | 16GB+ | Llama-8B, requires quantization on smaller GPUs |
-| **Encoder** | 2GB | 4GB | 2GB+ | Fast inference |
-| **Diffusion (SD 2.1)** | 8GB | 16GB | 6GB+ | SDXL needs 8GB+ VRAM |
-| **Diffusion (SDXL)** | 16GB | 32GB | 8GB+ | High memory usage |
-| **Vision** | 2GB | 4GB | 2GB+ | Fast |
-| **Audio (Whisper)** | 4GB | 8GB | 4GB+ | Whisper-large |
-| **Multimodal** | 8GB | 16GB | 8GB+ | LLaVA needs 16GB+ |
+| Model Type             | Min RAM | Recommended | GPU VRAM | Notes                                           |
+| ---------------------- | ------- | ----------- | -------- | ----------------------------------------------- |
+| **CausalLM (small)**   | 4GB     | 8GB         | 4GB+     | Phi-2, Qwen-0.5B                                |
+| **CausalLM (medium)**  | 8GB     | 16GB        | 8GB+     | Llama-3B, Mistral-7B                            |
+| **CausalLM (large)**   | 16GB    | 32GB        | 16GB+    | Llama-8B, requires quantization on smaller GPUs |
+| **Encoder**            | 2GB     | 4GB         | 2GB+     | Fast inference                                  |
+| **Diffusion (SD 2.1)** | 8GB     | 16GB        | 6GB+     | SDXL needs 8GB+ VRAM                            |
+| **Diffusion (SDXL)**   | 16GB    | 32GB        | 8GB+     | High memory usage                               |
+| **Vision**             | 2GB     | 4GB         | 2GB+     | Fast                                            |
+| **Audio (Whisper)**    | 4GB     | 8GB         | 4GB+     | Whisper-large                                   |
+| **Multimodal**         | 8GB     | 16GB        | 8GB+     | LLaVA needs 16GB+                               |
 
 ### Device Support
 
@@ -1225,6 +1470,7 @@ print(response.json())
 ### Model Downloads Slowly
 
 **Solution:** Set a HuggingFace token for faster downloads:
+
 ```bash
 export HF_TOKEN=hf_xxxxxxxxxxxxx
 ```
@@ -1232,6 +1478,7 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 ### Out of Memory Errors
 
 **Solutions:**
+
 - Use smaller models: `microsoft/phi-2` or `Qwen/Qwen2.5-0.5B-Instruct`
 - Reduce image size: `"size": "512x512"`
 - Reduce inference steps: `"num_inference_steps": 20`
@@ -1241,12 +1488,14 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 ### Generation is Very Slow
 
 **Causes & Solutions:**
+
 - **First-time downloads**: Models are 2-10GB. Wait for cache, subsequent loads are fast.
 - **CPU mode**: Switch to GPU if available.
 - **Large models**: Use smaller variants or turbo models.
 - **Too many steps**: Reduce `num_inference_steps`.
 
 **Expected generation times (512x512 image):**
+
 - Tiny SD (M1 Mac): 2-5 seconds
 - SD 2.1 (M1 Mac): 20-30 seconds
 - SD 2.1 (RTX 3090): 5-10 seconds
@@ -1255,6 +1504,7 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 ### Images Look Weird or Low Quality
 
 **Solutions:**
+
 - Improve prompt quality (be descriptive)
 - Increase `guidance_scale` (7.0-9.0 range)
 - Increase `num_inference_steps` (40-50 range)
@@ -1268,6 +1518,7 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 ### CUDA Out of Memory
 
 **Solutions:**
+
 - Close other GPU-using applications
 - Reduce batch size (`n=1`)
 - Use gradient checkpointing (future feature)
@@ -1280,6 +1531,7 @@ export HF_TOKEN=hf_xxxxxxxxxxxxx
 **Cause:** You're using Python 3.14 or newer, which PyTorch doesn't support yet.
 
 **Solution:**
+
 ```bash
 # From project root (recommended):
 nx sync universal-runtime
@@ -1294,6 +1546,7 @@ The `pyproject.toml` constraint ensures only compatible Python versions are used
 ### Server Won't Start
 
 **Solutions:**
+
 - Check port 11540 is not in use: `lsof -i :11540`
 - Ensure Python 3.11-3.13 is installed: `python --version`
 - Reinstall dependencies: `nx sync universal-runtime` or `uv sync`

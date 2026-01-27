@@ -429,7 +429,7 @@ class UniversalProvider(RuntimeProvider):
                     model_ids = []
 
                 message = (
-                    f"{base} reachable on {device_type}, "
+                    f"Reachable on {device_type}, "
                     f"{len(model_ids)} model(s) loaded"
                 )
                 return HealthCheckResult(

@@ -95,6 +95,56 @@ class EmbeddingResponse(TypedDict):
     usage: EmbeddingUsage
 
 
+# Multimodal types for audio/vision input
+
+
+class AudioData(TypedDict):
+    """Audio data for multimodal input."""
+
+    data: str  # base64-encoded audio or file path
+    format: Literal["wav", "pcm", "mp3"]
+
+
+class AudioContentPart(TypedDict):
+    """Audio content part for multimodal messages."""
+
+    type: Literal["input_audio"]
+    input_audio: AudioData
+
+
+class TextContentPart(TypedDict):
+    """Text content part for multimodal messages."""
+
+    type: Literal["text"]
+    text: str
+
+
+class ImageUrlData(TypedDict, total=False):
+    """Image URL data for multimodal input."""
+
+    url: str  # URL or base64 data URI
+    detail: Optional[Literal["auto", "low", "high"]]
+
+
+class ImageContentPart(TypedDict):
+    """Image content part for multimodal messages."""
+
+    type: Literal["image_url"]
+    image_url: ImageUrlData
+
+
+# Content can be text, audio, or image
+ContentPart = Union[TextContentPart, AudioContentPart, ImageContentPart]
+
+
+class MultimodalMessage(TypedDict, total=False):
+    """A chat message that can contain multimodal content (text, audio, images)."""
+
+    role: str
+    content: Union[str, List[ContentPart]]
+    name: Optional[str]
+
+
 # Type aliases
 ChatCompletionStreamResponse = Iterator[ChatCompletionChunk]
 CompletionResponse = Union[ChatCompletionResponse, ChatCompletionStreamResponse]

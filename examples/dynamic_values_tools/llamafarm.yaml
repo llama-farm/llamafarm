@@ -1,0 +1,37 @@
+version: v1
+name: dynamic_tools_demo
+namespace: examples
+
+runtime:
+  models:
+    - name: tools_model
+      description: "Demo model with dynamic tool variables"
+      provider: universal
+      model: llama3.2:3b
+      default: true
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: fetch_data
+          description: "Fetch data from {{api_name | the API}} at {{api_base | http://localhost:3000}}"
+          parameters:
+            type: object
+            properties:
+              endpoint:
+                type: string
+                description: "The endpoint path relative to {{api_base | http://localhost:3000}}"
+              method:
+                type: string
+                description: "HTTP method to use"
+                enum: ["GET", "POST", "PUT", "DELETE"]
+                default: "GET"
+            required:
+              - endpoint
+
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful assistant that can fetch data from APIs.
+          When asked to get data, use the fetch_data tool.
