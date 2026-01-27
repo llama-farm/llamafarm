@@ -70,7 +70,7 @@ jobs:
           echo "✓ Dereferenced schema available at cli/cmd/config/schema.json"
 
       - name: Install go-jsonschema
-        run: go install github.com/atombender/go-jsonschema@v0.20.0
+        run: go install github.com/atombender/go-jsonschema@v0.21.0
 
       - name: Generate Go types
         run: |
