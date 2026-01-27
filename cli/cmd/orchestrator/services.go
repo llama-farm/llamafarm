@@ -143,10 +143,12 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
-			"TRANSFORMERS_SKIP_MPS":            "", // Set to "1" to skip MPS on macOS
-			"TRANSFORMERS_FORCE_CPU":           "", // Set to "1" to force CPU (useful in CI)
-			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
-			"HF_TOKEN":                         "",
+			"TRANSFORMERS_SKIP_MPS":  "", // Set to "1" to skip MPS on macOS
+			"TRANSFORMERS_FORCE_CPU": "", // Set to "1" to force CPU (useful in CI)
+			// Note: PYTORCH_MPS_HIGH_WATERMARK_RATIO removed - setting it to non-default
+			// values causes "invalid low watermark ratio" errors on some PyTorch versions.
+			// Let PyTorch use its default memory management.
+			"HF_TOKEN": "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
