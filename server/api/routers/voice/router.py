@@ -464,14 +464,15 @@ async def voice_chat_websocket(
             # Send descriptive error to client so UI doesn't stay stuck in loading state
             try:
                 # Provide context-aware error message
+                # Use generic messages to avoid leaking internal details
                 if "connection" in error_str.lower() or "connect" in error_str.lower():
                     error_msg = "Lost connection to a backend service. Please try again."
                 elif "timeout" in error_str.lower():
                     error_msg = "Request timed out. The service may be busy."
                 elif "model" in error_str.lower() and "not" in error_str.lower():
-                    error_msg = f"Model issue: {error_str}"
+                    error_msg = "Model not available. Please try a different model."
                 else:
-                    error_msg = f"Processing failed: {error_str}"
+                    error_msg = "Processing failed. Please try again."
                 await websocket.send_json(
                     ErrorMessage(message=error_msg).model_dump()
                 )

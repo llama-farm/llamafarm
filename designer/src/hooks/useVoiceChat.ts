@@ -137,6 +137,18 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   const currentAssistantAudioRef = useRef<ArrayBuffer[]>([])
   const hasConnectedRef = useRef(false) // Track if we ever successfully connected
   const errorReceivedRef = useRef(false) // Track if we received an error message from server
+  // Refs to track latest state values for use in callbacks (avoids stale closures)
+  const isRecordingRef = useRef(false)
+  const voiceStateRef = useRef<VoiceState>('idle')
+
+  // Keep refs in sync with state for use in callbacks
+  useEffect(() => {
+    isRecordingRef.current = isRecording
+  }, [isRecording])
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState
+  }, [voiceState])
 
   // Get or create audio context
   const getAudioContext = useCallback(() => {
@@ -341,7 +353,8 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       },
       onClose: () => {
         // If we were recording/processing, this is unexpected - show error
-        const wasActive = isRecording || voiceState !== 'idle'
+        // Use refs to get latest state values (avoids stale closure)
+        const wasActive = isRecordingRef.current || voiceStateRef.current !== 'idle'
         if (wasActive && !errorReceivedRef.current) {
           const errorMsg = hasConnectedRef.current
             ? 'Connection lost. Please try again.'

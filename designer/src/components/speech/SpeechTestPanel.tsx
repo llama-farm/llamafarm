@@ -903,6 +903,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                 response_format: 'mp3',
               })
               const audioUrl = URL.createObjectURL(audioBlob)
+              // Track the blob URL for cleanup to prevent memory leaks
+              blobUrlsRef.current.set(messageId, audioUrl)
 
               // Update the message with audioUrl so play button appears
               setMessages(prev => prev.map(msg =>
