@@ -152,6 +152,7 @@ environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'linux' and platform_machine == 'aarch64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'",  # Intel Mac
   "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
 
@@ -178,8 +179,11 @@ index-url = "https://pypi.org/simple"
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
   "numpy>=1.24.0,<2.4",   # numba (via librosa) requires numpy<2.4
-  "torch>=2.0.0",         # chatterbox pins ==2.6.0, but works with other versions
-  "torchaudio>=2.0.0",    # chatterbox pins ==2.6.0
+  # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
+  "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchaudio>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torchaudio>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "transformers>=4.35.0", # chatterbox pins ==4.46.3
 ]
 
