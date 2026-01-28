@@ -10,6 +10,10 @@ on:
   push:
     tags:
       - 'v*'
+  # TODO: Remove before merging - testing workflow changes
+  pull_request:
+    paths:
+      - '.github/workflows/build-llama.yml'
 
 jobs:
   build-llama-cpp:
