@@ -207,22 +207,11 @@ function RenameModelModal({
   )
 }
 
-// Default values for GGUF advanced settings
-const DEFAULT_EXTRA_BODY: ExtraBody = {
-  n_ctx: 2048,
-  n_batch: 512,
-  n_gpu_layers: -1,
-  flash_attn: true,
-  use_mmap: true,
-  use_mlock: false,
-  cache_type_k: 'q4_0',
-  cache_type_v: 'q4_0',
-}
-
+// Cache type options for KV quantization (llama.cpp defaults to f16)
 const CACHE_TYPE_OPTIONS: { value: CacheQuantizationType; label: string }[] = [
-  { value: 'q4_0', label: 'q4_0' },
+  { value: 'f16', label: 'f16 (default)' },
   { value: 'q8_0', label: 'q8_0' },
-  { value: 'f16', label: 'f16' },
+  { value: 'q4_0', label: 'q4_0' },
 ]
 
 interface AdvancedSettingsProps {
@@ -240,14 +229,61 @@ function AdvancedSettings({
   onOpenChange,
   onSettingsChange,
 }: AdvancedSettingsProps) {
-  // Merge with defaults for display
-  const settings: ExtraBody = { ...DEFAULT_EXTRA_BODY, ...extraBody }
+  // Local state for debounced saves
+  const [localSettings, setLocalSettings] = useState<ExtraBody>(extraBody || {})
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleChange = <K extends keyof ExtraBody>(
-    key: K,
-    value: ExtraBody[K]
-  ) => {
-    onSettingsChange(modelId, { ...settings, [key]: value })
+  // Sync local state when extraBody prop changes (e.g., from server)
+  useEffect(() => {
+    setLocalSettings(extraBody || {})
+  }, [extraBody])
+
+  // Debounced save effect
+  useEffect(() => {
+    // Skip if no changes from original
+    const hasChanges = JSON.stringify(localSettings) !== JSON.stringify(extraBody || {})
+    if (!hasChanges) return
+
+    setSaveStatus('saving')
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Debounce save by 800ms
+    saveTimeoutRef.current = setTimeout(() => {
+      onSettingsChange(modelId, localSettings)
+      setSaveStatus('saved')
+
+      // Reset status after 2s
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current)
+      }
+      statusTimeoutRef.current = setTimeout(() => {
+        setSaveStatus('idle')
+      }, 2000)
+    }, 800)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [localSettings, extraBody, modelId, onSettingsChange])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current)
+    }
+  }, [])
+
+  const handleChange = <K extends keyof ExtraBody>(key: K, value: ExtraBody[K]) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }))
   }
 
   const handleNumberChange = (key: keyof ExtraBody, rawValue: string) => {
@@ -266,171 +302,218 @@ function AdvancedSettings({
           }`}
         />
         <span>Advanced settings</span>
+        {saveStatus === 'saving' && (
+          <span className="ml-auto text-[10px] text-muted-foreground">Saving...</span>
+        )}
+        {saveStatus === 'saved' && (
+          <span className="ml-auto text-[10px] text-green-600 dark:text-green-400">Saved ✓</span>
+        )}
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-3">
-        <div className="grid grid-cols-3 gap-x-6">
-          {/* Left column: Number inputs */}
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Context</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Input
-                      type="number"
-                      value={settings.n_ctx ?? ''}
-                      onChange={e => handleNumberChange('n_ctx', e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder="2048"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[200px]">
-                    <p className="text-xs">Context window size (tokens)</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+        <TooltipProvider>
+          <div className="grid grid-cols-3 gap-x-6">
+            {/* Left column: Number inputs */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">Context</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Context window size in tokens. Leave empty for auto-detection based on model and available memory.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_ctx ?? ''}
+                  onChange={e => handleNumberChange('n_ctx', e.target.value)}
+                  className="h-8 text-sm"
+                  placeholder="auto"
+                  min={512}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">Batch</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Batch size for prompt processing. Default: 2048. Use 512 on low-memory devices.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_batch ?? ''}
+                  onChange={e => handleNumberChange('n_batch', e.target.value)}
+                  className="h-8 text-sm"
+                  placeholder="2048"
+                  min={1}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">GPU Layers</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Layers to offload to GPU. Use -1 for all layers (recommended). Reduce if running out of VRAM.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_gpu_layers ?? ''}
+                  onChange={e => handleNumberChange('n_gpu_layers', e.target.value)}
+                  className="h-8 text-sm"
+                  placeholder="-1"
+                  min={-1}
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Batch</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Input
-                      type="number"
-                      value={settings.n_batch ?? ''}
-                      onChange={e => handleNumberChange('n_batch', e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder="512"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[200px]">
-                    <p className="text-xs">Batch size for prompt processing</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">GPU Layers</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Input
-                      type="number"
-                      value={settings.n_gpu_layers ?? ''}
-                      onChange={e => handleNumberChange('n_gpu_layers', e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder="-1"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[200px]">
-                    <p className="text-xs">GPU layers (-1 = all layers)</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
 
-          {/* Middle column: Dropdowns */}
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">KV Keys</Label>
-              <Select
-                value={settings.cache_type_k ?? 'q4_0'}
-                onValueChange={value => handleChange('cache_type_k', value as CacheQuantizationType)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CACHE_TYPE_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Middle column: Dropdowns */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">KV Keys</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">KV cache quantization. f16 is safest. q8_0/q4_0 reduce memory but may affect quality slightly.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={localSettings.cache_type_k || ''}
+                  onValueChange={value => handleChange('cache_type_k', value as CacheQuantizationType)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="f16 (default)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CACHE_TYPE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">KV Values</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">KV cache quantization. f16 is safest. q8_0/q4_0 reduce memory but may affect quality slightly.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={localSettings.cache_type_v || ''}
+                  onValueChange={value => handleChange('cache_type_v', value as CacheQuantizationType)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="f16 (default)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CACHE_TYPE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">KV Values</Label>
-              <Select
-                value={settings.cache_type_v ?? 'q4_0'}
-                onValueChange={value => handleChange('cache_type_v', value as CacheQuantizationType)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CACHE_TYPE_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          {/* Right column: Checkboxes */}
-          <div className="flex flex-col gap-3 pt-5">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`${modelId}-flash-attn`}
-                      checked={settings.flash_attn ?? true}
-                      onCheckedChange={checked => handleChange('flash_attn', !!checked)}
-                    />
-                    <Label htmlFor={`${modelId}-flash-attn`} className="text-xs cursor-pointer">
-                      Flash Attn
-                    </Label>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-[200px]">
-                  <p className="text-xs">Enable flash attention for faster inference</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`${modelId}-mmap`}
-                      checked={settings.use_mmap ?? true}
-                      onCheckedChange={checked => handleChange('use_mmap', !!checked)}
-                    />
-                    <Label htmlFor={`${modelId}-mmap`} className="text-xs cursor-pointer">
-                      mmap
-                    </Label>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-[200px]">
-                  <p className="text-xs">Memory-map model file for efficient memory usage</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id={`${modelId}-mlock`}
-                      checked={settings.use_mlock ?? false}
-                      onCheckedChange={checked => handleChange('use_mlock', !!checked)}
-                    />
-                    <Label htmlFor={`${modelId}-mlock`} className="text-xs cursor-pointer">
-                      mlock
-                    </Label>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-[200px]">
-                  <p className="text-xs">Lock model in RAM to prevent swapping</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {/* Right column: Checkboxes */}
+            <div className="flex flex-col gap-3 pt-5">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-flash-attn`}
+                  checked={localSettings.flash_attn ?? false}
+                  onCheckedChange={checked => handleChange('flash_attn', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-flash-attn`} className="text-xs cursor-pointer">
+                  Flash Attn
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Flash attention for faster inference. Recommended for modern GPUs (RTX 30xx+, Apple Silicon).</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-mmap`}
+                  checked={localSettings.use_mmap ?? false}
+                  onCheckedChange={checked => handleChange('use_mmap', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-mmap`} className="text-xs cursor-pointer">
+                  mmap
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Memory-map model file. Usually leave off. Can help with very large models.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-mlock`}
+                  checked={localSettings.use_mlock ?? false}
+                  onCheckedChange={checked => handleChange('use_mlock', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-mlock`} className="text-xs cursor-pointer">
+                  mlock
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Lock model in RAM. Usually leave off to allow OS memory management.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
           </div>
-        </div>
+        </TooltipProvider>
       </CollapsibleContent>
     </Collapsible>
   )
