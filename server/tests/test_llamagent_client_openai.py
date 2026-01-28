@@ -8,10 +8,12 @@ Tests the OpenAI client implementation including:
 - Message format conversion
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from config.datamodel import Model, PromptMessage, PromptSet, Provider
+from pydantic import BaseModel
 
 from agents.base.clients.client import LFAgentClient
 from agents.base.clients.openai import LFAgentClientOpenAI
@@ -183,3 +185,34 @@ class TestLFAgentClientOpenAI:
 
         assert len(chunks) == 1
         assert chunks[0].choices[0].delta.content == "Response"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.clients.openai.LFAgentClientOpenAI._wrap_with_instructor")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
+    async def test_chat_structured_response(
+        self, mock_openai_class, mock_wrap_instructor, client
+    ):
+        """Test structured output path with response model."""
+
+        class StructuredResponse(BaseModel):
+            name: str
+            age: int
+
+        structured = StructuredResponse(name="Ada", age=37)
+        mock_instructor = AsyncMock()
+        mock_instructor.chat.completions.create = AsyncMock(return_value=structured)
+        mock_wrap_instructor.return_value = mock_instructor
+        mock_openai_class.return_value = AsyncMock()
+
+        client.set_response_model(StructuredResponse)
+        messages = [LFChatCompletionUserMessageParam(role="user", content="Hello")]
+        response = await client.chat(messages=messages)
+
+        content = response.choices[0].message.content
+        assert json.loads(content) == {"name": "Ada", "age": 37}
+
+        assert mock_instructor.chat.completions.create.await_count == 1
+        assert (
+            mock_instructor.chat.completions.create.call_args.kwargs["response_model"]
+            is StructuredResponse
+        )
