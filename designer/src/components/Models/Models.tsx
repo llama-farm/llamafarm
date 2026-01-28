@@ -54,7 +54,22 @@ import {
   type LocalModelGroup,
   type ModelVariant,
 } from './modelConstants'
-import type { InferenceModel, ModelStatus } from './types'
+import type { InferenceModel, ModelStatus, ExtraBody, CacheQuantizationType } from './types'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '../ui/collapsible'
+import { Checkbox } from '../ui/checkbox'
+import { Label } from '../ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
+import { ChevronDown } from 'lucide-react'
 import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
 
@@ -192,6 +207,235 @@ function RenameModelModal({
   )
 }
 
+// Default values for GGUF advanced settings
+const DEFAULT_EXTRA_BODY: ExtraBody = {
+  n_ctx: 2048,
+  n_batch: 512,
+  n_gpu_layers: -1,
+  flash_attn: true,
+  use_mmap: true,
+  use_mlock: false,
+  cache_type_k: 'q4_0',
+  cache_type_v: 'q4_0',
+}
+
+const CACHE_TYPE_OPTIONS: { value: CacheQuantizationType; label: string }[] = [
+  { value: 'q4_0', label: 'q4_0' },
+  { value: 'q8_0', label: 'q8_0' },
+  { value: 'f16', label: 'f16' },
+]
+
+interface AdvancedSettingsProps {
+  modelId: string
+  extraBody?: ExtraBody
+  isOpen: boolean
+  onOpenChange: (modelId: string | null) => void
+  onSettingsChange: (modelId: string, settings: ExtraBody) => void
+}
+
+function AdvancedSettings({
+  modelId,
+  extraBody,
+  isOpen,
+  onOpenChange,
+  onSettingsChange,
+}: AdvancedSettingsProps) {
+  // Merge with defaults for display
+  const settings: ExtraBody = { ...DEFAULT_EXTRA_BODY, ...extraBody }
+
+  const handleChange = <K extends keyof ExtraBody>(
+    key: K,
+    value: ExtraBody[K]
+  ) => {
+    onSettingsChange(modelId, { ...settings, [key]: value })
+  }
+
+  const handleNumberChange = (key: keyof ExtraBody, rawValue: string) => {
+    const value = rawValue === '' ? undefined : parseInt(rawValue, 10)
+    if (value === undefined || !isNaN(value)) {
+      handleChange(key, value as ExtraBody[typeof key])
+    }
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={open => onOpenChange(open ? modelId : null)}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full pt-2 border-t border-border/50 mt-2">
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${
+            isOpen ? 'rotate-0' : '-rotate-90'
+          }`}
+        />
+        <span>Advanced settings</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        <div className="grid grid-cols-3 gap-x-6">
+          {/* Left column: Number inputs */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Context</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input
+                      type="number"
+                      value={settings.n_ctx ?? ''}
+                      onChange={e => handleNumberChange('n_ctx', e.target.value)}
+                      className="h-8 text-sm"
+                      placeholder="2048"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[200px]">
+                    <p className="text-xs">Context window size (tokens)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Batch</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input
+                      type="number"
+                      value={settings.n_batch ?? ''}
+                      onChange={e => handleNumberChange('n_batch', e.target.value)}
+                      className="h-8 text-sm"
+                      placeholder="512"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[200px]">
+                    <p className="text-xs">Batch size for prompt processing</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">GPU Layers</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input
+                      type="number"
+                      value={settings.n_gpu_layers ?? ''}
+                      onChange={e => handleNumberChange('n_gpu_layers', e.target.value)}
+                      className="h-8 text-sm"
+                      placeholder="-1"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[200px]">
+                    <p className="text-xs">GPU layers (-1 = all layers)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+
+          {/* Middle column: Dropdowns */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">KV Keys</Label>
+              <Select
+                value={settings.cache_type_k ?? 'q4_0'}
+                onValueChange={value => handleChange('cache_type_k', value as CacheQuantizationType)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CACHE_TYPE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">KV Values</Label>
+              <Select
+                value={settings.cache_type_v ?? 'q4_0'}
+                onValueChange={value => handleChange('cache_type_v', value as CacheQuantizationType)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CACHE_TYPE_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Right column: Checkboxes */}
+          <div className="flex flex-col gap-3 pt-5">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`${modelId}-flash-attn`}
+                      checked={settings.flash_attn ?? true}
+                      onCheckedChange={checked => handleChange('flash_attn', !!checked)}
+                    />
+                    <Label htmlFor={`${modelId}-flash-attn`} className="text-xs cursor-pointer">
+                      Flash Attn
+                    </Label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[200px]">
+                  <p className="text-xs">Enable flash attention for faster inference</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`${modelId}-mmap`}
+                      checked={settings.use_mmap ?? true}
+                      onCheckedChange={checked => handleChange('use_mmap', !!checked)}
+                    />
+                    <Label htmlFor={`${modelId}-mmap`} className="text-xs cursor-pointer">
+                      mmap
+                    </Label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[200px]">
+                  <p className="text-xs">Memory-map model file for efficient memory usage</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`${modelId}-mlock`}
+                      checked={settings.use_mlock ?? false}
+                      onCheckedChange={checked => handleChange('use_mlock', !!checked)}
+                    />
+                    <Label htmlFor={`${modelId}-mlock`} className="text-xs cursor-pointer">
+                      mlock
+                    </Label>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[200px]">
+                  <p className="text-xs">Lock model in RAM to prevent swapping</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 function ModelCard({
   model,
   onMakeDefault,
@@ -205,7 +449,15 @@ function ModelCard({
   availableDeviceModels,
   onModelChange,
   existingModelNames = [],
-}: ModelCardProps & { existingModelNames?: string[] }) {
+  expandedSettingsModelId,
+  onExpandedSettingsChange,
+  onAdvancedSettingsChange,
+}: ModelCardProps & {
+  existingModelNames?: string[]
+  expandedSettingsModelId?: string | null
+  onExpandedSettingsChange?: (modelId: string | null) => void
+  onAdvancedSettingsChange?: (modelId: string, settings: ExtraBody) => void
+}) {
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false)
 
   return (
@@ -323,6 +575,17 @@ function ModelCard({
           onRename={onRename}
         />
       )}
+
+      {/* Advanced settings for GGUF models only (universal provider) */}
+      {model.provider === 'universal' && onAdvancedSettingsChange && onExpandedSettingsChange && (
+        <AdvancedSettings
+          modelId={model.id}
+          extraBody={model.extra_body}
+          isOpen={expandedSettingsModelId === model.id}
+          onOpenChange={onExpandedSettingsChange}
+          onSettingsChange={onAdvancedSettingsChange}
+        />
+      )}
     </div>
   )
 }
@@ -339,6 +602,9 @@ function ProjectInferenceModels({
   availableProjectModels,
   availableDeviceModels,
   onModelChange,
+  expandedSettingsModelId,
+  onExpandedSettingsChange,
+  onAdvancedSettingsChange,
 }: {
   models: InferenceModel[]
   onMakeDefault: (id: string) => void
@@ -351,6 +617,9 @@ function ProjectInferenceModels({
   availableProjectModels: Array<{ identifier: string; name: string }>
   availableDeviceModels: Array<{ identifier: string; name: string }>
   onModelChange: (modelId: string, newModelIdentifier: string) => void
+  expandedSettingsModelId: string | null
+  onExpandedSettingsChange: (modelId: string | null) => void
+  onAdvancedSettingsChange: (modelId: string, settings: ExtraBody) => void
 }) {
   const existingNames = models.map(m => m.name)
 
@@ -373,6 +642,9 @@ function ProjectInferenceModels({
             onModelChange(m.id, newModelIdentifier)
           }
           existingModelNames={existingNames}
+          expandedSettingsModelId={expandedSettingsModelId}
+          onExpandedSettingsChange={onExpandedSettingsChange}
+          onAdvancedSettingsChange={onAdvancedSettingsChange}
         />
       ))}
     </div>
@@ -2319,6 +2591,7 @@ const Models = () => {
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<string | null>(null)
+  const [expandedSettingsModelId, setExpandedSettingsModelId] = useState<string | null>(null)
 
   // Fetch cached models from device
   const { data: cachedModelsResponse } = useCachedModels()
@@ -2382,6 +2655,8 @@ const Models = () => {
         badges: [localityBadge],
         isDefault,
         status: 'ready' as ModelStatus,
+        provider,
+        extra_body: model?.extra_body,
       }
     })
 
@@ -2416,6 +2691,53 @@ const Models = () => {
       )
     } catch (error) {
       console.error('Failed to set default model:', error)
+    }
+  }
+
+  const handleAdvancedSettingsChange = async (modelId: string, settings: ExtraBody) => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !projectResponse?.project?.config
+    )
+      return
+
+    const currentConfig = projectResponse.project.config
+    const runtime = currentConfig.runtime || {}
+    const runtimeModels = runtime.models || []
+
+    // Update the specific model's extra_body
+    const updatedModels = runtimeModels.map((m: any) => {
+      if (m.name === modelId) {
+        return { ...m, extra_body: settings }
+      }
+      return m
+    })
+
+    const nextConfig = {
+      ...currentConfig,
+      runtime: {
+        ...runtime,
+        models: updatedModels,
+      },
+    }
+
+    // Optimistically update local state
+    setProjectModels(prev =>
+      prev.map(m =>
+        m.id === modelId ? { ...m, extra_body: settings } : m
+      )
+    )
+
+    try {
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: nextConfig },
+      })
+    } catch (error) {
+      console.error('Failed to update advanced settings:', error)
+      // Revert on error - the useEffect will reload from projectResponse
     }
   }
 
@@ -2867,6 +3189,9 @@ const Models = () => {
                 availableProjectModels={availableProjectModels}
                 availableDeviceModels={availableDeviceModels}
                 onModelChange={handleModelChange}
+                expandedSettingsModelId={expandedSettingsModelId}
+                onExpandedSettingsChange={setExpandedSettingsModelId}
+                onAdvancedSettingsChange={handleAdvancedSettingsChange}
               />
               </>
             ))}
