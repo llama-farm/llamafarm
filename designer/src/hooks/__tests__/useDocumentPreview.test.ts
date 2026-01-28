@@ -11,7 +11,7 @@ import { useDocumentPreview } from '../useDocumentPreview'
 import { server } from '../../test/mocks/server'
 import { http, HttpResponse } from 'msw'
 
-const API_BASE = 'http://localhost:8000/v1'
+const API_BASE = 'http://localhost:14345/v1'
 
 const mockPreviewResponse = {
   original_text: 'This is test content for the preview.',

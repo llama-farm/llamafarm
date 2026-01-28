@@ -186,7 +186,7 @@ async def actions(
 
     def task_uri(task_id: str):
         return (
-            f"http://localhost:8000/v1/projects/{namespace}/{project}/tasks/{task_id}"
+            f"http://localhost:14345/v1/projects/{namespace}/{project}/tasks/{task_id}"
         )
 
     if action_type == DatasetActionType.PROCESS:

@@ -90,7 +90,7 @@ class UniversalParser(BaseParser):
         )
         self.use_ocr = self.config.get("use_ocr", True)
         self.ocr_endpoint = self.config.get(
-            "ocr_endpoint", "http://127.0.0.1:8000/v1/vision/ocr"
+            "ocr_endpoint", "http://127.0.0.1:14345/v1/vision/ocr"
         )
         self.extract_metadata = self.config.get("extract_metadata", True)
         self.min_chunk_size = self.config.get("min_chunk_size", 50)

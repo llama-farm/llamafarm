@@ -300,7 +300,7 @@ class TestURLReplacement:
             "level1": [
                 {
                     "level2": {
-                        "url": "http://localhost:8000",
+                        "url": "http://localhost:14345",
                         "value": 42,
                         "none_value": None,
                         "list": [
@@ -320,7 +320,7 @@ class TestURLReplacement:
             "level1": [
                 {
                     "level2": {
-                        "url": "http://host.docker.internal:8000",
+                        "url": "http://host.docker.internal:14345",
                         "value": 42,
                         "none_value": None,
                         "list": [

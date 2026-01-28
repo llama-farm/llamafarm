@@ -66,7 +66,7 @@ The original flat runtime configuration is automatically converted internally:
 runtime:
   provider: openai
   model: qwen2.5:7b
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-local-placeholder
   instructor_mode: tools
   model_api_parameters:

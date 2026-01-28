@@ -6,7 +6,7 @@ import (
 
 func TestResolveDependencies(t *testing.T) {
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:14345",
 		services:  ServiceGraph,
 	}
 
@@ -98,7 +98,7 @@ func TestResolveDependenciesCircular(t *testing.T) {
 	defer func() { ServiceGraph = originalGraph }()
 
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:14345",
 		services:  circularGraph,
 	}
 
@@ -199,7 +199,7 @@ func (e *dependencyOrderError) Error() string {
 
 func TestFindDependents(t *testing.T) {
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:14345",
 		services:  ServiceGraph,
 	}
 
@@ -248,7 +248,7 @@ func TestFindDependents(t *testing.T) {
 
 func TestStopServicesValidation(t *testing.T) {
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:14345",
 		services:  ServiceGraph,
 	}
 
@@ -297,7 +297,7 @@ func TestStopServicesValidation(t *testing.T) {
 // TestEnsureServicesWithConfig_AutoStartDisabled tests the auto-start disabled behavior
 func TestEnsureServicesWithConfig_AutoStartDisabled(t *testing.T) {
 	sm := &ServiceManager{
-		serverURL: "http://localhost:8000",
+		serverURL: "http://localhost:14345",
 		services:  ServiceGraph,
 	}
 
@@ -328,7 +328,7 @@ func TestEnsureServicesWithConfig_AutoStartDisabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &ServiceOrchestrationConfig{
-				ServerURL:   "http://localhost:8000",
+				ServerURL:   "http://localhost:14345",
 				PrintStatus: false,
 				AutoStart:   tt.autoStart,
 			}

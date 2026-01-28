@@ -151,7 +151,7 @@ new BrowserWindow({
 })
 
 // Document the reason and scope
-// webSecurity: false - Required for localhost:8000 API access
+// webSecurity: false - Required for localhost:14345 API access
 // The Designer UI is served from localhost and calls localhost APIs
 ```
 
@@ -161,8 +161,8 @@ new BrowserWindow({
 ```typescript
 // Only load from trusted origins
 const ALLOWED_ORIGINS = [
-  'http://localhost:8000',
-  'http://127.0.0.1:8000'
+  'http://localhost:14345',
+  'http://127.0.0.1:14345'
 ]
 
 loadDesigner(url: string): void {
