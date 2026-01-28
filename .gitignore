@@ -29,6 +29,14 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+!electron-app/build/
+electron-app/build/*
+!electron-app/build/splash-logo.png
+!electron-app/build/*.icns
+!electron-app/build/*.ico
+!electron-app/build/*.plist
+!electron-app/build/icon.iconset/
+!electron-app/build/lf-icons/
 develop-eggs/
 dist/
 downloads/
