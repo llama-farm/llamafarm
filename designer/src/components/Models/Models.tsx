@@ -2790,8 +2790,9 @@ const Models = () => {
     const runtimeModels = runtime.models || []
 
     // Update the specific model's extra_body
+    // Match by name OR model since id is derived from (model.name || model.model)
     const updatedModels = runtimeModels.map((m: any) => {
-      if (m.name === modelId) {
+      if (m.name === modelId || m.model === modelId) {
         return { ...m, extra_body: settings }
       }
       return m
