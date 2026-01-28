@@ -14,7 +14,7 @@ on:
 jobs:
   build-llama-cpp:
     name: Build llama.cpp
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout LlamaFarm (for version file)
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y build-essential cmake
 
       - name: Configure CMake
         run: |
@@ -55,9 +55,7 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF \
-            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DLLAMA_CURL=OFF \
             -DGGML_NATIVE=OFF \
             -DGGML_CPU_ARM_ARCH=armv8-a
 
