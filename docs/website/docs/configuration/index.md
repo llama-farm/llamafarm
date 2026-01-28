@@ -13,6 +13,7 @@ Every LlamaFarm project is defined by a single file: `llamafarm.yaml`. The serve
 version: v1
 name: my-project
 namespace: default
+schema: schemas/example.py::Person
 runtime: { ... }
 prompts: [...]
 rag: { ... }
@@ -22,11 +23,12 @@ voice: { ... }
 
 ### Metadata
 
-| Field       | Type   | Required  | Notes                                              |
-| ----------- | ------ | --------- | -------------------------------------------------- |
-| `version`   | string | ✅ (`v1`) | Schema version.                                    |
-| `name`      | string | ✅        | Project identifier.                                |
-| `namespace` | string | ✅        | Grouping for isolation (matches server namespace). |
+| Field       | Type   | Required  | Notes                                                       |
+| ----------- | ------ | --------- | ----------------------------------------------------------- |
+| `version`   | string | ✅ (`v1`) | Schema version.                                             |
+| `name`      | string | ✅        | Project identifier.                                         |
+| `namespace` | string | ✅        | Grouping for isolation (matches server namespace).          |
+| `schema`    | string | Optional  | Pydantic schema for structured outputs (`schemas/...::Class`) |
 
 ### Runtime
 
@@ -101,6 +103,34 @@ runtime:
 | `encoder_config`       | object                                | Optional                                                                   | Configuration for BERT-style encoder models (Universal runtime only)                                                   |
 | `tool_call_strategy`   | enum                                  | `native_api`                                                               | `native_api` or `prompt_based` for tool calling strategy                                                               |
 | `mcp_servers`          | array                                 | Optional                                                                   | List of MCP server names to use (omit for all, empty for none)                                                         |
+
+### Structured Outputs
+
+Structured outputs require two settings:
+
+1. **Top-level schema**: Point to a Pydantic model inside your project’s `schemas/` directory.
+2. **Instructor mode**: Set `instructor_mode` on the target model (for example, `tools` or `json`).
+
+Example:
+
+```yaml
+schema: schemas/example.py::Person
+
+runtime:
+  models:
+    - name: vllm-model
+      provider: openai
+      model: qwen2.5:7b
+      base_url: http://localhost:8000/v1
+      api_key: ${VLLM_API_KEY}
+      instructor_mode: tools
+      default: true
+```
+
+Notes:
+
+- Schema paths must be relative, use a `.py` file, and live under `schemas/`.
+- Streaming is not supported when `schema` is configured. Use non-streaming requests (for example, `lf chat --structured`).
 
 **extra_body fields (Universal runtime):**
 
