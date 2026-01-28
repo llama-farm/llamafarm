@@ -322,7 +322,7 @@ The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000)
+# Via LlamaFarm API (port 14345)
 curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
@@ -332,7 +332,7 @@ curl -X POST http://localhost:11540/v1/classifier/fit ...
 
 :::warning Server vs Universal Runtime
 - **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
-- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 8000) and proxies to Universal Runtime.
+- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 14345) and proxies to Universal Runtime.
 :::
 
 ### Step 1: Train Your Classifier

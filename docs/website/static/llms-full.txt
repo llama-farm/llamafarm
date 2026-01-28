@@ -2311,7 +2311,7 @@ LF_ORCHESTRATION_MODE=docker lf services stop
 
 1. Check if the port is already in use:
    ```bash
-   lsof -i :8000  # For server
+   lsof -i :14345  # For server
    lsof -i :11540 # For universal-runtime
    ```
 
@@ -12369,7 +12369,7 @@ pm2 save
 
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
-- **Firewall**: Restrict access to ports 8000 (API) and 11540 (Universal Runtime) as needed.
+- **Firewall**: Restrict access to ports 14345 (API) and 11540 (Universal Runtime) as needed.
 - **TLS termination**: Use a reverse proxy (nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
@@ -12377,7 +12377,7 @@ pm2 save
 
 ```nginx
 upstream llamafarm {
-    server 127.0.0.1:8000;
+    server 127.0.0.1:14345;
 }
 
 server {

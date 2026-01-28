@@ -5,7 +5,7 @@
 # `variables` field in chat completion requests.
 #
 # Prerequisites:
-#   - LlamaFarm server running on port 8000
+#   - LlamaFarm server running on port 14345
 #   - A project configured (uses default/project_seed as example)
 #
 # Usage:
@@ -19,7 +19,7 @@ ENV_FILE="$SCRIPT_DIR/../../.env"
 if [ -f "$ENV_FILE" ]; then
   PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
 fi
-PORT="${PORT:-8000}"
+PORT="${PORT:-14345}"
 
 API_BASE="${API_BASE:-http://localhost:$PORT}"
 NAMESPACE="${NAMESPACE:-test}"

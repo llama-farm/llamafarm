@@ -46,7 +46,7 @@ lf start
 # Option 2: Manual server start
 cd ../server
 uv sync
-uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 14345
 ```
 
 Verify the server is running:

@@ -5,12 +5,12 @@
 # to the /v1/vision/ocr endpoint.
 #
 # Usage: ./test_ocr_api.sh [PORT] [IMAGE_FILE]
-#   PORT defaults to 8000 (LlamaFarm API)
+#   PORT defaults to 14345 (LlamaFarm API)
 #   IMAGE_FILE defaults to the sample image in this directory
 
 set -e
 
-PORT=${1:-8000}
+PORT=${1:-14345}
 IMAGE_FILE=${2:-"$(dirname "$0")/receipt.png"}
 BASE_URL="http://localhost:${PORT}/v1/vision"
 
