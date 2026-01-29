@@ -11,6 +11,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-llama-cpp:
     name: Build llama.cpp
@@ -123,9 +126,14 @@ jobs:
           path: llama.cpp
 
       - name: Install CUDA toolkit
+        env:
+          CUDA_KEYRING_URL: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
+          CUDA_KEYRING_SHA256: 6ea7d2737648936820e85677177957a0f6521b840d98eb0bbae0a4f003fa7249
         run: |
-          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
-          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          wget -q "$CUDA_KEYRING_URL" -O cuda-keyring.deb
+          echo "$CUDA_KEYRING_SHA256 cuda-keyring.deb" | sha256sum -c -
+          sudo dpkg -i cuda-keyring.deb
+          rm cuda-keyring.deb
           sudo apt-get update
           sudo apt-get install -y build-essential cmake cuda-toolkit-12-6
 
