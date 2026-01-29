@@ -4,16 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       llama_version:
-        description: 'llama.cpp version (e.g., b7693). Leave empty to use llama-cpp-version.txt'
+        description: "llama.cpp version (e.g., b7693). Leave empty to use llama-cpp-version.txt"
         required: false
         type: string
   push:
     tags:
-      - 'v*'
-  # TODO: Remove before merging - testing workflow changes
-  pull_request:
-    paths:
-      - '.github/workflows/build-llama.yml'
+      - "v*"
 
 jobs:
   build-llama-cpp:
