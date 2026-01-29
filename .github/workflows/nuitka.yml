@@ -155,14 +155,10 @@ jobs:
           # Use ccache symlinks in PATH instead of CC/CXX variables
           echo "$(brew --prefix ccache)/libexec" >> $GITHUB_PATH
 
-      # ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
-      # Large binaries exceed this, causing "relocation truncated to fit" errors.
-      # --long-plt uses indirect calls via PLT to avoid the range limit.
-      # -fuse-ld=bfd forces GNU ld which supports --long-plt (the default ld on
-      # ubuntu-24.04-arm may be mold/lld which don't recognize this flag).
-      - name: Set ARM64 linker flags (Linux)
-        if: runner.os == 'Linux' && contains(matrix.os, 'arm64')
-        run: echo "LDFLAGS=-fuse-ld=bfd -Wl,--long-plt" >> $GITHUB_ENV
+      # Note: ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
+      # We avoid relocation overflow by excluding heavy modules (onnxruntime,
+      # sympy) in build.py rather than using linker flags like --long-plt,
+      # which aren't supported by the linker on ubuntu-24.04-arm runners.
 
       - name: Install build dependencies
         run: |

@@ -127,6 +127,10 @@ def get_common_nuitka_args() -> list[str]:
         "--standalone",
         "--onefile",
         "--assume-yes-for-downloads",
+        # Parallel C compilation using all available cores
+        f"--jobs={os.cpu_count() or 4}",
+        # Skip link-time optimization for faster linking
+        "--lto=no",
         # Python optimizations
         "--python-flag=no_site",
         "--python-flag=no_warnings",
@@ -151,9 +155,6 @@ def get_common_nuitka_args() -> list[str]:
         "--nofollow-import-to=sympy",
         # Enable useful plugins
         "--enable-plugin=anti-bloat",
-        # Show progress
-        "--show-progress",
-        "--show-memory",
     ]
 
 
