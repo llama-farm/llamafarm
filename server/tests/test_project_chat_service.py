@@ -465,7 +465,7 @@ class TestProjectChatService:
             mock_agent.remove_context_provider = MagicMock()
             mock_agent.model_name = "test-model"
 
-            # Mock context_providers with RAG chunks
+            # Mock get_context_provider with RAG chunks
             mock_chunk1 = MagicMock()
             mock_chunk1.content = "Context chunk 1"
             mock_chunk1.metadata = {"source": "doc1.txt", "similarity_score": 0.9}
@@ -476,7 +476,7 @@ class TestProjectChatService:
 
             mock_rag_context = MagicMock()
             mock_rag_context.chunks = [mock_chunk1, mock_chunk2]
-            mock_agent.context_providers = {"rag_context": mock_rag_context}
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
 
             # Mock run_async_stream as an async generator
             async def mock_stream(*args, **kwargs):
@@ -529,13 +529,13 @@ class TestProjectChatService:
             mock_agent.remove_context_provider = MagicMock()
             mock_agent.model_name = "test-model"
 
-            # Mock context_providers with RAG chunks
+            # Mock get_context_provider with RAG chunks
             mock_chunk = MagicMock()
             mock_chunk.content = "Context chunk"
             mock_chunk.metadata = {"source": "doc.txt", "similarity_score": 0.9}
             mock_rag_context = MagicMock()
             mock_rag_context.chunks = [mock_chunk]
-            mock_agent.context_providers = {"rag_context": mock_rag_context}
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
 
             async def mock_stream(*args, **kwargs):
                 yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Answer"))])
@@ -587,7 +587,7 @@ class TestProjectChatService:
 
             mock_rag_context = MagicMock()
             mock_rag_context.chunks = mock_chunks
-            mock_agent.context_providers = {"rag_context": mock_rag_context}
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
 
             async def mock_stream(*args, **kwargs):
                 yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Answer"))])

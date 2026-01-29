@@ -134,7 +134,6 @@ def create_streaming_response_from_iterator(
                         yield f"data: {json.dumps(chunk)}\n\n".encode()
                     except (TypeError, ValueError) as e:
                         logger.warning(f"Failed to serialize custom event: {e}")
-                        # Skip malformed events rather than breaking the stream
                         continue
                     await asyncio.sleep(0)
                     continue

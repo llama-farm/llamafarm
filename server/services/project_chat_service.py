@@ -418,7 +418,10 @@ class ProjectChatService:
 
             # Yield sources event before LLM stream (if requested)
             if include_sources and rag_enabled:
-                context_provider = chat_agent.context_providers.get("rag_context")
+                # Use get_context_provider method to access RAG context
+                context_provider = None
+                if hasattr(chat_agent, "get_context_provider"):
+                    context_provider = chat_agent.get_context_provider("rag_context")
                 if context_provider and hasattr(context_provider, "chunks"):
                     chunks = context_provider.chunks
                     if chunks:
@@ -430,12 +433,11 @@ class ProjectChatService:
                                 "source": chunk.metadata.get("source", "unknown"),
                                 "score": chunk.metadata.get(
                                     "similarity_score", 0.0
-                                ),  # Use similarity_score
+                                ),
                                 "metadata": {
                                     k: v
                                     for k, v in chunk.metadata.items()
-                                    if k
-                                    not in ("_score", "embeddings")  # Exclude raw data
+                                    if k not in ("_score", "embeddings")
                                 },
                             }
                             for chunk in limited_chunks
