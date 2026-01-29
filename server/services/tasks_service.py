@@ -30,6 +30,12 @@ class CycleDetectedError(Exception):
     pass
 
 
+class InvalidStatusTransitionError(Exception):
+    """Raised when a status transition is not allowed."""
+
+    pass
+
+
 class Task(BaseModel):
     """Task model for tracking work items within a session."""
 
@@ -335,6 +341,7 @@ class TasksService:
         Raises:
             TaskNotFoundError: If the task or any referenced task doesn't exist
             CycleDetectedError: If adding dependencies would create a cycle
+            InvalidStatusTransitionError: If trying to reopen a completed task
         """
         tasks_dir = Path(project_dir) / "tasks" / session_id
 
@@ -346,6 +353,12 @@ class TasksService:
         with lock:
             # Read the task
             task = cls._read_task(tasks_dir, task_id)
+
+            # Reject reopening completed tasks
+            if status is not None and task.status == "completed" and status != "completed":
+                raise InvalidStatusTransitionError(
+                    f"Cannot reopen completed task '{task_id}'. Create a new task instead."
+                )
 
             # Update basic fields
             if status is not None:

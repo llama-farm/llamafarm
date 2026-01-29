@@ -357,8 +357,8 @@ class TestBuiltinToolsRegistry:
         assert tasks_def.name == "tasks"
         assert "operation" in tasks_def.parameters["properties"]
 
-    def test_get_enabled_builtin_tools_all_enabled_by_default(self):
-        """Test all builtin tools are enabled by default."""
+    def test_get_enabled_builtin_tools_none_by_default(self):
+        """Test no builtin tools are enabled by default."""
         model_config = Model(
             name="test",
             provider="universal",
@@ -367,51 +367,51 @@ class TestBuiltinToolsRegistry:
 
         enabled = get_enabled_builtin_tools(model_config)
 
-        # All tools should be enabled
-        assert len(enabled) == len(BUILTIN_TOOLS)
+        # No tools should be enabled by default
+        assert len(enabled) == 0
 
-    def test_get_enabled_builtin_tools_with_exclude(self):
-        """Test excluding specific tools via config."""
+    def test_get_enabled_builtin_tools_with_include(self):
+        """Test including specific tools via config."""
         model_config = Model(
             name="test",
             provider="universal",
             model="test-model",
-            builtin_tools=BuiltinTools(exclude=["tasks"]),
+            builtin_tools=BuiltinTools(include=["tasks"]),
         )
 
         enabled = get_enabled_builtin_tools(model_config)
 
-        # Tasks should be excluded
+        # Tasks should be included
         tool_names = [t.name for t in enabled]
-        assert "tasks" not in tool_names
+        assert "tasks" in tool_names
+        assert len(enabled) == 1
 
-    def test_get_enabled_builtin_tools_master_switch_disabled(self):
-        """Test master switch disables all builtin tools."""
+    def test_get_enabled_builtin_tools_empty_include(self):
+        """Test empty include list disables all builtin tools."""
         model_config = Model(
             name="test",
             provider="universal",
             model="test-model",
-            builtin_tools=BuiltinTools(enabled=False),
+            builtin_tools=BuiltinTools(include=[]),
         )
 
         enabled = get_enabled_builtin_tools(model_config)
 
         assert len(enabled) == 0
 
-    def test_get_enabled_builtin_tools_master_switch_enabled_with_exclude(self):
-        """Test master switch enabled with exclude list."""
+    def test_get_enabled_builtin_tools_unknown_tool_ignored(self):
+        """Test unknown tool names in include list are ignored."""
         model_config = Model(
             name="test",
             provider="universal",
             model="test-model",
-            builtin_tools=BuiltinTools(enabled=True, exclude=["tasks"]),
+            builtin_tools=BuiltinTools(include=["unknown_tool"]),
         )
 
         enabled = get_enabled_builtin_tools(model_config)
 
-        # Should have other tools but not tasks
-        tool_names = [t.name for t in enabled]
-        assert "tasks" not in tool_names
+        # Unknown tool is ignored, so no tools returned
+        assert len(enabled) == 0
 
 
 class TestTasksToolIntegration:

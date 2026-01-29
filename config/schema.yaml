@@ -269,19 +269,14 @@ properties:
             builtin_tools:
               type: object
               description: |
-                Configuration for built-in tools. All builtin tools are enabled by default.
-                Use 'exclude' to disable specific tools by name.
+                Configuration for built-in tools. All builtin tools are disabled by default.
+                Use 'include' to enable specific tools by name.
               properties:
-                enabled:
-                  type: boolean
-                  description: Master switch for builtin tools. Set false to disable all.
-                  default: true
-                exclude:
+                include:
                   type: array
-                  description: List of builtin tool names to exclude (e.g., ["tasks"])
+                  description: List of builtin tool names to enable (e.g., ["tasks"]). All builtin tools are disabled by default.
                   items:
                     type: string
-                  default: []
 
   mcp:
     type: object

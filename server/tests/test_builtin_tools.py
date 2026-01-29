@@ -65,101 +65,78 @@ class TestGetEnabledBuiltinTools:
         )
 
     @pytest.fixture
-    def model_config_enabled_no_exclude(self):
-        """Create model config with builtin_tools enabled and empty exclude."""
+    def model_config_include_all(self):
+        """Create model config with all builtin tools included."""
         return Model(
             name="test-model",
             provider=Provider.ollama,
             model="llama3.2:latest",
-            builtin_tools=BuiltinTools(enabled=True, exclude=[]),
+            builtin_tools=BuiltinTools(include=["tasks"]),
         )
 
     @pytest.fixture
-    def model_config_disabled(self):
-        """Create model config with builtin_tools disabled."""
+    def model_config_include_none(self):
+        """Create model config with empty include list."""
         return Model(
             name="test-model",
             provider=Provider.ollama,
             model="llama3.2:latest",
-            builtin_tools=BuiltinTools(enabled=False),
+            builtin_tools=BuiltinTools(include=[]),
         )
 
-    @pytest.fixture
-    def model_config_exclude_tasks(self):
-        """Create model config with tasks tool excluded."""
-        return Model(
-            name="test-model",
-            provider=Provider.ollama,
-            model="llama3.2:latest",
-            builtin_tools=BuiltinTools(enabled=True, exclude=["tasks"]),
-        )
-
-    def test_all_tools_returned_when_no_builtin_tools_config(self, base_model_config):
-        """Test that all tools are returned when no builtin_tools config is specified."""
+    def test_no_tools_returned_when_no_builtin_tools_config(self, base_model_config):
+        """Test that no tools are returned when no builtin_tools config is specified."""
         tools = get_enabled_builtin_tools(base_model_config)
 
-        # All builtin tools should be returned
-        assert len(tools) == len(BUILTIN_TOOLS)
+        # No builtin tools should be returned (default is disabled)
+        assert len(tools) == 0
+
+    def test_tools_returned_when_included(self, model_config_include_all):
+        """Test that tools are returned when explicitly included."""
+        tools = get_enabled_builtin_tools(model_config_include_all)
+
+        # Only included tools should be returned
         tool_names = {t.name for t in tools}
         assert "tasks" in tool_names
 
-    def test_all_tools_returned_when_enabled_and_no_exclude(
-        self, model_config_enabled_no_exclude
-    ):
-        """Test that all tools are returned when enabled=True and exclude=[]."""
-        tools = get_enabled_builtin_tools(model_config_enabled_no_exclude)
-
-        # All builtin tools should be returned
-        assert len(tools) == len(BUILTIN_TOOLS)
-        tool_names = {t.name for t in tools}
-        assert "tasks" in tool_names
-
-    def test_no_tools_returned_when_disabled(self, model_config_disabled):
-        """Test that no tools are returned when builtin_tools.enabled=False."""
-        tools = get_enabled_builtin_tools(model_config_disabled)
+    def test_no_tools_returned_when_empty_include(self, model_config_include_none):
+        """Test that no tools are returned when include list is empty."""
+        tools = get_enabled_builtin_tools(model_config_include_none)
 
         # No tools should be returned
         assert len(tools) == 0
 
-    def test_specific_tools_excluded(self, model_config_exclude_tasks):
-        """Test that tools in the exclude list are not returned."""
-        tools = get_enabled_builtin_tools(model_config_exclude_tasks)
-
-        tool_names = {t.name for t in tools}
-        assert "tasks" not in tool_names
-
-    def test_tools_not_in_exclude_are_returned(self):
-        """Test that tools not in exclude list are still returned."""
+    def test_specific_tools_included(self):
+        """Test that only tools in the include list are returned."""
         model_config = Model(
             name="test-model",
             provider=Provider.ollama,
             model="llama3.2:latest",
-            builtin_tools=BuiltinTools(enabled=True, exclude=["some_other_tool"]),
+            builtin_tools=BuiltinTools(include=["tasks"]),
         )
 
         tools = get_enabled_builtin_tools(model_config)
 
-        # Tasks tool should still be included
         tool_names = {t.name for t in tools}
         assert "tasks" in tool_names
+        assert len(tools) == 1
 
-    def test_unknown_tool_names_in_exclude_ignored(self):
-        """Test that unknown tool names in exclude list are silently ignored."""
+    def test_unknown_tool_names_in_include_ignored(self):
+        """Test that unknown tool names in include list are silently ignored."""
         model_config = Model(
             name="test-model",
             provider=Provider.ollama,
             model="llama3.2:latest",
             builtin_tools=BuiltinTools(
-                enabled=True,
-                exclude=["nonexistent_tool", "another_fake_tool"],
+                include=["nonexistent_tool", "another_fake_tool"],
             ),
         )
 
         # Should not raise an error
         tools = get_enabled_builtin_tools(model_config)
 
-        # All actual builtin tools should be returned since excluded ones don't exist
-        assert len(tools) == len(BUILTIN_TOOLS)
+        # No tools should be returned since included ones don't exist
+        assert len(tools) == 0
 
     def test_registry_contains_tasks_tool(self):
         """Test that the BUILTIN_TOOLS registry contains the tasks tool."""
@@ -830,10 +807,9 @@ class TestBuiltinToolsSchemaIntegration:
             name="test",
             provider="openai",
             model="gpt-4",
-            builtin_tools=BuiltinTools(enabled=True, exclude=["tasks"]),
+            builtin_tools=BuiltinTools(include=["tasks"]),
         )
-        assert model.builtin_tools.enabled is True
-        assert model.builtin_tools.exclude == ["tasks"]
+        assert model.builtin_tools.include == ["tasks"]
 
     def test_model_config_builtin_tools_defaults(self):
         """Test builtin_tools has correct defaults when not specified."""
@@ -843,19 +819,12 @@ class TestBuiltinToolsSchemaIntegration:
         # builtin_tools should be None (not specified)
         assert model.builtin_tools is None
 
-    def test_builtin_tools_enabled_defaults_to_true(self):
-        """Test BuiltinTools.enabled defaults to True."""
+    def test_builtin_tools_include_defaults_to_none(self):
+        """Test BuiltinTools.include defaults to None."""
         from config.datamodel import BuiltinTools
 
         bt = BuiltinTools()
-        assert bt.enabled is True
-
-    def test_builtin_tools_exclude_defaults_to_empty(self):
-        """Test BuiltinTools.exclude defaults to empty list."""
-        from config.datamodel import BuiltinTools
-
-        bt = BuiltinTools()
-        assert bt.exclude == []
+        assert bt.include is None
 
     def test_config_yaml_with_builtin_tools_parses(self, tmp_path):
         """Test loading a YAML config with builtin_tools."""
@@ -871,8 +840,7 @@ runtime:
       provider: openai
       model: gpt-4
       builtin_tools:
-        enabled: true
-        exclude:
+        include:
           - tasks
 """
         config_file = tmp_path / "llamafarm.yaml"
@@ -881,5 +849,4 @@ runtime:
         config = load_config(str(config_file))
         model = config.runtime.models[0]
         assert model.builtin_tools is not None
-        assert model.builtin_tools.enabled is True
-        assert "tasks" in model.builtin_tools.exclude
+        assert "tasks" in model.builtin_tools.include

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 try:
     from services.tasks_service import (
         CycleDetectedError,
+        InvalidStatusTransitionError,
         Task,
         TaskNotFoundError,
         TasksService,
@@ -50,6 +51,10 @@ except ImportError:
 
     class CycleDetectedError(Exception):
         """Raised when adding a dependency would create a cycle."""
+        pass
+
+    class InvalidStatusTransitionError(Exception):
+        """Raised when a status transition is not allowed."""
         pass
 
     class TasksService:
@@ -561,6 +566,76 @@ class TestTaskUpdate:
                 task_id="999",
                 subject="Updated",
             )
+
+    def test_cannot_reopen_completed_task_to_pending(self, temp_project_dir, session_id):
+        """Completed tasks cannot be set back to pending."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to complete",
+            description="Will be completed then reopened",
+        )
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            status="completed",
+        )
+
+        with pytest.raises(InvalidStatusTransitionError, match="Cannot reopen completed task"):
+            TasksService.update_task(
+                project_dir=temp_project_dir,
+                session_id=session_id,
+                task_id=task.id,
+                status="pending",
+            )
+
+    def test_cannot_reopen_completed_task_to_in_progress(self, temp_project_dir, session_id):
+        """Completed tasks cannot be set back to in_progress."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to complete",
+            description="Will be completed then reopened",
+        )
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            status="completed",
+        )
+
+        with pytest.raises(InvalidStatusTransitionError, match="Cannot reopen completed task"):
+            TasksService.update_task(
+                project_dir=temp_project_dir,
+                session_id=session_id,
+                task_id=task.id,
+                status="in_progress",
+            )
+
+    def test_can_set_completed_task_to_completed(self, temp_project_dir, session_id):
+        """Setting a completed task to completed again should be allowed (no-op)."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to complete",
+            description="Will be set completed twice",
+        )
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            status="completed",
+        )
+
+        # Should not raise - setting completed to completed is allowed
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            status="completed",
+        )
+        assert updated_task.status == "completed"
 
 
 class TestTaskDeletion:

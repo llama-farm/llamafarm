@@ -47,7 +47,10 @@ BUILTIN_TOOLS: dict[str, ToolDefinition] = {
                 "status": {
                     "type": "string",
                     "enum": ["pending", "in_progress", "completed", "deleted"],
-                    "description": "Task status (for update). Use 'deleted' to remove.",
+                    "description": (
+                        "Task status (for update). Use 'deleted' to remove. "
+                        "Note: Completed tasks cannot be reopened; create a new task instead."
+                    ),
                 },
                 "blockedBy": {
                     "type": "array",
@@ -72,7 +75,7 @@ BUILTIN_TOOLS: dict[str, ToolDefinition] = {
 
 
 def get_enabled_builtin_tools(model_config: Model) -> list[ToolDefinition]:
-    """Return builtin tools based on model config exclude list.
+    """Return builtin tools based on model config include list.
 
     Args:
         model_config: The model configuration containing builtin_tools settings
@@ -82,16 +85,15 @@ def get_enabled_builtin_tools(model_config: Model) -> list[ToolDefinition]:
     """
     builtin_config = model_config.builtin_tools
 
-    # If not specified, all enabled
+    # Default: no tools enabled
     if builtin_config is None:
-        return list(BUILTIN_TOOLS.values())
-
-    # Master switch
-    if not builtin_config.enabled:
         return []
 
-    # Filter by exclude list
-    exclude_set = set(builtin_config.exclude or [])
+    # Only include explicitly listed tools
+    include_list = builtin_config.include or []
+    if not include_list:
+        return []
+
     return [
-        tool for name, tool in BUILTIN_TOOLS.items() if name not in exclude_set
+        tool for name, tool in BUILTIN_TOOLS.items() if name in include_list
     ]
