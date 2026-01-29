@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from config import load_config
-from config.datamodel import DataProcessingStrategy, Parsers
+from config.datamodel import DataProcessingStrategyDefinition, Parser
 from config.helpers.strategy_resolver import StrategyResolver
 
 
@@ -15,11 +15,11 @@ def _load_base_config():
 
 
 def _build_strategy(name: str, parser_type: str, config: dict | None = None):
-    return DataProcessingStrategy(
+    return DataProcessingStrategyDefinition(
         name=name,
         description="Strategy used for resolver tests.",
         parsers=[
-            Parsers(
+            Parser(
                 type=parser_type,
                 config=config or {},
                 file_extensions=None,
