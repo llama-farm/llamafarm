@@ -14,16 +14,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from config.datamodel import (
     Database,
+    DatabaseRetrievalStrategy,
+    DatabaseRetrievalType,
+    DatabaseType,
     LlamaFarmConfig,
     Model,
     PromptMessage,
     PromptSet,
     Provider,
     RAGStrategyConfigurationSchema,
-    RetrievalStrategy,
     Runtime,
-    Type,
-    Type2,
     Version,
 )
 
@@ -89,11 +89,11 @@ def config_with_rag():
             databases=[
                 Database(
                     name="main_db",
-                    type=Type.ChromaStore,
+                    type=DatabaseType.ChromaStore,
                     retrieval_strategies=[
-                        RetrievalStrategy(
+                        DatabaseRetrievalStrategy(
                             name="default_strategy",
-                            type=Type2.VectorRetriever,
+                            type=DatabaseRetrievalType.VectorRetriever,
                             default=True,
                             config={"top_k": 5, "score_threshold": 0.7},
                         )
@@ -205,19 +205,23 @@ class TestProjectChatService:
                 databases=[
                     Database(
                         name="db1",
-                        type=Type.ChromaStore,
+                        type=DatabaseType.ChromaStore,
                         retrieval_strategies=[
-                            RetrievalStrategy(
-                                name="strat1", type=Type2.VectorRetriever, config={}
+                            DatabaseRetrievalStrategy(
+                                name="strat1",
+                                type=DatabaseRetrievalType.VectorRetriever,
+                                config={},
                             )
                         ],
                     ),
                     Database(
                         name="db2",
-                        type=Type.ChromaStore,
+                        type=DatabaseType.ChromaStore,
                         retrieval_strategies=[
-                            RetrievalStrategy(
-                                name="strat2", type=Type2.VectorRetriever, config={}
+                            DatabaseRetrievalStrategy(
+                                name="strat2",
+                                type=DatabaseRetrievalType.VectorRetriever,
+                                config={},
                             )
                         ],
                     ),
@@ -253,7 +257,9 @@ class TestProjectChatService:
             prompts=[],
             rag=RAGStrategyConfigurationSchema(
                 databases=[
-                    Database(name="db1", type=Type.ChromaStore, retrieval_strategies=[])
+                    Database(
+                        name="db1", type=DatabaseType.ChromaStore, retrieval_strategies=[]
+                    )
                 ]
             ),
         )

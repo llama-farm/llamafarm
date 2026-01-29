@@ -11,7 +11,7 @@ ls -la schema.json 2>/dev/null || echo "DEBUG: schema.json NOT FOUND"
 
 # Generate Go types using go-jsonschema
 if ! command -v go-jsonschema >/dev/null 2>&1; then
-    echo "Error: go-jsonschema not found. Install with: go install github.com/atombender/go-jsonschema@v0.20.0" >&2
+    echo "Error: go-jsonschema not found. Install with: go install github.com/atombender/go-jsonschema@v0.21.0" >&2
     echo "DEBUG: Checking $HOME/go/bin..."
     ls -la "$HOME/go/bin" 2>/dev/null || echo "DEBUG: $HOME/go/bin not found"
     exit 1
@@ -22,6 +22,15 @@ go-jsonschema -p config --struct-name-from-title -o types.go schema.json
 echo "DEBUG: types.go generated, checking..."
 ls -la types.go
 grep -c "LlamaFarmConfigPromptsElem" types.go || echo "DEBUG: LlamaFarmConfigPromptsElem NOT FOUND in types.go"
+
+# Verify --struct-name-from-title worked (PromptSet should exist, not LlamaFarmConfigPromptsElem)
+if ! grep -q 'type PromptSet struct' types.go; then
+    echo "Error: --struct-name-from-title flag did not work correctly." >&2
+    echo "Expected 'type PromptSet struct' but it was not found in types.go" >&2
+    echo "This usually means go-jsonschema version doesn't support this flag." >&2
+    echo "Ensure go-jsonschema v0.21.0+ is installed." >&2
+    exit 1
+fi
 
 # Fix go-jsonschema bug: when additionalProperties:true is combined with
 # minimum constraints, it generates code that uses 'raw' variable without

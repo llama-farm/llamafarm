@@ -25,7 +25,7 @@ lf services <subcommand> [service-name] [flags]
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 8000 |
+| `server` | Main FastAPI server | 14345 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server for HuggingFace models | 11540 |
 
@@ -196,7 +196,7 @@ LF_ORCHESTRATION_MODE=docker lf services stop
 
 1. Check if the port is already in use:
    ```bash
-   lsof -i :8000  # For server
+   lsof -i :14345  # For server
    lsof -i :11540 # For universal-runtime
    ```
 

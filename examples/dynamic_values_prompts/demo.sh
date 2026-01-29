@@ -5,7 +5,7 @@
 # prompts at runtime without changing the config.
 #
 # Prerequisites:
-#   - LlamaFarm server running on port 8000
+#   - LlamaFarm server running on port 14345
 #   - Universal runtime running with llama3.2:3b model available
 #   - This example project registered (or use default/project_seed)
 #
@@ -20,7 +20,7 @@ ENV_FILE="$SCRIPT_DIR/../../.env"
 if [ -f "$ENV_FILE" ]; then
   PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
 fi
-PORT="${PORT:-8000}"
+PORT="${PORT:-14345}"
 
 API_BASE="${API_BASE:-http://localhost:$PORT}"
 NAMESPACE="${NAMESPACE:-test}"

@@ -365,7 +365,7 @@ eventSource.onmessage = (event) => {
 **Solutions:**
 - Verify LlamaFarm is running: `lf start`
 - Check API endpoint in `.env.local`
-- Ensure correct port (default: 8000)
+- Ensure correct port (default: 14345)
 - Check firewall settings
 - Review LlamaFarm logs for errors
 

@@ -1,0 +1,69 @@
+version: v1
+name: universal_rag_demo
+namespace: examples
+
+# =============================================================================
+# Universal RAG Example
+# =============================================================================
+# This example demonstrates the zero-config RAG capability. By NOT defining
+# any `data_processing_strategies`, LlamaFarm automatically uses the built-in
+# `universal_rag` strategy which:
+#   - Parses 90%+ of document formats (PDF, DOCX, MD, TXT, HTML, CSV, etc.)
+#   - Chunks intelligently using semantic chunking
+#   - Extracts rich metadata (keywords, entities, language, etc.)
+#   - Handles OCR for image-based documents
+#
+# This means you can ingest documents with ZERO parser configuration!
+# =============================================================================
+
+runtime:
+  models:
+    - name: universal_model
+      description: "Model for universal RAG demo"
+      provider: universal
+      model: llama3.2:3b
+      default: true
+
+prompts:
+  - name: default
+    messages:
+      - role: system
+        content: |
+          You are a helpful assistant with access to a document knowledge base.
+          When answering questions, cite the source document names when possible.
+          Be concise and accurate in your responses.
+
+rag:
+  databases:
+    - name: universal_db
+      type: ChromaStore
+      config:
+        collection_name: universal_rag_docs
+        distance_function: cosine
+        persist_directory: ./data/universal_db
+      embedding_strategies:
+        - name: default_embeddings
+          type: UniversalEmbedder
+          config:
+            model: nomic-ai/nomic-embed-text-v2-moe
+            dimension: 768
+            batch_size: 8
+            timeout: 60
+            auto_pull: true
+          priority: 0
+      retrieval_strategies:
+        - name: default_search
+          type: BasicSimilarityStrategy
+          config:
+            distance_metric: cosine
+            top_k: 5
+          default: true
+      default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: default_search
+  # NOTE: No data_processing_strategies defined!
+  # This means universal_rag is used automatically.
+
+datasets:
+  - name: universal_docs
+    # No explicit data_processing_strategy - uses universal_rag by default
+    database: universal_db

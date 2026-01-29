@@ -120,7 +120,7 @@ function ProjectModalRoot() {
 
       <DeleteProjectModal
         isOpen={modal.isDeleteModalOpen}
-        projectName={modal.projectName}
+        projectName={modal.projectToDelete}
         onClose={modal.closeDeleteModal}
         onConfirm={modal.deleteProject}
         isLoading={modal.isLoading}

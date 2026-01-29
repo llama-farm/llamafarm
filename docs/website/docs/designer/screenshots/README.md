@@ -10,25 +10,25 @@ Please add the following screenshots to this directory:
 
    - Shows the Designer home page with project selection and creation
    - Should show the project cards and the "Create new project" button
-   - Capture: http://localhost:8000/
+   - Capture: http://localhost:14345/
 
 2. **dashboard.png** (referenced in `features.md`)
 
    - Shows the Dashboard view with project overview and key metrics
    - Should show project configuration summary, dataset stats, and quick actions
-   - Capture: http://localhost:8000/chat/dashboard
+   - Capture: http://localhost:14345/chat/dashboard
 
 3. **data-management.png** (referenced in `features.md`)
 
    - Shows the Data management interface
    - Should display processing strategies and datasets
    - Include both strategy cards and dataset cards if possible
-   - Capture: http://localhost:8000/chat/data
+   - Capture: http://localhost:14345/chat/data
 
 4. **rag-config.png** (referenced in `features.md`)
    - Shows the RAG configuration interface
    - Should display databases, embedding strategies, or retrieval methods
-   - Capture: http://localhost:8000/chat/databases
+   - Capture: http://localhost:14345/chat/databases
 
 ## Screenshot Guidelines
 
@@ -42,7 +42,7 @@ Please add the following screenshots to this directory:
 ## How to Add Screenshots
 
 1. Start the Designer: `lf start`
-2. Open http://localhost:8000 in your browser
+2. Open http://localhost:14345 in your browser
 3. Navigate to each section
 4. Take screenshots using your OS screenshot tool
 5. Name them according to the list above

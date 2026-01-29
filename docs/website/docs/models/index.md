@@ -124,7 +124,7 @@ runtime:
 - **Hardware acceleration**: Automatically detects and uses Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
 - **Multiple backends**: llamacpp (GGUF models), ONNX, or Transformers (PyTorch)
 - **OpenAI-compatible API**: Drop-in replacement for OpenAI-compatible endpoints
-- **Port 11534**: Default port (different from LlamaFarm's 8000 and Ollama's 11434)
+- **Port 11534**: Default port (different from LlamaFarm's 14345 and Ollama's 11434)
 
 ### Multi-Model with Lemonade
 

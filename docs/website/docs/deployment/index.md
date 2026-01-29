@@ -66,7 +66,7 @@ pm2 save
 
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
-- **Firewall**: Restrict access to ports 8000 (API) and 11540 (Universal Runtime) as needed.
+- **Firewall**: Restrict access to ports 14345 (API) and 11540 (Universal Runtime) as needed.
 - **TLS termination**: Use a reverse proxy (Traefik, nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
@@ -74,7 +74,7 @@ pm2 save
 
 ```nginx
 upstream llamafarm {
-    server 127.0.0.1:8000;
+    server 127.0.0.1:14345;
 }
 
 server {
@@ -114,10 +114,10 @@ LlamaFarm provides health endpoints for monitoring:
 
 ```bash
 # Full health check
-curl http://localhost:8000/health
+curl http://localhost:14345/health
 
 # Liveness probe (for orchestrators)
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ## Platform-Specific Guides

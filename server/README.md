@@ -17,7 +17,7 @@ The CLI (`lf start`) will launch the server and RAG worker for you, but you can 
 
 ```bash
 uv sync
-uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 14345
 ```
 
 To execute Celery ingestion jobs alongside it, start the worker from `rag/` (see that README) or run `lf datasets process …` which will auto-start the worker via Docker.
@@ -27,10 +27,10 @@ To execute Celery ingestion jobs alongside it, start the worker from `rag/` (see
 The server API is consumed by:
 
 - **CLI**: Command-line interface (`lf`) for automation and scripting
-- **Designer**: Web-based visual interface at `http://localhost:8000` (see [Designer docs](../docs/website/docs/designer/index.md))
+- **Designer**: Web-based visual interface at `http://localhost:14345` (see [Designer docs](../docs/website/docs/designer/index.md))
 - **Custom integrations**: Any OpenAI-compatible client
 
-Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
+Interactive API docs are available at [http://localhost:14345/docs](http://localhost:14345/docs).
 
 ### Voice Chat
 
@@ -39,12 +39,12 @@ The server provides a full-duplex WebSocket endpoint for real-time voice convers
 ```javascript
 // Connect to voice chat (uses voice config from llamafarm.yaml)
 const ws = new WebSocket(
-  'ws://localhost:8000/v1/default/my-project/voice/chat'
+  'ws://localhost:14345/v1/default/my-project/voice/chat'
 );
 
 // Or override settings via query params
 const ws2 = new WebSocket(
-  'ws://localhost:8000/v1/default/my-project/voice/chat?tts_voice=am_adam'
+  'ws://localhost:14345/v1/default/my-project/voice/chat?tts_voice=am_adam'
 );
 ```
 

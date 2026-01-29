@@ -238,7 +238,7 @@ uv run lemonade-server-dev pull user.ModelName --checkpoint ... --recipe llamacp
 ```
 
 ### Check Health
-Visit: http://localhost:8000/health
+Visit: http://localhost:14345/health
 
 Look for the "lemonade" component status.
 

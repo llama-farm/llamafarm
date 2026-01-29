@@ -1,0 +1,86 @@
+API Design Best Practices
+=========================
+
+This document outlines best practices for designing RESTful APIs.
+
+1. Use Consistent Naming Conventions
+------------------------------------
+- Use lowercase for URLs: /users, /products
+- Use hyphens for multi-word resources: /user-profiles
+- Use plural nouns for collections: /users not /user
+- Avoid verbs in URLs; use HTTP methods instead
+
+2. HTTP Methods
+---------------
+GET: Retrieve resources (safe, idempotent)
+POST: Create new resources
+PUT: Replace entire resource (idempotent)
+PATCH: Partial update to resource
+DELETE: Remove resource (idempotent)
+
+3. Status Codes
+---------------
+200 OK: Successful GET, PUT, PATCH, or DELETE
+201 Created: Successful POST creating a resource
+204 No Content: Successful DELETE with no body
+400 Bad Request: Client error in request format
+401 Unauthorized: Authentication required
+403 Forbidden: Authenticated but not authorized
+404 Not Found: Resource doesn't exist
+422 Unprocessable Entity: Validation errors
+500 Internal Server Error: Server-side failure
+
+4. Versioning
+-------------
+Options for API versioning:
+- URL path: /v1/users, /v2/users
+- Header: Accept: application/vnd.api+json;version=1
+- Query param: /users?version=1
+
+Recommendation: Use URL path versioning for clarity.
+
+5. Pagination
+-------------
+For large collections, always paginate:
+
+GET /users?page=2&limit=20
+
+Response should include:
+{
+  "data": [...],
+  "meta": {
+    "total": 150,
+    "page": 2,
+    "limit": 20,
+    "pages": 8
+  }
+}
+
+6. Error Handling
+-----------------
+Return consistent error structures:
+
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid email format",
+    "field": "email",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+
+7. Rate Limiting
+----------------
+Implement rate limits and communicate via headers:
+- X-RateLimit-Limit: 1000
+- X-RateLimit-Remaining: 999
+- X-RateLimit-Reset: 1640995200
+
+8. Authentication
+-----------------
+Use industry standards:
+- OAuth 2.0 for third-party access
+- JWT for stateless authentication
+- API keys for server-to-server communication
+
+Never pass credentials in URLs - use headers instead.

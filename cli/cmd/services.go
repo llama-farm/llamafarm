@@ -113,7 +113,7 @@ func runServicesStatus(cmd *cobra.Command, args []string) {
 	// Get server URL for health checks
 	serverURLToUse := serverURL
 	if serverURLToUse == "" {
-		serverURLToUse = "http://localhost:8000"
+		serverURLToUse = "http://localhost:14345"
 	}
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -174,7 +174,7 @@ func runServicesStart(cmd *cobra.Command, args []string) {
 	// Get server URL for operations
 	serverURLToUse := serverURL
 	if serverURLToUse == "" {
-		serverURLToUse = "http://localhost:8000"
+		serverURLToUse = "http://localhost:14345"
 	}
 
 	// Determine which services to start
@@ -214,7 +214,7 @@ func runServicesStop(cmd *cobra.Command, args []string) {
 	// Get server URL for operations
 	serverURLToUse := serverURL
 	if serverURLToUse == "" {
-		serverURLToUse = "http://localhost:8000"
+		serverURLToUse = "http://localhost:14345"
 	}
 
 	// Determine which services to stop

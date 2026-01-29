@@ -24,9 +24,9 @@
         "cwd": "{workspaceRoot}",
         "commands": [
           "cd config && uv run python compile_schema.py",
-          "go install github.com/atombender/go-jsonschema@v0.20.0",
+          "go install github.com/atombender/go-jsonschema@v0.21.0",
           "cd cli/cmd/config && sh generate-types.sh",
-          "echo 'Verifying types.go...' && ls -la cli/cmd/config/types.go && grep -c LlamaFarmConfigPromptsElem cli/cmd/config/types.go"
+          "echo 'Verifying types.go...' && ls -la cli/cmd/config/types.go && grep -q 'type PromptSet struct' cli/cmd/config/types.go && echo 'PromptSet type found - verification passed'"
         ],
         "parallel": false
       }

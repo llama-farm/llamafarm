@@ -159,7 +159,7 @@ Each worktree gets a unique port offset (100-999) computed from a hash of its na
 
 | Service | Port Formula | Example (offset=150) |
 |---------|--------------|----------------------|
-| Server | 8000 + offset | 8150 |
+| Server | 14345 + offset | 14495 |
 | Designer | 5000 + offset | 5150 |
 | Runtime | 11000 + offset | 11150 |
 

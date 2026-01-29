@@ -98,13 +98,13 @@ This will:
 - Start the Electron app in dev mode
 - Enable hot reload for main process changes
 - Open DevTools automatically (in non-packaged mode)
-- Load Designer from `http://localhost:8000`
+- Load Designer from `http://localhost:14345`
 
 **Important**: In development mode, make sure you have:
 1. The LlamaFarm backend running (`lf services start` from anywhere, or `nx start designer` from root)
-2. The Designer accessible at `http://localhost:8000`
+2. The Designer accessible at `http://localhost:14345`
 
-**Note**: The app loads Designer from `http://localhost:8000` (NOT 127.0.0.1), as the Designer's API configuration depends on the hostname being `localhost`.
+**Note**: The app loads Designer from `http://localhost:14345` (NOT 127.0.0.1), as the Designer's API configuration depends on the hostname being `localhost`.
 
 #### Building for Production
 
@@ -143,7 +143,7 @@ electron-app/
 │   ├── preload/                  # Preload scripts (IPC bridge)
 │   │   └── index.ts              # Secure context bridge
 │   └── renderer/                 # Renderer process (no custom UI)
-│       └── (Designer loads from localhost:8000)
+│       └── (Designer loads from localhost:14345)
 ├── build/                        # Build resources
 │   ├── icon.png                  # macOS app icon (1024x1024)
 │   └── entitlements.mac.plist    # macOS entitlements
@@ -166,7 +166,7 @@ The main process handles the complete application lifecycle:
    - Stops services on quit via `lf services stop`
 
 3. **Health Monitoring**
-   - Polls `http://127.0.0.1:8000/health` endpoint
+   - Polls `http://127.0.0.1:14345/health` endpoint
    - Waits up to 30 seconds for server to become ready
    - Shows error if server fails to start
 
@@ -203,7 +203,7 @@ Creates and manages application windows:
 **Main Window:**
 - Hidden title bar (`titleBarStyle: 'hidden'`)
 - Traffic lights positioned at `{ x: 20, y: 18 }`
-- Loads Designer from `http://localhost:8000`
+- Loads Designer from `http://localhost:14345`
 - Injects CSS to make header draggable
 - Shows after 5 second timeout or when ready (whichever comes first)
 - Opens DevTools in development mode
@@ -361,12 +361,12 @@ npm run dist:linux       # Build for Linux
    - Start services (progress: 70-90%)
 
 3. **Wait for Server** (`waitForServer()`)
-   - Poll `http://127.0.0.1:8000/health` (progress: 80%)
+   - Poll `http://127.0.0.1:14345/health` (progress: 80%)
    - Max 30 attempts (30 seconds)
    - Throws error if server doesn't start
 
 4. **Create Main Window** (progress: 95%)
-   - Load Designer from `http://localhost:8000`
+   - Load Designer from `http://localhost:14345`
    - Inject draggable header CSS
    - Show window when ready or after 5 seconds
    - Close splash screen
@@ -409,7 +409,7 @@ See [SIGNING.md](SIGNING.md) for detailed instructions on:
 **Solutions**:
 - Ensure Docker is installed and running (required for LlamaFarm)
 - Ensure Ollama is installed: https://ollama.com/download
-- Check available ports (8000 must be free for server)
+- Check available ports (14345 must be free for server)
 - Try running `lf services start` manually to see detailed errors
 - Check Docker logs: `docker logs llamafarm-server`
 
@@ -419,12 +419,12 @@ See [SIGNING.md](SIGNING.md) for detailed instructions on:
 
 **Solutions**:
 - Wait 30 seconds for initial startup (first time can be slow)
-- Verify server is running: open http://localhost:8000 in a browser
+- Verify server is running: open http://localhost:14345 in a browser
 - Check DevTools console: View → Toggle Developer Tools
 - Try restarting the app
 - Verify services are running: `lf services status`
 
-**Common Cause**: Server not ready yet. The app waits up to 30 seconds for `http://127.0.0.1:8000/health` to respond.
+**Common Cause**: Server not ready yet. The app waits up to 30 seconds for `http://127.0.0.1:14345/health` to respond.
 
 ### App Won't Quit
 

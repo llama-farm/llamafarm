@@ -99,12 +99,12 @@ speech = [
 ]
 
 # Text-to-speech with Kokoro
-# Usage: uv pip install "universal-runtime[tts]" && uv pip install en-core-web-sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
-# Note: spaCy model must be installed separately (URL deps don't work in extras with uv pip)
+# Usage: uv pip install "universal-runtime[tts]"
 tts = [
   "kokoro>=0.9.0",  # High-quality neural TTS (~82M params)
   "misaki[en]>=0.9.0",  # G2P for English (kokoro dependency)
   "spacy>=3.7.0",  # NLP for G2P
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
   "pydub>=0.25.0",  # Audio format conversion (MP3, FLAC)
   "av>=12.0.0",  # PyAV for Opus/AAC encoding
 ]
@@ -131,6 +131,8 @@ tts-pocket = [
 # Usage: uv pip install "universal-runtime[tts-mlx]"
 tts-mlx = [
   "mlx-audio>=0.1.0",
+  "spacy>=3.7.0",  # NLP for G2P (required by mlx-audio's Kokoro)
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
 ]
 
 [build-system]
@@ -152,6 +154,7 @@ environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'linux' and platform_machine == 'aarch64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'",  # Intel Mac
   "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
 
@@ -178,14 +181,12 @@ index-url = "https://pypi.org/simple"
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
   "numpy>=1.24.0,<2.4",   # numba (via librosa) requires numpy<2.4
-  "torch>=2.0.0",         # chatterbox pins ==2.6.0, but works with other versions
-  "torchaudio>=2.0.0",    # chatterbox pins ==2.6.0
+  # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
+  "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchaudio>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torchaudio>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "transformers>=4.35.0", # chatterbox pins ==4.46.3
-]
-
-# spaCy model for TTS (Kokoro) - added here so uv sync works
-constraint-dependencies = [
-  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 ]
 
 [tool.uv.sources]

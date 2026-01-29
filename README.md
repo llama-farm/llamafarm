@@ -79,7 +79,7 @@ Download the desktop app above and run it. No additional setup required.
    lf chat "Hello, LlamaFarm!"       # One-off message
    ```
 
-The Designer web interface is available at `http://localhost:8000`.
+The Designer web interface is available at `http://localhost:14345`.
 
 ### Option 3: Development from Source
 
@@ -92,7 +92,7 @@ npm install -g nx
 nx init --useDotNxInstallation --interactive=false  # Required on first clone
 
 # Start all services (run each in a separate terminal)
-nx start server           # FastAPI server (port 8000)
+nx start server           # FastAPI server (port 14345)
 nx start rag              # RAG worker for document processing
 nx start universal-runtime # ML models, OCR, embeddings (port 11540)
 ```
@@ -105,7 +105,7 @@ LlamaFarm consists of three main services:
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| **Server** | 8000 | FastAPI REST API, Designer web UI, project management |
+| **Server** | 14345 | FastAPI REST API, Designer web UI, project management |
 | **RAG Worker** | - | Celery worker for async document processing |
 | **Universal Runtime** | 11540 | ML model inference, embeddings, OCR, anomaly detection |
 
@@ -202,7 +202,7 @@ lf rag query --database main_db "What are the key findings?"
 
 ### Designer Web UI
 
-The Designer at `http://localhost:8000` provides:
+The Designer at `http://localhost:14345` provides:
 
 - Visual dataset management with drag-and-drop uploads
 - Interactive configuration editor with live validation
@@ -305,7 +305,7 @@ LlamaFarm provides an OpenAI-compatible REST API:
 
 **Chat Completions**
 ```bash
-curl -X POST http://localhost:8000/v1/projects/default/my-project/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Hello"}],
@@ -316,7 +316,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/chat/completio
 
 **RAG Query**
 ```bash
-curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/query \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/rag/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What are the requirements?",
@@ -336,7 +336,7 @@ The Universal Runtime provides endpoints beyond chat:
 ### OCR & Document Extraction
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=surya"
 ```
@@ -345,12 +345,12 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 
 ```bash
 # Train on normal data
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-detector", "backend": "isolation_forest", "data": [[22.1], [23.5], ...]}'
 
 # Detect anomalies
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-detector", "data": [[22.0], [100.0], [23.0]], "threshold": 0.5}'
 ```
