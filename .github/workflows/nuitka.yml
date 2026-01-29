@@ -116,7 +116,7 @@ jobs:
       # Install C compiler and ccache for compilation (Linux/macOS)
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y build-essential ccache
+        run: sudo apt-get install -y build-essential ccache lld
 
       - name: Install ccache (macOS)
         if: runner.os == 'macOS'
@@ -155,10 +155,13 @@ jobs:
           # Use ccache symlinks in PATH instead of CC/CXX variables
           echo "$(brew --prefix ccache)/libexec" >> $GITHUB_PATH
 
-      # Note: ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
-      # We avoid relocation overflow by excluding heavy modules (onnxruntime,
-      # sympy) in build.py rather than using linker flags like --long-plt,
-      # which aren't supported by the linker on ubuntu-24.04-arm runners.
+      # ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
+      # Large Nuitka binaries exceed this, causing "relocation truncated to fit"
+      # errors. Use lld (LLVM linker) which automatically inserts range extension
+      # thunks for out-of-range branches — no special flags needed.
+      - name: Set ARM64 linker flags (Linux)
+        if: runner.os == 'Linux' && contains(matrix.os, 'arm64')
+        run: echo "LDFLAGS=-fuse-ld=lld" >> $GITHUB_ENV
 
       - name: Install build dependencies
         run: |
