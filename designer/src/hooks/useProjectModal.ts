@@ -423,9 +423,60 @@ export const useProjectModal = ({
       console.error('Failed to delete project:', error)
 
       // Handle delete errors gracefully
-      if (error?.response?.status === 404) {
-        setProjectError('Project not found')
-      } else if (error?.response?.status === 403) {
+      // ChatApiError has status directly on the error, not error.response.status
+      if (error?.status === 404) {
+        // Project doesn't exist on server - clean up the ghost entry from cache/localStorage
+        try {
+          queryClient.removeQueries({
+            queryKey: projectKeys.detail(namespace, nameToDelete),
+          })
+          const prev = queryClient.getQueryData(projectKeys.list(namespace)) as
+            | { total?: number; projects?: Project[] }
+            | undefined
+          if (prev?.projects) {
+            const nextProjects = prev.projects.filter(
+              p => p.name !== nameToDelete
+            )
+            queryClient.setQueryData(projectKeys.list(namespace), {
+              total: Math.max(
+                prev.total ?? nextProjects.length,
+                nextProjects.length
+              ),
+              projects: nextProjects,
+            })
+          }
+          queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
+
+          // Remove from localStorage fallback list
+          const raw = localStorage.getItem('lf_custom_projects')
+          const arr: string[] = raw ? JSON.parse(raw) : []
+          const filtered = arr.filter(n => n !== nameToDelete)
+          localStorage.setItem('lf_custom_projects', JSON.stringify(filtered))
+
+          // Clear active project if it was the ghost
+          const active = localStorage.getItem('activeProject')
+          if (active === nameToDelete) {
+            localStorage.removeItem('activeProject')
+            window.dispatchEvent(
+              new CustomEvent<string>('lf-active-project', { detail: '' })
+            )
+          }
+        } catch {}
+
+        toast({ message: `Removed "${nameToDelete}" from list` })
+        try {
+          window.dispatchEvent(
+            new CustomEvent<string>('lf-project-deleted', {
+              detail: nameToDelete,
+            })
+          )
+        } catch {}
+        closeDeleteModal()
+        onSuccess?.('', 'edit')
+        try {
+          navigate('/')
+        } catch {}
+      } else if (error?.status === 403) {
         setProjectError('Not authorized to delete this project')
       } else {
         setProjectError('Failed to delete project. Please try again.')
