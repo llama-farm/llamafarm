@@ -286,9 +286,9 @@ function AdvancedSettings({
     setLocalSettings(prev => ({ ...prev, [key]: value }))
   }
 
-  const handleNumberChange = (key: keyof ExtraBody, rawValue: string) => {
+  const handleNumberChange = (key: keyof ExtraBody, rawValue: string, min?: number) => {
     const value = rawValue === '' ? undefined : parseInt(rawValue, 10)
-    if (value === undefined || !isNaN(value)) {
+    if (value === undefined || (!isNaN(value) && (min === undefined || value >= min))) {
       handleChange(key, value as ExtraBody[typeof key])
     }
   }
@@ -331,7 +331,7 @@ function AdvancedSettings({
                 <Input
                   type="number"
                   value={localSettings.n_ctx ?? ''}
-                  onChange={e => handleNumberChange('n_ctx', e.target.value)}
+                  onChange={e => handleNumberChange('n_ctx', e.target.value, 512)}
                   className="h-8 text-sm"
                   placeholder="auto"
                   min={512}
@@ -354,7 +354,7 @@ function AdvancedSettings({
                 <Input
                   type="number"
                   value={localSettings.n_batch ?? ''}
-                  onChange={e => handleNumberChange('n_batch', e.target.value)}
+                  onChange={e => handleNumberChange('n_batch', e.target.value, 1)}
                   className="h-8 text-sm"
                   placeholder="2048"
                   min={1}
@@ -377,7 +377,7 @@ function AdvancedSettings({
                 <Input
                   type="number"
                   value={localSettings.n_gpu_layers ?? ''}
-                  onChange={e => handleNumberChange('n_gpu_layers', e.target.value)}
+                  onChange={e => handleNumberChange('n_gpu_layers', e.target.value, -1)}
                   className="h-8 text-sm"
                   placeholder="-1"
                   min={-1}
@@ -2790,9 +2790,9 @@ const Models = () => {
     const runtimeModels = runtime.models || []
 
     // Update the specific model's extra_body
-    // Match by name OR model since id is derived from (model.name || model.model)
+    // Match by composite id (name || model) to avoid updating multiple models
     const updatedModels = runtimeModels.map((m: any) => {
-      if (m.name === modelId || m.model === modelId) {
+      if ((m.name || m.model) === modelId) {
         return { ...m, extra_body: settings }
       }
       return m
@@ -2805,6 +2805,10 @@ const Models = () => {
         models: updatedModels,
       },
     }
+
+    // Store original settings for potential revert
+    const originalModel = projectModels.find(m => m.id === modelId)
+    const originalSettings = originalModel?.extra_body
 
     // Optimistically update local state
     setProjectModels(prev =>
@@ -2821,7 +2825,13 @@ const Models = () => {
       })
     } catch (error) {
       console.error('Failed to update advanced settings:', error)
-      // Revert on error - the useEffect will reload from projectResponse
+      // Explicitly revert the optimistic update
+      setProjectModels(prev =>
+        prev.map(m =>
+          m.id === modelId ? { ...m, extra_body: originalSettings } : m
+        )
+      )
+      toast({ message: 'Failed to save advanced settings', variant: 'destructive' })
     }
   }
 
