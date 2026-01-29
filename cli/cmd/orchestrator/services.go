@@ -166,7 +166,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  90 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "14345"},
 		Env: map[string]string{
 			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "server.log"),
 			"OLLAMA_HOST":                  "http://localhost:11434",
