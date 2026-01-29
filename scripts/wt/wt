@@ -717,7 +717,7 @@ generate_env_file() {
     data_path=$(get_data_path "$wt_name")
     offset=$(get_port_assignment "$wt_name")
 
-    local server_port=$((8000 + offset))
+    local server_port=$((14345 + offset))
     local designer_port=$((5000 + offset))
     local runtime_port=$((11000 + offset))
 

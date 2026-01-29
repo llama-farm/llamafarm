@@ -358,12 +358,12 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         if (wasActive && !errorReceivedRef.current) {
           const errorMsg = hasConnectedRef.current
             ? 'Connection lost. Please try again.'
-            : 'Failed to connect to voice chat server. Is the server running on port 8000?'
+            : 'Failed to connect to voice chat server. Is the server running on port 14345?'
           setError(errorMsg)
           onError?.(errorMsg)
         } else if (!hasConnectedRef.current && !errorReceivedRef.current) {
           // Never connected - connection failure
-          const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 8000?'
+          const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 14345?'
           setError(errorMsg)
           onError?.(errorMsg)
         }

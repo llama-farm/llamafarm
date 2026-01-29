@@ -25,7 +25,7 @@ vi.mock('../../api/modelService', () => ({
 // Import after mocking
 import modelService from '../../api/modelService'
 
-const API_BASE = 'http://localhost:8000/v1'
+const API_BASE = 'http://localhost:14345/v1'
 
 // Demo config with embedding model for testing
 const DEMO_CONFIG_WITH_MODEL = `

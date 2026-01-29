@@ -65,7 +65,7 @@ The easiest way to use OCR is through the LlamaFarm API, which handles file uplo
 
 ```bash
 # Upload a PDF or image directly
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=easyocr" \
   -F "languages=en"
@@ -74,7 +74,7 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 Or with base64-encoded images:
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=surya" \
   -F "languages=en"
@@ -161,7 +161,7 @@ The easiest way to extract data from documents is through the LlamaFarm API:
 
 ```bash
 # Extract from a receipt (file upload)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@receipt.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
@@ -208,7 +208,7 @@ Ask questions about document content using the LlamaFarm API:
 
 ```bash
 # Document VQA with file upload (LlamaFarm API)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@invoice.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
   -F "prompts=What is the total amount?,What is the invoice date?" \
@@ -322,8 +322,8 @@ The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000)
-curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
+# Via LlamaFarm API (port 14345)
+curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
@@ -332,7 +332,7 @@ curl -X POST http://localhost:11540/v1/classifier/fit ...
 
 :::warning Server vs Universal Runtime
 - **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
-- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 8000) and proxies to Universal Runtime.
+- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 14345) and proxies to Universal Runtime.
 :::
 
 ### Step 1: Train Your Classifier

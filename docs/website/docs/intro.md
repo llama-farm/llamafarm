@@ -152,7 +152,7 @@ POST /v1/ml/anomaly/detect
 Extract structured data from invoices and forms:
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@invoice.pdf" \
   -F "model=surya"
 ```

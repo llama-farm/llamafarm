@@ -257,7 +257,7 @@ async waitForServer(): Promise<void> {
 
   while (attempts < maxAttempts) {
     try {
-      const response = await axios.get('http://127.0.0.1:8000/health', {
+      const response = await axios.get('http://127.0.0.1:14345/health', {
         timeout: 3000
       })
       if (response.status === 200) return

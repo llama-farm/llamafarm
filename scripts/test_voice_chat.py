@@ -19,7 +19,7 @@ Usage:
 Options:
     --namespace, -n   Project namespace (default: "default")
     --project, -p     Project name (default: "sales-agent")
-    --host            Server host (default: "localhost:8000")
+    --host            Server host (default: "localhost:14345")
     --output, -o      Save TTS audio response to file
     --no-convert      Skip ffmpeg conversion (audio must be raw PCM 16kHz mono)
 
@@ -235,8 +235,8 @@ def main():
     )
     parser.add_argument(
         "--host",
-        default="localhost:8000",
-        help="Server host:port (default: localhost:8000)"
+        default="localhost:14345",
+        help="Server host:port (default: localhost:14345)"
     )
     parser.add_argument(
         "-o", "--output",

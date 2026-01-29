@@ -1,0 +1,63 @@
+version: v1
+name: test-project
+namespace: default
+
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+        dimension: 384
+  
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  
+  parsers:
+    - name: pdf_parser
+      type: PDFParser_LlamaIndex
+      config:
+        chunk_size: 512
+        chunk_overlap: 50
+  
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+    parser: pdf_parser
+
+rag:
+  databases:
+    - name: main_db
+      type: ChromaStore
+      embedding_strategy: default_embeddings
+      retrieval_strategy: semantic_search
+    - name: inline_db
+      type: ChromaStore
+      embedding_strategies:
+        - type: UniversalEmbedder
+          config:
+            model: custom-model
+            dimension: 512
+      retrieval_strategies:
+        - type: BasicSimilarityStrategy
+          config:
+            top_k: 10
+
+  data_processing_strategies:
+    - name: default_processing
+      parsers:
+        - pdf_parser
+
+runtime:
+  models:
+    - name: default
+      provider: openai
+      model: gpt-4o-mini
+
+datasets:
+  - name: test_dataset
+    database: main_db
+    data_processing_strategy: default_processing

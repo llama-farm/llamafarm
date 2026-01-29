@@ -223,10 +223,7 @@ class ToolAwareParserFactory:
             if parser_class:
                 return parser_class(name=parser_name, config=config)
             else:
-                # Create mock parser as fallback
-                logger.warning(f"Parser {parser_name} not found, creating mock parser")
-                mock_class = cls.create_mock_parser(parser_name)
-                return mock_class(name=parser_name, config=config)
+                raise ValueError(f"Parser {parser_name} not found and no fallback available")
 
         # If file_type and/or tool provided, find matching parser
         if file_type:
@@ -363,6 +360,15 @@ class ToolAwareParserFactory:
         Returns:
             Parser class or None
         """
+        # Handle UniversalParser specially - it's in its own module
+        if parser_type in ("UniversalParser", "UniversalParser_"):
+            try:
+                from components.parsers.universal import UniversalParser
+                return UniversalParser
+            except ImportError as e:
+                logger.error(f"Failed to import UniversalParser: {e}")
+                return None
+
         parser_category, implementation = cls._parse_parser_type_name(parser_type)
         potential_paths = cls._build_potential_module_paths(
             parser_category, implementation, parser_type

@@ -143,10 +143,12 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
-			"TRANSFORMERS_SKIP_MPS":            "", // Set to "1" to skip MPS on macOS
-			"TRANSFORMERS_FORCE_CPU":           "", // Set to "1" to force CPU (useful in CI)
-			"PYTORCH_MPS_HIGH_WATERMARK_RATIO": "0.9",
-			"HF_TOKEN":                         "",
+			"TRANSFORMERS_SKIP_MPS":  "", // Set to "1" to skip MPS on macOS
+			"TRANSFORMERS_FORCE_CPU": "", // Set to "1" to force CPU (useful in CI)
+			// Note: PYTORCH_MPS_HIGH_WATERMARK_RATIO removed - setting it to non-default
+			// values causes "invalid low watermark ratio" errors on some PyTorch versions.
+			// Let PyTorch use its default memory management.
+			"HF_TOKEN": "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
@@ -164,7 +166,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  90 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "14345"},
 		Env: map[string]string{
 			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "server.log"),
 			"OLLAMA_HOST":                  "http://localhost:11434",

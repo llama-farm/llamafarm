@@ -26,7 +26,6 @@ import {
 } from './utils/projectValidation'
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
-import { Textarea } from './components/ui/textarea'
 import { useDemoModal } from './contexts/DemoModalContext'
 import { getFileBasedDemos } from './config/demos'
 import { useGitHubStars } from './hooks/useGitHubStars'
@@ -42,7 +41,6 @@ function Home() {
 
   // Form state
   const [projectName, setProjectName] = useState('')
-  const [what, setWhat] = useState('')
   const [deployment, setDeployment] = useState<'local' | 'cloud' | 'unsure'>(
     'local'
   )
@@ -56,6 +54,8 @@ function Home() {
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const [fakeProgress, setFakeProgress] = useState(0)
+  // Counter to force projectsList recalculation when localStorage changes
+  const [projectsRefreshKey, setProjectsRefreshKey] = useState(0)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -70,9 +70,10 @@ function Home() {
   const { data: githubData } = useGitHubStars()
 
   // Convert API projects to project names for UI compatibility
+  // projectsRefreshKey forces recalculation when localStorage changes (e.g., ghost project deleted)
   const projectsList = useMemo(
     () => getProjectsList(projectsResponse),
-    [projectsResponse]
+    [projectsResponse, projectsRefreshKey]
   )
 
   // Determine view mode based on project count
@@ -211,11 +212,10 @@ function Home() {
         config_template: 'default',
       })
 
-      // 2) Save optional "what" description and deployment
-      if (what.trim() || deployment) {
-        const brief: { what?: string; deployment?: string } = {}
-        if (what.trim()) brief.what = what.trim()
-        if (deployment) brief.deployment = deployment
+      // 2) Save deployment preference
+      if (deployment) {
+        const brief: { deployment?: string } = {}
+        brief.deployment = deployment
 
         // Get current config
         const currentProject = await projectService.getProject(
@@ -333,6 +333,8 @@ function Home() {
       const deletedProjectName = (event as CustomEvent<string>).detail
       // Force refetch of projects list to ensure UI is updated
       queryClient.invalidateQueries({ queryKey: projectKeys.list(namespace) })
+      // Increment refresh key to force useMemo recalculation (for localStorage-only projects)
+      setProjectsRefreshKey(k => k + 1)
 
       // Clear active project if it was the one deleted
       try {
@@ -420,18 +422,18 @@ function Home() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="space-y-3 mt-auto">
-                  <button
-                    onClick={handleStartLlamaDemo}
-                    className="w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-opacity"
-                  >
-                    Start
-                  </button>
+                <div className="flex gap-3 mt-auto">
                   <button
                     onClick={() => demoModal.openModal()}
-                    className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground hover:bg-accent/20 font-medium transition-colors"
+                    className="flex-1 px-4 py-3 rounded-lg border border-input bg-background text-foreground hover:bg-accent/20 font-medium transition-colors"
                   >
-                    Explore more demo projects
+                    Explore demos
+                  </button>
+                  <button
+                    onClick={handleStartLlamaDemo}
+                    className="flex-1 px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 font-medium transition-opacity"
+                  >
+                    Start
                   </button>
                 </div>
               </div>
@@ -489,20 +491,6 @@ function Home() {
                         Only letters, numbers, underscores (_), and hyphens (-)
                         allowed. No spaces.
                       </p>
-                    </div>
-
-                    <div className="grid gap-2.5">
-                      <Label htmlFor="what">
-                        What are you building? (optional)
-                      </Label>
-                      <Textarea
-                        id="what"
-                        value={what}
-                        onChange={e => setWhat(e.target.value)}
-                        placeholder="A customer support chatbot, inventory system, data dashboard..."
-                        className="min-h-[72px]"
-                        disabled={isCreatingProject}
-                      />
                     </div>
 
                     <div className="grid gap-2.5">
@@ -649,7 +637,7 @@ function Home() {
       {/* Your projects (moved outside to align with Resources width) */}
       <div
         id="projects"
-        className={`w-full max-w-6xl mx-auto px-6 ${hasManyProjects ? 'mt-8' : 'mt-16 lg:mt-24'}`}
+        className={`w-full max-w-6xl mx-auto px-6 ${hasManyProjects ? 'mt-8' : 'mt-8 lg:mt-12'}`}
       >
         {!hasManyProjects && (
           <div className="flex items-center justify-between mb-4">

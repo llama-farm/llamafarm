@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.0.26](https://github.com/llama-farm/llamafarm/compare/v0.0.25...v0.0.26) (2026-01-27)
+
+
+### Features
+
+* **config:** add reusable components ([#682](https://github.com/llama-farm/llamafarm/issues/682)) ([e59ec87](https://github.com/llama-farm/llamafarm/commit/e59ec871a935285ff2bff27000beda90c1e6f3d1))
+* **designer:** add gardening and home repair sample datasets ([#688](https://github.com/llama-farm/llamafarm/issues/688)) ([b2c71f3](https://github.com/llama-farm/llamafarm/commit/b2c71f34b5cb2fd735dfb97ab9abb2472d0c9889))
+* **designer:** add port and clean up link ([2d03d2c](https://github.com/llama-farm/llamafarm/commit/2d03d2cce0c2878e1ac6baf44b89490a0f852355))
+* **designer:** add Service Status panel to header ([3d9aca7](https://github.com/llama-farm/llamafarm/commit/3d9aca77694c4d7cbc9deacf4d1076e01227d950))
+* **designer:** auto process datasets ([#679](https://github.com/llama-farm/llamafarm/issues/679)) ([b15db41](https://github.com/llama-farm/llamafarm/commit/b15db413c61ea9e2a2c48c21b55bf96e277af14a))
+* **designer:** small color/sizing/layout update ([#711](https://github.com/llama-farm/llamafarm/issues/711)) ([8bd9542](https://github.com/llama-farm/llamafarm/commit/8bd95426478d8f3866a90849a75c574a238ce981))
+* **electron-app:** improve splash screen UX and cross-platform support ([#712](https://github.com/llama-farm/llamafarm/issues/712)) ([35f56f7](https://github.com/llama-farm/llamafarm/commit/35f56f70ca986ffaaf7d8c02e0b8460c6c65729b))
+* full-duplex speech reasoning pipeline ([#690](https://github.com/llama-farm/llamafarm/issues/690)) ([0d6090b](https://github.com/llama-farm/llamafarm/commit/0d6090baa2ed3342a981cc5713943970944cc9e6))
+* **rag:** add document preview with strategy selection ([#704](https://github.com/llama-farm/llamafarm/issues/704)) ([87fe04f](https://github.com/llama-farm/llamafarm/commit/87fe04fab19920fdc45cd29744bb58fec201f5ca))
+* **rag:** Universal RAG - Zero-config default strategy ([#696](https://github.com/llama-farm/llamafarm/issues/696)) ([909f549](https://github.com/llama-farm/llamafarm/commit/909f549d3713035342715a7fc375d09dd8e59b3b))
+* **runtime:** audio processing ([#685](https://github.com/llama-farm/llamafarm/issues/685)) ([3d7536c](https://github.com/llama-farm/llamafarm/commit/3d7536cda9e4872aefdd9b867aa342af14dd61ea))
+* **server:** add dynamic value substitution for prompts and tools ([#672](https://github.com/llama-farm/llamafarm/issues/672)) ([127fccb](https://github.com/llama-farm/llamafarm/commit/127fccb51b05471705248c3cacd8801a6f0705f7))
+
+
+### Bug Fixes
+
+* **cli:** prevent dev builds from stopping running services ([#699](https://github.com/llama-farm/llamafarm/issues/699)) ([2173f77](https://github.com/llama-farm/llamafarm/commit/2173f773ff36ebe0a6dcea08e0229da11d5f6758)), closes [#698](https://github.com/llama-farm/llamafarm/issues/698)
+* **cli:** remove PYTORCH_MPS_HIGH_WATERMARK_RATIO to fix sample project creation ([#725](https://github.com/llama-farm/llamafarm/issues/725)) ([1fdfec7](https://github.com/llama-farm/llamafarm/commit/1fdfec7084d2146c2dc2d2453c32246050e3c028))
+* **cli:** update prompt type to match generated schema ([cb4f76d](https://github.com/llama-farm/llamafarm/commit/cb4f76d58efeab49f849922326ba64a1f1dc8b8a))
+* **designer:** Clear Chat Button Input Field Issue During Streaming ([#446](https://github.com/llama-farm/llamafarm/issues/446)) ([8df09e8](https://github.com/llama-farm/llamafarm/commit/8df09e82fdb3e858382ed33b13a783321e78713c))
+* **designer:** fix error overflows ([581b846](https://github.com/llama-farm/llamafarm/commit/581b8464e702d917818aa91eab71ad431661669f))
+* **designer:** improve Service Status panel reliability and accessibility ([29fe28d](https://github.com/llama-farm/llamafarm/commit/29fe28d191fa725276a718ecbb1acdce11fc63dc))
+* Jetson/Tegra CUDA optimization and unified memory GPU support ([#702](https://github.com/llama-farm/llamafarm/issues/702)) ([33f65ad](https://github.com/llama-farm/llamafarm/commit/33f65ad67a1a8b9c1172b33764afabc0edb094bd))
+* **runtime:** add Intel Mac (x86_64) support with PyTorch 2.2.2 ([#726](https://github.com/llama-farm/llamafarm/issues/726)) ([9ef08e6](https://github.com/llama-farm/llamafarm/commit/9ef08e6e88b7fb732c65148d54e585b5736ff201))
+* **runtime:** restrict sync inference to Jetson/Tegra platforms ([#718](https://github.com/llama-farm/llamafarm/issues/718)) ([a5429bd](https://github.com/llama-farm/llamafarm/commit/a5429bd9c12365ad125ec01729fbb8d9cbc66b37))
+
+
+### Miscellaneous Chores
+
+* release 0.0.26 ([9ccae0f](https://github.com/llama-farm/llamafarm/commit/9ccae0f4a4f41bd1b13942904be7eab7cfb13ceb))
+
 ## [0.0.25](https://github.com/llama-farm/llamafarm/compare/v0.0.24...v0.0.25) (2026-01-14)
 
 

@@ -37,7 +37,7 @@ from observability.event_logger import EventLogger  # noqa: E402
 
 try:
     from config import load_config
-    from config.datamodel import Database, DataProcessingStrategy, Parser
+    from config.datamodel import Database, DataProcessingStrategyDefinition, Parser
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -98,7 +98,7 @@ class IngestHandler:
             project_dir, self.database_config
         )
 
-    def _get_processing_config(self) -> DataProcessingStrategy:
+    def _get_processing_config(self) -> DataProcessingStrategyDefinition:
         """
         Get the data processing strategy configuration.
 
@@ -174,16 +174,16 @@ class IngestHandler:
                 f"for parser {parser_type or 'unknown'}"
             )
 
-    def _get_database_config(self) -> dict[str, Any]:
+    def _get_database_config(self) -> Database:
         """
         Get the database configuration.
 
         Returns:
-            Dictionary with database settings
+            Database configuration
         """
         return self.schema_handler.create_database_config(self.database)
 
-    def _initialize_embedder(self, db_config: dict[str, Any]):
+    def _initialize_embedder(self, db_config: Database):
         """
         Initialize the embedder from database configuration.
 

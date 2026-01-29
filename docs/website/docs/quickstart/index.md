@@ -99,12 +99,12 @@ This command:
 
 - Starts the API server and Universal Runtime natively
 - Opens the interactive chat TUI
-- Launches the Designer web UI at `http://localhost:8000`
+- Launches the Designer web UI at `http://localhost:14345`
 
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
 :::tip Use the Designer Web UI
-Prefer a visual interface? Open `http://localhost:8000` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
+Prefer a visual interface? Open `http://localhost:14345` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
 
 See the [Designer documentation](../designer/index.md) for details.
 :::

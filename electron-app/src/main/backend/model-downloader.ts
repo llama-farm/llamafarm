@@ -9,8 +9,8 @@ import * as path from 'path'
 import * as yaml from 'js-yaml'
 import { promises as fsPromises } from 'fs'
 
-// Server URL - defaults to localhost:8000
-const DEFAULT_SERVER_URL = 'http://127.0.0.1:8000'
+// Server URL - defaults to localhost:14345
+const DEFAULT_SERVER_URL = 'http://127.0.0.1:14345'
 
 /**
  * SSE event structure from the server's download endpoint

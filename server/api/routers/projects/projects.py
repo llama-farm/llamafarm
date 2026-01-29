@@ -981,8 +981,19 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 failed_count = 0
 
                 for result in results:
-                    # New format: [success, info]
-                    success, info = result[0], result[1]
+                    # Handle multiple result formats
+                    if isinstance(result, (list, tuple)) and len(result) >= 2:
+                        # New format: [success, info]
+                        success, info = result[0], result[1]
+                    elif isinstance(result, dict):
+                        # Dict format from failed tasks or legacy format
+                        success = result.get("success", True)
+                        info = result.get("details", result)
+                    else:
+                        logger.warning(f"Unexpected result format: {type(result)}")
+                        success = False
+                        info = {"error": "Unexpected result format"}
+
                     if not success:
                         failed_count += 1
                         continue
