@@ -449,6 +449,8 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
 - `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
 - `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
+- `variables` (optional): Object of key-value pairs for dynamic template substitution in prompts and tools. See [Dynamic Variables](#dynamic-variables) below
+- `tools` (optional): Array of tool definitions (OpenAI format). Tools can also contain `{{variable}}` placeholders
 
 **Response (Non-Streaming):**
 
@@ -634,6 +636,143 @@ curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions 
 ```
 
 Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
+
+### Dynamic Variables
+
+LlamaFarm supports dynamic variable substitution in prompts and tools using Jinja2-style `{{variable}}` syntax. Pass variable values in the `variables` field of your request, and they are resolved before the request is processed.
+
+**Example (Basic Variables):**
+
+If your `llamafarm.yaml` contains prompts with variables:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          Customer name: {{user_name | Valued Customer}}
+          Account tier: {{account_tier | standard}}
+```
+
+Pass the values at request time:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What can you help me with?"}
+    ],
+    "variables": {
+      "company_name": "TechCorp Solutions",
+      "user_name": "Alice Johnson",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+The system prompt becomes: "You are a customer service assistant for TechCorp Solutions. Customer name: Alice Johnson. Account tier: premium."
+
+**Example (Variables in Tools):**
+
+Tool definitions in your config can also use variables:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      tools:
+        - type: function
+          name: search_kb
+          description: "Search the {{company_name | Company}} knowledge base"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | General}} topics"
+```
+
+Pass values to customize the tool:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Search for shipping policies"}],
+    "variables": {
+      "company_name": "Acme Corp",
+      "department": "Customer Support"
+    }
+  }'
+```
+
+**Example (Request-Level Tools with Variables):**
+
+You can also pass tools directly in the request with variables:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "What tools do you have?"}],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup",
+          "description": "Look up data in {{data_source | the database}}",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "description": "ID to look up"}
+            },
+            "required": ["id"]
+          }
+        }
+      }
+    ],
+    "variables": {
+      "data_source": "the CRM system"
+    }
+  }'
+```
+
+**Variable Syntax:**
+
+| Pattern | Behavior |
+|---------|----------|
+| `{{variable}}` | Required - returns error 400 if not provided |
+| `{{variable \| default}}` | Optional - uses default if not provided |
+| `{{ variable }}` | Whitespace is allowed |
+
+**Supported Value Types:**
+
+- `string` - Inserted as-is
+- `int`, `float` - Converted to string
+- `boolean` - Converted to `True` or `False` (Python-style)
+- `null` - Converted to empty string
+
+Complex types (arrays, objects) are not supported and will return an error.
+
+**Error Handling:**
+
+If a required variable (no default) is missing, the API returns:
+
+```json
+{
+  "detail": "Template resolution failed: Template variable '{{ user_id }}' not found in provided variables. Available variables: ['company_name']. Add a default with '{{ user_id | default_value }}'."
+}
+```
+
+**Use Cases:**
+
+- **Multi-tenant apps** - Customize branding per customer
+- **Personalization** - Inject user names, roles, preferences
+- **A/B testing** - Swap prompt variants without config changes
+- **Dynamic context** - Pass dates, session IDs, account info
 
 ### Get Chat History
 
