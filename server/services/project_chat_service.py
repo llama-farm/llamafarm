@@ -370,7 +370,9 @@ class ProjectChatService:
         think: bool | None = None,
         thinking_budget: int | None = None,
         max_tokens: int | None = None,
-    ) -> AsyncGenerator[LFChatCompletionChunk]:
+        include_sources: bool = False,
+        sources_limit: int = 10,
+    ) -> AsyncGenerator[LFChatCompletionChunk | dict]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
@@ -413,6 +415,32 @@ class ProjectChatService:
                     rag_score_threshold=rag_score_threshold,
                     rag_queries=rag_queries,
                 )
+
+            # Yield sources event before LLM stream (if requested)
+            if include_sources and rag_enabled:
+                context_provider = chat_agent.context_providers.get("rag_context")
+                if context_provider and hasattr(context_provider, "chunks"):
+                    chunks = context_provider.chunks
+                    if chunks:
+                        # Limit chunks to prevent performance issues
+                        limited_chunks = chunks[:sources_limit]
+                        sources = [
+                            {
+                                "content": chunk.content,
+                                "source": chunk.metadata.get("source", "unknown"),
+                                "score": chunk.metadata.get(
+                                    "similarity_score", 0.0
+                                ),  # Use similarity_score
+                                "metadata": {
+                                    k: v
+                                    for k, v in chunk.metadata.items()
+                                    if k
+                                    not in ("_score", "embeddings")  # Exclude raw data
+                                },
+                            }
+                            for chunk in limited_chunks
+                        ]
+                        yield {"type": "sources", "sources": sources}
 
             logger.debug("Running async stream")
 

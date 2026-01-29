@@ -127,9 +127,25 @@ def create_streaming_response_from_iterator(
             async for chunk in stream_source:
                 if not chunk:
                     continue
-                # Chunk is already a ChatCompletionChunk - serialize it directly
-                chunk_dict = chunk.model_dump(exclude_none=True)
-                yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
+
+                # Handle custom events (sources, etc.) - dict with "type" field
+                if isinstance(chunk, dict) and chunk.get("type"):
+                    try:
+                        yield f"data: {json.dumps(chunk)}\n\n".encode()
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Failed to serialize custom event: {e}")
+                        # Skip malformed events rather than breaking the stream
+                        continue
+                    await asyncio.sleep(0)
+                    continue
+
+                # Handle ChatCompletionChunk - serialize it directly
+                try:
+                    chunk_dict = chunk.model_dump(exclude_none=True)
+                    yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
+                except (TypeError, ValueError, AttributeError) as e:
+                    logger.warning(f"Failed to serialize chunk: {e}")
+                    continue
                 await asyncio.sleep(0)
                 emitted = True
         except asyncio.CancelledError:

@@ -11,7 +11,12 @@ import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSessio
 import { useProjectSession } from '../../hooks/useProjectSession'
 import { useChatbox } from '../../hooks/useChatbox'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
-import { ChatStreamChunk } from '../../types/chat'
+import {
+  ChatStreamChunk,
+  RAGSource,
+  isSourcesEvent,
+  isChatChunk,
+} from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
@@ -2461,6 +2466,7 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
+      let currentSources: RAGSource[] = []
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -2525,11 +2531,29 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              // Handle content chunks
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                currentSources = chunk.sources
+                // Update streaming message to show sources immediately
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: currentSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2538,6 +2562,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: currentSources,
                 })
               }
             },
@@ -2549,9 +2574,15 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                // Append final assistant message once and clear transient bubble
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                // Append final assistant message with sources and clear transient bubble
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  currentSources
+                )
               }
+              currentSources = []
               setStreamingMessage(null)
             },
           },
@@ -2733,6 +2764,7 @@ export default function TestChat({
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
+        let testSources: RAGSource[] = []
         const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
@@ -2775,10 +2807,28 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                testSources = chunk.sources
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: testSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2787,6 +2837,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: testSources,
                 })
               }
             },
@@ -2797,8 +2848,14 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  testSources
+                )
               }
+              testSources = []
               setStreamingMessage(null)
             },
           },
