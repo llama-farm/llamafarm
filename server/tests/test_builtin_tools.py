@@ -9,12 +9,9 @@ This module contains comprehensive TDD tests for:
 Written following TEST-DRIVEN DEVELOPMENT: tests are written before implementation.
 """
 
-import json
 import os
 import shutil
 import tempfile
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -22,8 +19,8 @@ from pydantic import BaseModel
 # Import will fail until implementation exists - that's TDD!
 # These imports are what we expect the implementation to provide
 try:
-    from tools.builtin.registry import BUILTIN_TOOLS, get_enabled_builtin_tools
     from tools.builtin.factory import BuiltinToolFactory
+    from tools.builtin.registry import BUILTIN_TOOLS, get_enabled_builtin_tools
     from tools.builtin.tasks_tool import TasksTool
 except ImportError:
     # Define placeholder classes for type hints in tests
@@ -48,8 +45,7 @@ except ImportError:
 
 
 # Import config models - these should already exist
-from config.datamodel import Model, BuiltinTools, Provider
-
+from config.datamodel import BuiltinTools, Model, Provider
 
 # ==============================================================================
 # REGISTRY TESTS (get_enabled_builtin_tools)
@@ -828,7 +824,7 @@ class TestBuiltinToolsSchemaIntegration:
 
     def test_model_config_accepts_builtin_tools(self):
         """Test Model can be instantiated with builtin_tools config."""
-        from config.datamodel import Model, BuiltinTools
+        from config.datamodel import BuiltinTools, Model
 
         model = Model(
             name="test",
@@ -841,7 +837,7 @@ class TestBuiltinToolsSchemaIntegration:
 
     def test_model_config_builtin_tools_defaults(self):
         """Test builtin_tools has correct defaults when not specified."""
-        from config.datamodel import Model, BuiltinTools
+        from config.datamodel import Model
 
         model = Model(name="test", provider="openai", model="gpt-4")
         # builtin_tools should be None (not specified)

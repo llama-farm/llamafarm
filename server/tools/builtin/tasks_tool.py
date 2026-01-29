@@ -7,7 +7,7 @@ with dependency tracking (blockedBy/blocks).
 
 import asyncio
 import json
-from typing import Literal, Optional
+from typing import Literal
 
 from atomic_agents import BaseTool
 from atomic_agents.base.base_io_schema import BaseIOSchema
@@ -27,35 +27,35 @@ class TasksToolInput(BaseIOSchema):
         ...,
         description="The operation to perform on tasks",
     )
-    taskId: Optional[str] = Field(
+    taskId: str | None = Field(
         None,
         description="Task ID (required for get, update operations)",
     )
-    subject: Optional[str] = Field(
+    subject: str | None = Field(
         None,
         description="Task subject/title (for create, update)",
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None,
         description="Task description (for create, update)",
     )
-    activeForm: Optional[str] = Field(
+    activeForm: str | None = Field(
         None,
         description="Present continuous form for display (e.g., 'Running tests')",
     )
-    status: Optional[Literal["pending", "in_progress", "completed", "deleted"]] = Field(
+    status: Literal["pending", "in_progress", "completed", "deleted"] | None = Field(
         None,
         description="Task status (for update). Use 'deleted' to remove.",
     )
-    blockedBy: Optional[list[str]] = Field(
+    blockedBy: list[str] | None = Field(
         None,
         description="Task IDs that must complete before this task (create)",
     )
-    addBlockedBy: Optional[list[str]] = Field(
+    addBlockedBy: list[str] | None = Field(
         None,
         description="Task IDs to add to blockedBy list (update)",
     )
-    addBlocks: Optional[list[str]] = Field(
+    addBlocks: list[str] | None = Field(
         None,
         description="Task IDs that this task blocks (update)",
     )

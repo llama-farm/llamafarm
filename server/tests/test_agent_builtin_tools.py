@@ -10,7 +10,6 @@ This module tests:
 Written following TEST-DRIVEN DEVELOPMENT: tests written before implementation.
 """
 
-import json
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -770,33 +769,33 @@ class TestBuiltinToolsAgentIntegration:
         """Test that ChatOrchestratorAgentFactory creates agent with builtin tools loaded."""
         from agents.chat_orchestrator import ChatOrchestratorAgentFactory
 
-        with tempfile.TemporaryDirectory() as project_dir:
-            with (
-                patch("agents.chat_orchestrator.MCPToolFactory") as mock_mcp_factory,
-                patch(
-                    "agents.chat_orchestrator.BuiltinToolFactory"
-                ) as mock_builtin_factory,
-            ):
-                # Mock MCP factory
-                mock_mcp_instance = AsyncMock()
-                mock_mcp_instance.create_all_tools = AsyncMock(return_value=[])
-                mock_mcp_factory.return_value = mock_mcp_instance
+        with (
+            tempfile.TemporaryDirectory() as project_dir,
+            patch("agents.chat_orchestrator.MCPToolFactory") as mock_mcp_factory,
+            patch(
+                "agents.chat_orchestrator.BuiltinToolFactory"
+            ) as mock_builtin_factory,
+        ):
+            # Mock MCP factory
+            mock_mcp_instance = AsyncMock()
+            mock_mcp_instance.create_all_tools = AsyncMock(return_value=[])
+            mock_mcp_factory.return_value = mock_mcp_instance
 
-                # Mock builtin factory
-                mock_builtin = MagicMock()
-                mock_builtin.mcp_tool_name = "tasks"
-                mock_builtin_instance = MagicMock()
-                mock_builtin_instance.create_all_tools.return_value = [mock_builtin]
-                mock_builtin_factory.return_value = mock_builtin_instance
+            # Mock builtin factory
+            mock_builtin = MagicMock()
+            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin_instance = MagicMock()
+            mock_builtin_instance.create_all_tools.return_value = [mock_builtin]
+            mock_builtin_factory.return_value = mock_builtin_instance
 
-                agent = await ChatOrchestratorAgentFactory.create_agent(
-                    project_config=base_config,
-                    project_dir=project_dir,
-                    session_id="test-session",
-                )
+            agent = await ChatOrchestratorAgentFactory.create_agent(
+                project_config=base_config,
+                project_dir=project_dir,
+                session_id="test-session",
+            )
 
-                # Factory should have been called
-                mock_builtin_factory.assert_called_once()
+            # Factory should have been called
+            mock_builtin_factory.assert_called_once()
 
-                # Agent should have builtin tools loaded
-                assert hasattr(agent, "_builtin_tools")
+            # Agent should have builtin tools loaded
+            assert hasattr(agent, "_builtin_tools")

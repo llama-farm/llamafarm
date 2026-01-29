@@ -5,9 +5,9 @@ This module defines the registry of all builtin tools and provides
 filtering based on model configuration.
 """
 
-from agents.base.types import ToolDefinition
 from config.datamodel import Model
 
+from agents.base.types import ToolDefinition
 
 # Registry of all builtin tools keyed by name
 BUILTIN_TOOLS: dict[str, ToolDefinition] = {

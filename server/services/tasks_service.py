@@ -9,6 +9,7 @@ This service provides CRUD operations for tasks with:
 - Session-level file locking for concurrency safety
 """
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Literal
@@ -76,11 +77,8 @@ class TasksService:
         # Read current counter value
         current_counter = 0
         if counter_file.exists():
-            try:
+            with contextlib.suppress(ValueError, OSError):
                 current_counter = int(counter_file.read_text().strip())
-            except (ValueError, OSError):
-                # If counter file is corrupted, scan existing files
-                pass
 
         # Also scan existing files to handle legacy data or corrupted counter
         max_existing_id = 0

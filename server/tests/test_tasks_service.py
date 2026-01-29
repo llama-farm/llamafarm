@@ -16,7 +16,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Literal
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel, Field
@@ -24,7 +24,12 @@ from pydantic import BaseModel, Field
 # Import will fail until implementation exists - that's TDD!
 # These imports are what we expect the implementation to provide
 try:
-    from services.tasks_service import Task, TasksService, TaskNotFoundError, CycleDetectedError
+    from services.tasks_service import (
+        CycleDetectedError,
+        Task,
+        TaskNotFoundError,
+        TasksService,
+    )
 except ImportError:
     # Define placeholder classes for type hints in tests
     # These will be replaced by actual imports once implementation exists
@@ -114,13 +119,13 @@ class TestTaskCreation:
     def test_create_task_with_blocked_by_references(self, temp_project_dir, session_id):
         """Test creating a task that is blocked by other tasks."""
         # Create prerequisite tasks
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Setup database",
             description="Initialize database schema",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Configure environment",
@@ -141,7 +146,7 @@ class TestTaskCreation:
     def test_create_task_updates_bidirectional_references(self, temp_project_dir, session_id):
         """Test that blockedBy creates corresponding blocks on referenced tasks."""
         # Create prerequisite task
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Setup database",
@@ -441,7 +446,7 @@ class TestTaskUpdate:
             subject="Blocking task",
             description="This will block others",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task to be blocked",
@@ -464,7 +469,7 @@ class TestTaskUpdate:
 
     def test_update_task_add_blocked_by(self, temp_project_dir, session_id):
         """Test adding blockedBy via addBlockedBy parameter."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Blocking task",
@@ -605,13 +610,13 @@ class TestTaskDeletion:
 
     def test_delete_task_removes_from_blocks_of_related_tasks(self, temp_project_dir, session_id):
         """Test that deleting a task removes it from blocks of tasks it was blocking."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Blocking task",
             description="Will block task2",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Blocked task",
@@ -632,7 +637,7 @@ class TestTaskDeletion:
 
     def test_delete_task_removes_from_blocked_by_of_related_tasks(self, temp_project_dir, session_id):
         """Test that deleting a task removes it from blockedBy of dependent tasks."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Blocking task",
@@ -663,26 +668,26 @@ class TestTaskDeletion:
 
     def test_delete_task_with_multiple_dependencies(self, temp_project_dir, session_id):
         """Test deleting a task that has multiple blocking and blocked-by relationships."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 1",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 2",
             description="Second task",
         )
-        task3 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 3 (middle)",
             description="Blocked by 1, 2 and blocks others",
             blockedBy=["1", "2"],
         )
-        task4 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 4",
@@ -721,13 +726,13 @@ class TestCycleDetection:
 
     def test_reject_direct_cycle_on_create(self, temp_project_dir, session_id):
         """Test that creating task A blockedBy B when B is blockedBy A is rejected."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
@@ -746,20 +751,20 @@ class TestCycleDetection:
 
     def test_reject_indirect_cycle_on_create(self, temp_project_dir, session_id):
         """Test that indirect cycles A -> B -> C -> A are rejected."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
             description="Blocked by A",
             blockedBy=["1"],
         )
-        task3 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task C",
@@ -778,13 +783,13 @@ class TestCycleDetection:
 
     def test_reject_cycle_on_update_add_blocks(self, temp_project_dir, session_id):
         """Test that adding blocks that would create a cycle is rejected."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
@@ -803,7 +808,7 @@ class TestCycleDetection:
 
     def test_self_reference_rejected(self, temp_project_dir, session_id):
         """Test that a task cannot block itself."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
@@ -820,20 +825,20 @@ class TestCycleDetection:
 
     def test_valid_dependency_chain_allowed(self, temp_project_dir, session_id):
         """Test that valid dependency chains without cycles are allowed."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
             description="Blocked by A",
             blockedBy=["1"],
         )
-        task3 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task C",
@@ -853,13 +858,13 @@ class TestCycleDetection:
 
     def test_multiple_blockers_no_cycle(self, temp_project_dir, session_id):
         """Test that a task can be blocked by multiple tasks without creating a cycle."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="First task",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
@@ -1019,7 +1024,7 @@ class TestConcurrency:
         session_b = "session-b"
 
         completed = {"a": False, "b": False}
-        start_time = time.time()
+        time.time()
 
         def create_in_session_a():
             for i in range(5):
@@ -1027,7 +1032,7 @@ class TestConcurrency:
                     project_dir=temp_project_dir,
                     session_id=session_a,
                     subject=f"Session A Task {i}",
-                    description=f"Created in session A",
+                    description="Created in session A",
                 )
             completed["a"] = True
 
@@ -1037,7 +1042,7 @@ class TestConcurrency:
                     project_dir=temp_project_dir,
                     session_id=session_b,
                     subject=f"Session B Task {i}",
-                    description=f"Created in session B",
+                    description="Created in session B",
                 )
             completed["b"] = True
 
@@ -1182,13 +1187,13 @@ class TestEdgeCases:
 
     def test_id_sequence_continues_after_deletion(self, temp_project_dir, session_id):
         """Test that ID sequence continues even after deletions."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 1",
             description="First",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 2",
@@ -1210,13 +1215,13 @@ class TestEdgeCases:
 
     def test_duplicate_blocked_by_ignored(self, temp_project_dir, session_id):
         """Test that duplicate entries in blockedBy are handled gracefully."""
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 1",
             description="First",
         )
-        task2 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task 2",
@@ -1399,7 +1404,7 @@ class TestComplexDependencyGraphs:
     def test_deep_dependency_chain(self, temp_project_dir, session_id):
         """Test chain A -> B -> C -> D -> E works correctly."""
         # Create task A (root)
-        task_a = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
@@ -1492,7 +1497,7 @@ class TestComplexDependencyGraphs:
     def test_diamond_dependency(self, temp_project_dir, session_id):
         """Test diamond: A blocks B and C, both block D."""
         # Create A (root)
-        task_a = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
@@ -1570,7 +1575,7 @@ class TestComplexDependencyGraphs:
     def test_complete_task_with_many_dependents(self, temp_project_dir, session_id):
         """Test completing a task with 10 dependent tasks."""
         # Create A (blocker)
-        task_a = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
@@ -1584,7 +1589,7 @@ class TestComplexDependencyGraphs:
                 project_dir=temp_project_dir,
                 session_id=session_id,
                 subject=f"Dependent Task {i+1}",
-                description=f"Blocked by A",
+                description="Blocked by A",
                 blockedBy=["1"],
             )
             dependent_ids.append(task.id)
@@ -1610,27 +1615,27 @@ class TestComplexDependencyGraphs:
     def test_complex_cycle_detection(self, temp_project_dir, session_id):
         """Test cycle detection in complex graph A->B->C->D->B."""
         # Create chain A->B->C->D
-        task_a = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task A",
             description="Root",
         )
-        task_b = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task B",
             description="Blocked by A",
             blockedBy=["1"],
         )
-        task_c = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task C",
             description="Blocked by B",
             blockedBy=["2"],
         )
-        task_d = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="Task D",
@@ -1690,6 +1695,7 @@ class TestDataIntegrity:
         # In practice, TasksService is stateless and reads from disk,
         # so we just verify we can read the task using a new call
         import importlib
+
         import services.tasks_service as ts_module
         importlib.reload(ts_module)
 
@@ -1718,13 +1724,13 @@ class TestDataIntegrity:
         task_file.write_text("{ invalid json content }")
 
         # Try to read the corrupted task - should raise an error
-        with pytest.raises(Exception):  # Could be JSONDecodeError or ValidationError
+        with pytest.raises((json.JSONDecodeError, ValueError)):
             TasksService.get_task(temp_project_dir, session_id, task.id)
 
     def test_missing_lock_file_recreated(self, temp_project_dir, session_id):
         """Test lock file is recreated if deleted."""
         # Create a task (creates lock file)
-        task1 = TasksService.create_task(
+        TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
             subject="First task",
