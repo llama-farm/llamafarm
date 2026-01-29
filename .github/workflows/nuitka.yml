@@ -158,9 +158,11 @@ jobs:
       # ARM64 has a ±128MB limit for direct calls (R_AARCH64_CALL26).
       # Large binaries exceed this, causing "relocation truncated to fit" errors.
       # --long-plt uses indirect calls via PLT to avoid the range limit.
+      # -fuse-ld=bfd forces GNU ld which supports --long-plt (the default ld on
+      # ubuntu-24.04-arm may be mold/lld which don't recognize this flag).
       - name: Set ARM64 linker flags (Linux)
         if: runner.os == 'Linux' && contains(matrix.os, 'arm64')
-        run: echo "LDFLAGS=-Wl,--long-plt" >> $GITHUB_ENV
+        run: echo "LDFLAGS=-fuse-ld=bfd -Wl,--long-plt" >> $GITHUB_ENV
 
       - name: Install build dependencies
         run: |
