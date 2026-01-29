@@ -45,6 +45,8 @@ from services.model_service import ModelService
 from services.prompt_service import PromptService  # type: ignore  # type: ignore
 from services.runtime_service.runtime_service import RuntimeService
 from services.template_service import TemplateService
+from tools.builtin.factory import BuiltinToolFactory
+from tools.builtin.registry import get_enabled_builtin_tools
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
@@ -66,6 +68,7 @@ class ChatOrchestratorAgent(LFAgent):
     _mcp_service: MCPService | None = None
     _mcp_tool_factory: MCPToolFactory | None = None
     _mcp_tools: list[type[BaseTool]] = []
+    _builtin_tools: list[type[BaseTool]] = []
     _model_config_template: "Model"  # Raw model config with unresolved templates
     _resolved_config_tools: list["ToolDefinition"] | None = None
 
@@ -192,7 +195,7 @@ class ChatOrchestratorAgent(LFAgent):
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> LFChatCompletion:
-        """Run the agent with MCP tool calling support.
+        """Run the agent with MCP and builtin tool calling support.
 
         The agent will:
         1. Get response from LLM
@@ -201,8 +204,22 @@ class ChatOrchestratorAgent(LFAgent):
         4. Repeat until LLM provides final answer
         """
         iteration = 0
-        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools] + (
-            tools or []
+
+        # Get enabled builtin tools based on model config
+        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
+        enabled_names = {t.name for t in builtin_tool_defs}
+        enabled_builtin = [
+            t
+            for t in self._builtin_tools
+            if getattr(t, "mcp_tool_name", "") in enabled_names
+        ]
+
+        # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
+        tools = (
+            builtin_tool_defs
+            + [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+            + [ToolDefinition.from_mcp_tool(t) for t in enabled_builtin]
+            + (tools or [])
         )
 
         final_response: LFChatCompletion | None = None
@@ -261,7 +278,7 @@ class ChatOrchestratorAgent(LFAgent):
                     final_response = response
                     break
 
-                result = await self._execute_mcp_tool(
+                result = await self._execute_tool(
                     tool_call.function.name, tool_call.function.arguments
                 )
 
@@ -316,11 +333,23 @@ class ChatOrchestratorAgent(LFAgent):
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        """Stream chat with MCP tool execution support."""
+        """Stream chat with MCP and builtin tool execution support."""
 
-        # Convert MCP tools to ToolDefinition format
-        tools = [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools] + (
-            tools or []
+        # Get enabled builtin tools based on model config
+        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
+        enabled_names = {t.name for t in builtin_tool_defs}
+        enabled_builtin = [
+            t
+            for t in self._builtin_tools
+            if getattr(t, "mcp_tool_name", "") in enabled_names
+        ]
+
+        # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
+        tools = (
+            builtin_tool_defs
+            + [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
+            + [ToolDefinition.from_mcp_tool(t) for t in enabled_builtin]
+            + (tools or [])
         )
 
         iteration = 0
@@ -410,7 +439,7 @@ class ChatOrchestratorAgent(LFAgent):
                     continue
 
                 logger.info(
-                    "Executing MCP tool",
+                    "Executing tool",
                     tool_name=accumulated_tool_call.function.name,
                     iteration=iteration,
                 )
@@ -435,8 +464,8 @@ class ChatOrchestratorAgent(LFAgent):
                 )
                 yield tool_call_chunk
 
-                # Execute the MCP tool
-                result = await self._execute_mcp_tool(
+                # Execute the tool (MCP or builtin)
+                result = await self._execute_tool(
                     accumulated_tool_call.function.name,
                     accumulated_tool_call.function.arguments,
                 )
@@ -505,11 +534,12 @@ class ChatOrchestratorAgent(LFAgent):
         """
         Setup tools that the agent can use.
 
-        For now, this only pertains to tools associated with MCP servers.
-        In the future, we may support custom tool definitions through the
-        project config.
+        This loads both MCP tools (from configured servers) and builtin tools
+        (like tasks management). Builtin tools are filtered based on the model's
+        builtin_tools config settings.
         """
         await self.enable_mcp()
+        await self._load_builtin_tools()
 
     async def enable_mcp(self):
         """Enable MCP tool calling support."""
@@ -535,20 +565,100 @@ class ChatOrchestratorAgent(LFAgent):
             ],
         )
 
+    async def _load_builtin_tools(self):
+        """Load built-in tools with project context."""
+        factory = BuiltinToolFactory(self._project_dir, self._session_id)
+        self._builtin_tools = factory.create_all_tools()
+        logger.info(
+            "Builtin tools loaded",
+            tool_count=len(self._builtin_tools),
+            tool_names=[
+                getattr(t, "mcp_tool_name", getattr(t, "__name__", "unknown"))
+                for t in self._builtin_tools
+            ],
+        )
+
     def _can_execute_tool_call(
         self, tool_call: ChatCompletionMessageFunctionToolCallParam
     ) -> bool:
-        """Check if a tool call can be executed on the server."""
-        return bool(
-            next(
-                (
-                    t
-                    for t in self._mcp_tools
-                    if getattr(t, "mcp_tool_name", None) == tool_call.function.name
-                ),
-                None,
-            )
+        """Check if a tool call can be executed on the server (MCP or builtin)."""
+        tool_name = tool_call.function.name
+        all_tools = self._mcp_tools + self._builtin_tools
+        return any(getattr(t, "mcp_tool_name", None) == tool_name for t in all_tools)
+
+    async def _execute_tool(self, tool_name: str, arguments: str | None) -> str:
+        """Unified wrapper to execute any invocable tool (MCP or builtin).
+
+        Dispatches to the appropriate executor based on tool type.
+
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Tool parameters as JSON string
+
+        Returns:
+            Tool result as string
+
+        Raises:
+            ValueError: If tool is not found in MCP or builtin tools
+        """
+        # Check MCP tools first
+        mcp_tool = next(
+            (t for t in self._mcp_tools if getattr(t, "mcp_tool_name", None) == tool_name),
+            None,
         )
+        if mcp_tool:
+            return await self._execute_mcp_tool(tool_name, arguments)
+
+        # Check builtin tools
+        builtin_tool = next(
+            (t for t in self._builtin_tools if getattr(t, "mcp_tool_name", None) == tool_name),
+            None,
+        )
+        if builtin_tool:
+            return await self._execute_builtin_tool(builtin_tool, arguments)
+
+        raise ValueError(f"Tool '{tool_name}' not found in MCP or builtin tools")
+
+    async def _execute_builtin_tool(
+        self, tool_class: type[BaseTool], arguments: str | None
+    ) -> str:
+        """Execute a builtin tool and return the result.
+
+        Args:
+            tool_class: The builtin tool class to execute
+            arguments: Tool parameters as JSON string
+
+        Returns:
+            Tool result as string
+        """
+        try:
+            tool_instance = tool_class()
+            input_schema_class = getattr(tool_class, "input_schema", None)
+            if input_schema_class:
+                tool_input = input_schema_class(**json.loads(arguments or "{}"))
+            else:
+                tool_input = None
+            result = await tool_instance.arun(tool_input)
+
+            result_content = result.result if hasattr(result, "result") else str(result)
+
+            logger.info(
+                "Builtin tool execution successful",
+                tool_name=getattr(
+                    tool_class, "mcp_tool_name", getattr(tool_class, "__name__", "unknown")
+                ),
+                result_length=len(str(result_content)),
+            )
+
+            return str(result_content)
+
+        except Exception as e:
+            tool_name = getattr(
+                tool_class, "mcp_tool_name", getattr(tool_class, "__name__", "unknown")
+            )
+            error_msg = f"Error executing builtin tool '{tool_name}': {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return error_msg
 
     async def _execute_mcp_tool(self, tool_name: str, arguments: str | None) -> str:
         """Execute an MCP tool and return the result.
