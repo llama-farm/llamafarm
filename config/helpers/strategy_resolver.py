@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
-from config.datamodel import DataProcessingStrategy, LlamaFarmConfig
+from config.datamodel import DataProcessingStrategyDefinition, LlamaFarmConfig
 from config.defaults.parser_defaults import get_parser_defaults
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class StrategyResolver:
     def __init__(self, config: LlamaFarmConfig):
         self._config = config
 
-    def get_strategy(self, strategy_name: str) -> DataProcessingStrategy:
+    def get_strategy(self, strategy_name: str) -> DataProcessingStrategyDefinition:
         strategies = list(self._iter_strategies())
         for strategy in strategies:
             if strategy.name == strategy_name:
@@ -34,7 +34,7 @@ class StrategyResolver:
         self,
         strategy_name: str,
         api_overrides: dict[str, dict[str, Any]] | None = None,
-    ) -> DataProcessingStrategy:
+    ) -> DataProcessingStrategyDefinition:
         """Return a strategy with parser configs merged with defaults and overrides."""
         strategy = self.get_strategy(strategy_name)
         resolved = strategy.model_copy(deep=True)
@@ -47,7 +47,9 @@ class StrategyResolver:
 
             defaults = get_parser_defaults(parser_type)
             if not defaults:
-                logger.warning("No built-in defaults for parser", extra={"type": parser_type})
+                logger.warning(
+                    "No built-in defaults for parser", extra={"type": parser_type}
+                )
 
             merged = defaults
             parser_config = getattr(parser, "config", None)
@@ -70,11 +72,13 @@ class StrategyResolver:
                     )
 
             parser.config = merged
-            logger.debug("Resolved parser config", extra={"type": parser_type, "config": merged})
+            logger.debug(
+                "Resolved parser config", extra={"type": parser_type, "config": merged}
+            )
 
         return resolved
 
-    def _iter_strategies(self) -> Iterable[DataProcessingStrategy]:
+    def _iter_strategies(self) -> Iterable[DataProcessingStrategyDefinition]:
         rag_config = getattr(self._config, "rag", None)
         if not rag_config:
             return []
@@ -91,7 +95,9 @@ class StrategyResolver:
 
         return []
 
-    def _deep_merge(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    def _deep_merge(
+        self, base: dict[str, Any], override: dict[str, Any]
+    ) -> dict[str, Any]:
         result = deepcopy(base)
         for key, value in override.items():
             if (
