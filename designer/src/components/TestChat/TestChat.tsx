@@ -2111,6 +2111,7 @@ export default function TestChat({
       type: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
       content: msg.content,
       timestamp: new Date(msg.timestamp),
+      sources: msg.sources,
     })
   )
   // Transient streaming assistant message (not persisted)
