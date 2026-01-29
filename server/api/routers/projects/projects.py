@@ -1023,6 +1023,21 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 if failed_count > 0:
                     response.state = "FAILURE"
                     response.error = f"{failed_count} of {total} tasks failed"
+                    # Log the actual error messages for debugging
+                    for result in results:
+                        # Handle array format [success, details] vs dict format
+                        if isinstance(result, (list, tuple)) and len(result) >= 2:
+                            success, details = result[0], result[1]
+                        else:
+                            success = result.get("success", True) if isinstance(result, dict) else True
+                            details = result.get("details", result) if isinstance(result, dict) else {}
+                        if not success and isinstance(details, dict) and details.get("error"):
+                            logger.error(
+                                "Task failed with error",
+                                task_id=task_id,
+                                filename=details.get("filename", "unknown"),
+                                error=details.get("error"),
+                            )
                 else:
                     response.state = "SUCCESS"
 
@@ -1170,6 +1185,21 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 if failed_count > 0:
                     response.state = "FAILURE"
                     response.error = f"{failed_count} of {total} tasks failed"
+                    # Log the actual error messages for debugging
+                    for result in results:
+                        # Handle array format [success, details] vs dict format
+                        if isinstance(result, (list, tuple)) and len(result) >= 2:
+                            success, details = result[0], result[1]
+                        else:
+                            success = result.get("success", True) if isinstance(result, dict) else True
+                            details = result.get("details", result) if isinstance(result, dict) else {}
+                        if not success and isinstance(details, dict) and details.get("error"):
+                            logger.error(
+                                "Task failed with error",
+                                task_id=task_id,
+                                filename=details.get("filename", "unknown"),
+                                error=details.get("error"),
+                            )
                 else:
                     response.state = "SUCCESS"
 

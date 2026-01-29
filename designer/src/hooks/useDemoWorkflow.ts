@@ -415,13 +415,21 @@ export function useDemoWorkflow(): UseDemoWorkflowReturn {
               }
 
               // If we have result details with file-specific errors, include those
+              // Server returns results in two formats:
+              // - Array format: [success_flag, details_dict] where details_dict.error contains the error
+              // - Dict format: {success: false, error: "...", filename: "..."}
               if (
                 taskStatus.result?.details &&
                 Array.isArray(taskStatus.result.details)
               ) {
                 const fileErrors = taskStatus.result.details
-                  .filter((d: any) => d.error)
-                  .map((d: any) => `${d.filename}: ${d.error}`)
+                  .map((d: any) => {
+                    // Handle array format [success, details] vs dict format {error, filename}
+                    const details = Array.isArray(d) ? d[1] : d
+                    return details
+                  })
+                  .filter((details: any) => details?.error)
+                  .map((details: any) => `${details.filename || 'unknown'}: ${details.error}`)
                   .join('; ')
                 if (fileErrors) {
                   errorMsg += `. File errors: ${fileErrors.substring(0, 300)}`
