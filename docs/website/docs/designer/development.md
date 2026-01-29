@@ -46,12 +46,12 @@ lf start
 # Option 2: Manual server start
 cd ../server
 uv sync
-uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 14345
 ```
 
 Verify the server is running:
 ```bash
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ### 4. Start the Development Server
@@ -65,7 +65,7 @@ npm run dev
 The Designer will start on `http://localhost:5173` (Vite's default port).
 
 Vite will automatically:
-- Proxy API requests to `http://localhost:8000`
+- Proxy API requests to `http://localhost:14345`
 - Hot-reload when you edit source files
 - Display build errors in the browser
 
@@ -105,7 +105,7 @@ During development, Vite proxies API requests to avoid CORS issues. This is conf
 server: {
   proxy: {
     '/api': {
-      target: process.env.API_URL || 'http://localhost:8000',
+      target: process.env.API_URL || 'http://localhost:14345',
       changeOrigin: true,
       rewrite: path => path.replace(/^\/api/, ''),
     },
@@ -113,7 +113,7 @@ server: {
 }
 ```
 
-The client code (`src/api/client.ts`) automatically detects localhost and connects directly to `http://localhost:8000`.
+The client code (`src/api/client.ts`) automatically detects localhost and connects directly to `http://localhost:14345`.
 
 ### Environment Variables
 
@@ -121,7 +121,7 @@ You can customize the API URL using environment variables:
 
 ```bash
 # .env.local
-VITE_APP_API_URL=http://localhost:8000
+VITE_APP_API_URL=http://localhost:14345
 ```
 
 Available variables:
@@ -212,7 +212,7 @@ The Dockerfile:
 docker run -d \
   --name llamafarm-designer \
   -p 3123:80 \
-  -e VITE_APP_API_URL=http://localhost:8000 \
+  -e VITE_APP_API_URL=http://localhost:14345 \
   llamafarm-designer
 ```
 
@@ -317,7 +317,7 @@ Use the browser Network tab to inspect:
 
 The Designer logs proxy requests during development:
 ```
-[PROXY] GET /api/v1/projects/default/my-project -> http://localhost:8000/v1/projects/default/my-project
+[PROXY] GET /api/v1/projects/default/my-project -> http://localhost:14345/v1/projects/default/my-project
 ```
 
 ## Common Development Tasks
@@ -368,7 +368,7 @@ npm run dev -- --port 3000
 
 ### API Connection Errors
 
-- Verify server is running: `curl http://localhost:8000/health/liveness`
+- Verify server is running: `curl http://localhost:14345/health/liveness`
 - Check `VITE_APP_API_URL` in environment
 - Look at browser console for CORS errors
 

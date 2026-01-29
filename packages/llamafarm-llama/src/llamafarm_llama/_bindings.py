@@ -134,7 +134,7 @@ LLAMA_CDEF = """
         bool no_host;
     };
 
-    // Context parameters - must match llama.cpp b7376+ layout exactly
+    // Context parameters - must match llama.cpp b7693+ layout exactly
     struct llama_context_params {
         uint32_t n_ctx;
         uint32_t n_batch;
@@ -166,6 +166,7 @@ LLAMA_CDEF = """
         bool op_offload;
         bool swa_full;
         bool kv_unified;
+        void * samplers;                     // llama_sampler_seq_config * (NULL = no backend samplers, b7690+)
     };
 
     // Batch
@@ -565,14 +566,38 @@ def _load_mtmd_library():
 
 
 def _preload_ggml_with_global(lib_dir, system):
-    """Pre-load libggml with RTLD_GLOBAL so backend registrations are visible.
+    """Pre-load libggml and its dependencies with RTLD_GLOBAL.
 
-    On Linux, when libllama.so is loaded, it pulls in libggml.so as a dependency.
+    CRITICAL FOR LINUX/JETSON: This function ensures proper library loading order
+    and symbol visibility for llama.cpp's backend system.
+
+    Problem: When libllama.so is loaded, it pulls in libggml.so as a dependency.
     If libggml.so is loaded with RTLD_LOCAL (the default), then backend registrations
-    made by ggml_backend_load_all() won't be visible to libllama.so.
+    made by ggml_backend_load_all() won't be visible to libllama.so. This causes
+    compute backends (CPU, CUDA) to fail to register properly.
 
-    By pre-loading libggml.so with RTLD_GLOBAL before libllama.so, we ensure that
-    the backend registry is globally visible.
+    Solution: Pre-load all ggml libraries with RTLD_GLOBAL before libllama.so.
+    This ensures:
+    1. The backend registry is globally visible to all loaded libraries
+    2. All dependencies are resolved from our bundled library directory
+    3. No stale RUNPATH entries from system libraries are used
+
+    Load order matters due to inter-library dependencies:
+        1. libggml-base.so.0 - Foundation library, no ggml dependencies
+        2. libggml-cpu.so.0  - CPU compute backend, depends on base
+        3. libggml-cuda.so.0 - CUDA compute backend, depends on base (optional)
+        4. libggml.so.0      - Main ggml library, depends on all above
+
+    Jetson/Tegra notes:
+        - libggml-cuda.so.0 MUST be loaded for GPU acceleration on Jetson
+        - Build llama.cpp with GGML_CUDA_GRAPHS=OFF for Jetson Orin stability
+        - The CUDA backend initialization should happen from the main thread
+          (see server.py _init_llama_backend for details)
+
+    Thread-safety:
+        - This function should be called once during module initialization
+        - Subsequent calls are safe but redundant (libraries already loaded)
+        - CUDA context creation from worker threads can cause issues on Jetson
     """
     import ctypes
 
@@ -580,36 +605,45 @@ def _preload_ggml_with_global(lib_dir, system):
         # On macOS, everything is usually linked into libllama.dylib
         return
 
-    # Find libggml
-    ggml_lib_path = None
     if system == "Windows":
-        ggml_lib_path = lib_dir / "ggml.dll"
-    elif system == "Linux":
-        # Try versioned first, then unversioned
-        for pattern in ["libggml.so.0", "libggml.so"]:
-            candidate = lib_dir / pattern
-            if candidate.exists():
-                ggml_lib_path = candidate
-                break
-
-    if not ggml_lib_path or not ggml_lib_path.exists():
-        logger.debug(f"libggml not found in {lib_dir}, skipping preload")
+        # Windows uses different loading mechanism
         return
 
-    try:
-        # Platform-specific RTLD flags
-        if system == "Linux":
-            RTLD_GLOBAL = 0x100
-            RTLD_NOW = 0x2
-        else:  # Windows
-            RTLD_GLOBAL = 0
-            RTLD_NOW = 0
+    # Platform-specific RTLD flags for Linux
+    RTLD_GLOBAL = 0x100
+    RTLD_NOW = 0x2
 
-        logger.debug(f"Pre-loading {ggml_lib_path.name} with RTLD_GLOBAL...")
-        ctypes.CDLL(str(ggml_lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
-        logger.info(f"Pre-loaded {ggml_lib_path} with RTLD_GLOBAL")
-    except Exception as e:
-        logger.warning(f"Failed to pre-load {ggml_lib_path}: {e}")
+    # Libraries to preload in dependency order
+    # Each entry is (name_patterns, required)
+    preload_order = [
+        (["libggml-base.so.0", "libggml-base.so"], True),
+        (["libggml-cpu.so.0", "libggml-cpu.so"], True),
+        (["libggml-cuda.so.0", "libggml-cuda.so"], False),  # Optional: CUDA backend
+        (["libggml.so.0", "libggml.so"], True),
+    ]
+
+    for patterns, required in preload_order:
+        lib_path = None
+        for pattern in patterns:
+            candidate = lib_dir / pattern
+            if candidate.exists():
+                lib_path = candidate
+                break
+
+        if not lib_path:
+            if required:
+                logger.debug(f"Required library {patterns[0]} not found in {lib_dir}")
+            continue
+
+        try:
+            logger.debug(f"Pre-loading {lib_path.name} with RTLD_GLOBAL...")
+            ctypes.CDLL(str(lib_path), mode=RTLD_GLOBAL | RTLD_NOW)
+            logger.info(f"Pre-loaded {lib_path} with RTLD_GLOBAL")
+        except Exception as e:
+            if required:
+                logger.warning(f"Failed to pre-load {lib_path}: {e}")
+            else:
+                logger.debug(f"Optional library {lib_path} failed to load: {e}")
 
 
 def _load_library():

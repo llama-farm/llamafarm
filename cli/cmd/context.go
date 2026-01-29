@@ -21,7 +21,7 @@ type CLIContext struct {
 func NewCLIContext() *CLIContext {
 	return &CLIContext{
 		Debug:              false,
-		ServerURL:          "http://localhost:8000",
+		ServerURL:          "http://localhost:14345",
 		OllamaHost:         "http://localhost:11434",
 		ServerStartTimeout: 45 * time.Second,
 		OverrideCwd:        "",

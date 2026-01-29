@@ -11,7 +11,7 @@ import { devToolsEmitter } from '../utils/devToolsEmitter'
 
 // Server URL for voice WebSocket (goes through API gateway)
 // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-const API_HOST = (import.meta.env as Record<string, string>).VITE_APP_API_URL || 'http://127.0.0.1:8000'
+const API_HOST = (import.meta.env as Record<string, string>).VITE_APP_API_URL || 'http://127.0.0.1:14345'
 
 // =============================================================================
 // Types

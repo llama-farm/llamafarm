@@ -14,7 +14,7 @@ import (
 func TestChatManager_BuildCurlCommand(t *testing.T) {
 	// Test that ChatManager can build proper curl command
 	cfg := &ChatConfig{
-		ServerURL:   "http://localhost:8000",
+		ServerURL:   "http://localhost:14345",
 		Namespace:   "org",
 		ProjectID:   "proj",
 		SessionMode: SessionModeStateless,
@@ -33,7 +33,7 @@ func TestChatManager_BuildCurlCommand(t *testing.T) {
 	}
 
 	// Verify the URL is in the curl command
-	if !strings.Contains(curlCmd, "http://localhost:8000/v1/projects/org/proj/chat/completions") {
+	if !strings.Contains(curlCmd, "http://localhost:14345/v1/projects/org/proj/chat/completions") {
 		t.Fatalf("curl command doesn't contain expected URL: %s", curlCmd)
 	}
 
@@ -46,7 +46,7 @@ func TestChatManager_BuildCurlCommand(t *testing.T) {
 func TestChatManager_Creation(t *testing.T) {
 	// Test that ChatManager can be created with proper config
 	cfg := &ChatConfig{
-		ServerURL:        "http://localhost:8000",
+		ServerURL:        "http://localhost:14345",
 		Namespace:        "ns",
 		ProjectID:        "proj",
 		SessionMode:      SessionModeProject,
@@ -98,7 +98,7 @@ func TestChatManager_SessionPersistence(t *testing.T) {
 
 	// Create ChatManager and set a session ID
 	cfg := &ChatConfig{
-		ServerURL:        "http://localhost:8000",
+		ServerURL:        "http://localhost:14345",
 		Namespace:        "test",
 		ProjectID:        "test",
 		SessionMode:      SessionModeProject,
@@ -191,7 +191,7 @@ func TestChatManager_ClearSession(t *testing.T) {
 
 	// Create ChatManager with a session
 	cfg := &ChatConfig{
-		ServerURL:        "http://localhost:8000",
+		ServerURL:        "http://localhost:14345",
 		Namespace:        "test",
 		ProjectID:        "test",
 		SessionMode:      SessionModeProject,

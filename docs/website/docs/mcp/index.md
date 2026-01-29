@@ -231,7 +231,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "llamafarm": {
       "transport": "http",
-      "url": "http://localhost:8000/mcp"
+      "url": "http://localhost:14345/mcp"
     }
   }
 }
@@ -244,7 +244,7 @@ Or use the HTTP transport if your MCP client supports it:
   "mcpServers": {
     "llamafarm": {
       "transport": "http",
-      "url": "http://localhost:8000/mcp"
+      "url": "http://localhost:14345/mcp"
     }
   }
 }
@@ -274,7 +274,7 @@ mcp:
   servers:
     - name: llamafarm-server
       transport: http
-      base_url: http://localhost:8000/mcp
+      base_url: http://localhost:14345/mcp
 
 runtime:
   models:
@@ -539,7 +539,7 @@ mcp:
     # LlamaFarm's own API
     - name: llamafarm
       transport: http
-      base_url: http://localhost:8000/mcp
+      base_url: http://localhost:14345/mcp
 
 runtime:
   default_model: assistant

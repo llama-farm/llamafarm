@@ -4,12 +4,12 @@ LlamaFarm provides a comprehensive REST API for managing projects, datasets, cha
 
 ## Base URL
 
-The API is served at: `http://localhost:8000`
+The API is served at: `http://localhost:14345`
 
 All versioned endpoints use the `/v1` prefix:
 
 ```text
-http://localhost:8000/v1
+http://localhost:14345/v1
 ```
 
 ## Finding Your Namespace and Project Name
@@ -56,7 +56,7 @@ You can also list projects programmatically:
 
 ```bash
 # List all projects in a namespace
-curl http://localhost:8000/v1/projects/my-org
+curl http://localhost:14345/v1/projects/my-org
 ```
 
 ### Custom Data Directory
@@ -243,7 +243,7 @@ List all projects in a namespace.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org
+curl http://localhost:14345/v1/projects/my-org
 ```
 
 ### Create Project
@@ -280,7 +280,7 @@ Create a new project in a namespace.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org \
+curl -X POST http://localhost:14345/v1/projects/my-org \
   -H "Content-Type: application/json" \
   -d '{"name": "chatbot", "config_template": "server"}'
 ```
@@ -320,7 +320,7 @@ Get details of a specific project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot
+curl http://localhost:14345/v1/projects/my-org/chatbot
 ```
 
 ### Update Project
@@ -366,7 +366,7 @@ Update a project's configuration.
 **Example:**
 
 ```bash
-curl -X PUT http://localhost:8000/v1/projects/my-org/chatbot \
+curl -X PUT http://localhost:14345/v1/projects/my-org/chatbot \
   -H "Content-Type: application/json" \
   -d @updated-config.json
 ```
@@ -495,7 +495,7 @@ data: [DONE]
 **Example (Non-Streaming):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -507,7 +507,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (Streaming):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -520,7 +520,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (Stateless):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -533,7 +533,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (With RAG):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -550,7 +550,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 For models that support chain-of-thought reasoning (like Qwen3), enable thinking mode to see the model's reasoning process:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -600,7 +600,7 @@ This ensures your answer isn't cut short by the thinking process.
 Override the default RAG query (which uses the user message) with a custom search query. This is useful when the user's question is conversational but you want specific technical retrieval:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -617,7 +617,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 Execute multiple search queries concurrently and merge the results. This is useful for comparative analysis or comprehensive retrieval:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -667,7 +667,7 @@ Retrieve conversation history for a session.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
+curl http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
 ```
 
 ### Delete Chat Session
@@ -693,7 +693,7 @@ Delete a specific chat session and its history.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions/abc-123
 ```
 
 ### Delete All Chat Sessions
@@ -719,7 +719,7 @@ Delete all chat sessions for a project.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions
 ```
 
 ### List Available Models
@@ -762,7 +762,7 @@ List all configured models for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/models
+curl http://localhost:14345/v1/projects/my-org/chatbot/models
 ```
 
 ---
@@ -812,7 +812,7 @@ List all datasets in a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/datasets
+curl http://localhost:14345/v1/projects/my-org/chatbot/datasets
 ```
 
 ### Get Available Strategies
@@ -838,7 +838,7 @@ Get available data processing strategies and databases for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/datasets/strategies
+curl http://localhost:14345/v1/projects/my-org/chatbot/datasets/strategies
 ```
 
 ### Create Dataset
@@ -878,7 +878,7 @@ Create a new dataset.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "research_papers",
@@ -915,7 +915,7 @@ Delete a dataset.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers
 ```
 
 ### Upload File to Dataset
@@ -948,7 +948,7 @@ Upload a file to a dataset (stores the file but does not process it).
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data \
   -F "file=@paper1.pdf"
 ```
 
@@ -978,7 +978,7 @@ Processing is now driven exclusively through the dataset actions endpoint, which
 ```json
 {
   "message": "Accepted",
-  "task_uri": "http://localhost:8000/v1/projects/my-org/chatbot/tasks/8f6f9c2a",
+  "task_uri": "http://localhost:14345/v1/projects/my-org/chatbot/tasks/8f6f9c2a",
   "task_id": "8f6f9c2a"
 }
 ```
@@ -988,7 +988,7 @@ Use `task_uri`/`task_id` with `GET /v1/projects/{namespace}/{project}/tasks/{tas
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/actions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/actions \
   -H "Content-Type: application/json" \
   -d '{"action_type":"process"}'
 ```
@@ -1018,13 +1018,13 @@ Remove a file from a dataset.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
 ```
 
 **Example (Remove from disk):**
 
 ```bash
-curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
+curl -X DELETE "http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
 ```
 
 ---
@@ -1099,7 +1099,7 @@ Perform a semantic search query against a RAG database.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/query \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/rag/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What are the clinical trial requirements?",
@@ -1152,7 +1152,7 @@ List all configured RAG databases and their associated strategies for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases
 ```
 
 ### Get Database Details
@@ -1205,7 +1205,7 @@ Get detailed information about a specific RAG database including its configurati
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db
 ```
 
 ### Create Database
@@ -1267,7 +1267,7 @@ Create a new RAG database in the project configuration.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/databases \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/rag/databases \
   -H "Content-Type: application/json" \
   -d '{
     "name": "new_database",
@@ -1325,7 +1325,7 @@ Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
 **Example - Add a reranking strategy:**
 
 ```bash
-curl -X PATCH http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db \
+curl -X PATCH http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db \
   -H "Content-Type: application/json" \
   -d '{
     "retrieval_strategies": [
@@ -1375,10 +1375,10 @@ Delete a RAG database from the project. Fails if any datasets depend on this dat
 
 ```bash
 # Delete database and its collection
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/old_db
 
 # Only remove from config, keep the vector store data
-curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db?delete_collection=false"
+curl -X DELETE "http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/old_db?delete_collection=false"
 ```
 
 ### Check RAG Health
@@ -1436,13 +1436,13 @@ Get health status of the RAG system and databases.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/health
 ```
 
 **Example (Specific database):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/health?database=main_db"
 ```
 
 ### Get RAG Statistics
@@ -1474,13 +1474,13 @@ Get statistics for a RAG database including vector counts and storage usage.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/stats
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/stats
 ```
 
 **Example (Specific database):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/stats?database=research_db"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/stats?database=research_db"
 ```
 
 ### List Documents in Database
@@ -1527,13 +1527,13 @@ List all documents stored in a RAG database with their metadata.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db/documents
 ```
 
 **Example (With limit):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
 ```
 
 ---
@@ -1582,7 +1582,7 @@ Get the status of an asynchronous task.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+curl http://localhost:14345/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
 
 ### Cancel Task
@@ -1678,7 +1678,7 @@ This endpoint is primarily used for cancelling dataset processing operations. Wh
 **Example:**
 ```bash
 # Cancel a running dataset processing task
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
 
 **HTTP Status Codes:**
@@ -1730,7 +1730,7 @@ List all available example projects.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/examples
+curl http://localhost:14345/v1/examples
 ```
 
 ### Import Example as Project
@@ -1767,7 +1767,7 @@ Import an example as a new project.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/examples/fda_rag/import-project \
+curl -X POST http://localhost:14345/v1/examples/fda_rag/import-project \
   -H "Content-Type: application/json" \
   -d '{
     "namespace": "my-org",
@@ -1811,7 +1811,7 @@ Import example data into an existing project.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/examples/fda_rag/import-data \
+curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
   -H "Content-Type: application/json" \
   -d '{
     "namespace": "my-org",
@@ -1946,12 +1946,12 @@ Real-time voice chat with stateful conversation sessions.
 ```javascript
 // Connect using project config (voice settings from llamafarm.yaml)
 const ws = new WebSocket(
-  'ws://localhost:8000/v1/default/my-voice-app/voice/chat'
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat'
 );
 
 // Override specific settings via query params
 const ws2 = new WebSocket(
-  'ws://localhost:8000/v1/default/my-voice-app/voice/chat?' +
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat?' +
   'tts_voice=am_adam&' +  // Override voice from config
   'speed=1.2'             // Override speed from config
 );
@@ -2040,7 +2040,7 @@ Check overall system health.
 **Example:**
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:14345/health
 ```
 
 ### Liveness Probe
@@ -2060,7 +2060,7 @@ Simple liveness check for container orchestration.
 **Example:**
 
 ```bash
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ---
@@ -2099,7 +2099,7 @@ Get system version and configuration info.
 **Example:**
 
 ```bash
-curl http://localhost:8000/info
+curl http://localhost:14345/info
 ```
 
 ### Check for CLI Updates
@@ -2129,7 +2129,7 @@ Check if a newer version of the CLI is available.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/system/version-check
+curl http://localhost:14345/v1/system/version-check
 ```
 
 ### Get Disk Space
@@ -2168,7 +2168,7 @@ Get disk space information for the HuggingFace cache and system disk.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/system/disk
+curl http://localhost:14345/v1/system/disk
 ```
 
 ---
@@ -2219,13 +2219,13 @@ List event logs for a project with optional filtering.
 
 ```bash
 # List recent events
-curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs
+curl http://localhost:14345/v1/projects/my-org/chatbot/event_logs
 
 # Filter by type with pagination
-curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?type=inference&limit=20"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/event_logs?type=inference&limit=20"
 
 # Filter by time range
-curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?start_time=2024-01-15T00:00:00Z"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/event_logs?start_time=2024-01-15T00:00:00Z"
 ```
 
 ### Get Event Details
@@ -2265,7 +2265,7 @@ Get full details of a specific event including all sub-events.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
+curl http://localhost:14345/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
 ```
 
 ---
@@ -2303,7 +2303,7 @@ List all models cached on disk.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/models
+curl http://localhost:14345/v1/models
 ```
 
 ### Download/Cache Model
@@ -2332,7 +2332,7 @@ data: {"event": "complete", "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/models/download \
+curl -X POST http://localhost:14345/v1/models/download \
   -H "Content-Type: application/json" \
   -d '{"model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}'
 ```
@@ -2390,7 +2390,7 @@ Check if there's sufficient disk space for a model download before starting.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/models/validate-download \
+curl -X POST http://localhost:14345/v1/models/validate-download \
   -H "Content-Type: application/json" \
   -d '{"model_name": "unsloth/Qwen3-1.7B-GGUF"}'
 ```
@@ -2435,7 +2435,7 @@ List all available GGUF quantization options for a model with file sizes.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
+curl http://localhost:14345/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
 ```
 
 ### Delete Cached Model
@@ -2463,7 +2463,7 @@ Delete a cached model from disk.
 **Example:**
 
 ```bash
-curl -X DELETE "http://localhost:8000/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
+curl -X DELETE "http://localhost:14345/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
 ```
 
 ---
@@ -2493,7 +2493,7 @@ runtime:
 The `model` field in chat completions requests is OpenAI-compatible and allows you to select which configured model to use:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "smart-model",
@@ -2508,7 +2508,7 @@ If `model` is not specified, the `default_model` from your configuration is used
 ### Get Available Models
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/models
+curl http://localhost:14345/v1/projects/my-org/chatbot/models
 ```
 
 ---
@@ -2606,7 +2606,7 @@ You can configure LlamaFarm projects to expose tools through MCP servers, giving
 Always check HTTP status codes and handle errors:
 
 ```bash
-response=$(curl -s -w "\n%{http_code}" http://localhost:8000/v1/projects/my-org/chatbot)
+response=$(curl -s -w "\n%{http_code}" http://localhost:14345/v1/projects/my-org/chatbot)
 http_code=$(echo "$response" | tail -n 1)
 body=$(echo "$response" | head -n -1)
 
@@ -2648,7 +2648,7 @@ fi
 import requests
 
 class LlamaFarmClient:
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://localhost:14345"):
         self.base_url = base_url
         self.session = requests.Session()
 
@@ -2703,7 +2703,7 @@ interface ChatRequest {
 }
 
 class LlamaFarmClient {
-  constructor(private baseUrl: string = "http://localhost:8000") {}
+  constructor(private baseUrl: string = "http://localhost:14345") {}
 
   async chat(
     namespace: string,
@@ -2811,7 +2811,7 @@ console.log(result.choices[0].message.content);
 
 The Vision API provides OCR and document extraction capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime, handling file uploads and base64 image conversion automatically.
 
-**Base URL:** `http://localhost:8000/v1/vision`
+**Base URL:** `http://localhost:14345/v1/vision`
 
 ### OCR Endpoint
 
@@ -2855,7 +2855,7 @@ Extract text from images and PDFs using multiple OCR backends.
 **Example (File Upload):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=easyocr" \
   -F "languages=en"
@@ -2864,7 +2864,7 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 **Example (Base64 Images):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=surya" \
   -F "languages=en"
@@ -2923,7 +2923,7 @@ Extract structured data from documents using vision-language models.
 **Example (Document VQA with File Upload):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@receipt.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
   -F "prompts=What is the store name?,What is the total amount?" \
@@ -2933,7 +2933,7 @@ curl -X POST http://localhost:8000/v1/vision/documents/extract \
 **Example (Extraction with Base64):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
@@ -2945,7 +2945,7 @@ curl -X POST http://localhost:8000/v1/vision/documents/extract \
 
 The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
 
-**Base URL:** `http://localhost:8000/v1/ml`
+**Base URL:** `http://localhost:14345/v1/ml`
 
 :::tip Model Versioning
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
@@ -3025,7 +3025,7 @@ To add a description to a model, use the `/v1/ml/classifier/save` endpoint after
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+curl -X POST http://localhost:14345/v1/ml/classifier/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "intent-classifier",
@@ -3102,7 +3102,7 @@ Classify texts using a trained model.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+curl -X POST http://localhost:14345/v1/ml/classifier/predict \
   -H "Content-Type: application/json" \
   -d '{
     "model": "intent-classifier-latest",
@@ -3269,7 +3269,7 @@ Train an anomaly detection model.
 
 ```bash
 # Train on normal temperature readings (20-25°C range)
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor_anomaly_detector",
@@ -3334,7 +3334,7 @@ Same request format as `/score`, but response only includes anomalous points.
 
 ```bash
 # Test with mix of normal and anomalous readings
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor_anomaly_detector-latest",
@@ -3461,7 +3461,7 @@ nx start universal-runtime
 
 :::info Classification Endpoints
 - **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
-- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:8000`.
+- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:14345`.
 :::
 
 ### Quick Examples

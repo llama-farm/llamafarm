@@ -435,7 +435,8 @@ class TestDatasetService:
             "test_namespace", "test_project"
         )
 
-        expected_strategies = ["custom_strategy"]
+        # universal_rag is always included as the built-in default
+        expected_strategies = ["universal_rag", "custom_strategy"]
         assert strategies == expected_strategies
 
     @patch.object(ProjectService, "load_config")
@@ -479,7 +480,8 @@ class TestDatasetService:
             "test_namespace", "test_project"
         )
 
-        expected_strategies = []
+        # universal_rag is always available as the built-in default, even without RAG config
+        expected_strategies = ["universal_rag"]
         assert strategies == expected_strategies
 
     @patch.object(ProjectService, "load_config")

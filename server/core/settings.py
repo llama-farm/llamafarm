@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",  # Ignore unknown env vars instead of raising errors
     )
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 14345
     RELOAD: bool = False  # if true, the server will reload on code changes
 
     LOG_JSON_FORMAT: bool = False

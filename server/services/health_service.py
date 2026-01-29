@@ -28,6 +28,8 @@ def _check_server() -> dict:
             "latency_ms": _now_ms() - start,
             "details": {
                 "pid": os.getpid(),
+                # Show localhost for 0.0.0.0 (all interfaces), otherwise actual host
+                "host": f"http://{'localhost' if settings.HOST == '0.0.0.0' else settings.HOST}:{settings.PORT}",
             },
         }
     except Exception as e:  # pragma: no cover - defensive

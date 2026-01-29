@@ -350,7 +350,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         // If we never got connected (no session_id), this is a connection failure
         // Only show generic error if we didn't receive a specific error from server
         if (!hasConnectedRef.current && !errorReceivedRef.current) {
-          const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 8000?'
+          const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 14345?'
           setError(errorMsg)
           onError?.(errorMsg)
         }

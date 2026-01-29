@@ -69,7 +69,7 @@ lf rag query --database main_db "summarize"
 lf chat "hello"
 ```
 
-**Designer Web UI**: When you run `lf start`, the Designer is automatically launched at `http://localhost:8000`. This provides a visual interface for managing projects, uploading datasets via drag-and-drop, and testing your AI—all without additional commands. See the [Designer documentation](../docs/website/docs/designer/index.md) for details.
+**Designer Web UI**: When you run `lf start`, the Designer is automatically launched at `http://localhost:14345`. This provides a visual interface for managing projects, uploading datasets via drag-and-drop, and testing your AI—all without additional commands. See the [Designer documentation](../docs/website/docs/designer/index.md) for details.
 
 ### Running Backend Services Manually
 

@@ -49,7 +49,7 @@ default_data_dir = str(Path.home() / ".llamafarm")
 class Settings(BaseSettings, env_file=".env"):
     """Application settings loaded from environment."""
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 14345
     LOG_LEVEL: str = "INFO"
     LOG_JSON_FORMAT: bool = False
 

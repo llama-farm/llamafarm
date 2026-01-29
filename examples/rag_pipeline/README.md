@@ -739,7 +739,7 @@ lf rag process my-dataset --workers 4
 #### Server connection issues
 ```bash
 # Check server status
-curl http://localhost:8000/health
+curl http://localhost:14345/health
 
 # Restart server
 pkill -f "uvicorn.*main:app"

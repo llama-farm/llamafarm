@@ -4,12 +4,9 @@ Tests that preview produces the EXACT same chunks as actual ingestion.
 All tests written FIRST and will fail until implementation is complete.
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
-
-from core.base import Document
 
 
 class TestPreviewIntegration:
@@ -71,7 +68,9 @@ unlabeled datasets.
 """
 
     @pytest.fixture
-    def sample_markdown_file(self, sample_markdown_content: str, tmp_path: Path) -> Path:
+    def sample_markdown_file(
+        self, sample_markdown_content: str, tmp_path: Path
+    ) -> Path:
         """Create a temporary markdown file."""
         file_path = tmp_path / "sample.md"
         file_path.write_text(sample_markdown_content)
@@ -84,20 +83,24 @@ unlabeled datasets.
         sample_text_content: str,
     ):
         """Preview chunks MUST match what ingestion produces."""
+        # Create a minimal strategy config for testing
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        # Create a minimal strategy config for testing
-        from config.datamodel import DataProcessingStrategy, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
                     priority=1,
+                    fallback_parser=None,
+                    file_extensions=None,
+                    mime_types=None,
                 )
             ],
             extractors=[],
@@ -124,7 +127,7 @@ unlabeled datasets.
 
         # CRITICAL: Same content in each chunk
         for i, (preview_chunk, ingested_doc) in enumerate(
-            zip(preview_result.chunks, ingestion_docs)
+            zip(preview_result.chunks, ingestion_docs, strict=True)
         ):
             assert preview_chunk.content == ingested_doc.content, (
                 f"Chunk {i} content mismatch:\n"
@@ -138,19 +141,23 @@ unlabeled datasets.
         sample_markdown_file: Path,
     ):
         """Preview matches ingestion for markdown files."""
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        from config.datamodel import DataProcessingStrategy, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_markdown_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="MarkdownParser_Python",
                     file_include_patterns=["*.md"],
                     config={"chunk_size": 300, "chunk_overlap": 30},
                     priority=1,
+                    fallback_parser=None,
+                    file_extensions=None,
+                    mime_types=None,
                 )
             ],
             extractors=[],
@@ -169,7 +176,9 @@ unlabeled datasets.
         assert len(preview_result.chunks) == len(ingestion_docs)
 
         # Same content
-        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs):
+        for preview_chunk, ingested_doc in zip(
+            preview_result.chunks, ingestion_docs, strict=True
+        ):
             assert preview_chunk.content == ingested_doc.content
 
     @pytest.mark.integration
@@ -185,19 +194,23 @@ unlabeled datasets.
         sample_text_file: Path,
     ):
         """Extractors are applied same way in preview and ingestion."""
+        from config.datamodel import DataProcessingStrategyDefinition, Extractor, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        from config.datamodel import DataProcessingStrategy, Extractor, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_extractor_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
                     priority=1,
+                    fallback_parser=None,
+                    file_extensions=None,
+                    mime_types=None,
                 )
             ],
             extractors=[
@@ -206,6 +219,8 @@ unlabeled datasets.
                     file_include_patterns=["*.txt"],
                     config={},
                     priority=1,
+                    condition=None,
+                    required_for=None,
                 )
             ],
         )
@@ -220,25 +235,31 @@ unlabeled datasets.
         ingestion_docs = blob_processor.process_blob(file_data, metadata)
 
         # Same content (extractors don't change content, only metadata)
-        for preview_chunk, ingested_doc in zip(preview_result.chunks, ingestion_docs):
+        for preview_chunk, ingested_doc in zip(
+            preview_result.chunks, ingestion_docs, strict=True
+        ):
             assert preview_chunk.content == ingested_doc.content
 
     @pytest.mark.integration
     def test_preview_with_different_chunk_sizes(self, sample_text_file: Path):
         """Preview correctly records chunk size override in result."""
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        from config.datamodel import DataProcessingStrategy, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_small_chunks_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 100, "chunk_overlap": 10},
                     priority=1,
+                    fallback_parser=None,
+                    file_extensions=None,
+                    mime_types=None,
                 )
             ],
             extractors=[],
@@ -271,19 +292,23 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_positions_are_accurate(self, sample_text_content: str):
         """Preview chunk positions accurately map to original text."""
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        from config.datamodel import DataProcessingStrategy, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_position_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 100, "chunk_overlap": 0},
                     priority=1,
+                    fallback_parser=None,
+                    file_extensions=None,
+                    mime_types=None,
                 )
             ],
             extractors=[],
@@ -300,7 +325,9 @@ unlabeled datasets.
         # Verify each chunk's position maps to correct text
         for chunk in result.chunks:
             if chunk.start_position >= 0:  # Skip unfindable chunks
-                extracted = result.original_text[chunk.start_position:chunk.end_position]
+                extracted = result.original_text[
+                    chunk.start_position : chunk.end_position
+                ]
                 assert extracted == chunk.content, (
                     f"Position mismatch for chunk {chunk.chunk_index}:\n"
                     f"Content: '{chunk.content[:30]}...'\n"
@@ -310,15 +337,15 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_overlap_detection(self):
         """Preview correctly identifies overlapping regions."""
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
-
-        from config.datamodel import DataProcessingStrategy, Parser
 
         # Use a known text with predictable chunking
         text = "AAAA BBBB CCCC DDDD EEEE FFFF GGGG HHHH"
 
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_overlap_strategy",
             parsers=[
                 Parser(
@@ -347,26 +374,30 @@ unlabeled datasets.
             # The end of chunk1 should overlap with the start of chunk2
             if chunk1.end_position > chunk2.start_position:
                 overlap_region = result.original_text[
-                    chunk2.start_position:chunk1.end_position
+                    chunk2.start_position : chunk1.end_position
                 ]
                 assert len(overlap_region) > 0, "Expected overlap region"
 
     @pytest.mark.integration
     def test_preview_idempotent(self, sample_text_file: Path):
         """Calling preview multiple times produces same result."""
+        from config.datamodel import DataProcessingStrategyDefinition, Parser
+
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        from config.datamodel import DataProcessingStrategy, Parser
-
-        strategy = DataProcessingStrategy(
+        strategy = DataProcessingStrategyDefinition(
             name="test_strategy",
+            description="",
             parsers=[
                 Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
                     priority=1,
+                    file_extensions=None,
+                    mime_types=None,
+                    fallback_parser=None,
                 )
             ],
             extractors=[],
@@ -386,7 +417,7 @@ unlabeled datasets.
         assert result1.total_chunks == result2.total_chunks
         assert result1.original_text == result2.original_text
 
-        for c1, c2 in zip(result1.chunks, result2.chunks):
+        for c1, c2 in zip(result1.chunks, result2.chunks, strict=True):
             assert c1.content == c2.content
             assert c1.start_position == c2.start_position
             assert c1.end_position == c2.end_position

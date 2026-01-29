@@ -312,7 +312,7 @@ jobs:
         run: |
           if ! ./${{ matrix.binary }} init --cwd "$TEST_DIR" --debug; then
             echo "❌ Project initialization failed, checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
           echo "✓ Project initialized"
@@ -422,7 +422,7 @@ jobs:
             echo ""
             echo "❌ Model pre-warming failed!"
             echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             echo ""
             echo "Last 50 lines of output:"
             tail -50 /tmp/prewarm.log
@@ -442,14 +442,16 @@ jobs:
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
             LIB_NAME="libllama.dylib"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
             LIB_NAME="llama.dll"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
             LIB_NAME="libllama.so"
           fi
 
-          LLAMA_VERSION="b7376"
+          # Strip both LF and CR to handle Windows CRLF line endings
+          LLAMA_VERSION=$(cat llama-cpp-version.txt | tr -d '\r\n')
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
           echo "Expected binary location: $LIB_PATH"
@@ -581,11 +583,11 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets create \
-            -s universal_processor \
+            -s universal_rag \
             -b main_database \
             test_dataset; then
             echo "❌ Dataset creation failed, checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
           echo "✓ Dataset created"
@@ -616,7 +618,7 @@ jobs:
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets upload test_dataset "../examples/quick_rag/files"; then
             echo "❌ Upload failed for ../examples/quick_rag/files, checking server health..."
             echo "Current directory: $(pwd)"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
           echo "✓ All sample files uploaded"
@@ -654,7 +656,7 @@ jobs:
           sleep 2
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets process test_dataset; then
             echo "❌ Dataset processing failed, checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
           echo "✓ Dataset processing complete"
@@ -676,7 +678,7 @@ jobs:
             echo "❌ RAG query command failed"
             echo "$OUTPUT"
             echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -685,7 +687,7 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: RAG query returned empty output"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -705,7 +707,7 @@ jobs:
             echo "❌ RAG query validation failed"
             echo "$OUTPUT"
             echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -732,7 +734,7 @@ jobs:
             echo "❌ Chat command failed"
             echo "$OUTPUT"
             echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -742,14 +744,14 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command returned empty output"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
           # Check if output contains some text (at least 10 characters)
           if [ ${#OUTPUT} -lt 10 ]; then
             echo "❌ Error: Chat response too short, possible error"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -768,7 +770,7 @@ jobs:
             echo "❌ Chat command (no RAG) failed"
             echo "$OUTPUT"
             echo "Checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -778,7 +780,7 @@ jobs:
           # Verify output is not empty
           if [ -z "$OUTPUT" ]; then
             echo "❌ Error: Chat command (no RAG) returned empty output"
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
 
@@ -796,7 +798,7 @@ jobs:
           echo "Listing datasets..."
           if ! ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug datasets list; then
             echo "❌ Dataset listing failed, checking server health..."
-            curl -s http://localhost:8000/health | jq '.' || echo "Server not reachable"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
           echo "✓ Dataset listing works"
@@ -907,7 +909,8 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             LLAMA_CACHE="$HOME/Library/Caches/llamafarm-llama"
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            LLAMA_CACHE="$LOCALAPPDATA/llamafarm-llama/cache"
+            # Convert Windows path to Unix-style for bash compatibility
+            LLAMA_CACHE="$(cygpath -u "$LOCALAPPDATA")/llamafarm-llama/cache"
           else
             LLAMA_CACHE="$HOME/.cache/llamafarm-llama"
           fi

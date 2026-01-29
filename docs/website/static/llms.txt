@@ -11,14 +11,14 @@ LlamaFarm provides enterprise AI capabilities on your own hardware: RAG (retriev
 
 ## Common API Patterns
 
-Base URL: `http://localhost:8000`
+Base URL: `http://localhost:14345`
 
 ### Chat Completions (OpenAI-compatible)
 
 ```bash
 POST /v1/projects/{namespace}/{project}/chat/completions
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Hello"}],
@@ -49,7 +49,7 @@ Session headers:
 ```bash
 POST /v1/projects/{namespace}/{project}/rag/databases
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/databases \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/rag/databases \
   -H "Content-Type: application/json" \
   -d '{
     "name": "my_database",
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/databases 
 ```bash
 POST /v1/projects/{namespace}/{project}/datasets
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/datasets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "research_papers",
@@ -86,7 +86,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets \
 ```bash
 POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/research_papers/data \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/datasets/research_papers/data \
   -F "file=@document.pdf"
 ```
 
@@ -95,7 +95,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/resea
 ```bash
 POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/research_papers/actions \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/datasets/research_papers/actions \
   -H "Content-Type: application/json" \
   -d '{"action": "ingest"}'
 ```
@@ -105,7 +105,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/datasets/resea
 ```bash
 POST /v1/projects/{namespace}/{project}/rag/query
 
-curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/query \
+curl -X POST http://localhost:14345/v1/projects/default/my-project/rag/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What are the key findings?",
@@ -119,7 +119,7 @@ curl -X POST http://localhost:8000/v1/projects/default/my-project/rag/query \
 ```bash
 POST /v1/ml/classifier/fit
 
-curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+curl -X POST http://localhost:14345/v1/ml/classifier/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "ticket-router",
@@ -137,7 +137,7 @@ curl -X POST http://localhost:8000/v1/ml/classifier/fit \
 ```bash
 POST /v1/ml/classifier/predict
 
-curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+curl -X POST http://localhost:14345/v1/ml/classifier/predict \
   -H "Content-Type: application/json" \
   -d '{
     "model": "ticket-router",
@@ -151,7 +151,7 @@ curl -X POST http://localhost:8000/v1/ml/classifier/predict \
 # Train on normal data
 POST /v1/ml/anomaly/fit
 
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "latency-monitor",
@@ -162,7 +162,7 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
 # Detect anomalies
 POST /v1/ml/anomaly/detect
 
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "latency-monitor",
@@ -178,7 +178,7 @@ Backends: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoenco
 ```bash
 POST /v1/vision/ocr
 
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=surya"
 ```
@@ -190,7 +190,7 @@ OCR backends: `surya` (best), `easyocr`, `paddleocr`, `tesseract`
 ```bash
 POST /v1/embeddings
 
-curl -X POST http://localhost:8000/v1/embeddings \
+curl -X POST http://localhost:14345/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "input": ["Hello world", "How are you?"],

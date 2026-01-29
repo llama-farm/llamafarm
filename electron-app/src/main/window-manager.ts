@@ -299,9 +299,9 @@ export class WindowManager {
     })
 
     // Load the Designer UI
-    // The backend serves the Designer at localhost:8000 (via lf start/launch designer)
+    // The backend serves the Designer at localhost:14345 (via lf start/launch designer)
     // MUST use localhost (not 127.0.0.1) as the Designer's API config depends on it
-    const designerURL = 'http://localhost:8000'
+    const designerURL = 'http://localhost:14345'
     console.log('Loading Designer from:', designerURL)
     this.mainWindow.loadURL(designerURL)
 
