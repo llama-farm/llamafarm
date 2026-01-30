@@ -16,7 +16,6 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     # --- Server dependencies ---
-    "dotenv>=0.9.9",
     "fastapi>=0.116.1",
     "pydantic-settings>=2.10.1",
     "uvicorn>=0.35.0",
@@ -52,11 +51,10 @@ dependencies = [
     "tomli-w>=1.0.0",
     # --- Common dependencies (bundled, not from PyPI) ---
     "hf-transfer>=0.1.9",
-    # --- ML baseline (CPU-only) ---
-    # GPU versions are installed by the add-on/orchestration tools when needed.
-    # CPU torch is sourced from https://download.pytorch.org/whl/cpu via
-    # PYAPP_PIP_EXTRA_ARGS in the build script.
-    "torch>=2.0.0",
+    # --- ML / Hardware-specific ---
+    # torch is NOT listed here — it is installed separately by the CLI after
+    # initial bootstrap, using the appropriate index for the user's hardware
+    # (CPU, CUDA, ROCm). See: cli/internal/deploy/
     # --- Platform-specific ---
     "pywin32>=306; sys_platform == 'win32'",
 ]

@@ -85,7 +85,7 @@ COMPONENTS: dict[str, dict] = {
             ("observability", "observability"),
         ],
         "needs_config": True,
-        "pip_extra_args": "--extra-index-url https://download.pytorch.org/whl/cpu",
+        "pip_extra_args": "",
         "python_version": "3.12",
     },
     "rag": {
@@ -124,7 +124,7 @@ COMPONENTS: dict[str, dict] = {
             ("llamafarm_llama", "packages/llamafarm-llama/src/llamafarm_llama"),
         ],
         "needs_config": False,
-        "pip_extra_args": "--extra-index-url https://download.pytorch.org/whl/cpu",
+        "pip_extra_args": "",
         "python_version": "3.12",
     },
 }
@@ -497,7 +497,7 @@ def download_pyapp_source(cache_dir: Path) -> Path:
 
     print("Extracting PyApp source...")
     with tarfile.open(archive_path, "r:gz") as tar:
-        tar.extractall(path=cache_dir)
+        tar.extractall(path=cache_dir, filter="data")
 
     # PyApp extracts to a directory named "pyapp-vX.Y.Z"
     # Check common extraction patterns
@@ -573,7 +573,7 @@ def build_pyapp_binary(
             # Allow pip to read env vars and config at runtime
             # (needed for custom package indexes for private add-ons)
             "PYAPP_PIP_ALLOW_CONFIG": "true",
-            # Extra pip args (e.g. PyTorch CPU index)
+            # Extra pip/uv args for dependency installation
             "PYAPP_PIP_EXTRA_ARGS": cfg["pip_extra_args"],
             # Management command name
             "PYAPP_SELF_COMMAND": "self",

@@ -52,11 +52,10 @@ dependencies = [
     # --- llamafarm-llama dependencies (bundled, not from PyPI) ---
     "cffi>=1.15.0",
     "numpy>=1.20.0",
-    # --- ML baseline (CPU-only) ---
-    # GPU versions are installed by the add-on/orchestration tools when needed.
-    # CPU torch is sourced from https://download.pytorch.org/whl/cpu via
-    # PYAPP_PIP_EXTRA_ARGS in the build script.
-    "torch>=2.0.0",
+    # --- ML / Hardware-specific ---
+    # torch is NOT listed here — it is installed separately by the CLI after
+    # initial bootstrap, using the appropriate index for the user's hardware
+    # (CPU, CUDA, ROCm). See: cli/internal/deploy/
     # --- Platform-specific ---
     "pywin32>=306; sys_platform == 'win32'",
 ]
