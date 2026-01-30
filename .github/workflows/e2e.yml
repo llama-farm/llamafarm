@@ -279,9 +279,147 @@ jobs:
 
           exit 1
 
+  wait-for-pyapp:
+    name: Wait for PyApp Build
+    runs-on: ubuntu-latest
+    outputs:
+      pyapp_run_id: ${{ steps.wait.outputs.run_id }}
+    steps:
+      - name: Wait for PyApp workflow (if triggered)
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Checking for 'Build Native Binaries (PyApp)' workflow run..."
+
+          # Get the current commit SHA
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            COMMIT_SHA="${{ github.sha }}"
+          fi
+          echo "Looking for PyApp build for commit: $COMMIT_SHA"
+
+          # Phase 1: Check if a PyApp workflow run exists for this commit.
+          # pyapp.yml only triggers when tools/pyapp/** or the workflow file changes,
+          # so there may not be a run for every commit. Wait up to 5 minutes for
+          # GitHub to dispatch it (accounting for queue delays).
+          DISCOVERY_ATTEMPTS=10
+          SLEEP_TIME=30
+          RUN_ID=""
+
+          echo ""
+          echo "Phase 1: Checking if PyApp workflow was triggered for this commit..."
+          for i in $(seq 1 $DISCOVERY_ATTEMPTS); do
+            RUN_INFO=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/pyapp.yml/runs?head_sha=$COMMIT_SHA&per_page=1" \
+              --jq '.workflow_runs[0] | {id: .id, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "{}")
+
+            RUN_ID=$(echo "$RUN_INFO" | jq -r '.id // empty')
+
+            if [ -n "$RUN_ID" ]; then
+              echo "  Found PyApp workflow run: $RUN_ID"
+              break
+            fi
+
+            echo "  Attempt $i/$DISCOVERY_ATTEMPTS: No PyApp workflow run found, waiting..."
+            sleep $SLEEP_TIME
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo ""
+            echo "No PyApp workflow run found for this commit."
+            echo "Binary tests will use the latest artifacts from the branch."
+            echo "run_id=" >> $GITHUB_OUTPUT
+
+            {
+              echo "## PyApp Build Wait Summary"
+              echo ""
+              echo "- **Result**: No PyApp workflow triggered for this commit"
+              echo "- **Fallback**: Binary tests will use latest branch artifacts"
+            } >> $GITHUB_STEP_SUMMARY
+
+            exit 0
+          fi
+
+          # Phase 2: Wait for the PyApp workflow to complete.
+          # PyApp builds compile Rust binaries across 4 platforms, so they can
+          # take 20-40 minutes. Wait up to 45 minutes total.
+          echo ""
+          echo "Phase 2: Waiting for PyApp workflow $RUN_ID to complete..."
+          MAX_ATTEMPTS=90
+          START_TIME=$(date +%s)
+          PREV_STATUS=""
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$(( (CURRENT_TIME - START_TIME) / 60 ))
+            REMAINING=$(( (MAX_ATTEMPTS - i) * SLEEP_TIME / 60 ))
+
+            RUN_INFO=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/runs/$RUN_ID" \
+              --jq '{status: .status, conclusion: .conclusion}' 2>/dev/null || echo "{}")
+
+            STATUS=$(echo "$RUN_INFO" | jq -r '.status // empty')
+            CONCLUSION=$(echo "$RUN_INFO" | jq -r '.conclusion // empty')
+
+            if [ -n "$PREV_STATUS" ] && [ "$STATUS" != "$PREV_STATUS" ]; then
+              echo "  Status changed: $PREV_STATUS → $STATUS"
+            fi
+            PREV_STATUS="$STATUS"
+
+            echo "  Attempt $i: status=$STATUS, conclusion=$CONCLUSION (${ELAPSED}m elapsed, ~${REMAINING}m remaining)"
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo ""
+                echo "✓ PyApp workflow completed successfully!"
+                echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+                {
+                  echo "## PyApp Build Wait Summary"
+                  echo ""
+                  echo "- **Total wait time**: ${ELAPSED}m"
+                  echo "- **PyApp Run ID**: $RUN_ID"
+                  echo "- **Conclusion**: $CONCLUSION"
+                } >> $GITHUB_STEP_SUMMARY
+
+                exit 0
+              elif [ "$CONCLUSION" = "cancelled" ]; then
+                echo ""
+                echo "❌ PyApp workflow was cancelled (likely by concurrency controls)"
+                exit 1
+              else
+                echo ""
+                echo "❌ PyApp workflow failed with conclusion: $CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep $SLEEP_TIME
+          done
+
+          FINAL_ELAPSED=$(( ($(date +%s) - START_TIME) / 60 ))
+          echo ""
+          echo "❌ Timed out waiting for PyApp workflow after ${FINAL_ELAPSED}m"
+
+          {
+            echo "## PyApp Build Wait - TIMEOUT"
+            echo ""
+            echo "- **Total wait time**: ${FINAL_ELAPSED}m"
+            echo "- **Last status**: $STATUS"
+            echo ""
+            echo "The PyApp workflow did not complete within the 45-minute timeout."
+            echo "This is usually caused by GitHub runner availability issues."
+          } >> $GITHUB_STEP_SUMMARY
+
+          exit 1
+
   e2e-test:
     name: E2E Tests (${{ matrix.os }}, ${{ matrix.deploy_mode }})
-    needs: wait-for-cli
+    needs: [wait-for-cli, wait-for-pyapp]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -403,9 +541,22 @@ jobs:
       # ============================================================
       # Download and Setup PyApp Binaries (binary deploy mode only)
       # ============================================================
-      - name: Download PyApp service binaries
-        if: matrix.deploy_mode == 'binary'
-        id: download-pyapp
+      - name: Download PyApp service binaries (from matching build)
+        if: matrix.deploy_mode == 'binary' && needs.wait-for-pyapp.outputs.pyapp_run_id != ''
+        id: download-pyapp-exact
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: pyapp.yml
+          run_id: ${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}
+          name: llamafarm-.*-pyapp-${{ matrix.pyapp_os }}
+          name_is_regexp: true
+          path: pyapp-download/
+          if_no_artifact_found: fail
+
+      - name: Download PyApp service binaries (latest from branch)
+        if: matrix.deploy_mode == 'binary' && needs.wait-for-pyapp.outputs.pyapp_run_id == ''
+        id: download-pyapp-branch
         continue-on-error: true
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -420,12 +571,18 @@ jobs:
         if: matrix.deploy_mode == 'binary'
         shell: bash
         run: |
-          if [ "${{ steps.download-pyapp.outcome }}" != "success" ]; then
+          EXACT="${{ steps.download-pyapp-exact.outcome }}"
+          BRANCH="${{ steps.download-pyapp-branch.outcome }}"
+          if [ "$EXACT" != "success" ] && [ "$BRANCH" != "success" ]; then
             echo "::error::PyApp artifacts not available for platform ${{ matrix.pyapp_os }}."
             echo "Run the 'Build Native Binaries (PyApp)' workflow first, then re-run this workflow."
             exit 1
           fi
-          echo "✓ PyApp artifacts downloaded"
+          if [ "$EXACT" = "success" ]; then
+            echo "✓ PyApp artifacts downloaded (from matching PyApp build)"
+          else
+            echo "✓ PyApp artifacts downloaded (latest from branch)"
+          fi
           ls -laR pyapp-download/
 
       - name: Setup binary deploy mode
