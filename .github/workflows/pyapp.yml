@@ -16,6 +16,10 @@ on:
           - rag
           - runtime
           - all
+      version:
+        description: "Version (e.g. 0.0.26). Leave empty to use git ref."
+        required: false
+        type: string
       embed_python:
         description: "Embed Python distribution in binary"
         required: true
@@ -135,7 +139,7 @@ jobs:
 
       - name: Build with PyApp
         run: |
-          python tools/pyapp/build.py --component ${{ matrix.component }} --skip-types ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
+          python tools/pyapp/build.py --component ${{ matrix.component }} --skip-types ${{ github.event.inputs.version && format('--version {0}', github.event.inputs.version) || '' }} ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
 
       - name: List build output
         shell: bash

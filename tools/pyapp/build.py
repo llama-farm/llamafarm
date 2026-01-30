@@ -11,8 +11,14 @@ Usage:
     python tools/pyapp/build.py --component rag
     python tools/pyapp/build.py --component runtime
     python tools/pyapp/build.py --component all         # Build all components
+    python tools/pyapp/build.py --version 0.0.26        # Explicit release version
     python tools/pyapp/build.py --python-version 3.12
     python tools/pyapp/build.py --no-embed-python
+
+Version:
+    --version sets the wheel version embedded in the binary. If omitted,
+    the version is derived from git: exact tags produce release versions
+    (v0.0.26 -> 0.0.26), otherwise a dev version (0.0.0.dev0+g<sha>).
 
 Output:
     dist/pyapp/llamafarm-{component}-{platform}-{arch}
@@ -23,6 +29,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -237,6 +244,41 @@ if __name__ == '__main__':
 # ============================================================================
 
 
+def get_version_from_git() -> str:
+    """Derive a PEP 440 version from git.
+
+    On a release tag (v0.0.26): returns "0.0.26".
+    Otherwise: returns "0.0.0.dev0+g<short-sha>" for dev builds.
+    """
+    # Try exact tag first (release builds)
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--exact-match"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=PROJECT_ROOT,
+        )
+        tag = result.stdout.strip()
+        return tag.lstrip("v")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # Fall back to short SHA (dev builds)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=PROJECT_ROOT,
+        )
+        sha = result.stdout.strip()
+        return f"0.0.0.dev0+g{sha}"
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return "0.0.0.dev0"
+
+
 def get_platform_suffix() -> str:
     """Get platform-architecture suffix for binary naming."""
     system = platform.system().lower()
@@ -305,7 +347,7 @@ def generate_config_types() -> None:
 # ============================================================================
 
 
-def build_fat_wheel(component: str, output_dir: Path) -> Path:
+def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
     """Build a single wheel containing a component + its internal packages.
 
     Creates a temporary build directory with symlinks to source packages
@@ -329,9 +371,14 @@ def build_fat_wheel(component: str, output_dir: Path) -> Path:
             shutil.rmtree(d)
         d.mkdir(parents=True)
 
-    # Copy the pyproject.toml template
+    # Copy the pyproject.toml template and inject the build version
     template = TOOLS_DIR / cfg["pyproject"]
-    shutil.copy2(template, build_dir / "pyproject.toml")
+    pyproject_path = build_dir / "pyproject.toml"
+    shutil.copy2(template, pyproject_path)
+    content = pyproject_path.read_text()
+    content = re.sub(r'version = ".*?"', f'version = "{version}"', content)
+    pyproject_path.write_text(content)
+    print(f"Wheel version: {version}")
 
     # Create the wrapper package with all subpackages nested inside it.
     #
@@ -599,6 +646,7 @@ def build_pyapp_binary(
 def build_component(
     component: str,
     output_dir: Path,
+    version: str,
     python_version: str,
     embed_python: bool,
     skip_types: bool,
@@ -618,7 +666,7 @@ def build_component(
         generate_config_types()
 
     # Build the fat wheel
-    wheel_path = build_fat_wheel(component, output_dir)
+    wheel_path = build_fat_wheel(component, output_dir, version)
 
     # Download PyApp source (cached across components)
     source_dir = download_pyapp_source(CACHE_DIR)
@@ -645,6 +693,11 @@ def main() -> None:
         choices=[*COMPONENTS.keys(), "all"],
         default="server",
         help="Component to build (default: server)",
+    )
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="Version for the built wheel (default: auto-detect from git)",
     )
     parser.add_argument(
         "--python-version",
@@ -681,9 +734,13 @@ def main() -> None:
     else:
         components = [args.component]
 
+    # Resolve version
+    version = args.version or get_version_from_git()
+
     print("LlamaFarm — PyApp Build")
     print("=" * 60)
     print(f"Component(s): {', '.join(components)}")
+    print(f"Version: {version}")
     print(f"Platform: {get_platform_suffix()}")
     print(f"Python version: {args.python_version}")
     print(f"Embed Python: {not args.no_embed_python}")
@@ -706,6 +763,7 @@ def main() -> None:
         binary_path = build_component(
             component=component,
             output_dir=args.output_dir,
+            version=version,
             python_version=args.python_version,
             embed_python=not args.no_embed_python,
             skip_types=args.skip_types,
