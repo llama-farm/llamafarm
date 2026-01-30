@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -5,7 +6,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
-default_data_dir = str(Path.home() / ".llamafarm")
+try:
+    default_data_dir = str(Path.home() / ".llamafarm")
+except RuntimeError:
+    # Path.home() fails in PyApp-embedded Python on Windows when
+    # HOME/USERPROFILE env vars are absent during bootstrap.
+    _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA", ".")
+    default_data_dir = str(Path(_fb) / ".llamafarm")
 
 
 class Settings(BaseSettings):
