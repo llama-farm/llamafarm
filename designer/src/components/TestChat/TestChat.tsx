@@ -5105,8 +5105,26 @@ function ActionLink({
 }
 
 function References({ sources }: { sources: any[] }) {
-  const [open, setOpen] = useState<boolean>(true)
+  const [open, setOpen] = useState<boolean>(false)
+  const [expandedChunks, setExpandedChunks] = useState<Set<number>>(
+    () => new Set()
+  )
   const count = sources.length
+  const previewLineMax = 150
+  const previewFallbackMax = 120
+
+  const toggleChunk = (index: number) => {
+    setExpandedChunks(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="mt-2 rounded-md border border-border bg-card/40">
       <button
@@ -5121,25 +5139,71 @@ function References({ sources }: { sources: any[] }) {
       </button>
       {open && (
         <div id="references-panel" className="divide-y divide-border">
-          {sources.map((s, idx) => (
-            <div key={idx} className="px-3 py-2">
-              {s.content && (
-                <div className="text-sm text-foreground whitespace-pre-wrap line-clamp-2">
-                  {s.content}
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                <div className="truncate">
-                  {s.source || s.metadata?.source || 'source'}
-                </div>
-                {typeof s.score === 'number' && (
-                  <span className="ml-2 text-[11px]">
-                    {(s.score * 100).toFixed(1)}%
-                  </span>
+          {sources.map((s, idx) => {
+            const content =
+              typeof s.content === 'string' ? s.content : String(s.content ?? '')
+            const firstLine = content.split('\n', 1)[0] ?? ''
+            const hasNewline = content.includes('\n')
+            const previewLine = hasNewline
+              ? firstLine
+              : content.slice(0, previewFallbackMax)
+            const previewText =
+              previewLine.length > previewLineMax
+                ? `${previewLine.slice(0, previewLineMax).trimEnd()}...`
+                : previewLine
+            const isLong = content.length > previewText.length
+            const isExpanded = expandedChunks.has(idx)
+            const displayContent =
+              !isLong || isExpanded
+                ? content
+                : previewText
+
+            return (
+              <div key={idx} className="px-3 py-2">
+                {content && (
+                  <div
+                    className={[
+                      'text-sm text-foreground whitespace-pre-wrap',
+                      isLong
+                        ? 'cursor-pointer hover:bg-accent/20 rounded-sm p-1 -m-1'
+                        : '',
+                    ].join(' ')}
+                    role={isLong ? 'button' : undefined}
+                    tabIndex={isLong ? 0 : undefined}
+                    onClick={isLong ? () => toggleChunk(idx) : undefined}
+                    onKeyDown={
+                      isLong
+                        ? (event: React.KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              toggleChunk(idx)
+                            }
+                          }
+                        : undefined
+                    }
+                    aria-expanded={isLong ? isExpanded : undefined}
+                  >
+                    {isLong && (
+                      <span className="mr-1 text-xs text-muted-foreground">
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
+                    )}
+                    {displayContent}
+                  </div>
                 )}
+                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="truncate">
+                    {s.source || s.metadata?.source || 'source'}
+                  </div>
+                  {typeof s.score === 'number' && (
+                    <span className="ml-2 text-[11px]">
+                      {(s.score * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
