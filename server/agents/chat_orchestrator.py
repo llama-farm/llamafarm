@@ -207,12 +207,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         # Get enabled builtin tools based on model config
         builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
-        enabled_names = {t.name for t in builtin_tool_defs}
-        enabled_builtin = [
-            t
-            for t in self._builtin_tools
-            if getattr(t, "mcp_tool_name", "") in enabled_names
-        ]
+        enabled_builtin = self._get_enabled_builtin_tools()
 
         # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
         tools = (
@@ -337,12 +332,7 @@ class ChatOrchestratorAgent(LFAgent):
 
         # Get enabled builtin tools based on model config
         builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
-        enabled_names = {t.name for t in builtin_tool_defs}
-        enabled_builtin = [
-            t
-            for t in self._builtin_tools
-            if getattr(t, "mcp_tool_name", "") in enabled_names
-        ]
+        enabled_builtin = self._get_enabled_builtin_tools()
 
         # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
         tools = (
@@ -578,12 +568,25 @@ class ChatOrchestratorAgent(LFAgent):
             ],
         )
 
+    def _get_enabled_builtin_tools(self) -> list[type[BaseTool]]:
+        """Return only the builtin tools enabled by model config.
+
+        Filters self._builtin_tools based on the include list in model config.
+        """
+        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
+        enabled_names = {t.name for t in builtin_tool_defs}
+        return [
+            t
+            for t in self._builtin_tools
+            if getattr(t, "mcp_tool_name", "") in enabled_names
+        ]
+
     def _can_execute_tool_call(
         self, tool_call: ChatCompletionMessageFunctionToolCallParam
     ) -> bool:
         """Check if a tool call can be executed on the server (MCP or builtin)."""
         tool_name = tool_call.function.name
-        all_tools = self._mcp_tools + self._builtin_tools
+        all_tools = self._mcp_tools + self._get_enabled_builtin_tools()
         return any(getattr(t, "mcp_tool_name", None) == tool_name for t in all_tools)
 
     async def _execute_tool(self, tool_name: str, arguments: str | None) -> str:
@@ -609,9 +612,10 @@ class ChatOrchestratorAgent(LFAgent):
         if mcp_tool:
             return await self._execute_mcp_tool(tool_name, arguments)
 
-        # Check builtin tools
+        # Check enabled builtin tools only
+        enabled_builtin = self._get_enabled_builtin_tools()
         builtin_tool = next(
-            (t for t in self._builtin_tools if getattr(t, "mcp_tool_name", None) == tool_name),
+            (t for t in enabled_builtin if getattr(t, "mcp_tool_name", None) == tool_name),
             None,
         )
         if builtin_tool:
