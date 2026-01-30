@@ -1,0 +1,77 @@
+# Fat wheel definition for PyApp packaging of the LlamaFarm server.
+#
+# This pyproject.toml is used in a temporary build directory that contains
+# symlinks/copies of all required packages. It bundles server + config + common
+# into a single wheel so PyApp can embed it via PYAPP_PROJECT_PATH.
+#
+# Not used for normal development — only for PyApp binary builds.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llamafarm-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    # --- Server dependencies ---
+    "dotenv>=0.9.9",
+    "fastapi>=0.116.1",
+    "pydantic-settings>=2.10.1",
+    "uvicorn>=0.35.0",
+    "openai>=1.0.0",
+    "instructor>=1.0.0",
+    "urllib3>=2.3.0",
+    "six>=1.16.0",
+    "requests>=2.32.5,<3.0.0",
+    "httpx[http2]>=0.25.0",
+    "mcp>=1.2.0",
+    "structlog>=25.4.0",
+    "asgi-correlation-id>=4.3.4",
+    "atomic-agents==2.1.0",
+    "jsonref>=1.1.0",
+    "celery>=5.5.3",
+    "pyyaml>=6.0.0",
+    "python-dotenv>=1.0.0",
+    "types-requests>=2.31.0.6",
+    "fastapi-mcp>=0.4.0",
+    "ollama>=0.6.0",
+    "huggingface-hub>=1.0.1",
+    "psutil>=5.9.0",
+    "pymupdf>=1.26.0",
+    "websockets>=12.0",
+    "aiohttp>=3.11.11",
+    "starlette>=0.40.0",
+    "filelock>=3.16.1",
+    "numpy>=1.26.0",
+    # --- Config dependencies (bundled, not from PyPI) ---
+    "jsonschema>=4.23.0",
+    "jsonschema-path>=0.3.4",
+    "ruamel.yaml>=0.18.0",
+    "tomli-w>=1.0.0",
+    # --- Common dependencies (bundled, not from PyPI) ---
+    "hf-transfer>=0.1.9",
+    # --- Platform-specific ---
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[tool.hatch.build.targets.wheel]
+# Top-level packages in the fat wheel.
+# Server subpackages (api, core, agents, services) are nested inside server/
+# so both bare imports (from api.xxx) and prefixed imports (from server.services.xxx)
+# work via the __main__.py sys.path shim.
+packages = [
+    "server",
+    "config",
+    "llamafarm_common",
+    "observability",
+]
+
+# Include non-Python data files that aren't auto-discovered.
+# Paths are relative to the temp build directory root.
+[tool.hatch.build.targets.wheel.force-include]
+"server/seeds" = "server/seeds"
+"config/templates" = "config/templates"
+"config/schema.yaml" = "config/schema.yaml"
+"config/schema.deref.yaml" = "config/schema.deref.yaml"

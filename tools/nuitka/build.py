@@ -155,6 +155,9 @@ def get_common_nuitka_args() -> list[str]:
         "--nofollow-import-to=sympy",
         # Enable useful plugins
         "--enable-plugin=anti-bloat",
+        # Disable transformers plugin - its import structure introspection
+        # subprocess crashes with SIGBUS on some platforms (Nuitka 2.8.x)
+        "--disable-plugin=transformers",
     ]
 
 
@@ -203,6 +206,8 @@ def build_server(output_dir: Path, python: str) -> Path:
         "--include-package=vine",
         # Include Celery static files (banner image, etc.)
         "--include-package-data=celery",
+        # websockets uses lazy imports via __getattr__ that Nuitka can't detect
+        "--include-package=websockets",
         # FastAPI/uvicorn plugins
         "--enable-plugin=no-qt",
         # Exclude unused SQLAlchemy dialects (server uses SQLite only)
