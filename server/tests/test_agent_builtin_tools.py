@@ -300,9 +300,24 @@ class TestToolExecutionDispatch:
             agent._mcp_tools = []
             agent._builtin_tools = [mock_builtin]
 
-            with patch.object(
-                agent, "_execute_builtin_tool", new_callable=AsyncMock
-            ) as mock_execute:
+            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            with (
+                patch(
+                    "agents.chat_orchestrator.get_enabled_builtin_tools"
+                ) as mock_registry,
+                patch.object(
+                    agent, "_execute_builtin_tool", new_callable=AsyncMock
+                ) as mock_execute,
+            ):
+                from agents.base.types import ToolDefinition
+
+                mock_registry.return_value = [
+                    ToolDefinition(
+                        name="tasks",
+                        description="Tasks tool",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ]
                 mock_execute.return_value = "builtin result"
 
                 result = await agent._execute_tool("tasks", '{"operation": "list"}')
@@ -635,12 +650,26 @@ class TestToolDetection:
             agent._mcp_tools = []
             agent._builtin_tools = [mock_builtin]
 
-            # Create tool call
-            tool_call = make_tool_call(name="tasks", arguments='{"operation": "list"}')
+            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            with patch(
+                "agents.chat_orchestrator.get_enabled_builtin_tools"
+            ) as mock_registry:
+                from agents.base.types import ToolDefinition
 
-            result = agent._can_execute_tool_call(tool_call)
+                mock_registry.return_value = [
+                    ToolDefinition(
+                        name="tasks",
+                        description="Tasks tool",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ]
 
-            assert result is True
+                # Create tool call
+                tool_call = make_tool_call(name="tasks", arguments='{"operation": "list"}')
+
+                result = agent._can_execute_tool_call(tool_call)
+
+                assert result is True
 
     def test_can_execute_returns_false_for_unknown_tools(self, base_config):
         """Test that _can_execute_tool_call returns False for unknown tools."""
@@ -676,14 +705,28 @@ class TestToolDetection:
             agent._mcp_tools = [mock_mcp]
             agent._builtin_tools = [mock_builtin]
 
-            # Both should be found
-            mcp_call = make_tool_call(name="mcp_tool", arguments="{}")
-            builtin_call = make_tool_call(name="tasks", arguments="{}")
-            unknown_call = make_tool_call(name="unknown", arguments="{}")
+            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            with patch(
+                "agents.chat_orchestrator.get_enabled_builtin_tools"
+            ) as mock_registry:
+                from agents.base.types import ToolDefinition
 
-            assert agent._can_execute_tool_call(mcp_call) is True
-            assert agent._can_execute_tool_call(builtin_call) is True
-            assert agent._can_execute_tool_call(unknown_call) is False
+                mock_registry.return_value = [
+                    ToolDefinition(
+                        name="tasks",
+                        description="Tasks tool",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ]
+
+                # Both should be found
+                mcp_call = make_tool_call(name="mcp_tool", arguments="{}")
+                builtin_call = make_tool_call(name="tasks", arguments="{}")
+                unknown_call = make_tool_call(name="unknown", arguments="{}")
+
+                assert agent._can_execute_tool_call(mcp_call) is True
+                assert agent._can_execute_tool_call(builtin_call) is True
+                assert agent._can_execute_tool_call(unknown_call) is False
 
 
 # ==============================================================================
