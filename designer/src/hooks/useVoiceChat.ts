@@ -137,6 +137,18 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
   const currentAssistantAudioRef = useRef<ArrayBuffer[]>([])
   const hasConnectedRef = useRef(false) // Track if we ever successfully connected
   const errorReceivedRef = useRef(false) // Track if we received an error message from server
+  // Refs to track latest state values for use in callbacks (avoids stale closures)
+  const isRecordingRef = useRef(false)
+  const voiceStateRef = useRef<VoiceState>('idle')
+
+  // Keep refs in sync with state for use in callbacks
+  useEffect(() => {
+    isRecordingRef.current = isRecording
+  }, [isRecording])
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState
+  }, [voiceState])
 
   // Get or create audio context
   const getAudioContext = useCallback(() => {
@@ -184,6 +196,10 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       })
     } catch (err) {
       console.error('Failed to play audio:', err)
+      // Reset playback state on error to prevent queue blocking
+      isPlayingRef.current = false
+      setIsPlayingAudio(false)
+      audioQueueRef.current = [] // Clear queue to prevent cascade errors
     }
   }, [getAudioContext])
 
@@ -261,25 +277,24 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       },
       onTranscription: (text, isFinal) => {
         setCurrentTranscription(text)
-        if (isFinal) {
-          currentUserTextRef.current = text
+        if (isFinal && text.trim()) {
+          // Add user message immediately when transcription is final
+          // This ensures user sees their message even if LLM fails/errors
+          const userMessage: VoiceMessage = {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            text: text,
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, userMessage])
+          setCurrentTranscription('') // Clear streaming display
+          currentUserTextRef.current = '' // Clear ref since message is added
         }
       },
       onLLMText: (text, isFinal) => {
         // When LLM is disabled (frontend-only), skip LLM response display
-        // but still add user message to conversation
+        // User message is already added in onTranscription
         if (!llmEnabled) {
-          if (currentUserTextRef.current) {
-            const userMessage: VoiceMessage = {
-              id: `user-${Date.now()}`,
-              role: 'user',
-              text: currentUserTextRef.current,
-              timestamp: new Date(),
-            }
-            setMessages((prev) => [...prev, userMessage])
-            currentUserTextRef.current = ''
-            setCurrentTranscription('')
-          }
           // Clear audio/text buffers when response is final to prevent memory leak
           // (onAudio still accumulates data even when LLM display is disabled)
           if (isFinal) {
@@ -289,19 +304,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
           return // Skip LLM response display
         }
 
-        // Add user message on FIRST LLM text received (before any assistant content)
-        // This ensures proper message ordering: user message appears before assistant response
-        if (currentUserTextRef.current && currentAssistantTextRef.current === '') {
-          const userMessage: VoiceMessage = {
-            id: `user-${Date.now()}`,
-            role: 'user',
-            text: currentUserTextRef.current,
-            timestamp: new Date(),
-          }
-          setMessages((prev) => [...prev, userMessage])
-          currentUserTextRef.current = ''
-          setCurrentTranscription('')
-        }
+        // User message is already added in onTranscription, just handle assistant response
 
         // Accumulate the text for the assistant response
         currentAssistantTextRef.current += text
@@ -344,12 +347,22 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
       onError: (message) => {
         errorReceivedRef.current = true // Mark that we received a server error
         setError(message)
+        setVoiceState('idle') // Reset to idle on error
+        setIsRecording(false) // Ensure recording stops
         onError?.(message)
       },
       onClose: () => {
-        // If we never got connected (no session_id), this is a connection failure
-        // Only show generic error if we didn't receive a specific error from server
-        if (!hasConnectedRef.current && !errorReceivedRef.current) {
+        // If we were recording/processing, this is unexpected - show error
+        // Use refs to get latest state values (avoids stale closure)
+        const wasActive = isRecordingRef.current || voiceStateRef.current !== 'idle'
+        if (wasActive && !errorReceivedRef.current) {
+          const errorMsg = hasConnectedRef.current
+            ? 'Connection lost. Please try again.'
+            : 'Failed to connect to voice chat server. Is the server running on port 14345?'
+          setError(errorMsg)
+          onError?.(errorMsg)
+        } else if (!hasConnectedRef.current && !errorReceivedRef.current) {
+          // Never connected - connection failure
           const errorMsg = 'Failed to connect to voice chat server. Is the server running on port 14345?'
           setError(errorMsg)
           onError?.(errorMsg)
@@ -357,6 +370,7 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
         setIsConnected(false)
         setSessionId(null)
         setVoiceState('idle')
+        setIsRecording(false) // Ensure recording state is reset
       },
       onEmotion: (emotion, confidence, allScores) => {
         onEmotion?.(emotion, confidence, allScores)
@@ -493,11 +507,12 @@ export function useVoiceChat(options: UseVoiceChatOptions): UseVoiceChatReturn {
 
     setIsRecording(false)
 
-    // Send end signal to trigger processing
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Only send end signal if we're actively processing (not idle)
+    // This prevents processing residual noise when user stops after conversation completes
+    if (wsRef.current?.readyState === WebSocket.OPEN && voiceState !== 'idle') {
       sendEndSignal(wsRef.current)
     }
-  }, [activeStream])
+  }, [activeStream, voiceState])
 
   // Stop audio playback immediately
   const stopAudio = useCallback(() => {

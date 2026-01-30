@@ -587,6 +587,116 @@ datasets:
     data_processing_strategy: universal_processor
 ```
 
+## Dynamic Variables in Prompts and Tools
+
+Use Jinja2-style `{{variable | default}}` syntax to customize prompts and tools at request time:
+
+```yaml
+version: v1
+name: dynamic-demo
+namespace: default
+
+runtime:
+  default_model: assistant
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      default: true
+      tool_call_strategy: native_api
+      prompts:
+        - system
+        - context
+      tools:
+        - type: function
+          name: search_knowledge_base
+          description: "Search the {{company_name | Company}} knowledge base"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | General}} topics"
+            required:
+              - query
+        - type: function
+          name: create_ticket
+          description: "Create a support ticket for {{user_name | a customer}}"
+          parameters:
+            type: object
+            properties:
+              title:
+                type: string
+              priority:
+                type: string
+                enum: ["low", "medium", "high"]
+            required:
+              - title
+
+prompts:
+  - name: system
+    messages:
+      - role: system
+        content: |
+          You are a helpful assistant for {{company_name | Acme Corp}}.
+          You work in the {{department | General}} department.
+          Current date: {{current_date | today}}
+
+  - name: context
+    messages:
+      - role: system
+        content: |
+          ## Customer Information
+          - Name: {{user_name | Valued Customer}}
+          - Account Tier: {{account_tier | standard}}
+          - Language: {{language | English}}
+
+          Adjust responses based on tier:
+          - basic: Focus on self-service
+          - standard: Provide helpful guidance
+          - premium: Offer personalized assistance
+```
+
+**Usage with full variables:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi, what can you help me with?"}],
+    "variables": {
+      "company_name": "TechCorp Solutions",
+      "department": "Technical Support",
+      "user_name": "Alice Johnson",
+      "account_tier": "premium",
+      "current_date": "2024-01-15"
+    }
+  }'
+```
+
+**Usage with defaults (minimal variables):**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "variables": {
+      "user_name": "Bob"
+    }
+  }'
+```
+
+Unprovided variables use their defaults (e.g., `company_name` becomes "Acme Corp").
+
+**Variable syntax:**
+
+| Pattern | Description |
+|---------|-------------|
+| `{{variable}}` | Required - error if not provided |
+| `{{variable \| default}}` | Uses default if not provided |
+| `{{ variable }}` | Whitespace is allowed |
+
 ## Qdrant Production Setup
 
 Production-ready configuration with Qdrant vector database:

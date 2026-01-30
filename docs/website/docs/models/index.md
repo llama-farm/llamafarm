@@ -74,7 +74,43 @@ LlamaFarm selects an agent handler based on configuration:
 - **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
 - **Classifier / Custom** – future handlers for specialized workflows.
 
-Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don’t handle tools, so stick with simple chat.
+Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
+
+## Inline Tools with Dynamic Variables
+
+Models can define tools inline in the config, and these tools support dynamic variable substitution:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: search_docs
+          description: "Search {{company_name | the company}} documentation"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | general}} topics"
+            required:
+              - query
+```
+
+Pass values at request time via the `variables` field:
+
+```bash
+curl -X POST .../chat/completions -d '{
+  "messages": [{"role": "user", "content": "Find shipping info"}],
+  "variables": {"company_name": "Acme Corp", "department": "logistics"}
+}'
+```
+
+See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
 
 ## Lemonade Runtime
 

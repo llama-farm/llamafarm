@@ -382,6 +382,8 @@ export function createVoiceChatConnection(
       }
     } catch (e) {
       console.error('Failed to parse voice message:', e)
+      // Propagate parse errors to UI so user knows something went wrong
+      callbacks.onError?.(`Failed to parse server message: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 

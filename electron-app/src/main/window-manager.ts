@@ -39,10 +39,10 @@ export class WindowManager {
       // In development: logo is in build folder
       // In production: logo should be in extraResources
       const possiblePaths = [
-        path.join(__dirname, '../../build/splash-logo.png'),           // Development
-        path.join(__dirname, '../../../build/splash-logo.png'),        // Packaged (app.asar)
+        path.join(__dirname, '../../assets/images/splash-logo.png'),   // Development
+        path.join(__dirname, '../../../assets/images/splash-logo.png'), // Packaged (app.asar)
         path.join(process.resourcesPath || '', 'splash-logo.png'),     // extraResources
-        path.join(app.getAppPath(), 'build/splash-logo.png')           // App path fallback
+        path.join(app.getAppPath(), 'assets/images/splash-logo.png')   // App path fallback
       ]
 
       for (const logoPath of possiblePaths) {

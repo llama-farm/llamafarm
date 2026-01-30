@@ -68,6 +68,7 @@ class IngestHandler:
             data_processing_strategy: Name of the data processing strategy
             database: Name of the database to use
             dataset_name: Optional dataset name for logging
+            parser_overrides: Optional parser overrides for this ingestion
         """
         self.config_path = Path(config_path)
         self.data_processing_strategy = data_processing_strategy
@@ -112,9 +113,7 @@ class IngestHandler:
             config.parsers = self._apply_parser_overrides(config.parsers or [])
         return config
 
-    def _apply_parser_overrides(
-        self, parsers: list[Parser]
-    ) -> list[Parser]:
+    def _apply_parser_overrides(self, parsers: list[Parser]) -> list[Parser]:
         """
         Apply parser-level overrides (e.g., chunk sizes) to configured parsers.
         """
@@ -126,7 +125,9 @@ class IngestHandler:
         )
 
         for parser in parsers:
-            override_cfg = self.parser_overrides.get(getattr(parser, "type", None)) or {}
+            override_cfg = (
+                self.parser_overrides.get(getattr(parser, "type", None)) or {}
+            )
             merged = {}
             if parser.config:
                 merged.update(parser.config)
@@ -422,7 +423,10 @@ class IngestHandler:
             )
 
             # Health check: Verify embedder is available before processing batch
-            if hasattr(self.embedder, "validate_config") and not self.embedder.validate_config():
+            if (
+                hasattr(self.embedder, "validate_config")
+                and not self.embedder.validate_config()
+            ):
                 error_msg = (
                     f"Embedder {self.embedder.__class__.__name__} is not available. "
                     "Please ensure the embedding service is running."
@@ -454,7 +458,9 @@ class IngestHandler:
 
                 try:
                     # Generate embedding
-                    embedding = self.embedder.embed([doc.content])  # embed expects a list
+                    embedding = self.embedder.embed(
+                        [doc.content]
+                    )  # embed expects a list
 
                     # Validate embedding before accepting it
                     if embedding and len(embedding) > 0:
@@ -484,9 +490,7 @@ class IngestHandler:
 
                 except (EmbedderUnavailableError, CircuitBreakerOpenError) as e:
                     # Embedder service failure - stop processing immediately
-                    error_msg = (
-                        f"Embedder failed after processing {i}/{len(documents)} chunks: {e}"
-                    )
+                    error_msg = f"Embedder failed after processing {i}/{len(documents)} chunks: {e}"
                     logger.error(error_msg)
                     event_logger.fail_event(error_msg)
 

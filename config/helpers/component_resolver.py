@@ -157,7 +157,9 @@ class ComponentResolver:
                     embed_def = self._resolve_named_component(
                         default_embed, self._embedding_map, "embedding_strategy"
                     )
-                    db_copy.embedding_strategies = [self._to_embedding_strategy(embed_def)]
+                    db_copy.embedding_strategies = [
+                        self._to_embedding_strategy(embed_def)
+                    ]
                     db_copy.default_embedding_strategy = default_embed
                 else:
                     # Inline strategies present: only set default if it exists in the list
@@ -180,7 +182,9 @@ class ComponentResolver:
                     retrieval_def = self._resolve_named_component(
                         default_retrieval, self._retrieval_map, "retrieval_strategy"
                     )
-                    db_copy.retrieval_strategies = [self._to_retrieval_strategy(retrieval_def)]
+                    db_copy.retrieval_strategies = [
+                        self._to_retrieval_strategy(retrieval_def)
+                    ]
                     db_copy.default_retrieval_strategy = default_retrieval
                 else:
                     inline_names = set()
@@ -205,7 +209,9 @@ class ComponentResolver:
 
         for parser in parsers:
             if isinstance(parser, str):
-                parser_def = self._resolve_named_component(parser, self._parser_map, "parser")
+                parser_def = self._resolve_named_component(
+                    parser, self._parser_map, "parser"
+                )
                 resolved_parsers.append(self._to_parser(parser_def))
             else:
                 # Already inline

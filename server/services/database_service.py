@@ -8,10 +8,10 @@ from config.datamodel import (
     DatabaseEmbeddingStrategy,
     DatabaseRetrievalStrategy,
 )
+from config.helpers.component_resolver import ComponentResolver
 
 from api.errors import DatabaseNotFoundError
 from core.logging import FastAPIStructLogger
-from config.helpers.component_resolver import ComponentResolver
 from services.project_service import ProjectService
 
 logger = FastAPIStructLogger()
@@ -90,7 +90,11 @@ class DatabaseService:
 
         # Extract the resolved database we just added
         resolved_db = next(
-            (db for db in resolved_temp.rag.databases or [] if db.name == database.name),
+            (
+                db
+                for db in resolved_temp.rag.databases or []
+                if db.name == database.name
+            ),
             None,
         )
         if resolved_db is None:

@@ -507,16 +507,26 @@ class VoiceChatService:
                          Raw PCM is preferred for optimal performance.
 
         Returns:
-            Transcribed text.
+            Transcribed text, or empty string if audio couldn't be decoded.
         """
-        # Use .pcm extension to hint at raw PCM format (though detection is content-based)
-        result = await UniversalRuntimeService.transcribe_audio(
-            audio_bytes=audio_bytes,
-            filename="audio.pcm",
-            model=self.session.config.stt_model,
-            language=self.session.config.language,
-        )
-        return result.get("text", "")
+        try:
+            # Use .pcm extension to hint at raw PCM format (though detection is content-based)
+            result = await UniversalRuntimeService.transcribe_audio(
+                audio_bytes=audio_bytes,
+                filename="audio.pcm",
+                model=self.session.config.stt_model,
+                language=self.session.config.language,
+            )
+            return result.get("text", "")
+        except Exception as e:
+            error_str = str(e)
+            # FFmpeg errors (e.g., truncated audio when user stops recording) should
+            # be treated as "no speech" rather than surfaced as errors to the user
+            if "Invalid data" in error_str or "processing input" in error_str:
+                logger.warning(f"Audio decode error (treating as no speech): {e}")
+                return ""
+            # Re-raise other errors
+            raise
 
     async def transcribe_audio_stream(
         self, audio_bytes: bytes
@@ -592,6 +602,20 @@ class VoiceChatService:
                 break
 
         return messages
+
+    async def _send_error_and_reset(self, websocket: WebSocket, error_msg: str) -> None:
+        """Send error message to client and reset session state.
+
+        Args:
+            websocket: Client WebSocket connection.
+            error_msg: User-friendly error message to send.
+        """
+        try:
+            await websocket.send_json(ErrorMessage(message=error_msg).model_dump())
+            await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+        except Exception:
+            pass  # WebSocket might be closed
+        self.session.set_state(VoiceState.IDLE)
 
     def _filter_thinking_tags(self, text: str) -> str:
         """Filter out <think>...</think> tags from text.
@@ -1244,15 +1268,42 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during turn: {e}", exc_info=True)
+            # Check for specific model-not-loaded errors
+            if "not loaded" in error_str.lower():
+                error_msg = "Model not ready. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = "Processing error. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your request. Please try again."
-                ).model_dump()
-            )
-            self.session.set_state(VoiceState.IDLE)
+            # Provide contextual error message based on exception content
+            # Use generic messages to avoid leaking internal details
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = "Model not available. Please try a different model."
+            else:
+                # Generic fallback - don't expose internal error details
+                error_msg = "Failed to process request. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def process_turn_native_audio(
         self, websocket: WebSocket, audio_bytes: bytes
@@ -1452,15 +1503,39 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during native audio turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during native audio turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during native audio turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during native audio turn: {e}", exc_info=True)
+            if "not loaded" in error_str.lower():
+                error_msg = "Model not ready. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = "Processing error. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your audio. Please try again."
-                ).model_dump()
-            )
-            self.session.set_state(VoiceState.IDLE)
+            # Use generic messages to avoid leaking internal details
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = "Model not available. Please try a different model."
+            else:
+                error_msg = "Failed to process audio. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def stream_llm_response_with_audio(
         self, audio_bytes: bytes
