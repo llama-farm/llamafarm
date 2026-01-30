@@ -132,11 +132,16 @@ def create_streaming_response_from_iterator(
                 if isinstance(chunk, dict) and chunk.get("type"):
                     try:
                         yield f"data: {json.dumps(chunk)}\n\n".encode()
+                        # NOTE: Custom events (like sources) are metadata, not chat content.
+                        # We intentionally do NOT set emitted=True here so that if the LLM
+                        # stream fails after sending sources, the fallback message still runs.
+                        # This provides a clear error message to users: "RAG worked (you see
+                        # sources) but response generation failed." Without this fallback,
+                        # users would see references with no explanation of why there's no answer.
                     except (TypeError, ValueError) as e:
                         logger.warning(f"Failed to serialize custom event: {e}")
                         continue
                     await asyncio.sleep(0)
-                    emitted = True
                     continue
 
                 # Handle ChatCompletionChunk - serialize it directly
