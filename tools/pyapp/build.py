@@ -435,9 +435,13 @@ def download_pyapp_source(cache_dir: Path) -> Path:
     archive_path = cache_dir / f"pyapp-v{PYAPP_VERSION}-source.tar.gz"
     source_dir = cache_dir / f"pyapp-v{PYAPP_VERSION}"
 
-    if source_dir.exists():
+    if source_dir.exists() and (source_dir / "Cargo.toml").exists():
         print(f"Using cached PyApp source: {source_dir}")
         return source_dir
+
+    # Clean up incomplete cache (e.g. CI restoring only target/ subdirectory)
+    if source_dir.exists():
+        shutil.rmtree(source_dir)
 
     if not archive_path.exists():
         print(f"Downloading PyApp v{PYAPP_VERSION} source...")

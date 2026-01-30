@@ -18,11 +18,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Cached torch module reference (lazy loaded)
-_torch: "torch_type | None" = None
+_torch: torch_type | None = None
 _torch_available: bool | None = None
 
 
-def _get_torch() -> "torch_type | None":
+def _get_torch() -> torch_type | None:
     """Lazy-load torch module. Returns None if not installed."""
     global _torch, _torch_available
 

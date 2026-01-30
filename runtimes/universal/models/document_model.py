@@ -13,7 +13,10 @@ import base64
 import io
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    import torch
 
 from PIL import Image
 

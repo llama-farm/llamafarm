@@ -7,7 +7,6 @@ import gc
 import pytest
 import torch
 
-
 # Disable automatic garbage collection for the entire test session.
 # On Python 3.11+ in CI environments, GC during or after tests involving
 # torch/numpy/scipy can cause segfaults due to C extension module interactions.
