@@ -16,6 +16,10 @@ on:
 env:
   NX_NO_CLOUD: true
 
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ============================================================
   # Notify PR that E2E tests are starting
@@ -151,22 +155,32 @@ jobs:
           fi
           echo "Looking for CLI build for commit: $COMMIT_SHA"
 
-          # Wait up to 15 minutes for the CLI workflow to complete
-          MAX_ATTEMPTS=30
+          # Wait up to 30 minutes for the CLI workflow to complete
+          # This accounts for GitHub runner queue delays, not just build time
+          MAX_ATTEMPTS=60
           SLEEP_TIME=30
+          START_TIME=$(date +%s)
+          PREV_STATUS=""
 
           for i in $(seq 1 $MAX_ATTEMPTS); do
-            echo "Attempt $i/$MAX_ATTEMPTS: Checking CLI workflow status..."
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$(( (CURRENT_TIME - START_TIME) / 60 ))
+            REMAINING=$(( (MAX_ATTEMPTS - i) * SLEEP_TIME / 60 ))
+
+            echo ""
+            echo "Attempt $i/$MAX_ATTEMPTS (${ELAPSED}m elapsed, ~${REMAINING}m remaining)"
 
             # Find the CLI workflow run for this commit
             RUN_INFO=$(gh api \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/actions/workflows/cli.yml/runs?head_sha=$COMMIT_SHA&per_page=1" \
-              --jq '.workflow_runs[0] | {id: .id, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "{}")
+              --jq '.workflow_runs[0] | {id: .id, status: .status, conclusion: .conclusion, created_at: .created_at, run_started_at: .run_started_at}' 2>/dev/null || echo "{}")
 
             RUN_ID=$(echo "$RUN_INFO" | jq -r '.id // empty')
             STATUS=$(echo "$RUN_INFO" | jq -r '.status // empty')
             CONCLUSION=$(echo "$RUN_INFO" | jq -r '.conclusion // empty')
+            CREATED_AT=$(echo "$RUN_INFO" | jq -r '.created_at // empty')
+            RUN_STARTED_AT=$(echo "$RUN_INFO" | jq -r '.run_started_at // empty')
 
             if [ -z "$RUN_ID" ]; then
               echo "  No CLI workflow run found yet, waiting..."
@@ -174,24 +188,92 @@ jobs:
               continue
             fi
 
-            echo "  Found run $RUN_ID: status=$STATUS, conclusion=$CONCLUSION"
+            echo "  CLI workflow $RUN_ID: status=$STATUS, conclusion=$CONCLUSION"
 
-            if [ "$STATUS" = "completed" ]; then
-              if [ "$CONCLUSION" = "success" ]; then
-                echo "✓ CLI workflow completed successfully!"
-                echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-                exit 0
-              else
-                echo "❌ CLI workflow failed with conclusion: $CONCLUSION"
-                exit 1
-              fi
+            # Detect status transitions
+            if [ -n "$PREV_STATUS" ] && [ "$STATUS" != "$PREV_STATUS" ]; then
+              echo "  Status changed: $PREV_STATUS → $STATUS"
             fi
+            PREV_STATUS="$STATUS"
 
-            echo "  Workflow still running, waiting ${SLEEP_TIME}s..."
+            # Get queue statistics for context
+            QUEUED_COUNT=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/cli.yml/runs?status=queued" \
+              --jq '.total_count' 2>/dev/null || echo "?")
+            IN_PROGRESS_COUNT=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/cli.yml/runs?status=in_progress" \
+              --jq '.total_count' 2>/dev/null || echo "?")
+            echo "  Queue status: $QUEUED_COUNT jobs queued, $IN_PROGRESS_COUNT running"
+
+            # Status-specific messaging
+            case "$STATUS" in
+              queued)
+                echo "  Waiting for GitHub runner..."
+                ;;
+              in_progress)
+                if [ -n "$RUN_STARTED_AT" ] && [ "$RUN_STARTED_AT" != "null" ]; then
+                  RUN_START_EPOCH=$(date -d "$RUN_STARTED_AT" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$RUN_STARTED_AT" +%s 2>/dev/null || echo "")
+                  if [ -n "$RUN_START_EPOCH" ]; then
+                    BUILD_DURATION=$(( (CURRENT_TIME - RUN_START_EPOCH) / 60 ))
+                    echo "  Building... (started ${BUILD_DURATION}m ago)"
+                  else
+                    echo "  Building..."
+                  fi
+                else
+                  echo "  Building..."
+                fi
+                ;;
+              completed)
+                if [ "$CONCLUSION" = "success" ]; then
+                  echo "✓ CLI workflow completed successfully!"
+                  echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+                  # Write job summary
+                  {
+                    echo "## CLI Build Wait Summary"
+                    echo ""
+                    echo "- **Total wait time**: ${ELAPSED}m"
+                    echo "- **Attempts**: $i/$MAX_ATTEMPTS"
+                    echo "- **CLI Run ID**: $RUN_ID"
+                    echo "- **Conclusion**: $CONCLUSION"
+                  } >> $GITHUB_STEP_SUMMARY
+
+                  exit 0
+                elif [ "$CONCLUSION" = "cancelled" ]; then
+                  echo "❌ CLI workflow was cancelled (likely by concurrency controls)"
+                  echo "  This can happen when a new commit is pushed while the previous build is queued."
+                  echo "  The E2E tests for the previous commit will not run."
+                  exit 1
+                else
+                  echo "❌ CLI workflow failed with conclusion: $CONCLUSION"
+                  exit 1
+                fi
+                ;;
+            esac
+
             sleep $SLEEP_TIME
           done
 
-          echo "❌ Timed out waiting for CLI workflow"
+          FINAL_ELAPSED=$(( ($(date +%s) - START_TIME) / 60 ))
+          echo ""
+          echo "❌ Timed out waiting for CLI workflow after ${FINAL_ELAPSED}m"
+          echo "  Last known status: $STATUS"
+          echo "  Queue stats at timeout: $QUEUED_COUNT queued, $IN_PROGRESS_COUNT running"
+
+          # Write timeout summary
+          {
+            echo "## CLI Build Wait - TIMEOUT"
+            echo ""
+            echo "- **Total wait time**: ${FINAL_ELAPSED}m"
+            echo "- **Last status**: $STATUS"
+            echo "- **Queue at timeout**: $QUEUED_COUNT queued, $IN_PROGRESS_COUNT running"
+            echo ""
+            echo "The CLI workflow did not complete within the 30-minute timeout."
+            echo "This is usually caused by GitHub runner availability issues."
+          } >> $GITHUB_STEP_SUMMARY
+
           exit 1
 
   e2e-test:
