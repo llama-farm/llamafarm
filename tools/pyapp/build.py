@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-PyApp Build Script for LlamaFarm Server (POC)
+PyApp Build Script for LlamaFarm Components
 
-Packages the server component as a standalone binary using PyApp.
-Builds a "fat wheel" containing server + config + common packages,
+Packages LlamaFarm components (server, rag, runtime) as standalone binaries
+using PyApp. Builds a "fat wheel" containing the component + internal packages,
 then compiles a PyApp binary that embeds the wheel and a Python distribution.
 
 Usage:
-    python tools/pyapp/build.py
+    python tools/pyapp/build.py                         # Build server (default)
+    python tools/pyapp/build.py --component rag
+    python tools/pyapp/build.py --component runtime
+    python tools/pyapp/build.py --component all         # Build all components
     python tools/pyapp/build.py --python-version 3.12
     python tools/pyapp/build.py --no-embed-python
 
 Output:
-    dist/pyapp/llamafarm-server-{platform}-{arch}
+    dist/pyapp/llamafarm-{component}-{platform}-{arch}
 """
 
 from __future__ import annotations
@@ -30,11 +33,208 @@ from urllib.request import urlretrieve
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DIST_DIR = PROJECT_ROOT / "dist" / "pyapp"
 CACHE_DIR = Path(__file__).parent / ".cache"
+TOOLS_DIR = Path(__file__).parent
 
 PYAPP_VERSION = "0.26.0"
 PYAPP_SOURCE_URL = (
     f"https://github.com/ofek/pyapp/releases/download/v{PYAPP_VERSION}/source.tar.gz"
 )
+
+
+# ============================================================================
+# Component configurations
+# ============================================================================
+#
+# Each component defines how to assemble its fat wheel:
+#   source_dir:      component source relative to PROJECT_ROOT
+#   pkg_name:        the wrapper package name in the wheel
+#   pyproject:       pyproject.toml template filename
+#   binary_prefix:   output binary name prefix (suffixed with platform-arch)
+#   exec_module:     PYAPP_EXEC_MODULE value
+#   modules:         .py files to copy into the wrapper package
+#   data_dirs:       directories to copy into the wrapper package
+#   inner_packages:  subpackages to symlink INTO the wrapper package
+#   root_symlinks:   packages to symlink at the build root level
+#                    (list of (name, path-relative-to-PROJECT_ROOT) tuples)
+#   needs_config:    whether this component bundles the config package
+#   pip_extra_args:  extra pip args for PyApp (e.g. PyTorch CPU index)
+#   python_version:  minimum Python version for this component
+
+COMPONENTS: dict[str, dict] = {
+    "server": {
+        "source_dir": "server",
+        "pkg_name": "server",
+        "pyproject": "pyproject.server.toml",
+        "binary_prefix": "llamafarm-server",
+        "exec_module": "server",
+        "modules": ["main.py"],
+        "data_dirs": ["seeds"],
+        "inner_packages": [
+            "api", "core", "agents", "services", "context_providers", "tools",
+        ],
+        "root_symlinks": [
+            ("config", "config"),
+            ("llamafarm_common", "common/llamafarm_common"),
+            ("observability", "observability"),
+        ],
+        "needs_config": True,
+        "pip_extra_args": "--extra-index-url https://download.pytorch.org/whl/cpu",
+        "python_version": "3.12",
+    },
+    "rag": {
+        "source_dir": "rag",
+        "pkg_name": "rag",
+        "pyproject": "pyproject.rag.toml",
+        "binary_prefix": "llamafarm-rag",
+        "exec_module": "rag",
+        "modules": ["main.py", "celery_app.py", "api.py"],
+        "data_dirs": [],
+        "inner_packages": [
+            "core", "components", "tasks", "utils", "cli",
+        ],
+        "root_symlinks": [
+            ("config", "config"),
+            ("llamafarm_common", "common/llamafarm_common"),
+            ("observability", "observability"),
+        ],
+        "needs_config": True,
+        "pip_extra_args": "",
+        "python_version": "3.12",
+    },
+    "runtime": {
+        "source_dir": "runtimes/universal",
+        "pkg_name": "runtime",
+        "pyproject": "pyproject.runtime.toml",
+        "binary_prefix": "llamafarm-runtime",
+        "exec_module": "runtime",
+        "modules": ["server.py", "download_model.py", "state.py"],
+        "data_dirs": ["config"],
+        "inner_packages": [
+            "models", "utils", "core", "routers", "api_types", "services",
+        ],
+        "root_symlinks": [
+            ("llamafarm_common", "common/llamafarm_common"),
+            ("llamafarm_llama", "packages/llamafarm-llama/src/llamafarm_llama"),
+        ],
+        "needs_config": False,
+        "pip_extra_args": "--extra-index-url https://download.pytorch.org/whl/cpu",
+        "python_version": "3.12",
+    },
+}
+
+
+# ============================================================================
+# __main__.py shim templates
+# ============================================================================
+#
+# Each component needs a __main__.py that:
+#   1. Adds the wrapper package dir to sys.path (for bare imports)
+#   2. Sets LLAMAFARM_PYAPP=1 for runtime detection
+#   3. Imports the component's main module (triggering module-level setup)
+#   4. Starts the appropriate server/worker
+
+MAIN_SHIMS: dict[str, str] = {
+    "server": '''\
+"""PyApp entry point for llamafarm-server.
+
+Adds the server package directory to sys.path so that bare imports
+(from api.main import ...) work alongside prefixed imports
+(from server.services.xxx import ...).
+"""
+import os
+import sys
+
+# Allow bare imports (from api.xxx, from core.xxx, etc.)
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Signal PyApp mode for runtime detection
+os.environ["LLAMAFARM_PYAPP"] = "1"
+
+# Import main module — this executes module-level setup
+# (logging, PID file, seed copying, FastAPI app creation)
+from server import main  # noqa: F401
+
+if __name__ == '__main__':
+    import uvicorn
+    from server.core.settings import settings
+
+    uvicorn.run(
+        main.app,
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=False,
+        log_config=None,
+        access_log=False,
+    )
+''',
+    "rag": '''\
+"""PyApp entry point for llamafarm-rag.
+
+Adds the rag package directory to sys.path so that bare imports
+(from core.xxx, from celery_app import ...) work alongside prefixed
+imports (from rag.core.xxx import ...).
+"""
+import os
+import sys
+
+# Allow bare imports (from core.xxx, from celery_app, etc.)
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Signal PyApp mode for runtime detection
+os.environ["LLAMAFARM_PYAPP"] = "1"
+
+# Import main module — this executes module-level setup
+# (logging, PID file, Celery worker configuration)
+from rag import main  # noqa: F401
+
+if __name__ == '__main__':
+    main.main()
+''',
+    "runtime": '''\
+"""PyApp entry point for llamafarm-runtime.
+
+Adds the runtime package directory to sys.path so that bare imports
+(from models import ..., from state import ...) work alongside prefixed
+imports (from runtime.models import ...).
+"""
+import os
+import sys
+
+# Allow bare imports (from models.xxx, from routers.xxx, etc.)
+sys.path.insert(0, os.path.dirname(__file__))
+
+# Signal PyApp mode for runtime detection
+os.environ["LLAMAFARM_PYAPP"] = "1"
+
+# Import server module — this executes module-level setup
+# (logging, device detection, model loaders, FastAPI app creation)
+from runtime import server  # noqa: F401
+
+if __name__ == '__main__':
+    import uvicorn
+    from llamafarm_common.pidfile import write_pid
+
+    write_pid("universal-runtime")
+
+    port = int(os.getenv("LF_RUNTIME_PORT", os.getenv("PORT", "11540")))
+    host = os.getenv("LF_RUNTIME_HOST", os.getenv("HOST", "127.0.0.1"))
+
+    uvicorn.run(
+        server.app,
+        host=host,
+        port=port,
+        log_config=None,
+        access_log=False,
+        ws_ping_interval=30.0,
+        ws_ping_timeout=60.0,
+    )
+''',
+}
+
+
+# ============================================================================
+# Shared utilities
+# ============================================================================
 
 
 def get_platform_suffix() -> str:
@@ -100,20 +300,28 @@ def generate_config_types() -> None:
     print("Config types generated.")
 
 
-def build_fat_wheel(output_dir: Path) -> Path:
-    """Build a single wheel containing server + config + common packages.
+# ============================================================================
+# Fat wheel builder
+# ============================================================================
+
+
+def build_fat_wheel(component: str, output_dir: Path) -> Path:
+    """Build a single wheel containing a component + its internal packages.
 
     Creates a temporary build directory with symlinks to source packages
-    and a generated pyproject.toml, then builds a wheel using uv.
+    and a pyproject.toml template, then builds a wheel using uv.
 
     Returns the path to the built wheel.
     """
+    cfg = COMPONENTS[component]
+    source_dir = PROJECT_ROOT / cfg["source_dir"]
+
     print("\n" + "=" * 60)
-    print("Building fat wheel")
+    print(f"Building fat wheel for {component}")
     print("=" * 60)
 
-    build_dir = output_dir / "_build"
-    wheel_dir = output_dir / "_wheels"
+    build_dir = output_dir / f"_build_{component}"
+    wheel_dir = output_dir / f"_wheels_{component}"
 
     # Clean previous builds
     for d in (build_dir, wheel_dir):
@@ -122,95 +330,66 @@ def build_fat_wheel(output_dir: Path) -> Path:
         d.mkdir(parents=True)
 
     # Copy the pyproject.toml template
-    template = Path(__file__).parent / "pyproject.server.toml"
+    template = TOOLS_DIR / cfg["pyproject"]
     shutil.copy2(template, build_dir / "pyproject.toml")
 
-    # Create the server package with all subpackages nested inside it.
+    # Create the wrapper package with all subpackages nested inside it.
     #
-    # The codebase mixes two import styles:
-    #   - Bare:     from api.main import llama_farm_api    (in main.py)
-    #   - Prefixed: from server.services.xxx import yyy    (in routers)
-    #
-    # To support both, we nest api/core/agents/services INSIDE the server
-    # package (so server.services.xxx resolves), and use a __main__.py shim
-    # that adds the server package directory to sys.path (so bare api.xxx
-    # also resolves).
-    server_pkg = build_dir / "server"
-    server_pkg.mkdir()
-    (server_pkg / "__init__.py").touch()
-    shutil.copy2(PROJECT_ROOT / "server" / "main.py", server_pkg / "main.py")
-    shutil.copytree(
-        PROJECT_ROOT / "server" / "seeds",
-        server_pkg / "seeds",
-    )
+    # LlamaFarm components use bare imports (from core.xxx, from models.xxx).
+    # We nest subpackages INSIDE the wrapper package, then the __main__.py
+    # shim adds the wrapper dir to sys.path so bare imports resolve.
+    pkg_name = cfg["pkg_name"]
+    pkg_dir = build_dir / pkg_name
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").touch()
 
-    # Create __main__.py shim so `python -m server` works with both
-    # bare and prefixed imports
-    main_shim = server_pkg / "__main__.py"
-    main_shim.write_text(
-        '"""PyApp entry point for llamafarm-server.\n'
-        "\n"
-        "Adds the server package directory to sys.path so that bare imports\n"
-        "(from api.main import ...) work alongside prefixed imports\n"
-        "(from server.services.xxx import ...).\n"
-        '"""\n'
-        "import os\n"
-        "import sys\n"
-        "\n"
-        "# Allow bare imports (from api.xxx, from core.xxx, etc.)\n"
-        "sys.path.insert(0, os.path.dirname(__file__))\n"
-        "\n"
-        "# Signal PyApp mode for runtime detection\n"
-        'os.environ["LLAMAFARM_PYAPP"] = "1"\n'
-        "\n"
-        "# Import main module — this executes module-level setup\n"
-        "# (logging, PID file, seed copying, FastAPI app creation)\n"
-        "from server import main  # noqa: F401\n"
-        "\n"
-        "if __name__ == '__main__':\n"
-        "    import uvicorn\n"
-        "    from server.core.settings import settings\n"
-        "\n"
-        "    uvicorn.run(\n"
-        '        main.app,\n'
-        "        host=settings.HOST,\n"
-        "        port=settings.PORT,\n"
-        "        reload=False,\n"
-        "        log_config=None,\n"
-        "        access_log=False,\n"
-        "    )\n"
-    )
-
-    # Symlink server subpackages INSIDE the server package
-    for pkg in ("api", "core", "agents", "services", "context_providers", "tools"):
-        src = PROJECT_ROOT / "server" / pkg
+    # Copy top-level modules into the wrapper package
+    for module in cfg["modules"]:
+        src = source_dir / module
         if src.exists():
-            os.symlink(src, server_pkg / pkg)
+            shutil.copy2(src, pkg_dir / module)
         else:
-            print(f"WARNING: server/{pkg} not found, skipping")
+            print(f"WARNING: {cfg['source_dir']}/{module} not found, skipping")
 
-    # Symlink config package (the config/ repo dir IS the package)
-    os.symlink(PROJECT_ROOT / "config", build_dir / "config")
+    # Copy data directories into the wrapper package
+    for data_dir in cfg["data_dirs"]:
+        src = source_dir / data_dir
+        if src.exists():
+            shutil.copytree(src, pkg_dir / data_dir)
+        else:
+            print(f"WARNING: {cfg['source_dir']}/{data_dir} not found, skipping")
 
-    # Ensure config/helpers/ has __init__.py for hatchling discovery.
-    # The repo uses setuptools with explicit package listing, but hatchling
-    # needs __init__.py to recognize subpackages.
-    helpers_init = PROJECT_ROOT / "config" / "helpers" / "__init__.py"
-    if not helpers_init.exists():
-        print("Creating config/helpers/__init__.py for package discovery")
-        helpers_init.touch()
-        # Track that we created this so we can note it
-        print("NOTE: Created config/helpers/__init__.py in the source tree.")
-        print("      Consider committing this file.")
+    # Write the __main__.py shim
+    shim_content = MAIN_SHIMS[component]
+    (pkg_dir / "__main__.py").write_text(shim_content)
 
-    # Symlink common package
-    os.symlink(
-        PROJECT_ROOT / "common" / "llamafarm_common",
-        build_dir / "llamafarm_common",
-    )
+    # Symlink subpackages INSIDE the wrapper package
+    for pkg in cfg["inner_packages"]:
+        src = source_dir / pkg
+        if src.exists():
+            os.symlink(src, pkg_dir / pkg)
+        else:
+            print(f"WARNING: {cfg['source_dir']}/{pkg} not found, skipping")
 
-    # Symlink observability package (shared monorepo package)
-    os.symlink(PROJECT_ROOT / "observability", build_dir / "observability")
+    # Symlink external packages at the build root level
+    for name, rel_path in cfg["root_symlinks"]:
+        src = PROJECT_ROOT / rel_path
+        dest = build_dir / name
+        if src.exists():
+            os.symlink(src, dest)
+        else:
+            print(f"WARNING: {rel_path} not found, skipping")
+
+    # If this component bundles the config package, ensure config/helpers/
+    # has __init__.py for hatchling discovery (setuptools config doesn't need
+    # it but hatchling does).
+    if cfg["needs_config"]:
+        helpers_init = PROJECT_ROOT / "config" / "helpers" / "__init__.py"
+        if not helpers_init.exists():
+            print("Creating config/helpers/__init__.py for package discovery")
+            helpers_init.touch()
+            print("NOTE: Created config/helpers/__init__.py in the source tree.")
+            print("      Consider committing this file.")
 
     # Build the wheel
     print(f"Building wheel in {build_dir}...")
@@ -240,6 +419,11 @@ def build_fat_wheel(output_dir: Path) -> Path:
     size_mb = wheel_path.stat().st_size / (1024 * 1024)
     print(f"Built wheel: {wheel_path.name} ({size_mb:.1f} MB)")
     return wheel_path
+
+
+# ============================================================================
+# PyApp source management
+# ============================================================================
 
 
 def download_pyapp_source(cache_dir: Path) -> Path:
@@ -291,7 +475,13 @@ def download_pyapp_source(cache_dir: Path) -> Path:
     sys.exit(1)
 
 
+# ============================================================================
+# PyApp binary builder
+# ============================================================================
+
+
 def build_pyapp_binary(
+    component: str,
     source_dir: Path,
     wheel_path: Path,
     output_dir: Path,
@@ -302,11 +492,13 @@ def build_pyapp_binary(
 
     Returns the path to the built binary.
     """
+    cfg = COMPONENTS[component]
+
     print("\n" + "=" * 60)
-    print("Building PyApp binary")
+    print(f"Building PyApp binary for {component}")
     print("=" * 60)
 
-    output_name = f"llamafarm-server-{get_platform_suffix()}"
+    output_name = f"{cfg['binary_prefix']}-{get_platform_suffix()}"
     if platform.system() == "Windows":
         output_name += ".exe"
 
@@ -316,8 +508,8 @@ def build_pyapp_binary(
         {
             # Project: embed the fat wheel
             "PYAPP_PROJECT_PATH": str(wheel_path),
-            # Entry point: run server/__main__.py (shim that handles imports)
-            "PYAPP_EXEC_MODULE": "server",
+            # Entry point: run {pkg}/__main__.py (shim that handles imports)
+            "PYAPP_EXEC_MODULE": cfg["exec_module"],
             # Python version
             "PYAPP_PYTHON_VERSION": python_version,
             # Embed Python distribution in the binary (no download on first run)
@@ -330,6 +522,8 @@ def build_pyapp_binary(
             # Allow pip to read env vars and config at runtime
             # (needed for custom package indexes for private add-ons)
             "PYAPP_PIP_ALLOW_CONFIG": "true",
+            # Extra pip args (e.g. PyTorch CPU index)
+            "PYAPP_PIP_EXTRA_ARGS": cfg["pip_extra_args"],
             # Management command name
             "PYAPP_SELF_COMMAND": "self",
         }
@@ -393,9 +587,60 @@ def build_pyapp_binary(
     return output_path
 
 
+# ============================================================================
+# Build orchestration
+# ============================================================================
+
+
+def build_component(
+    component: str,
+    output_dir: Path,
+    python_version: str,
+    embed_python: bool,
+    skip_types: bool,
+) -> Path:
+    """Build a single component end-to-end.
+
+    Returns the path to the built binary.
+    """
+    cfg = COMPONENTS[component]
+
+    print(f"\n{'#' * 60}")
+    print(f"# Building: {component}")
+    print(f"{'#' * 60}")
+
+    # Generate config types if this component bundles config
+    if cfg["needs_config"] and not skip_types:
+        generate_config_types()
+
+    # Build the fat wheel
+    wheel_path = build_fat_wheel(component, output_dir)
+
+    # Download PyApp source (cached across components)
+    source_dir = download_pyapp_source(CACHE_DIR)
+
+    # Build PyApp binary
+    binary_path = build_pyapp_binary(
+        component=component,
+        source_dir=source_dir,
+        wheel_path=wheel_path,
+        output_dir=output_dir,
+        python_version=python_version,
+        embed_python=embed_python,
+    )
+
+    return binary_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build LlamaFarm server with PyApp (POC)"
+        description="Build LlamaFarm components with PyApp"
+    )
+    parser.add_argument(
+        "--component",
+        choices=[*COMPONENTS.keys(), "all"],
+        default="server",
+        help="Component to build (default: server)",
     )
     parser.add_argument(
         "--python-version",
@@ -426,8 +671,15 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    print("LlamaFarm Server — PyApp Build (POC)")
+    # Determine which components to build
+    if args.component == "all":
+        components = list(COMPONENTS.keys())
+    else:
+        components = [args.component]
+
+    print("LlamaFarm — PyApp Build")
     print("=" * 60)
+    print(f"Component(s): {', '.join(components)}")
     print(f"Platform: {get_platform_suffix()}")
     print(f"Python version: {args.python_version}")
     print(f"Embed Python: {not args.no_embed_python}")
@@ -444,40 +696,38 @@ def main() -> None:
     # Step 1: Check prerequisites
     check_prerequisites()
 
-    # Step 2: Generate config types
-    if not args.skip_types:
-        generate_config_types()
-
-    # Step 3: Build the fat wheel
-    wheel_path = build_fat_wheel(args.output_dir)
-
-    # Step 4: Download PyApp source
-    source_dir = download_pyapp_source(CACHE_DIR)
-
-    # Step 5: Build PyApp binary
-    binary_path = build_pyapp_binary(
-        source_dir=source_dir,
-        wheel_path=wheel_path,
-        output_dir=args.output_dir,
-        python_version=args.python_version,
-        embed_python=not args.no_embed_python,
-    )
+    # Step 2: Build each component
+    results: list[tuple[str, Path]] = []
+    for component in components:
+        binary_path = build_component(
+            component=component,
+            output_dir=args.output_dir,
+            python_version=args.python_version,
+            embed_python=not args.no_embed_python,
+            skip_types=args.skip_types,
+        )
+        results.append((component, binary_path))
+        # Skip type generation for subsequent components (only needed once)
+        args.skip_types = True
 
     # Summary
     print("\n" + "=" * 60)
     print("BUILD COMPLETE")
     print("=" * 60)
-    print(f"Binary: {binary_path}")
-    print(f"Size: {binary_path.stat().st_size / 1024 / 1024:.1f} MB")
+    for component, binary_path in results:
+        size_mb = binary_path.stat().st_size / (1024 * 1024)
+        print(f"  {component}: {binary_path} ({size_mb:.1f} MB)")
     print()
     print("Quick start:")
-    print(f"  {binary_path}")
+    for _, binary_path in results:
+        print(f"  {binary_path}")
     print()
     print("Management commands:")
-    print(f"  {binary_path.name} self pip install <addon-package>")
-    print(f"  {binary_path.name} self pip list")
-    print(f"  {binary_path.name} self python -c 'import fastapi; print(fastapi.__version__)'")
-    print(f"  {binary_path.name} self restore  # reinstall from scratch")
+    binary_name = results[0][1].name
+    print(f"  {binary_name} self pip install <addon-package>")
+    print(f"  {binary_name} self pip list")
+    print(f"  {binary_name} self python -c 'import sys; print(sys.version)'")
+    print(f"  {binary_name} self restore  # reinstall from scratch")
 
 
 if __name__ == "__main__":

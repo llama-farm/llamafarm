@@ -151,9 +151,9 @@ jobs:
           fi
           echo "Looking for CLI build for commit: $COMMIT_SHA"
 
-          # Wait up to 15 minutes for the CLI workflow to complete
-          MAX_ATTEMPTS=30
-          SLEEP_TIME=30
+          # Wait up to 30 minutes for the CLI workflow to complete
+          MAX_ATTEMPTS=15
+          SLEEP_TIME=60
 
           for i in $(seq 1 $MAX_ATTEMPTS); do
             echo "Attempt $i/$MAX_ATTEMPTS: Checking CLI workflow status..."

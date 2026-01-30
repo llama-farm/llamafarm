@@ -52,6 +52,11 @@ dependencies = [
     "tomli-w>=1.0.0",
     # --- Common dependencies (bundled, not from PyPI) ---
     "hf-transfer>=0.1.9",
+    # --- ML baseline (CPU-only) ---
+    # GPU versions are installed by the add-on/orchestration tools when needed.
+    # CPU torch is sourced from https://download.pytorch.org/whl/cpu via
+    # PYAPP_PIP_EXTRA_ARGS in the build script.
+    "torch>=2.0.0",
     # --- Platform-specific ---
     "pywin32>=306; sys_platform == 'win32'",
 ]

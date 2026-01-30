@@ -1,7 +1,6 @@
 name: Build Native Binaries (PyApp)
 
-# POC: Build standalone server binary using PyApp
-# This is an alternative to the Nuitka build pipeline.
+# Build standalone binaries for LlamaFarm components using PyApp.
 # PyApp produces a Rust binary that bootstraps Python + deps on first run.
 
 on:
@@ -14,6 +13,9 @@ on:
         type: choice
         options:
           - server
+          - rag
+          - runtime
+          - all
       embed_python:
         description: "Embed Python distribution in binary"
         required: true
@@ -32,25 +34,52 @@ env:
   UV_SYSTEM_PYTHON: 1
 
 jobs:
+  # Generate the build matrix based on the selected component.
+  # On PR: build all components. On dispatch: build selected component(s).
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          ALL_PLATFORMS='[
+            {"os":"linux-x86_64","runner":"ubuntu-latest"},
+            {"os":"linux-arm64","runner":"ubuntu-24.04-arm"},
+            {"os":"macos-arm64","runner":"macos-latest"},
+            {"os":"windows-x86_64","runner":"windows-latest"}
+          ]'
+
+          COMPONENT="${{ github.event.inputs.component }}"
+
+          # On PR or "all": build every component
+          if [[ "${{ github.event_name }}" == "pull_request" || "$COMPONENT" == "all" ]]; then
+            COMPONENTS='["server","rag","runtime"]'
+          else
+            COMPONENTS="[\"$COMPONENT\"]"
+          fi
+
+          # Build the matrix JSON: cross-product of platforms x components
+          MATRIX=$(jq -cn \
+            --argjson platforms "$ALL_PLATFORMS" \
+            --argjson components "$COMPONENTS" \
+            '{include: [
+              $platforms[] as $p | $components[] as $c |
+              {os: $p.os, runner: $p.runner, component: $c}
+            ]}')
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
   build:
     name: Build ${{ matrix.component }} on ${{ matrix.os }}
+    needs: setup
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: linux-x86_64
-            runner: ubuntu-latest
-            component: server
-          - os: linux-arm64
-            runner: ubuntu-24.04-arm
-            component: server
-          - os: macos-arm64
-            runner: macos-latest
-            component: server
-          - os: windows-x86_64
-            runner: windows-latest
-            component: server
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -81,9 +110,24 @@ jobs:
           restore-keys: |
             cargo-pyapp-${{ matrix.os }}-
 
-      - name: Install component dependencies
+      - name: Install build dependencies
         run: |
-          uv pip install --system -e ./config -e ./common -e ./server
+          uv pip install --system -e ./config -e ./common
+
+      - name: Install server dependencies
+        if: matrix.component == 'server'
+        run: |
+          uv pip install --system -e ./server
+
+      - name: Install rag dependencies
+        if: matrix.component == 'rag'
+        run: |
+          uv pip install --system -e ./rag
+
+      - name: Install runtime dependencies
+        if: matrix.component == 'runtime'
+        run: |
+          uv pip install --system -e ./packages/llamafarm-llama -e "./runtimes/universal"
 
       - name: Generate config types
         run: |
@@ -91,7 +135,7 @@ jobs:
 
       - name: Build with PyApp
         run: |
-          python tools/pyapp/build.py --skip-types ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
+          python tools/pyapp/build.py --component ${{ matrix.component }} --skip-types ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
 
       - name: List build output
         shell: bash
@@ -102,11 +146,12 @@ jobs:
       - name: Test binary runs
         shell: bash
         run: |
+          COMPONENT="${{ matrix.component }}"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            BINARY=$(ls dist/pyapp/llamafarm-server-*.exe)
+            BINARY=$(ls dist/pyapp/llamafarm-${COMPONENT}-*.exe)
           else
-            chmod +x dist/pyapp/llamafarm-server-*
-            BINARY=$(ls dist/pyapp/llamafarm-server-*)
+            chmod +x dist/pyapp/llamafarm-${COMPONENT}-*
+            BINARY=$(ls dist/pyapp/llamafarm-${COMPONENT}-*)
           fi
 
           echo "Testing self commands..."
@@ -118,7 +163,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: llamafarm-server-pyapp-${{ matrix.os }}
-          path: dist/pyapp/llamafarm-server-*
+          name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
+          path: dist/pyapp/llamafarm-${{ matrix.component }}-*
           retention-days: 7
           if-no-files-found: error
