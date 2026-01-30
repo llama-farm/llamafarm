@@ -8,6 +8,7 @@ Supports modern encoder architectures including:
 - Cross-encoder rerankers.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -98,12 +99,20 @@ class EncoderModel(BaseModel):
         return self._max_length or self._detected_max_length
 
     async def load(self) -> None:
-        """Load the encoder model with optimal settings."""
+        """Load the encoder model with optimal settings.
+
+        All blocking transformers operations are wrapped in asyncio.to_thread()
+        to avoid blocking the FastAPI event loop during model loading.
+        """
         logger.info(f"Loading encoder model ({self.task}): {self.model_id}")
 
         # Load config first to detect capabilities
-        config = AutoConfig.from_pretrained(
-            self.model_id, trust_remote_code=True, token=self.token
+        # Wrapped in to_thread() to avoid blocking event loop
+        config = await asyncio.to_thread(
+            AutoConfig.from_pretrained,
+            self.model_id,
+            trust_remote_code=True,
+            token=self.token,
         )
 
         # Detect max sequence length
@@ -128,30 +137,45 @@ class EncoderModel(BaseModel):
             self._flash_attention_enabled = True
             logger.info("Flash Attention 2 enabled")
 
-        # Load tokenizer
-        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
-            self.model_id, trust_remote_code=True, token=self.token
+        # Load tokenizer - wrapped to avoid blocking
+        self.tokenizer = await asyncio.to_thread(
+            AutoTokenizer.from_pretrained,
+            self.model_id,
+            trust_remote_code=True,
+            token=self.token,
         )
 
-        # Load model based on task
+        # Load model based on task - wrapped to avoid blocking
+        # This is the heaviest operation (downloads/loads model weights)
         if self.task == "classification":
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_id, **model_kwargs
+            self.model = await asyncio.to_thread(
+                AutoModelForSequenceClassification.from_pretrained,
+                self.model_id,
+                **model_kwargs,
             )
         elif self.task == "reranking":
             # Rerankers are typically sequence classification models
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.model_id, **model_kwargs
+            self.model = await asyncio.to_thread(
+                AutoModelForSequenceClassification.from_pretrained,
+                self.model_id,
+                **model_kwargs,
             )
         elif self.task == "ner":
-            self.model = AutoModelForTokenClassification.from_pretrained(
-                self.model_id, **model_kwargs
+            self.model = await asyncio.to_thread(
+                AutoModelForTokenClassification.from_pretrained,
+                self.model_id,
+                **model_kwargs,
             )
         else:  # embedding
-            self.model = AutoModel.from_pretrained(self.model_id, **model_kwargs)
+            self.model = await asyncio.to_thread(
+                AutoModel.from_pretrained,
+                self.model_id,
+                **model_kwargs,
+            )
 
         if self.model is not None:
-            self.model = self.model.to(self.device)
+            # Move to device - wrapped for consistency
+            self.model = await asyncio.to_thread(self.model.to, self.device)
             self.model.eval()
 
         logger.info(
