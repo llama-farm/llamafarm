@@ -134,6 +134,8 @@ async def extract_from_documents(request: DocumentExtractRequest):
             },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in extract_from_documents: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) from e

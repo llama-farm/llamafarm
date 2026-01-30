@@ -43,6 +43,17 @@ async def load_classifier(
 
     cache_key = make_classifier_cache_key(model_id)
 
+    # Evict cached model if base_model changed (prevents returning a model
+    # initialized with a different base_model for the same model_id)
+    cached = classifiers_cache.get(cache_key) if cache_key in classifiers_cache else None
+    if cached is not None and getattr(cached, "base_model", None) != base_model:
+        logger.info(
+            f"Evicting classifier '{model_id}': base_model changed "
+            f"({cached.base_model} -> {base_model})"
+        )
+        classifiers_cache.pop(cache_key, None)
+        await cached.unload()
+
     if cache_key not in classifiers_cache:
         async with model_load_lock:
             # Double-check after acquiring lock

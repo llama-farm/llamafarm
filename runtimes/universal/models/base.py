@@ -70,8 +70,10 @@ class BaseModel(ABC):
                     torch.mps.empty_cache()
                     logger.debug("Cleared MPS cache")
                 except Exception:
+                    # MPS cache clearing can fail on some macOS versions; not critical
                     pass
         except ImportError:
+            # torch not installed (GGUF-only deployment)
             pass
 
         logger.info(f"Model unloaded: {self.model_id}")
