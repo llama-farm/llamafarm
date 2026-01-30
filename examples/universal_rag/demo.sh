@@ -6,7 +6,7 @@
 # the built-in universal_rag strategy which handles 90%+ of document formats.
 #
 # Prerequisites:
-#   - LlamaFarm server running on port 8000
+#   - LlamaFarm server running on port 14345
 #   - Universal runtime running (for embeddings and inference)
 #   - This example project registered
 #
@@ -29,9 +29,9 @@ NO_PAUSE=${NO_PAUSE:-0}
 # Load port from .env if available
 ENV_FILE="$PROJECT_ROOT/.env"
 if [ -f "$ENV_FILE" ]; then
-  PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2 || echo "8000")
+  PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2 || echo "14345")
 fi
-PORT="${PORT:-8000}"
+PORT="${PORT:-14345}"
 API_BASE="${API_BASE:-http://localhost:$PORT}"
 
 lf() {

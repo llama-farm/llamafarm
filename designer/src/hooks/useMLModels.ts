@@ -242,23 +242,18 @@ export function useDeleteAnomalyModel() {
 // =============================================================================
 
 /**
- * Train and save a classifier in one operation
+ * Train a classifier (fit auto-saves the model)
  */
 export function useTrainAndSaveClassifier() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (request: ClassifierFitRequest) => {
-      // First fit the model
+      // Fit the model - this auto-saves to disk
       const fitResult = await mlService.fitClassifier(request)
 
-      // Then save it to disk (pass description to save endpoint)
-      const saveResult = await mlService.saveClassifier({
-        model: fitResult.versioned_name,
-        description: request.description,
-      })
-
-      return { fitResult, saveResult }
+      // No separate save call needed - fit endpoint auto-saves
+      return { fitResult }
     },
     onSuccess: () => {
       // Invalidate and force refetch to ensure models list is up to date
@@ -271,24 +266,18 @@ export function useTrainAndSaveClassifier() {
 }
 
 /**
- * Train and save an anomaly detector in one operation
+ * Train an anomaly detector (fit auto-saves the model)
  */
 export function useTrainAndSaveAnomaly() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (request: AnomalyFitRequest) => {
-      // First fit the model
+      // Fit the model - this auto-saves to disk
       const fitResult = await mlService.fitAnomaly(request)
 
-      // Then save it to disk (pass description to save endpoint)
-      const saveResult = await mlService.saveAnomaly({
-        model: fitResult.versioned_name,
-        backend: request.backend || 'isolation_forest',
-        description: request.description,
-      })
-
-      return { fitResult, saveResult }
+      // No separate save call needed - fit endpoint auto-saves
+      return { fitResult }
     },
     onSuccess: () => {
       // Invalidate and force refetch to ensure models list is up to date

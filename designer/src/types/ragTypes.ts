@@ -2004,7 +2004,7 @@ export const PARSER_SCHEMAS = {
       },
       "ocr_endpoint": {
         "type": "string",
-        "default": "http://127.0.0.1:8000/v1/vision/ocr",
+        "default": "http://127.0.0.1:14345/v1/vision/ocr",
         "description": "LlamaFarm API OCR endpoint URL"
       },
       "extract_metadata": {

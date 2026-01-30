@@ -4,7 +4,7 @@
 
 set -e
 
-PORT=${1:-8000}
+PORT=${1:-14345}
 BASE_URL="http://localhost:${PORT}/v1/ml"
 MODEL_NAME="intent-classifier-test"
 

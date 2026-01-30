@@ -135,7 +135,8 @@ const DatasetCard = ({
   const handleStopProcessing = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      if (!taskId || !activeProject?.namespace || !activeProject?.project) return
+      if (!taskId || !activeProject?.namespace || !activeProject?.project)
+        return
 
       cancelTaskMutation.mutate(
         {
@@ -158,20 +159,15 @@ const DatasetCard = ({
           onError: (error: any) => {
             toast({
               message:
-                error?.message || 'Failed to cancel processing. Please try again.',
+                error?.message ||
+                'Failed to cancel processing. Please try again.',
               variant: 'destructive',
             })
           },
         }
       )
     },
-    [
-      taskId,
-      activeProject,
-      dataset.name,
-      cancelTaskMutation,
-      toast,
-    ]
+    [taskId, activeProject, dataset.name, cancelTaskMutation, toast]
   )
 
   return (
@@ -667,7 +663,14 @@ const Data = () => {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [activeProject, projectResp, navigate, toast, createDatasetMutation, refetchDatasets])
+  }, [
+    activeProject,
+    projectResp,
+    navigate,
+    toast,
+    createDatasetMutation,
+    refetchDatasets,
+  ])
 
   // Map of fileKey -> array of dataset ids (transient UI state)
   // const [fileAssignments] = useState<Record<string, string[]>>({})
@@ -1285,20 +1288,23 @@ const Data = () => {
           </DialogDescription>
         </DialogHeader>
 
-      <div className="space-y-4 py-4">
-        <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Auto-process after upload</span>
-            <span className="text-xs text-muted-foreground">
-              Turn off for batch uploads or when you want to review before processing.
-            </span>
+        <div className="space-y-4 py-4">
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                Auto-process after upload
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Turn off for batch uploads or when you want to review before
+                processing.
+              </span>
+            </div>
+            <Switch
+              checked={autoProcessUploads}
+              onCheckedChange={setAutoProcessUploads}
+              aria-label="Toggle automatic processing after upload"
+            />
           </div>
-          <Switch
-            checked={autoProcessUploads}
-            onCheckedChange={setAutoProcessUploads}
-            aria-label="Toggle automatic processing after upload"
-          />
-        </div>
 
           {/* Create new dataset with dropped files */}
           <button

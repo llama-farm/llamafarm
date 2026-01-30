@@ -5,7 +5,7 @@
 # It shows how to ingest and query documents without any parser configuration.
 #
 # Prerequisites:
-#   - LlamaFarm server running on port 8000
+#   - LlamaFarm server running on port 14345
 #   - Universal runtime running
 #
 # Usage:
@@ -20,7 +20,7 @@ ENV_FILE="$SCRIPT_DIR/../../.env"
 if [ -f "$ENV_FILE" ]; then
   PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
 fi
-PORT="${PORT:-8000}"
+PORT="${PORT:-14345}"
 API_BASE="${API_BASE:-http://localhost:$PORT}"
 
 NAMESPACE="${NAMESPACE:-examples}"

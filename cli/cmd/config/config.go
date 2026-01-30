@@ -255,7 +255,7 @@ func GetServerConfig(configPath string, serverURL string, namespace string, proj
 	// Apply defaults
 	finalServerURL := serverURL
 	if finalServerURL == "" {
-		finalServerURL = "http://localhost:8000"
+		finalServerURL = "http://localhost:14345"
 	}
 
 	finalNamespace := namespace

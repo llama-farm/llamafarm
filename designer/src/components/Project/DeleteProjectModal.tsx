@@ -46,6 +46,7 @@ const DeleteProjectModal: React.FC<DeleteProjectModalProps> = ({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         className="sm:max-w-md"
+        hideCloseButton
         onEscapeKeyDown={e => {
           e.preventDefault()
           if (!isLoading) onClose()

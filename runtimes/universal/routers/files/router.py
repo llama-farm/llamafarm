@@ -51,7 +51,7 @@ async def upload_file(
 
     Example:
         ```bash
-        curl -X POST http://localhost:8000/v1/files \\
+        curl -X POST http://localhost:14345/v1/files \\
             -F "file=@document.pdf" \\
             -F "convert_pdf=true" \\
             -F "pdf_dpi=150"

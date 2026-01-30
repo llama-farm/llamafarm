@@ -103,7 +103,7 @@ rag:
 
             # OCR SETTINGS - For scanned documents and images
             use_ocr: true
-            # ocr_endpoint: http://127.0.0.1:8000/v1/vision/ocr
+            # ocr_endpoint: http://127.0.0.1:14345/v1/vision/ocr
 
       extractors:
         - type: UniversalExtractor

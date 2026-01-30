@@ -375,7 +375,7 @@ Check Lemonade documentation for backend-specific requirements: https://lemonade
 ## Port Allocation Strategy
 
 LlamaFarm uses the following port allocation:
-- **8000**: LlamaFarm main server
+- **14345**: LlamaFarm main server
 - **11434**: Ollama (default)
 - **11534**: Lemonade (this runtime)
 - **Future runtimes**: Will use similar high-numbered ports

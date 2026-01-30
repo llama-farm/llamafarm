@@ -100,19 +100,19 @@ You can also use the LlamaFarm API directly:
 
 ```bash
 # Create dataset
-curl -X POST http://localhost:8000/v1/datasets \
+curl -X POST http://localhost:14345/v1/datasets \
   -H "Content-Type: application/json" \
   -d '{"name": "my_docs", "database": "universal_db"}'
 
 # Upload document
-curl -X POST http://localhost:8000/v1/datasets/my_docs/upload \
+curl -X POST http://localhost:14345/v1/datasets/my_docs/upload \
   -F "file=@document.pdf"
 
 # Process (uses universal_rag automatically)
-curl -X POST http://localhost:8000/v1/datasets/my_docs/process
+curl -X POST http://localhost:14345/v1/datasets/my_docs/process
 
 # Query
-curl -X POST http://localhost:8000/v1/rag/query \
+curl -X POST http://localhost:14345/v1/rag/query \
   -H "Content-Type: application/json" \
   -d '{"query": "your question", "database": "universal_db", "top_k": 5}'
 ```

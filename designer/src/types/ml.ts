@@ -851,7 +851,8 @@ export interface TTSModel {
 // Available TTS models from the Universal Runtime
 export const TTS_MODELS: TTSModel[] = [
   { id: 'kokoro', name: 'Kokoro', size: '82M', description: 'Fast, GPU-optimized (~100ms)', supportsVoiceCloning: false, supportsSpeed: true },
-  { id: 'chatterbox-turbo', name: 'Chatterbox Turbo', size: '350M', description: 'Voice cloning, sub-200ms', supportsVoiceCloning: true, supportsSpeed: false },
+  // Chatterbox Turbo hidden - requires HuggingFace auth (gated model)
+  // { id: 'chatterbox-turbo', name: 'Chatterbox Turbo', size: '350M', description: 'Voice cloning, sub-200ms', supportsVoiceCloning: true, supportsSpeed: false },
   { id: 'pocket-tts', name: 'Pocket TTS', size: '100M', description: 'CPU-only, ~6x realtime', supportsVoiceCloning: false, supportsSpeed: false },
 ]
 

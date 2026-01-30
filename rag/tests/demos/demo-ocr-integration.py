@@ -7,7 +7,7 @@ This demo shows:
 3. Graceful handling when OCR endpoint is unavailable
 
 NOTE: To see actual OCR in action, the LlamaFarm server must be running at:
-  http://127.0.0.1:8000/v1/vision/ocr
+  http://127.0.0.1:14345/v1/vision/ocr
 """
 
 import sys
