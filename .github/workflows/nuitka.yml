@@ -44,13 +44,14 @@ jobs:
         include:
           # Linux x86_64
           - os: linux-x86_64
-            runner: ubuntu-latest
+            # runner: ubuntu-latest
+            runner: build-fast-amd64
             component: server
           - os: linux-x86_64
-            runner: ubuntu-latest
+            runner: build-fast-amd64
             component: rag
           - os: linux-x86_64
-            runner: ubuntu-latest
+            runner: build-fast-amd64
             component: runtime
 
           # Linux ARM64
