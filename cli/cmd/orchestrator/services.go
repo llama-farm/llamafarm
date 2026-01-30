@@ -201,7 +201,15 @@ type ServiceManager struct {
 
 // NewServiceManager returns a new ServiceManager.
 func NewServiceManager(serverURL string) (*ServiceManager, error) {
-	orchestrator, err := NewOrchestrator(serverURL)
+	var orchestrator *NativeOrchestrator
+	var err error
+
+	if IsBinaryMode() {
+		utils.LogDebug("Binary deploy mode enabled\n")
+		orchestrator, err = NewBinaryOrchestrator(serverURL)
+	} else {
+		orchestrator, err = NewOrchestrator(serverURL)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
@@ -382,8 +390,17 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 	return nil
 }
 
-// startService starts a service using its declarative configuration
+// startService starts a service using its declarative configuration.
+// In binary mode, it launches pre-built PyApp binaries instead of uv + source.
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
+	if IsBinaryMode() {
+		return sm.startServiceBinary(serviceDef)
+	}
+	return sm.startServiceSource(serviceDef)
+}
+
+// startServiceSource starts a service from source code via uv (original path).
+func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 
@@ -401,6 +418,23 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
+}
+
+// startServiceBinary starts a service from a pre-built PyApp binary.
+func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) error {
+	binaryPath, err := ResolveBinaryPath(serviceDef.Name)
+	if err != nil {
+		return fmt.Errorf("binary mode: %w", err)
+	}
+
+	utils.LogDebug(fmt.Sprintf("Starting %s from binary: %s\n", serviceDef.Name, binaryPath))
+
+	env := sm.orchestrator.getBinaryEnv(serviceDef.Env)
+
+	// PyApp binaries are self-contained; use the LF data dir as working directory
+	lfDir, _ := utils.GetLFDataDir()
+
+	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }
 
 // isServiceHealthy checks if a service is healthy by querying its health component

@@ -49,11 +49,14 @@ jobs:
             echo ""
             echo "### Test Results by Platform"
             echo ""
-            echo "| OS | Status |"
-            echo "|---|---|"
-            echo "| ubuntu-latest | :hourglass: Pending |"
-            echo "| macos-latest | :hourglass: Pending |"
-            echo "| windows-latest | :hourglass: Pending |"
+            echo "| OS | Mode | Status |"
+            echo "|---|---|---|"
+            echo "| ubuntu-latest | source | :hourglass: Pending |"
+            echo "| macos-latest | source | :hourglass: Pending |"
+            echo "| windows-latest | source | :hourglass: Pending |"
+            echo "| ubuntu-latest | binary | :hourglass: Pending |"
+            echo "| macos-latest | binary | :hourglass: Pending |"
+            echo "| windows-latest | binary | :hourglass: Pending |"
             echo ""
             echo "### Summary"
             echo ""
@@ -277,7 +280,7 @@ jobs:
           exit 1
 
   e2e-test:
-    name: E2E Tests (${{ matrix.os }})
+    name: E2E Tests (${{ matrix.os }}, ${{ matrix.deploy_mode }})
     needs: wait-for-cli
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -285,15 +288,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Source mode (existing behavior: uv + source)
           - os: ubuntu-latest
             artifact: llamafarm-linux-amd64
             binary: lf
+            deploy_mode: source
           - os: macos-latest
             artifact: llamafarm-darwin-arm64
             binary: lf
+            deploy_mode: source
           - os: windows-latest
             artifact: llamafarm-windows-amd64.exe
             binary: lf.exe
+            deploy_mode: source
+          # Binary deploy mode (PyApp standalone binaries)
+          - os: ubuntu-latest
+            artifact: llamafarm-linux-amd64
+            binary: lf
+            deploy_mode: binary
+            pyapp_os: linux-x86_64
+          - os: macos-latest
+            artifact: llamafarm-darwin-arm64
+            binary: lf
+            deploy_mode: binary
+            pyapp_os: macos-arm64
+          - os: windows-latest
+            artifact: llamafarm-windows-amd64.exe
+            binary: lf.exe
+            deploy_mode: binary
+            pyapp_os: windows-x86_64
     env:
       # Use the current branch/ref being tested instead of main
       # For PRs (including fork PRs), use the merge ref which is always accessible
@@ -376,6 +399,75 @@ jobs:
         run: |
           ./${{ matrix.binary }} version
           echo "✓ CLI binary is functional"
+
+      # ============================================================
+      # Download and Setup PyApp Binaries (binary deploy mode only)
+      # ============================================================
+      - name: Download PyApp service binaries
+        if: matrix.deploy_mode == 'binary'
+        id: download-pyapp
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: pyapp.yml
+          name: llamafarm-.*-pyapp-${{ matrix.pyapp_os }}
+          name_is_regexp: true
+          path: pyapp-download/
+          branch: ${{ github.head_ref || github.ref_name }}
+          if_no_artifact_found: warn
+
+      - name: Verify PyApp binaries available
+        if: matrix.deploy_mode == 'binary'
+        shell: bash
+        run: |
+          if [ "${{ steps.download-pyapp.outcome }}" != "success" ]; then
+            echo "::error::PyApp artifacts not available for platform ${{ matrix.pyapp_os }}."
+            echo "Run the 'Build Native Binaries (PyApp)' workflow first, then re-run this workflow."
+            exit 1
+          fi
+          echo "✓ PyApp artifacts downloaded"
+          ls -laR pyapp-download/
+
+      - name: Setup binary deploy mode
+        if: matrix.deploy_mode == 'binary'
+        shell: bash
+        run: |
+          # Create bin directory
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            BIN_DIR="$USERPROFILE/.llamafarm/bin"
+          else
+            BIN_DIR="$HOME/.llamafarm/bin"
+          fi
+          mkdir -p "$BIN_DIR"
+
+          # Move all PyApp binaries into the bin directory
+          for dir in pyapp-download/llamafarm-*-pyapp-*/; do
+            if [ -d "$dir" ]; then
+              for bin in "$dir"*; do
+                if [ -f "$bin" ]; then
+                  cp "$bin" "$BIN_DIR/"
+                  echo "  Installed: $(basename "$bin")"
+                fi
+              done
+            fi
+          done
+
+          # Make binaries executable (Unix only)
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            chmod +x "$BIN_DIR"/*
+          fi
+
+          # Set environment variables for remaining steps
+          echo "LF_DEPLOY_MODE=binary" >> $GITHUB_ENV
+          echo "LF_BIN_DIR=$BIN_DIR" >> $GITHUB_ENV
+
+          echo ""
+          echo "✓ Binary deploy mode configured"
+          echo "  LF_DEPLOY_MODE=binary"
+          echo "  LF_BIN_DIR=$BIN_DIR"
+          echo ""
+          echo "Installed binaries:"
+          ls -la "$BIN_DIR/"
 
       # ============================================================
       # Project Initialization
@@ -937,8 +1029,9 @@ jobs:
         shell: bash
         run: |
           echo "=========================================="
-          echo "End-to-End Test Summary (${{ matrix.os }})"
+          echo "End-to-End Test Summary (${{ matrix.os }}, ${{ matrix.deploy_mode }})"
           echo "=========================================="
+          echo "✓ Deploy mode: ${{ matrix.deploy_mode }}"
           echo "✓ CLI binary downloaded and verified"
           echo "✓ Project initialized"
           echo "✓ llama.cpp binary downloaded and verified"
@@ -957,14 +1050,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p e2e-results
-          echo "${{ job.status }}" > e2e-results/${{ matrix.os }}.txt
-          echo "Saved result: ${{ job.status }} for ${{ matrix.os }}"
+          echo "${{ job.status }}" > e2e-results/${{ matrix.os }}-${{ matrix.deploy_mode }}.txt
+          echo "Saved result: ${{ job.status }} for ${{ matrix.os }} (${{ matrix.deploy_mode }})"
 
       - name: Upload test result artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-result-${{ matrix.os }}
+          name: e2e-result-${{ matrix.os }}-${{ matrix.deploy_mode }}
           path: e2e-results/
           retention-days: 1
 
@@ -1047,7 +1140,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-logs-${{ matrix.os }}
+          name: e2e-test-logs-${{ matrix.os }}-${{ matrix.deploy_mode }}
           path: |
             ~/.llamafarm/logs/
             ~/Library/Caches/llamafarm-llama/
@@ -1094,34 +1187,36 @@ jobs:
           CANCELLED=0
 
           # Build results table
-          RESULTS_TABLE="| OS | Status |\n|---|---|\n"
+          RESULTS_TABLE="| OS | Mode | Status |\n|---|---|---|\n"
 
           for os in ubuntu-latest macos-latest windows-latest; do
-            RESULT_FILE="results/e2e-result-${os}/${os}.txt"
-            if [ -f "$RESULT_FILE" ]; then
-              STATUS=$(cat "$RESULT_FILE")
-              TOTAL=$((TOTAL + 1))
-              case "$STATUS" in
-                success)
-                  PASSED=$((PASSED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :white_check_mark: Passed |\n"
-                  ;;
-                failure)
-                  FAILED=$((FAILED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :x: Failed |\n"
-                  ;;
-                cancelled)
-                  CANCELLED=$((CANCELLED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :warning: Cancelled |\n"
-                  ;;
-                *)
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :question: ${STATUS} |\n"
-                  ;;
-              esac
-            else
-              echo "Warning: No result file found for ${os}"
-              RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :grey_question: No result |\n"
-            fi
+            for mode in source binary; do
+              RESULT_FILE="results/e2e-result-${os}-${mode}/${os}-${mode}.txt"
+              if [ -f "$RESULT_FILE" ]; then
+                STATUS=$(cat "$RESULT_FILE")
+                TOTAL=$((TOTAL + 1))
+                case "$STATUS" in
+                  success)
+                    PASSED=$((PASSED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :white_check_mark: Passed |\n"
+                    ;;
+                  failure)
+                    FAILED=$((FAILED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :x: Failed |\n"
+                    ;;
+                  cancelled)
+                    CANCELLED=$((CANCELLED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :warning: Cancelled |\n"
+                    ;;
+                  *)
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :question: ${STATUS} |\n"
+                    ;;
+                esac
+              else
+                echo "Warning: No result file found for ${os}-${mode}"
+                RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :grey_question: No result |\n"
+              fi
+            done
           done
 
           # Determine overall status

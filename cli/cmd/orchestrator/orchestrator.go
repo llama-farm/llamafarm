@@ -133,6 +133,44 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 	return append(env, extraEnv...)
 }
 
+// NewBinaryOrchestrator creates an orchestrator for binary deploy mode.
+// It only needs a ProcessManager — no UV, Python, or source managers.
+func NewBinaryOrchestrator(serverURL string) (*NativeOrchestrator, error) {
+	procMgr, err := NewProcessManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create process manager: %w", err)
+	}
+
+	return &NativeOrchestrator{
+		processMgr:  procMgr,
+		serverURL:   serverURL,
+		initialized: true,
+	}, nil
+}
+
+// getBinaryEnv builds environment variables for a binary-mode service.
+// Unlike getDefaultEnvWithKeys, it does not depend on pythonEnvMgr.
+func (no *NativeOrchestrator) getBinaryEnv(envKeysWithDefaults map[string]string) []string {
+	var env []string
+
+	// Inherit core environment keys
+	for _, key := range []string{"HOME", "USER", "TMPDIR", "LF_DATA_DIR", "PATH"} {
+		if val := os.Getenv(key); val != "" {
+			env = append(env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+
+	// Add service-specific environment variables
+	for key, val := range envKeysWithDefaults {
+		if val != "" {
+			expandedVal := os.ExpandEnv(val)
+			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
+		}
+	}
+
+	return env
+}
+
 // StopAllProcesses stops all native processes
 func (no *NativeOrchestrator) StopAllProcesses() {
 	if no.processMgr != nil {
