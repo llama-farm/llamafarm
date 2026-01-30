@@ -425,14 +425,38 @@ class ProjectChatService:
                 if context_provider and hasattr(context_provider, "chunks"):
                     chunks = context_provider.chunks
                     if chunks:
+                        sample_chunk = chunks[0]
+                        logger.info(
+                            "RAG chunk metadata preview: %s",
+                            getattr(sample_chunk, "metadata", None),
+                        )
+                        logger.info(
+                            "RAG chunk score fields: score=%s similarity_score=%s _score=%s attr_score=%s attr_similarity_score=%s",
+                            getattr(sample_chunk, "metadata", {}).get("score"),
+                            getattr(sample_chunk, "metadata", {}).get("similarity_score"),
+                            getattr(sample_chunk, "metadata", {}).get("_score"),
+                            getattr(sample_chunk, "score", None),
+                            getattr(sample_chunk, "similarity_score", None),
+                        )
+
+                        def _first_not_none(*values: object) -> object:
+                            for value in values:
+                                if value is not None:
+                                    return value
+                            return 0.0
+
                         # Limit chunks to prevent performance issues
                         limited_chunks = chunks[:sources_limit]
                         sources = [
                             {
                                 "content": chunk.content,
                                 "source": chunk.metadata.get("source", "unknown"),
-                                "score": chunk.metadata.get(
-                                    "similarity_score", 0.0
+                                "score": _first_not_none(
+                                    chunk.metadata.get("score"),
+                                    chunk.metadata.get("similarity_score"),
+                                    chunk.metadata.get("_score"),
+                                    getattr(chunk, "score", None),
+                                    getattr(chunk, "similarity_score", None),
                                 ),
                                 "metadata": {
                                     k: v
