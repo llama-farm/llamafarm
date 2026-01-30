@@ -401,6 +401,16 @@ class ProjectChatService:
         first_token_logged = False
 
         try:
+            rag_params = self._resolve_rag_parameters(
+                project_config,
+                rag_enabled=rag_enabled,
+                database=database,
+                retrieval_strategy=retrieval_strategy,
+                rag_top_k=rag_top_k,
+                rag_score_threshold=rag_score_threshold,
+                rag_queries=rag_queries,
+            )
+
             if latest_user_message:
                 await self._perform_rag_with_logging(
                     event_logger,
@@ -417,7 +427,7 @@ class ProjectChatService:
                 )
 
             # Yield sources event before LLM stream (if requested)
-            if include_sources and rag_enabled:
+            if include_sources and rag_params.rag_enabled:
                 # Use get_context_provider method to access RAG context
                 context_provider = None
                 if hasattr(chat_agent, "get_context_provider"):
