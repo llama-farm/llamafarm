@@ -430,6 +430,44 @@ jobs:
           fi
 
       # ============================================================
+      # Pre-warm Embedding Model
+      # ============================================================
+      - name: Pre-warm embedding model
+        shell: bash
+        timeout-minutes: 5
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Pre-warming embedding model (sentence-transformers/all-MiniLM-L6-v2)..."
+          echo "Sending a dummy embedding request to trigger model loading..."
+
+          # The universal runtime is already running from the chat pre-warm step.
+          # Send a minimal embedding request to force the embedding model to load
+          # before RAG ingestion tasks need it.
+          MAX_RETRIES=12
+          RETRY_DELAY=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
+              -X POST http://localhost:11540/v1/embeddings \
+              -H "Content-Type: application/json" \
+              -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "warm up"}')
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE)"
+              break
+            fi
+
+            if [ "$i" -eq "$MAX_RETRIES" ]; then
+              echo "❌ Embedding model failed to respond after $MAX_RETRIES attempts (last HTTP $HTTP_CODE)"
+              cat /tmp/embed_response.json 2>/dev/null || true
+              exit 1
+            fi
+
+            echo "  Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE, retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
+
+      # ============================================================
       # Verify llama.cpp Binary Download (critical for GGUF models)
       # ============================================================
       - name: Verify llama.cpp binary download
