@@ -411,8 +411,11 @@ def load_config(
     config_obj = LlamaFarmConfig(**config_dict)
 
     # Resolve reusable components (embedding/retrieval/parsers) into inline configs
-    resolver = ComponentResolver(config_obj)
-    return resolver.resolve_config(config_obj)
+    try:
+        resolver = ComponentResolver(config_obj)
+        return resolver.resolve_config(config_obj)
+    except ValueError as e:
+        raise ConfigError(f"Configuration validation error: {e}") from e
 
 
 # ============================================================================
