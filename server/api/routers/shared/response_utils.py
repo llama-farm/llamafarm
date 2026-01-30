@@ -136,6 +136,7 @@ def create_streaming_response_from_iterator(
                         logger.warning(f"Failed to serialize custom event: {e}")
                         continue
                     await asyncio.sleep(0)
+                    emitted = True
                     continue
 
                 # Handle ChatCompletionChunk - serialize it directly
