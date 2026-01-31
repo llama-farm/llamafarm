@@ -258,6 +258,24 @@ properties:
               items:
                 $ref: "#/definitions/Tool"
               default: []
+            tools_mode:
+              type: string
+              enum: [config_only, api_replace, api_supplement]
+              description: |
+                Controls how API-provided tools interact with config-defined tools:
+                - `config_only`: Only config tools are available; API tools are ignored (secure)
+                - `api_replace`: API tools replace config tools entirely
+                - `api_supplement`: API tools are added to config tools (default)
+              default: api_supplement
+            prompts_mode:
+              type: string
+              enum: [config_only, api_replace, api_supplement]
+              description: |
+                Controls how API-provided system prompts interact with config-defined prompts:
+                - `config_only`: Only config prompts are used; API system prompts are ignored (secure, but variables still work)
+                - `api_replace`: API system prompts replace config prompts entirely
+                - `api_supplement`: API system prompts are appended to config prompts (default)
+              default: api_supplement
             keep_loaded:
               type: boolean
               description: |
