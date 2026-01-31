@@ -189,6 +189,62 @@ def _preload_async_backends():
 _preload_async_backends()
 
 
+def _patch_torch_dynamo_double_registration():
+    """Work around torch._dynamo double-registration assertion in PyApp binaries.
+
+    When packaged as a PyApp binary on Windows, torch._dynamo module-level code
+    can execute twice, causing CacheArtifactFactory.register to assert that an
+    artifact type is already registered. This function:
+    1. Attempts to import torch._dynamo (which may fail with AssertionError)
+    2. If it fails, patches CacheArtifactFactory.register to be idempotent
+    3. Cleans up failed partial imports and retries
+    """
+    import sys
+
+    try:
+        import torch._dynamo  # noqa: F401
+        return  # Imported fine, no patch needed
+    except AssertionError as e:
+        if "already registered" not in str(e):
+            raise
+        logger.info("torch._dynamo assertion detected (PyApp double-import), applying workaround")
+    except ImportError:
+        return  # torch not installed
+
+    # The assertion fired during import. CacheArtifactFactory should be in
+    # sys.modules since it loaded successfully before package.py failed.
+    caf_mod = sys.modules.get("torch._dynamo.cache_artifact_factory")
+    if not caf_mod or not hasattr(caf_mod, "CacheArtifactFactory"):
+        logger.warning("CacheArtifactFactory not found after assertion — cannot patch")
+        return
+
+    CacheArtifactFactory = caf_mod.CacheArtifactFactory
+    original_register = CacheArtifactFactory.register.__func__
+
+    @classmethod  # type: ignore[misc]
+    def idempotent_register(cls, artifact_cls):
+        if artifact_cls.type() in cls._artifact_types:
+            return artifact_cls
+        return original_register(cls, artifact_cls)
+
+    CacheArtifactFactory.register = idempotent_register
+
+    # Clean up the failed partial imports so the retry re-executes module code
+    for key in list(sys.modules):
+        if key.startswith("torch._dynamo") and key != "torch._dynamo.cache_artifact_factory":
+            del sys.modules[key]
+
+    try:
+        import torch._dynamo  # noqa: F401
+        logger.info("torch._dynamo imported successfully after patching")
+    except Exception as exc:
+        logger.warning(f"torch._dynamo re-import failed after patch: {exc}")
+
+
+# Prevent torch._dynamo assertion errors in PyApp-packaged binaries
+_patch_torch_dynamo_double_registration()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
