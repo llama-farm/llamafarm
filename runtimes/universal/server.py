@@ -22,7 +22,6 @@ Environment Variables:
 import asyncio
 import os
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -289,7 +288,9 @@ _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 
 # Data directories
-_LF_DATA_DIR = Path.home() / ".llamafarm"
+from utils.safe_home import get_data_dir
+
+_LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
 

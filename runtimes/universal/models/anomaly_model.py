@@ -71,7 +71,9 @@ logger = logging.getLogger(__name__)
 # Safe directory for anomaly models - uses standard LlamaFarm data directory
 # ~/.llamafarm/models/anomaly/ (or LF_DATA_DIR/models/anomaly/)
 # Only files within this directory can be loaded - prevents path traversal attacks
-_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+from utils.safe_home import get_data_dir
+
+_LF_DATA_DIR = get_data_dir()
 ANOMALY_MODELS_DIR = (_LF_DATA_DIR / "models" / "anomaly").resolve()
 
 

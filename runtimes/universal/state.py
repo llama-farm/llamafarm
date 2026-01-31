@@ -20,6 +20,7 @@ from models import BaseModel, ClassifierModel
 from utils.device import get_optimal_device
 from utils.feature_encoder import FeatureEncoder
 from utils.model_cache import ModelCache
+from utils.safe_home import get_data_dir
 
 logger = UniversalRuntimeLogger("universal-runtime")
 
@@ -39,7 +40,7 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 100 * 1024 * 1024))
 
 # Model storage directories - uses standard LlamaFarm data directory structure
-_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+_LF_DATA_DIR = get_data_dir()
 ANOMALY_MODELS_DIR = _LF_DATA_DIR / "models" / "anomaly"
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
