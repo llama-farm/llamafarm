@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
+from utils.safe_home import get_data_dir
 from models import (
     AnomalyModel,
     BaseModel,
@@ -288,8 +289,6 @@ _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 
 # Data directories
-from utils.safe_home import get_data_dir
-
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
