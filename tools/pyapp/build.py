@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PyApp Build Script for LlamaFarm Components
+PyApp Build Script for LlamaFarm Components.
 
 Packages LlamaFarm components (server, rag, runtime) as standalone binaries
 using PyApp. Builds a "fat wheel" containing the component + internal packages,
