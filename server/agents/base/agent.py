@@ -64,12 +64,14 @@ class LFAgent:
         """Combine config tools with API tools based on tools_mode.
 
         Args:
-            api_tools: Tools provided via the API request (may include MCP tools)
+            api_tools: Tools provided via the API request (may include MCP tools).
+                       None means not provided; empty list means explicitly no tools.
 
         Returns:
             Combined tool list based on the model's tools_mode setting:
             - config_only: Only config tools; API tools are ignored
-            - api_replace: API tools replace config tools entirely
+            - api_replace: API tools replace config tools (empty list = no tools;
+                          None falls back to config for backwards compatibility)
             - api_supplement: API tools are added to config tools (default)
         """
         mode = self.tools_mode
@@ -86,14 +88,14 @@ class LFAgent:
 
         if mode == ToolsMode.api_replace:
             # API tools completely replace config tools
-            if api_tools:
+            if api_tools is not None:
                 logger.debug(
                     "tools_mode=api_replace: using %d API tools, ignoring %d config tools",
                     len(api_tools),
                     len(config_tools),
                 )
                 return api_tools
-            # No API tools provided, fall back to config tools
+            # No API tools provided (None), fall back to config tools
             return config_tools
 
         # Default: api_supplement - combine both
@@ -197,7 +199,8 @@ class LFAgent:
 
         Message order depends on prompts_mode:
         - config_only: Only config prompts (API system prompts ignored)
-        - api_replace: Only API system prompts (config prompts ignored if API prompts provided)
+        - api_replace: API system prompts replace config prompts (empty list = no
+                      system prompt; None falls back to config for backwards compat)
         - api_supplement: Config prompts + API system prompts (default)
 
         Then conversation history is appended.
@@ -205,6 +208,7 @@ class LFAgent:
         Args:
             request_system_messages: System messages from the current API request.
                 These are included for this request only, not stored in history.
+                None means not provided; empty list means explicitly no prompts.
         """
         messages: list[LFChatCompletionMessageParam] = []
         mode = self.prompts_mode
@@ -227,8 +231,8 @@ class LFAgent:
                 )
 
         elif mode == PromptsMode.api_replace:
-            # API system prompts replace config prompts (if provided)
-            if request_system_messages:
+            # API system prompts replace config prompts entirely
+            if request_system_messages is not None:
                 logger.debug(
                     "prompts_mode=api_replace: using %d API system messages, ignoring config prompt",
                     len(request_system_messages),
@@ -237,7 +241,7 @@ class LFAgent:
                     serialized = LFAgentHistory._serialize_message(sys_msg)
                     messages.append(serialized)
             elif config_system_prompt:
-                # No API prompts provided, fall back to config
+                # No API prompts provided (None), fall back to config
                 messages.append(
                     LFChatCompletionSystemMessageParam(
                         role="system", content=config_system_prompt
