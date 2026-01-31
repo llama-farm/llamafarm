@@ -21,7 +21,6 @@ Environment Variables:
 
 import asyncio
 import os
-import sys
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
@@ -189,101 +188,6 @@ def _preload_async_backends():
 # Preload async backends - prevents segfaults during streaming on ARM64/Jetson
 _preload_async_backends()
 
-
-class _DynamoRegistrationPatcher:
-    """Import hook that makes CacheArtifactFactory.register idempotent.
-
-    In PyApp-packaged binaries on Windows, torch._dynamo module-level code
-    can execute twice, causing CacheArtifactFactory.register to assert that
-    an artifact type is already registered. This hook intercepts the import
-    of cache_artifact_factory and patches register() to skip duplicates
-    BEFORE package.py ever tries to use it.
-
-    Uses the find_spec API (PEP 451) for Python 3.12+ compatibility.
-    """
-
-    _patching = False  # Guard against re-entrant calls
-
-    def find_spec(self, fullname, path, target=None):
-        if fullname != "torch._dynamo.cache_artifact_factory":
-            return None
-        if self._patching:
-            return None  # Avoid recursion during the real import
-
-        import importlib
-        import importlib.util
-
-        print(f"[dynamo-patch] Intercepting import of {fullname}", flush=True)
-
-        # Perform the real import by temporarily disabling our hook
-        self._patching = True
-        try:
-            module = importlib.import_module(fullname)
-        except Exception as exc:
-            print(f"[dynamo-patch] Real import failed: {exc}", flush=True)
-            self._patching = False
-            return None  # Let normal import handle it
-        self._patching = False
-
-        # Patch CacheArtifactFactory.register to be idempotent
-        CacheArtifactFactory = getattr(module, "CacheArtifactFactory", None)
-        if CacheArtifactFactory is not None and not getattr(CacheArtifactFactory, "_patched", False):
-            original_register = CacheArtifactFactory.register.__func__
-
-            @classmethod  # type: ignore[misc]
-            def idempotent_register(cls, artifact_cls):
-                if artifact_cls.type() in cls._artifact_types:
-                    return artifact_cls
-                return original_register(cls, artifact_cls)
-
-            CacheArtifactFactory.register = idempotent_register
-            CacheArtifactFactory._patched = True
-            print("[dynamo-patch] Patched CacheArtifactFactory.register for idempotent registration", flush=True)
-
-        # Module is already in sys.modules from importlib.import_module above.
-        # Return a spec that resolves to the already-loaded module.
-        spec = importlib.util.find_spec(fullname)
-        return spec
-
-    # Keep find_module as fallback for older Python versions
-    def find_module(self, fullname, path=None):
-        if fullname == "torch._dynamo.cache_artifact_factory" and not self._patching:
-            return self
-        return None
-
-    def load_module(self, fullname):
-        import importlib
-
-        if fullname in sys.modules:
-            return sys.modules[fullname]
-
-        self._patching = True
-        try:
-            module = importlib.import_module(fullname)
-        finally:
-            self._patching = False
-
-        CacheArtifactFactory = getattr(module, "CacheArtifactFactory", None)
-        if CacheArtifactFactory is not None and not getattr(CacheArtifactFactory, "_patched", False):
-            original_register = CacheArtifactFactory.register.__func__
-
-            @classmethod  # type: ignore[misc]
-            def idempotent_register(cls, artifact_cls):
-                if artifact_cls.type() in cls._artifact_types:
-                    return artifact_cls
-                return original_register(cls, artifact_cls)
-
-            CacheArtifactFactory.register = idempotent_register
-            CacheArtifactFactory._patched = True
-            print("[dynamo-patch] Patched via load_module fallback", flush=True)
-
-        return module
-
-
-# Install import hook to prevent torch._dynamo assertion errors in PyApp binaries.
-# Must be installed before any torch imports (transformers imports torch lazily).
-print("[dynamo-patch] Installing import hook for torch._dynamo.cache_artifact_factory", flush=True)
-sys.meta_path.insert(0, _DynamoRegistrationPatcher())
 
 
 @asynccontextmanager

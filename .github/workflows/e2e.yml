@@ -465,11 +465,6 @@ jobs:
       # Allow uv to search all indexes for best version match (needed because PyTorch index
       # has old versions of common packages like 'requests' that would block resolution)
       UV_INDEX_STRATEGY: unsafe-best-match
-      # Force CPU usage to avoid MPS issues on macOS runners
-      TRANSFORMERS_FORCE_CPU: 1
-      # Disable torch.compile / _dynamo to avoid double-registration assertion
-      # errors in PyApp-packaged binaries on Windows
-      TORCHDYNAMO_DISABLE: 1
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1
