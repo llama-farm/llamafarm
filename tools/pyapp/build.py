@@ -542,7 +542,9 @@ def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
 
     # Generate the pyproject.toml from source dependency files
     pyproject_path = build_dir / "pyproject.toml"
-    pyproject_path.write_text(generate_pyproject_toml(component, version))
+    pyproject_path.write_text(
+        generate_pyproject_toml(component, version), encoding="utf-8"
+    )
     print(f"Wheel version: {version}")
 
     # Create the wrapper package with all subpackages nested inside it.
