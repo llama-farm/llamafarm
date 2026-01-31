@@ -473,6 +473,9 @@ jobs:
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1
+      # Strip Python assert statements to work around torch._dynamo
+      # CacheArtifactFactory double-registration in PyApp binaries
+      PYTHONOPTIMIZE: 1
 
     steps:
       # ============================================================
@@ -793,11 +796,12 @@ jobs:
           # The universal runtime may have crashed during chat pre-warming (SIGSEGV
           # in llama.cpp native code). The CLI restarts unhealthy services when you
           # run a command, so we use `lf chat` to trigger a restart before retrying.
-          # HTTP 500 is expected while the embedding model is downloading/loading
-          # (can take 3+ minutes on Windows).
+          # HTTP 500 is expected while the embedding model is downloading/loading.
+          # On Windows binary, a PyTorch assertion error in torch._dynamo causes
+          # repeated 500s for ~5 minutes until the import eventually succeeds.
           RESTARTED=false
-          MAX_RETRIES=50
-          RETRY_DELAY=5
+          MAX_RETRIES=80
+          RETRY_DELAY=4
 
           for i in $(seq 1 $MAX_RETRIES); do
             HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
