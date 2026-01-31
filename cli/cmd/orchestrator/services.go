@@ -148,7 +148,9 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			// Note: PYTORCH_MPS_HIGH_WATERMARK_RATIO removed - setting it to non-default
 			// values causes "invalid low watermark ratio" errors on some PyTorch versions.
 			// Let PyTorch use its default memory management.
-			"HF_TOKEN": "",
+			"TORCHDYNAMO_DISABLE":      "", // Set to "1" to disable torch._dynamo (avoids import crashes in PyApp)
+			"LLAMAFARM_GGUF_FORCE_CPU": "", // Set to "1" to force CPU for GGUF inference (avoids Metal SIGSEGV in CI)
+			"HF_TOKEN":                 "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},

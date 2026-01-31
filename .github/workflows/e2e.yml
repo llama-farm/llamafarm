@@ -470,6 +470,9 @@ jobs:
       # Disable torch.compile / _dynamo to avoid double-registration assertion
       # errors in PyApp-packaged binaries on Windows
       TORCHDYNAMO_DISABLE: 1
+      # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
+      # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
+      LLAMAFARM_GGUF_FORCE_CPU: 1
 
     steps:
       # ============================================================
