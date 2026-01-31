@@ -473,9 +473,6 @@ jobs:
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1
-      # Strip Python assert statements to work around torch._dynamo
-      # CacheArtifactFactory double-registration in PyApp binaries
-      PYTHONOPTIMIZE: 1
 
     steps:
       # ============================================================
@@ -786,7 +783,7 @@ jobs:
       - name: Pre-warm embedding model
         working-directory: cli
         shell: bash
-        timeout-minutes: 8
+        timeout-minutes: 12
         env:
           PYTHONUNBUFFERED: "1"
         run: |
@@ -798,10 +795,12 @@ jobs:
           # run a command, so we use `lf chat` to trigger a restart before retrying.
           # HTTP 500 is expected while the embedding model is downloading/loading.
           # On Windows binary, a PyTorch assertion error in torch._dynamo causes
-          # repeated 500s for ~5 minutes until the import eventually succeeds.
-          RESTARTED=false
-          MAX_RETRIES=80
-          RETRY_DELAY=4
+          # repeated 500s until the import eventually succeeds.
+          MAX_RETRIES=120
+          RETRY_DELAY=5
+          RESTART_COUNT=0
+          MAX_RESTARTS=3
+          CONSECUTIVE_DEAD=0
 
           for i in $(seq 1 $MAX_RETRIES); do
             HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
@@ -811,22 +810,31 @@ jobs:
               2>/dev/null) || HTTP_CODE="000"
 
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE)"
+              echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE) on attempt $i"
               exit 0
             fi
 
-            # If runtime is dead (000), restart it via the CLI
-            if [ "$HTTP_CODE" = "000" ] && [ "$RESTARTED" = "false" ]; then
-              echo "  Runtime not reachable, restarting via CLI..."
-              ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "ping" 2>&1 | tail -3 || true
-              RESTARTED=true
+            # Track consecutive dead responses to trigger restart
+            if [ "$HTTP_CODE" = "000" ]; then
+              CONSECUTIVE_DEAD=$((CONSECUTIVE_DEAD + 1))
+            else
+              CONSECUTIVE_DEAD=0
+            fi
+
+            # If runtime is dead for 5+ consecutive checks, restart via CLI
+            if [ "$CONSECUTIVE_DEAD" -ge 5 ] && [ "$RESTART_COUNT" -lt "$MAX_RESTARTS" ]; then
+              RESTART_COUNT=$((RESTART_COUNT + 1))
+              echo "  Runtime dead for $CONSECUTIVE_DEAD checks, restarting via CLI (restart $RESTART_COUNT/$MAX_RESTARTS)..."
+              ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "ping" 2>&1 | tail -5 || true
+              CONSECUTIVE_DEAD=0
               echo "  Waiting for runtime to initialize..."
-              sleep 15
+              sleep 20
               continue
             fi
 
             if [ "$i" -eq "$MAX_RETRIES" ]; then
               echo "❌ Embedding model failed to respond after $MAX_RETRIES attempts (last HTTP $HTTP_CODE)"
+              echo "Restarts attempted: $RESTART_COUNT"
               echo "Checking server health..."
               curl -s http://localhost:14345/health | jq '.' 2>/dev/null || echo "Server not reachable"
               cat /tmp/embed_response.json 2>/dev/null || true

@@ -150,7 +150,6 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			// Let PyTorch use its default memory management.
 			"TORCHDYNAMO_DISABLE":      "", // Set to "1" to disable torch._dynamo (avoids import crashes in PyApp)
 			"LLAMAFARM_GGUF_FORCE_CPU": "", // Set to "1" to force CPU for GGUF inference (avoids Metal SIGSEGV in CI)
-			"PYTHONOPTIMIZE":           "", // Set to "1" to strip assert statements (works around PyApp double-registration)
 			"HF_TOKEN":                 "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
