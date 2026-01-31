@@ -189,6 +189,38 @@ def _preload_async_backends():
 _preload_async_backends()
 
 
+def _patch_cache_artifact_factory():
+    """Make CacheArtifactFactory.register idempotent (PyApp Windows workaround).
+
+    In PyApp-packaged binaries on Windows, importing torch._dynamo fails partway
+    through (after package.py registers artifact types but before __init__ completes).
+    Python cleans up the failed torch._dynamo.* submodules from sys.modules, but the
+    registrations persist in CacheArtifactFactory._artifact_types. On the next import
+    attempt, package.py re-runs and @register asserts the type is already registered.
+
+    Patching register() to skip duplicates breaks this cycle.
+    """
+    try:
+        from torch.compiler._cache import CacheArtifactFactory
+
+        if not getattr(CacheArtifactFactory, "_register_patched", False):
+            _orig = CacheArtifactFactory.register.__func__
+
+            @classmethod  # type: ignore[misc]
+            def _safe_register(cls, artifact_cls):
+                if artifact_cls.type() in cls._artifact_types:
+                    return artifact_cls
+                return _orig(cls, artifact_cls)
+
+            CacheArtifactFactory.register = _safe_register
+            CacheArtifactFactory._register_patched = True
+    except (ImportError, AttributeError):
+        pass  # torch not installed or API changed
+
+
+_patch_cache_artifact_factory()
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
