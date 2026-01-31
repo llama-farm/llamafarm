@@ -467,6 +467,9 @@ jobs:
       UV_INDEX_STRATEGY: unsafe-best-match
       # Force CPU usage to avoid MPS issues on macOS runners
       TRANSFORMERS_FORCE_CPU: 1
+      # Disable torch.compile / _dynamo to avoid double-registration assertion
+      # errors in PyApp-packaged binaries on Windows
+      TORCHDYNAMO_DISABLE: 1
 
     steps:
       # ============================================================
@@ -783,16 +786,17 @@ jobs:
           echo "Pre-warming embedding model (sentence-transformers/all-MiniLM-L6-v2)..."
           echo "Sending a dummy embedding request to trigger model loading..."
 
-          # The universal runtime is already running from the chat pre-warm step.
-          # Send a minimal embedding request to force the embedding model to load
-          # before RAG ingestion tasks need it.
-          MAX_RETRIES=12
+          # The universal runtime may have crashed during chat pre-warming (SIGSEGV).
+          # The CLI auto-restarts unhealthy services on the next health-checked command,
+          # so we use || true on curl to handle connection refused (exit 7) during retry.
+          MAX_RETRIES=18
           RETRY_DELAY=5
           for i in $(seq 1 $MAX_RETRIES); do
             HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
               -X POST http://localhost:11540/v1/embeddings \
               -H "Content-Type: application/json" \
-              -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "warm up"}')
+              -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "warm up"}' \
+              2>/dev/null) || HTTP_CODE="000"
 
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE)"
@@ -801,8 +805,17 @@ jobs:
 
             if [ "$i" -eq "$MAX_RETRIES" ]; then
               echo "❌ Embedding model failed to respond after $MAX_RETRIES attempts (last HTTP $HTTP_CODE)"
+              echo "Checking server health..."
+              curl -s http://localhost:14345/health | jq '.' 2>/dev/null || echo "Server not reachable"
               cat /tmp/embed_response.json 2>/dev/null || true
               exit 1
+            fi
+
+            # On first failure, trigger a health check through the server to restart
+            # the runtime if it crashed
+            if [ "$i" -eq 1 ] && [ "$HTTP_CODE" = "000" ]; then
+              echo "  Runtime not reachable, triggering health check to restart..."
+              curl -s http://localhost:14345/health > /dev/null 2>&1 || true
             fi
 
             echo "  Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE, retrying in ${RETRY_DELAY}s..."

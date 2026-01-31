@@ -132,6 +132,9 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 			// Expand environment variable placeholders like ${LF_DATA_DIR}
 			expandedVal := os.ExpandEnv(val)
 			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
+		} else if envVal := os.Getenv(key); envVal != "" {
+			// Empty default means "inherit from parent environment if set"
+			env = append(env, fmt.Sprintf("%s=%s", key, envVal))
 		}
 	}
 	return append(env, extraEnv...)
@@ -173,6 +176,9 @@ func (no *NativeOrchestrator) getBinaryEnv(envKeysWithDefaults map[string]string
 		if val != "" {
 			expandedVal := os.ExpandEnv(val)
 			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
+		} else if envVal := os.Getenv(key); envVal != "" {
+			// Empty default means "inherit from parent environment if set"
+			env = append(env, fmt.Sprintf("%s=%s", key, envVal))
 		}
 	}
 

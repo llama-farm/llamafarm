@@ -234,7 +234,24 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           # Exclude e2e tests (they require running services)
-          uv run pytest -v -m "not e2e" --cov=. --cov-report=term-missing
+          # Use junitxml so we can verify test results even if the process crashes
+          set +e
+          uv run pytest -v -m "not e2e" --cov=. --cov-report=term-missing --junitxml=test-results.xml
+          EXIT_CODE=$?
+          set -e
+
+          if [ "$EXIT_CODE" -eq 139 ]; then
+            echo "⚠️ Process exited with SIGSEGV (139) during shutdown"
+            if [ -f test-results.xml ] && grep -q 'failures="0"' test-results.xml && grep -q 'errors="0"' test-results.xml; then
+              echo "All tests passed before the crash — treating as success (known native library shutdown issue)"
+              exit 0
+            else
+              echo "Tests had failures or errors before the crash"
+              exit 1
+            fi
+          fi
+
+          exit "$EXIT_CODE"
 
       - name: Skip tests (no tests found)
         if: steps.check-tests.outputs.has_tests == 'false'
