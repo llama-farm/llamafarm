@@ -683,8 +683,9 @@ jobs:
             fi
           fi
 
-          # Update runtime model and quantization
+          # Update runtime model, quantization, and context window
           yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF:IQ1_S"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.runtime.models[0].extra_body.n_ctx = 512' "$TEST_DIR/llamafarm.yaml"
 
           # Update embedding model and dimension
           yq -i '.rag.databases[0].embedding_strategies[0].config.model = "sentence-transformers/all-MiniLM-L6-v2"' "$TEST_DIR/llamafarm.yaml"
