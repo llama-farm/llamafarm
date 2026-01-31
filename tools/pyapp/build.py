@@ -34,13 +34,13 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 from pathlib import Path
 from urllib.request import urlretrieve
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DIST_DIR = PROJECT_ROOT / "dist" / "pyapp"
 CACHE_DIR = Path(__file__).parent / ".cache"
-TOOLS_DIR = Path(__file__).parent
 
 PYAPP_VERSION = "0.26.0"
 PYAPP_SOURCE_URL = (
@@ -53,25 +53,33 @@ PYAPP_SOURCE_URL = (
 # ============================================================================
 #
 # Each component defines how to assemble its fat wheel:
-#   source_dir:      component source relative to PROJECT_ROOT
-#   pkg_name:        the wrapper package name in the wheel
-#   pyproject:       pyproject.toml template filename
-#   binary_prefix:   output binary name prefix (suffixed with platform-arch)
-#   exec_module:     PYAPP_EXEC_MODULE value
-#   modules:         .py files to copy into the wrapper package
-#   data_dirs:       directories to copy into the wrapper package
-#   inner_packages:  subpackages to symlink INTO the wrapper package
-#   root_symlinks:   packages to symlink at the build root level
-#                    (list of (name, path-relative-to-PROJECT_ROOT) tuples)
-#   needs_config:    whether this component bundles the config package
-#   pip_extra_args:  extra pip args for PyApp (e.g. PyTorch CPU index)
-#   python_version:  minimum Python version for this component
+#   source_dir:       component source relative to PROJECT_ROOT
+#   pkg_name:         the wrapper package name in the wheel
+#   binary_prefix:    output binary name prefix (suffixed with platform-arch)
+#   exec_module:      PYAPP_EXEC_MODULE value
+#   modules:          .py files to copy into the wrapper package
+#   data_dirs:        directories to copy into the wrapper package
+#   inner_packages:   subpackages to symlink INTO the wrapper package
+#   root_symlinks:    packages to symlink at the build root level
+#                     (list of (name, path-relative-to-PROJECT_ROOT) tuples)
+#   needs_config:     whether this component bundles the config package
+#   pip_extra_args:   extra pip args for PyApp (e.g. PyTorch CPU index)
+#   python_version:   minimum Python version for this component
+#
+# Fat wheel pyproject.toml generation (deps read from source pyproject files):
+#   wheel_name:       [project].name in the generated pyproject.toml
+#   requires_python:  [project].requires-python
+#   wheel_packages:   [tool.hatch.build.targets.wheel].packages
+#   force_include:    [tool.hatch.build.targets.wheel.force-include]
+#   bundled_packages: internal packages whose deps are merged in
+#                     (dict mapping PyPI name -> dir relative to PROJECT_ROOT)
+#   exclude_deps:     dep names to filter out (internal refs, dev-only pkgs)
+#   extra_deps:       additional deps only needed in PyApp builds
 
 COMPONENTS: dict[str, dict] = {
     "server": {
         "source_dir": "server",
         "pkg_name": "server",
-        "pyproject": "pyproject.server.toml",
         "binary_prefix": "llamafarm-server",
         "exec_module": "server",
         "modules": ["main.py"],
@@ -87,11 +95,29 @@ COMPONENTS: dict[str, dict] = {
         "needs_config": True,
         "pip_extra_args": "",
         "python_version": "3.12",
+        # Fat wheel configuration (previously in pyproject.server.toml)
+        "wheel_name": "llamafarm-server",
+        "requires_python": ">=3.12",
+        "wheel_packages": ["server", "config", "llamafarm_common", "observability"],
+        "force_include": {
+            "server/seeds": "server/seeds",
+            "config/templates": "config/templates",
+            "config/schema.yaml": "config/schema.yaml",
+            "config/schema.deref.yaml": "config/schema.deref.yaml",
+        },
+        "bundled_packages": {
+            "llamafarm-config": "config",
+            "llamafarm-common": "common",
+        },
+        "exclude_deps": [
+            "llamafarm-config", "llamafarm-common",
+            "dotenv", "pre-commit", "ruff",
+        ],
+        "extra_deps": [],
     },
     "rag": {
         "source_dir": "rag",
         "pkg_name": "rag",
-        "pyproject": "pyproject.rag.toml",
         "binary_prefix": "llamafarm-rag",
         "exec_module": "rag",
         "modules": ["main.py", "celery_app.py", "api.py"],
@@ -107,11 +133,28 @@ COMPONENTS: dict[str, dict] = {
         "needs_config": True,
         "pip_extra_args": "",
         "python_version": "3.12",
+        # Fat wheel configuration (previously in pyproject.rag.toml)
+        "wheel_name": "llamafarm-rag",
+        "requires_python": ">=3.11",
+        "wheel_packages": ["rag", "config", "llamafarm_common", "observability"],
+        "force_include": {
+            "config/templates": "config/templates",
+            "config/schema.yaml": "config/schema.yaml",
+            "config/schema.deref.yaml": "config/schema.deref.yaml",
+        },
+        "bundled_packages": {
+            "llamafarm-config": "config",
+            "llamafarm-common": "common",
+        },
+        "exclude_deps": [
+            "llamafarm-config", "llamafarm-common",
+            "pytest", "pytest-cov", "pytest-asyncio", "pytest-mock",
+        ],
+        "extra_deps": [],
     },
     "runtime": {
         "source_dir": "runtimes/universal",
         "pkg_name": "runtime",
-        "pyproject": "pyproject.runtime.toml",
         "binary_prefix": "llamafarm-runtime",
         "exec_module": "runtime",
         "modules": ["server.py", "download_model.py", "state.py"],
@@ -126,6 +169,21 @@ COMPONENTS: dict[str, dict] = {
         "needs_config": False,
         "pip_extra_args": "",
         "python_version": "3.12",
+        # Fat wheel configuration (previously in pyproject.runtime.toml)
+        "wheel_name": "llamafarm-runtime",
+        "requires_python": ">=3.10",
+        "wheel_packages": ["runtime", "llamafarm_common", "llamafarm_llama"],
+        "force_include": {
+            "runtime/config": "runtime/config",
+        },
+        "bundled_packages": {
+            "llamafarm-common": "common",
+            "llamafarm-llama": "packages/llamafarm-llama",
+        },
+        "exclude_deps": ["llamafarm-common", "llamafarm-llama"],
+        "extra_deps": [
+            "pywin32>=306; sys_platform == 'win32'",
+        ],
     },
 }
 
@@ -343,6 +401,117 @@ def generate_config_types() -> None:
 
 
 # ============================================================================
+# Dependency collection (DRY — reads from source pyproject.toml files)
+# ============================================================================
+
+# Regex to extract the package name from a PEP 508 dependency string.
+# Matches the leading name portion before any extras, version, or markers.
+_DEP_NAME_RE = re.compile(r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)")
+
+
+def _normalize_dep_name(dep_str: str) -> str:
+    """Normalize a dependency string to a comparable package name.
+
+    Handles extras (pkg[extra]), version specifiers (>=1.0), environment
+    markers (; sys_platform == ...), and URL references (pkg @ url).
+    """
+    m = _DEP_NAME_RE.match(dep_str.strip())
+    name = m.group(1) if m else dep_str.strip()
+    return re.sub(r"[-_.]+", "_", name).lower()
+
+
+def collect_pyapp_dependencies(component: str) -> list[str]:
+    """Collect production dependencies for a PyApp fat wheel.
+
+    Reads the component's main pyproject.toml and the pyproject.toml of each
+    bundled internal package, filters out dev-only and internal-package
+    references, and returns a deduplicated list.
+    """
+    cfg = COMPONENTS[component]
+    exclude = {_normalize_dep_name(d) for d in cfg.get("exclude_deps", [])}
+
+    deps: list[str] = []
+
+    # 1. Read component's own production dependencies
+    main_pyproject = PROJECT_ROOT / cfg["source_dir"] / "pyproject.toml"
+    with open(main_pyproject, "rb") as f:
+        data = tomllib.load(f)
+    for dep in data.get("project", {}).get("dependencies", []):
+        if _normalize_dep_name(dep) not in exclude:
+            deps.append(dep)
+
+    # 2. Read bundled internal package dependencies
+    for _pkg_ref, pkg_dir in cfg.get("bundled_packages", {}).items():
+        pkg_pyproject = PROJECT_ROOT / pkg_dir / "pyproject.toml"
+        if not pkg_pyproject.exists():
+            continue
+        with open(pkg_pyproject, "rb") as f:
+            pkg_data = tomllib.load(f)
+        for dep in pkg_data.get("project", {}).get("dependencies", []):
+            if _normalize_dep_name(dep) not in exclude:
+                deps.append(dep)
+
+    # 3. Add PyApp-specific extras (e.g. pywin32 for Windows)
+    deps.extend(cfg.get("extra_deps", []))
+
+    # Deduplicate by normalized name, keeping first occurrence
+    seen: set[str] = set()
+    unique: list[str] = []
+    for dep in deps:
+        name = _normalize_dep_name(dep)
+        if name not in seen:
+            seen.add(name)
+            unique.append(dep)
+
+    return unique
+
+
+def generate_pyproject_toml(component: str, version: str) -> str:
+    """Generate a pyproject.toml for a PyApp fat wheel build.
+
+    Collects dependencies from source pyproject.toml files and produces
+    a self-contained pyproject.toml that hatchling can build.
+    """
+    cfg = COMPONENTS[component]
+    deps = collect_pyapp_dependencies(component)
+
+    deps_str = "\n".join(f"    {dep!r}," for dep in deps)
+    pkgs_str = "\n".join(f"    {pkg!r}," for pkg in cfg["wheel_packages"])
+
+    lines = [
+        "# Auto-generated by tools/pyapp/build.py — do not edit.",
+        "# Dependencies are collected from source pyproject.toml files at build time.",
+        "",
+        "[build-system]",
+        'requires = ["hatchling"]',
+        'build-backend = "hatchling.build"',
+        "",
+        "[project]",
+        f'name = {cfg["wheel_name"]!r}',
+        f'version = "{version}"',
+        f'requires-python = {cfg["requires_python"]!r}',
+        "dependencies = [",
+        deps_str,
+        "]",
+        "",
+        "[tool.hatch.build.targets.wheel]",
+        "packages = [",
+        pkgs_str,
+        "]",
+    ]
+
+    force_include = cfg.get("force_include", {})
+    if force_include:
+        lines.append("")
+        lines.append("[tool.hatch.build.targets.wheel.force-include]")
+        for src, dest in force_include.items():
+            lines.append(f'{src!r} = {dest!r}')
+
+    lines.append("")  # trailing newline
+    return "\n".join(lines)
+
+
+# ============================================================================
 # Fat wheel builder
 # ============================================================================
 
@@ -371,13 +540,9 @@ def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
             shutil.rmtree(d)
         d.mkdir(parents=True)
 
-    # Copy the pyproject.toml template and inject the build version
-    template = TOOLS_DIR / cfg["pyproject"]
+    # Generate the pyproject.toml from source dependency files
     pyproject_path = build_dir / "pyproject.toml"
-    shutil.copy2(template, pyproject_path)
-    content = pyproject_path.read_text()
-    content = re.sub(r'version = ".*?"', f'version = "{version}"', content)
-    pyproject_path.write_text(content)
+    pyproject_path.write_text(generate_pyproject_toml(component, version))
     print(f"Wheel version: {version}")
 
     # Create the wrapper package with all subpackages nested inside it.
