@@ -783,7 +783,7 @@ jobs:
       - name: Pre-warm embedding model
         working-directory: cli
         shell: bash
-        timeout-minutes: 5
+        timeout-minutes: 8
         env:
           PYTHONUNBUFFERED: "1"
         run: |
@@ -794,9 +794,9 @@ jobs:
           # in llama.cpp native code). The CLI restarts unhealthy services when you
           # run a command, so we use `lf chat` to trigger a restart before retrying.
           # HTTP 500 is expected while the embedding model is downloading/loading
-          # (can take 90+ seconds on Windows).
+          # (can take 3+ minutes on Windows).
           RESTARTED=false
-          MAX_RETRIES=30
+          MAX_RETRIES=50
           RETRY_DELAY=5
 
           for i in $(seq 1 $MAX_RETRIES); do
