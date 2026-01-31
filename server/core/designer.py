@@ -49,8 +49,8 @@ def get_designer_dist_path() -> Path | None:
     try:
         _home = Path.home()
     except RuntimeError:
-        _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA", ".")
-        _home = Path(_fb)
+        _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+        _home = Path(_fb) if _fb else Path.cwd()
     cli_path = _home / ".llamafarm" / "src" / "designer" / "dist"
     if cli_path.exists() and cli_path.is_dir():
         logger.info(f"Using designer/dist path from CLI-managed source: {cli_path}")

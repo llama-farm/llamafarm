@@ -11,8 +11,8 @@ try:
 except RuntimeError:
     # Path.home() fails in PyApp-embedded Python on Windows when
     # HOME/USERPROFILE env vars are absent during bootstrap.
-    _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA", ".")
-    default_data_dir = str(Path(_fb) / ".llamafarm")
+    _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+    default_data_dir = str((Path(_fb) if _fb else Path.cwd()) / ".llamafarm")
 
 
 class Settings(BaseSettings):

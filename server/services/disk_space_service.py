@@ -112,8 +112,8 @@ class DiskSpaceService:
         try:
             home = Path.home()
         except RuntimeError:
-            fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA", ".")
-            home = Path(fb)
+            fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+            home = Path(fb) if fb else Path.cwd()
         if os.name == "nt":  # Windows
             cache_dir = home / ".cache" / "huggingface" / "hub"
         else:  # Unix-like

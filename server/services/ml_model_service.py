@@ -26,9 +26,9 @@ def _safe_home() -> Path:
         fb = (
             os.environ.get("USERPROFILE")
             or os.environ.get("APPDATA")
-            or os.environ.get("LOCALAPPDATA", ".")
+            or os.environ.get("LOCALAPPDATA")
         )
-        return Path(fb)
+        return Path(fb) if fb else Path.cwd()
 
 
 class MLModelService:

@@ -59,8 +59,8 @@ def get_data_dir() -> str:
         try:
             _home = str(Path.home() / ".llamafarm")
         except RuntimeError:
-            _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA", ".")
-            _home = str(Path(_fb) / ".llamafarm")
+            _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+            _home = str((Path(_fb) if _fb else Path.cwd()) / ".llamafarm")
         data_dir = os.getenv("LF_DATA_DIR", _home)
 
     return data_dir
