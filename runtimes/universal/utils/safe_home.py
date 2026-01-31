@@ -18,7 +18,12 @@ def safe_home() -> Path:
             or os.environ.get("APPDATA")
             or os.environ.get("LOCALAPPDATA")
         )
-        return Path(fb) if fb else Path(".")
+        if fb:
+            return Path(fb)
+        try:
+            return Path.cwd()
+        except OSError:
+            return Path(".")
 
 
 def get_data_dir() -> Path:
