@@ -41,6 +41,7 @@ from urllib.request import urlretrieve
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DIST_DIR = PROJECT_ROOT / "dist" / "pyapp"
 CACHE_DIR = Path(__file__).parent / ".cache"
+SHIMS_DIR = Path(__file__).parent / "shims"
 
 PYAPP_VERSION = "0.26.0"
 PYAPP_SOURCE_URL = (
@@ -52,36 +53,28 @@ PYAPP_SOURCE_URL = (
 # Component configurations
 # ============================================================================
 #
-# Each component defines how to assemble its fat wheel:
-#   source_dir:       component source relative to PROJECT_ROOT
-#   pkg_name:         the wrapper package name in the wheel
-#   binary_prefix:    output binary name prefix (suffixed with platform-arch)
-#   exec_module:      PYAPP_EXEC_MODULE value
-#   modules:          .py files to copy into the wrapper package
-#   data_dirs:        directories to copy into the wrapper package
-#   inner_packages:   subpackages to symlink INTO the wrapper package
-#   root_symlinks:    packages to symlink at the build root level
-#                     (list of (name, path-relative-to-PROJECT_ROOT) tuples)
-#   needs_config:     whether this component bundles the config package
-#   pip_extra_args:   extra pip args for PyApp (e.g. PyTorch CPU index)
-#   python_version:   minimum Python version for this component
-#
-# Fat wheel pyproject.toml generation (deps read from source pyproject files):
-#   wheel_name:       [project].name in the generated pyproject.toml
-#   requires_python:  [project].requires-python
-#   wheel_packages:   [tool.hatch.build.targets.wheel].packages
-#   force_include:    [tool.hatch.build.targets.wheel.force-include]
-#   bundled_packages: internal packages whose deps are merged in
-#                     (dict mapping PyPI name -> dir relative to PROJECT_ROOT)
-#   exclude_deps:     dep names to filter out (internal refs, dev-only pkgs)
-#   extra_deps:       additional deps only needed in PyApp builds
+# Minimal per-component specs. Everything else is derived by _resolve_config():
+#   pkg_name        defaults to the component name
+#   binary_prefix   always "llamafarm-{pkg_name}"
+#   exec_module     always pkg_name
+#   wheel_name      always "llamafarm-{pkg_name}"
+#   needs_config    True when "config" is in root_symlinks
+#   wheel_packages  [pkg_name] + root_symlink names
+#   force_include   derived from data_dirs + config presence
+#   bundled_packages derived from root_symlinks via _INTERNAL_PACKAGES
 
-COMPONENTS: dict[str, dict] = {
+# Maps root_symlink names to (PyPI name, source dir relative to PROJECT_ROOT).
+# Only packages with their own pyproject.toml (external deps to merge) are listed.
+_INTERNAL_PACKAGES: dict[str, tuple[str, str]] = {
+    "config": ("llamafarm-config", "config"),
+    "llamafarm_common": ("llamafarm-common", "common"),
+    "llamafarm_llama": ("llamafarm-llama", "packages/llamafarm-llama"),
+    # observability has no external deps — no pyproject.toml to read
+}
+
+_COMPONENT_SPECS: dict[str, dict] = {
     "server": {
         "source_dir": "server",
-        "pkg_name": "server",
-        "binary_prefix": "llamafarm-server",
-        "exec_module": "server",
         "modules": ["main.py"],
         "data_dirs": ["seeds"],
         "inner_packages": [
@@ -92,36 +85,14 @@ COMPONENTS: dict[str, dict] = {
             ("llamafarm_common", "common/llamafarm_common"),
             ("observability", "observability"),
         ],
-        "needs_config": True,
-        "pip_extra_args": "",
-        "python_version": "3.12",
-        # Fat wheel configuration (previously in pyproject.server.toml)
-        "wheel_name": "llamafarm-server",
-        "requires_python": ">=3.12",
-        "wheel_packages": ["server", "config", "llamafarm_common", "observability"],
-        "force_include": {
-            "server/seeds": "server/seeds",
-            "config/templates": "config/templates",
-            "config/schema.yaml": "config/schema.yaml",
-            "config/schema.deref.yaml": "config/schema.deref.yaml",
-        },
-        "bundled_packages": {
-            "llamafarm-config": "config",
-            "llamafarm-common": "common",
-        },
         "exclude_deps": [
             "llamafarm-config", "llamafarm-common",
             "dotenv", "pre-commit", "ruff",
         ],
-        "extra_deps": [],
     },
     "rag": {
         "source_dir": "rag",
-        "pkg_name": "rag",
-        "binary_prefix": "llamafarm-rag",
-        "exec_module": "rag",
         "modules": ["main.py", "celery_app.py", "api.py"],
-        "data_dirs": [],
         "inner_packages": [
             "core", "components", "tasks", "utils", "cli",
         ],
@@ -130,33 +101,14 @@ COMPONENTS: dict[str, dict] = {
             ("llamafarm_common", "common/llamafarm_common"),
             ("observability", "observability"),
         ],
-        "needs_config": True,
-        "pip_extra_args": "",
-        "python_version": "3.12",
-        # Fat wheel configuration (previously in pyproject.rag.toml)
-        "wheel_name": "llamafarm-rag",
-        "requires_python": ">=3.11",
-        "wheel_packages": ["rag", "config", "llamafarm_common", "observability"],
-        "force_include": {
-            "config/templates": "config/templates",
-            "config/schema.yaml": "config/schema.yaml",
-            "config/schema.deref.yaml": "config/schema.deref.yaml",
-        },
-        "bundled_packages": {
-            "llamafarm-config": "config",
-            "llamafarm-common": "common",
-        },
         "exclude_deps": [
             "llamafarm-config", "llamafarm-common",
             "pytest", "pytest-cov", "pytest-asyncio", "pytest-mock",
         ],
-        "extra_deps": [],
     },
     "runtime": {
         "source_dir": "runtimes/universal",
-        "pkg_name": "runtime",
-        "binary_prefix": "llamafarm-runtime",
-        "exec_module": "runtime",
+        "pkg_name": "runtime",  # differs from component name
         "modules": ["server.py", "download_model.py", "state.py"],
         "data_dirs": ["config"],
         "inner_packages": [
@@ -166,134 +118,60 @@ COMPONENTS: dict[str, dict] = {
             ("llamafarm_common", "common/llamafarm_common"),
             ("llamafarm_llama", "packages/llamafarm-llama/src/llamafarm_llama"),
         ],
-        "needs_config": False,
-        "pip_extra_args": "",
-        "python_version": "3.12",
-        # Fat wheel configuration (previously in pyproject.runtime.toml)
-        "wheel_name": "llamafarm-runtime",
-        "requires_python": ">=3.10",
-        "wheel_packages": ["runtime", "llamafarm_common", "llamafarm_llama"],
-        "force_include": {
-            "runtime/config": "runtime/config",
-        },
-        "bundled_packages": {
-            "llamafarm-common": "common",
-            "llamafarm-llama": "packages/llamafarm-llama",
-        },
         "exclude_deps": ["llamafarm-common", "llamafarm-llama"],
-        "extra_deps": [
-            "pywin32>=306; sys_platform == 'win32'",
-        ],
+        "extra_deps": ["pywin32>=306; sys_platform == 'win32'"],
     },
 }
 
 
-# ============================================================================
-# __main__.py shim templates
-# ============================================================================
-#
-# Each component needs a __main__.py that:
-#   1. Adds the wrapper package dir to sys.path (for bare imports)
-#   2. Sets LLAMAFARM_PYAPP=1 for runtime detection
-#   3. Imports the component's main module (triggering module-level setup)
-#   4. Starts the appropriate server/worker
+def _resolve_config(name: str, spec: dict) -> dict:
+    """Derive the full component configuration from a minimal spec."""
+    pkg_name = spec.get("pkg_name", name)
+    symlinks = spec.get("root_symlinks", [])
+    symlink_names = [n for n, _ in symlinks]
+    has_config = "config" in symlink_names
 
-MAIN_SHIMS: dict[str, str] = {
-    "server": '''\
-"""PyApp entry point for llamafarm-server.
+    # Derive bundled_packages from root_symlinks
+    bundled = {}
+    for sym_name, _ in symlinks:
+        if sym_name in _INTERNAL_PACKAGES:
+            pypi_name, pkg_dir = _INTERNAL_PACKAGES[sym_name]
+            bundled[pypi_name] = pkg_dir
 
-Adds the server package directory to sys.path so that bare imports
-(from api.main import ...) work alongside prefixed imports
-(from server.services.xxx import ...).
-"""
-import os
-import sys
+    # Derive force_include from data_dirs + config presence
+    force_include = {}
+    for data_dir in spec.get("data_dirs", []):
+        key = f"{pkg_name}/{data_dir}"
+        force_include[key] = key
+    if has_config:
+        force_include["config/templates"] = "config/templates"
+        force_include["config/schema.yaml"] = "config/schema.yaml"
+        force_include["config/schema.deref.yaml"] = "config/schema.deref.yaml"
 
-# Allow bare imports (from api.xxx, from core.xxx, etc.)
-sys.path.insert(0, os.path.dirname(__file__))
+    return {
+        "source_dir": spec["source_dir"],
+        "pkg_name": pkg_name,
+        "binary_prefix": f"llamafarm-{pkg_name}",
+        "exec_module": pkg_name,
+        "modules": spec["modules"],
+        "data_dirs": spec.get("data_dirs", []),
+        "inner_packages": spec["inner_packages"],
+        "root_symlinks": symlinks,
+        "needs_config": has_config,
+        "pip_extra_args": spec.get("pip_extra_args", ""),
+        "python_version": spec.get("python_version", "3.12"),
+        "wheel_name": f"llamafarm-{pkg_name}",
+        "wheel_packages": [pkg_name] + symlink_names,
+        "force_include": force_include,
+        "bundled_packages": bundled,
+        "exclude_deps": spec.get("exclude_deps", []),
+        "extra_deps": spec.get("extra_deps", []),
+    }
 
-# Signal PyApp mode for runtime detection
-os.environ["LLAMAFARM_PYAPP"] = "1"
 
-# Import main module — this executes module-level setup
-# (logging, PID file, seed copying, FastAPI app creation)
-from server import main  # noqa: F401
-
-if __name__ == '__main__':
-    import uvicorn
-    from server.core.settings import settings
-
-    uvicorn.run(
-        main.app,
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=False,
-        log_config=None,
-        access_log=False,
-    )
-''',
-    "rag": '''\
-"""PyApp entry point for llamafarm-rag.
-
-Adds the rag package directory to sys.path so that bare imports
-(from core.xxx, from celery_app import ...) work alongside prefixed
-imports (from rag.core.xxx import ...).
-"""
-import os
-import sys
-
-# Allow bare imports (from core.xxx, from celery_app, etc.)
-sys.path.insert(0, os.path.dirname(__file__))
-
-# Signal PyApp mode for runtime detection
-os.environ["LLAMAFARM_PYAPP"] = "1"
-
-# Import main module — this executes module-level setup
-# (logging, PID file, Celery worker configuration)
-from rag import main  # noqa: F401
-
-if __name__ == '__main__':
-    main.main()
-''',
-    "runtime": '''\
-"""PyApp entry point for llamafarm-runtime.
-
-Adds the runtime package directory to sys.path so that bare imports
-(from models import ..., from state import ...) work alongside prefixed
-imports (from runtime.models import ...).
-"""
-import os
-import sys
-
-# Allow bare imports (from models.xxx, from routers.xxx, etc.)
-sys.path.insert(0, os.path.dirname(__file__))
-
-# Signal PyApp mode for runtime detection
-os.environ["LLAMAFARM_PYAPP"] = "1"
-
-# Import server module — this executes module-level setup
-# (logging, device detection, model loaders, FastAPI app creation)
-from runtime import server  # noqa: F401
-
-if __name__ == '__main__':
-    import uvicorn
-    from llamafarm_common.pidfile import write_pid
-
-    write_pid("universal-runtime")
-
-    port = int(os.getenv("LF_RUNTIME_PORT", os.getenv("PORT", "11540")))
-    host = os.getenv("LF_RUNTIME_HOST", os.getenv("HOST", "127.0.0.1"))
-
-    uvicorn.run(
-        server.app,
-        host=host,
-        port=port,
-        log_config=None,
-        access_log=False,
-        ws_ping_interval=30.0,
-        ws_ping_timeout=60.0,
-    )
-''',
+COMPONENTS = {
+    name: _resolve_config(name, spec)
+    for name, spec in _COMPONENT_SPECS.items()
 }
 
 
@@ -475,11 +353,19 @@ def generate_pyproject_toml(component: str, version: str) -> str:
     cfg = COMPONENTS[component]
     deps = collect_pyapp_dependencies(component)
 
+    # Read requires-python from the component's source pyproject.toml
+    source_pyproject = PROJECT_ROOT / cfg["source_dir"] / "pyproject.toml"
+    with open(source_pyproject, "rb") as f:
+        source_data = tomllib.load(f)
+    requires_python = source_data.get("project", {}).get(
+        "requires-python", ">=3.12"
+    )
+
     deps_str = "\n".join(f"    {dep!r}," for dep in deps)
     pkgs_str = "\n".join(f"    {pkg!r}," for pkg in cfg["wheel_packages"])
 
     lines = [
-        "# Auto-generated by tools/pyapp/build.py — do not edit.",
+        "# Auto-generated by tools/pyapp/build.py -- do not edit.",
         "# Dependencies are collected from source pyproject.toml files at build time.",
         "",
         "[build-system]",
@@ -489,7 +375,7 @@ def generate_pyproject_toml(component: str, version: str) -> str:
         "[project]",
         f'name = {cfg["wheel_name"]!r}',
         f'version = "{version}"',
-        f'requires-python = {cfg["requires_python"]!r}',
+        f"requires-python = {requires_python!r}",
         "dependencies = [",
         deps_str,
         "]",
@@ -573,9 +459,9 @@ def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
         else:
             print(f"WARNING: {cfg['source_dir']}/{data_dir} not found, skipping")
 
-    # Write the __main__.py shim
-    shim_content = MAIN_SHIMS[component]
-    (pkg_dir / "__main__.py").write_text(shim_content)
+    # Copy the __main__.py shim from tools/pyapp/shims/
+    shim_path = SHIMS_DIR / f"{pkg_name}.py"
+    shutil.copy2(shim_path, pkg_dir / "__main__.py")
 
     # Symlink subpackages INSIDE the wrapper package
     for pkg in cfg["inner_packages"]:
