@@ -781,6 +781,7 @@ jobs:
       # Pre-warm Embedding Model
       # ============================================================
       - name: Pre-warm embedding model
+        working-directory: cli
         shell: bash
         timeout-minutes: 5
         env:
@@ -789,11 +790,15 @@ jobs:
           echo "Pre-warming embedding model (sentence-transformers/all-MiniLM-L6-v2)..."
           echo "Sending a dummy embedding request to trigger model loading..."
 
-          # The universal runtime may have crashed during chat pre-warming (SIGSEGV).
-          # The CLI auto-restarts unhealthy services on the next health-checked command,
-          # so we use || true on curl to handle connection refused (exit 7) during retry.
-          MAX_RETRIES=18
+          # The universal runtime may have crashed during chat pre-warming (SIGSEGV
+          # in llama.cpp native code). The CLI restarts unhealthy services when you
+          # run a command, so we use `lf chat` to trigger a restart before retrying.
+          # HTTP 500 is expected while the embedding model is downloading/loading
+          # (can take 90+ seconds on Windows).
+          RESTARTED=false
+          MAX_RETRIES=30
           RETRY_DELAY=5
+
           for i in $(seq 1 $MAX_RETRIES); do
             HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
               -X POST http://localhost:11540/v1/embeddings \
@@ -803,7 +808,17 @@ jobs:
 
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE)"
-              break
+              exit 0
+            fi
+
+            # If runtime is dead (000), restart it via the CLI
+            if [ "$HTTP_CODE" = "000" ] && [ "$RESTARTED" = "false" ]; then
+              echo "  Runtime not reachable, restarting via CLI..."
+              ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "ping" 2>&1 | tail -3 || true
+              RESTARTED=true
+              echo "  Waiting for runtime to initialize..."
+              sleep 15
+              continue
             fi
 
             if [ "$i" -eq "$MAX_RETRIES" ]; then
@@ -812,13 +827,6 @@ jobs:
               curl -s http://localhost:14345/health | jq '.' 2>/dev/null || echo "Server not reachable"
               cat /tmp/embed_response.json 2>/dev/null || true
               exit 1
-            fi
-
-            # On first failure, trigger a health check through the server to restart
-            # the runtime if it crashed
-            if [ "$i" -eq 1 ] && [ "$HTTP_CODE" = "000" ]; then
-              echo "  Runtime not reachable, triggering health check to restart..."
-              curl -s http://localhost:14345/health > /dev/null 2>&1 || true
             fi
 
             echo "  Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE, retrying in ${RETRY_DELAY}s..."
