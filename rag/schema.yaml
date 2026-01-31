@@ -2294,7 +2294,6 @@ definitions:
 
   # Reusable component definitions
   namedEmbeddingStrategy:
-    title: NamedEmbeddingStrategy
     type: object
     required: [name, type]
     additionalProperties: false
@@ -2327,7 +2326,6 @@ definitions:
         description: Priority for automatic selection
 
   namedRetrievalStrategy:
-    title: NamedRetrievalStrategy
     type: object
     required: [name, type]
     additionalProperties: false
@@ -2365,7 +2363,6 @@ definitions:
         description: Whether this is the default strategy
 
   namedParserDefinition:
-    title: NamedParserDefinition
     type: object
     required: [name, type]
     additionalProperties: false
