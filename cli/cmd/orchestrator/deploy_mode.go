@@ -70,7 +70,7 @@ func ResolveBinaryPath(serviceName string) (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"binary for service %q not found in %s (tried %s)",
+		"binary for service %q not found in %s (tried %v)",
 		serviceName, binDir, candidates,
 	)
 }
@@ -78,13 +78,13 @@ func ResolveBinaryPath(serviceName string) (string, error) {
 // getPlatformSuffix returns the platform-architecture suffix used by the
 // PyApp build system (e.g. "macos-arm64", "linux-x86_64", "windows-x86_64").
 func getPlatformSuffix() string {
-	os := runtime.GOOS
+	osName := runtime.GOOS
 	arch := runtime.GOARCH
 
 	// Map Go OS names to PyApp conventions
-	switch os {
+	switch osName {
 	case "darwin":
-		os = "macos"
+		osName = "macos"
 	}
 
 	// Map Go arch names to PyApp conventions
@@ -93,5 +93,5 @@ func getPlatformSuffix() string {
 		arch = "x86_64"
 	}
 
-	return os + "-" + arch
+	return osName + "-" + arch
 }

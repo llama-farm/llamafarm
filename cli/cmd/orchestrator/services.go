@@ -413,7 +413,10 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 	cmdArgs := append([]string{command}, serviceDef.Args...)
 
 	// Get source directory
-	lfDir, _ := utils.GetLFDataDir()
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("source mode: could not resolve data directory: %w", err)
+	}
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
@@ -432,7 +435,10 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 	env := sm.orchestrator.getBinaryEnv(serviceDef.Env)
 
 	// PyApp binaries are self-contained; use the LF data dir as working directory
-	lfDir, _ := utils.GetLFDataDir()
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("binary mode: could not resolve data directory: %w", err)
+	}
 
 	// Always pass LF_DATA_DIR so the Python settings use the CLI-resolved value.
 	// This prevents path mismatches when Path.home() fails inside PyApp (e.g., on

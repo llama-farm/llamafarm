@@ -8,9 +8,14 @@ import (
 )
 
 func TestIsBinaryMode(t *testing.T) {
-	// Clean up after test
-	orig := os.Getenv("LF_DEPLOY_MODE")
-	defer os.Setenv("LF_DEPLOY_MODE", orig)
+	orig, origSet := os.LookupEnv("LF_DEPLOY_MODE")
+	defer func() {
+		if origSet {
+			os.Setenv("LF_DEPLOY_MODE", orig)
+		} else {
+			os.Unsetenv("LF_DEPLOY_MODE")
+		}
+	}()
 
 	os.Setenv("LF_DEPLOY_MODE", "binary")
 	if !IsBinaryMode() {
@@ -29,11 +34,19 @@ func TestIsBinaryMode(t *testing.T) {
 }
 
 func TestGetBinDir(t *testing.T) {
-	origBinDir := os.Getenv("LF_BIN_DIR")
-	origDataDir := os.Getenv("LF_DATA_DIR")
+	origBinDir, origBinDirSet := os.LookupEnv("LF_BIN_DIR")
+	origDataDir, origDataDirSet := os.LookupEnv("LF_DATA_DIR")
 	defer func() {
-		os.Setenv("LF_BIN_DIR", origBinDir)
-		os.Setenv("LF_DATA_DIR", origDataDir)
+		if origBinDirSet {
+			os.Setenv("LF_BIN_DIR", origBinDir)
+		} else {
+			os.Unsetenv("LF_BIN_DIR")
+		}
+		if origDataDirSet {
+			os.Setenv("LF_DATA_DIR", origDataDir)
+		} else {
+			os.Unsetenv("LF_DATA_DIR")
+		}
 	}()
 
 	t.Run("uses LF_BIN_DIR when set", func(t *testing.T) {
@@ -95,8 +108,14 @@ func mapArch(goarch string) string {
 }
 
 func TestResolveBinaryPath(t *testing.T) {
-	origBinDir := os.Getenv("LF_BIN_DIR")
-	defer os.Setenv("LF_BIN_DIR", origBinDir)
+	origBinDir, origBinDirSet := os.LookupEnv("LF_BIN_DIR")
+	defer func() {
+		if origBinDirSet {
+			os.Setenv("LF_BIN_DIR", origBinDir)
+		} else {
+			os.Unsetenv("LF_BIN_DIR")
+		}
+	}()
 
 	// Create a temp directory with fake binaries
 	tmpDir := t.TempDir()

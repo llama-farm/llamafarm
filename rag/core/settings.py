@@ -10,7 +10,7 @@ try:
     default_data_dir = str(Path.home() / ".llamafarm")
 except RuntimeError:
     _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
-    default_data_dir = str((Path(_fb) if _fb else Path.cwd()) / ".llamafarm")
+    default_data_dir = str((Path(_fb) if _fb else Path(".")) / ".llamafarm")
 
 
 class Settings(BaseSettings, env_file=".env"):
