@@ -103,7 +103,9 @@ class LFAgent:
 
     def _extract_system_messages(
         self, messages: list[LFChatCompletionMessageParam] | None
-    ) -> tuple[list[LFChatCompletionMessageParam], list[LFChatCompletionMessageParam]]:
+    ) -> tuple[
+        list[LFChatCompletionMessageParam] | None, list[LFChatCompletionMessageParam]
+    ]:
         """Separate system messages from other messages.
 
         System messages are applied per-request but not stored in history.
@@ -111,10 +113,12 @@ class LFAgent:
         the system prompt with each request.
 
         Returns:
-            Tuple of (system_messages, non_system_messages)
+            Tuple of (system_messages, non_system_messages).
+            system_messages is None if messages was None (preserves distinction
+            between "not provided" and "explicitly empty").
         """
-        if not messages:
-            return [], []
+        if messages is None:
+            return None, []
 
         system_msgs = []
         other_msgs = []
