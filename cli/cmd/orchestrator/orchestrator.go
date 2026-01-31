@@ -116,8 +116,12 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 
 	// Always include core environment keys from the current environment
 	// Note: PATH is already set by GetEnvForProcess() with UV bin directory, so we don't override it
+	// Windows home directory vars are needed by Python's Path.home()
 	extraEnv := []string{}
-	for _, key := range []string{"HOME", "USER", "TMPDIR", "LF_DATA_DIR"} {
+	for _, key := range []string{
+		"HOME", "USER", "TMPDIR", "LF_DATA_DIR",
+		"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+	} {
 		if val := os.Getenv(key); val != "" {
 			extraEnv = append(extraEnv, fmt.Sprintf("%s=%s", key, val))
 		}
@@ -153,8 +157,12 @@ func NewBinaryOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 func (no *NativeOrchestrator) getBinaryEnv(envKeysWithDefaults map[string]string) []string {
 	var env []string
 
-	// Inherit core environment keys
-	for _, key := range []string{"HOME", "USER", "TMPDIR", "LF_DATA_DIR", "PATH"} {
+	// Inherit core environment keys (including Windows home directory vars
+	// needed by Python's Path.home() inside PyApp binaries)
+	for _, key := range []string{
+		"HOME", "USER", "TMPDIR", "LF_DATA_DIR", "PATH",
+		"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+	} {
 		if val := os.Getenv(key); val != "" {
 			env = append(env, fmt.Sprintf("%s=%s", key, val))
 		}

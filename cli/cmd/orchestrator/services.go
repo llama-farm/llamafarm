@@ -434,6 +434,11 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 	// PyApp binaries are self-contained; use the LF data dir as working directory
 	lfDir, _ := utils.GetLFDataDir()
 
+	// Always pass LF_DATA_DIR so the Python settings use the CLI-resolved value.
+	// This prevents path mismatches when Path.home() fails inside PyApp (e.g., on
+	// Windows where USERPROFILE may not be inherited).
+	env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDir))
+
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }
 
