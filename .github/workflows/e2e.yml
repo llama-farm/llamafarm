@@ -540,92 +540,68 @@ jobs:
           echo "✓ CLI binary is functional"
 
       # ============================================================
-      # Download and Setup PyApp Binaries (binary deploy mode only)
+      # Setup PyApp Binary Auto-Download (binary deploy mode only)
       # ============================================================
-      - name: Download PyApp service binaries (from matching build)
-        if: matrix.deploy_mode == 'binary' && needs.wait-for-pyapp.outputs.pyapp_run_id != ''
-        id: download-pyapp-exact
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: pyapp.yml
-          run_id: ${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}
-          name: llamafarm-.*-pyapp-${{ matrix.pyapp_os }}
-          name_is_regexp: true
-          path: pyapp-download/
-          if_no_artifact_found: fail
-
-      - name: Download PyApp service binaries (latest from branch)
-        if: matrix.deploy_mode == 'binary' && needs.wait-for-pyapp.outputs.pyapp_run_id == ''
-        id: download-pyapp-branch
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: pyapp.yml
-          name: llamafarm-.*-pyapp-${{ matrix.pyapp_os }}
-          name_is_regexp: true
-          path: pyapp-download/
-          branch: ${{ github.head_ref || github.ref_name }}
-          if_no_artifact_found: warn
-
-      - name: Verify PyApp binaries available
+      - name: Verify PyApp artifacts exist
         if: matrix.deploy_mode == 'binary'
+        id: check-artifacts
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          EXACT="${{ steps.download-pyapp-exact.outcome }}"
-          BRANCH="${{ steps.download-pyapp-branch.outcome }}"
-          if [ "$EXACT" != "success" ] && [ "$BRANCH" != "success" ]; then
-            echo "::error::PyApp artifacts not available for platform ${{ matrix.pyapp_os }}."
-            echo "Run the 'Build Native Binaries (PyApp)' workflow first, then re-run this workflow."
+          # Determine which PyApp run to use
+          if [ -n "${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}" ]; then
+            RUN_ID="${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}"
+            echo "Using PyApp run from current commit: $RUN_ID"
+          else
+            # Try to find latest successful PyApp run from this branch
+            BRANCH="${{ github.head_ref || github.ref_name }}"
+            echo "Looking for latest PyApp run from branch: $BRANCH"
+
+            RUN_ID=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/pyapp.yml/runs?branch=$BRANCH&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty' 2>/dev/null || echo "")
+
+            if [ -z "$RUN_ID" ]; then
+              echo "::error::No successful PyApp workflow runs found for branch $BRANCH"
+              echo "Run the 'Build Native Binaries (PyApp)' workflow first, then re-run this workflow."
+              exit 1
+            fi
+            echo "Using latest PyApp run from branch: $RUN_ID"
+          fi
+
+          # Verify the artifact exists for our platform
+          ARTIFACT_NAME="llamafarm-pyapp-${{ matrix.pyapp_os }}"
+          ARTIFACT_COUNT=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" \
+            --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .name" 2>/dev/null | wc -l || echo "0")
+
+          if [ "$ARTIFACT_COUNT" -eq 0 ]; then
+            echo "::error::Artifact $ARTIFACT_NAME not found in run $RUN_ID"
             exit 1
           fi
-          if [ "$EXACT" = "success" ]; then
-            echo "✓ PyApp artifacts downloaded (from matching PyApp build)"
-          else
-            echo "✓ PyApp artifacts downloaded (latest from branch)"
-          fi
-          ls -laR pyapp-download/
 
-      - name: Setup binary deploy mode
+          echo "✓ PyApp artifact verified: $ARTIFACT_NAME (run $RUN_ID)"
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Configure binary deploy mode
         if: matrix.deploy_mode == 'binary'
         shell: bash
         run: |
-          # Create bin directory
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            BIN_DIR="$USERPROFILE/.llamafarm/bin"
-          else
-            BIN_DIR="$HOME/.llamafarm/bin"
-          fi
-          mkdir -p "$BIN_DIR"
-
-          # Move all PyApp binaries into the bin directory
-          for dir in pyapp-download/llamafarm-*-pyapp-*/; do
-            if [ -d "$dir" ]; then
-              for bin in "$dir"*; do
-                if [ -f "$bin" ]; then
-                  cp "$bin" "$BIN_DIR/"
-                  echo "  Installed: $(basename "$bin")"
-                fi
-              done
-            fi
-          done
-
-          # Make binaries executable (Unix only)
-          if [ "$RUNNER_OS" != "Windows" ]; then
-            chmod +x "$BIN_DIR"/*
-          fi
-
-          # Set environment variables for remaining steps
+          # Set environment variables for CLI to auto-download binaries from artifacts
           echo "LF_DEPLOY_MODE=binary" >> $GITHUB_ENV
-          echo "LF_BIN_DIR=$BIN_DIR" >> $GITHUB_ENV
+          echo "LF_BINARY_SOURCE=artifact" >> $GITHUB_ENV
+          echo "LF_ARTIFACT_RUN_ID=${{ steps.check-artifacts.outputs.run_id }}" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
 
-          echo ""
           echo "✓ Binary deploy mode configured"
           echo "  LF_DEPLOY_MODE=binary"
-          echo "  LF_BIN_DIR=$BIN_DIR"
+          echo "  LF_BINARY_SOURCE=artifact"
+          echo "  LF_ARTIFACT_RUN_ID=${{ steps.check-artifacts.outputs.run_id }}"
           echo ""
-          echo "Installed binaries:"
-          ls -la "$BIN_DIR/"
+          echo "The CLI will auto-download binaries from GitHub Actions artifacts on first use."
 
       # ============================================================
       # Project Initialization
@@ -1199,6 +1175,43 @@ jobs:
           ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag health || true
           echo "✓ RAG health check complete"
 
+      - name: Verify designer accessibility (binary mode only)
+        if: matrix.deploy_mode == 'binary'
+        shell: bash
+        run: |
+          echo "Verifying designer is accessible from server..."
+
+          # Request the root path which should serve the designer
+          HTTP_CODE=$(curl -s -o /tmp/designer_response.html -w "%{http_code}" http://localhost:14345/)
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Designer endpoint returned HTTP $HTTP_CODE (expected 200)"
+            echo "Response content:"
+            cat /tmp/designer_response.html 2>/dev/null || echo "(empty)"
+            echo ""
+            echo "Server health:"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          # Check if response contains designer HTML content
+          if ! grep -q "<!doctype html>" /tmp/designer_response.html; then
+            echo "❌ Designer response doesn't contain expected HTML content"
+            echo "Response preview (first 500 chars):"
+            head -c 500 /tmp/designer_response.html
+            exit 1
+          fi
+
+          # Verify it's the designer by checking for React root div
+          if ! grep -q 'id="root"' /tmp/designer_response.html; then
+            echo "❌ Designer HTML missing React root element"
+            echo "Response preview (first 500 chars):"
+            head -c 500 /tmp/designer_response.html
+            exit 1
+          fi
+
+          echo "✓ Designer is accessible and serving expected content"
+
       - name: E2E test summary
         shell: bash
         run: |
@@ -1213,6 +1226,9 @@ jobs:
           echo "✓ Dataset created and processed"
           echo "✓ RAG queries executed"
           echo "✓ Chat commands completed"
+          if [ "${{ matrix.deploy_mode }}" = "binary" ]; then
+            echo "✓ Designer accessibility verified"
+          fi
           echo "=========================================="
           echo "All E2E tests passed!"
 

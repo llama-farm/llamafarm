@@ -32,6 +32,7 @@ type NativeOrchestrator struct {
 	uvManager    *UVManager
 	pythonEnvMgr *PythonEnvManager
 	sourceMgr    *SourceManager
+	binaryMgr    *BinaryManager
 	processMgr   *ProcessManager
 	initialized  bool
 	initMu       sync.Mutex // protects initialized flag
@@ -142,18 +143,34 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 }
 
 // NewBinaryOrchestrator creates an orchestrator for binary deploy mode.
-// It only needs a ProcessManager — no UV, Python, or source managers.
+// It only needs a ProcessManager and BinaryManager — no UV, Python, or source managers.
 func NewBinaryOrchestrator(serverURL string) (*NativeOrchestrator, error) {
 	procMgr, err := NewProcessManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create process manager: %w", err)
 	}
 
-	return &NativeOrchestrator{
+	// Create binary manager with version from LF_VERSION env var or CLI version
+	version := os.Getenv("LF_VERSION")
+	binaryMgr, err := NewBinaryManager(version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create binary manager: %w", err)
+	}
+
+	orchestrator := &NativeOrchestrator{
 		processMgr:  procMgr,
+		binaryMgr:   binaryMgr,
 		serverURL:   serverURL,
-		initialized: true,
-	}, nil
+		initialized: false, // Will be set to true after EnsureBinaries
+	}
+
+	// Download binaries if needed
+	if err := binaryMgr.EnsureBinaries(); err != nil {
+		return nil, fmt.Errorf("failed to ensure binaries: %w", err)
+	}
+
+	orchestrator.initialized = true
+	return orchestrator, nil
 }
 
 // getBinaryEnv builds environment variables for a binary-mode service.

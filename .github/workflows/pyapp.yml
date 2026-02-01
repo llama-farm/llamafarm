@@ -29,9 +29,12 @@ on:
     paths:
       - "tools/pyapp/**"
       - ".github/workflows/pyapp.yml"
+  release:
+    types:
+      - published
 
 permissions:
-  contents: read
+  contents: write  # Required for uploading release assets
 
 env:
   PYTHON_VERSION: "3.12"
@@ -57,8 +60,8 @@ jobs:
 
           COMPONENT="${{ github.event.inputs.component }}"
 
-          # On PR or "all": build every component
-          if [[ "${{ github.event_name }}" == "pull_request" || "$COMPONENT" == "all" ]]; then
+          # On PR, release, or "all": build every component
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "release" || "$COMPONENT" == "all" ]]; then
             COMPONENTS='["server","rag","runtime"]'
           else
             COMPONENTS="[\"$COMPONENT\"]"
@@ -137,6 +140,19 @@ jobs:
         run: |
           cd config && python generate_types.py
 
+      - name: Build designer (for server component)
+        if: matrix.component == 'server'
+        run: |
+          cd designer
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+          echo "✓ Designer built successfully"
+
       - name: Build with PyApp
         run: |
           python tools/pyapp/build.py --component ${{ matrix.component }} --skip-types ${{ github.event.inputs.version && format('--version {0}', github.event.inputs.version) || '' }} ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
@@ -164,10 +180,73 @@ jobs:
 
           echo "Binary executed successfully"
 
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist/pyapp
+          for file in llamafarm-${{ matrix.component }}-*; do
+            sha256sum "$file" > "$file.sha256"
+            echo "SHA256: $(cat $file.sha256)"
+          done
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
-          path: dist/pyapp/llamafarm-${{ matrix.component }}-*
+          path: |
+            dist/pyapp/llamafarm-${{ matrix.component }}-*
+            dist/pyapp/llamafarm-${{ matrix.component }}-*.sha256
           retention-days: 7
           if-no-files-found: error
+
+  # Upload binaries to GitHub release when triggered by a release event
+  upload-release:
+    name: Upload PyApp Binaries to Release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - os: linux-x86_64
+            component: server
+          - os: linux-x86_64
+            component: rag
+          - os: linux-x86_64
+            component: runtime
+          - os: linux-arm64
+            component: server
+          - os: linux-arm64
+            component: rag
+          - os: linux-arm64
+            component: runtime
+          - os: macos-arm64
+            component: server
+          - os: macos-arm64
+            component: rag
+          - os: macos-arm64
+            component: runtime
+          - os: windows-x86_64
+            component: server
+          - os: windows-x86_64
+            component: rag
+          - os: windows-x86_64
+            component: runtime
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
+          path: dist/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist/llamafarm-${{ matrix.component }}-*
+            dist/llamafarm-${{ matrix.component }}-*.sha256
+          fail_on_unmatched_files: true

@@ -102,7 +102,7 @@ _COMPONENT_SPECS: dict[str, dict] = {
     "server": {
         "source_dir": "server",
         "modules": ["main.py"],
-        "data_dirs": ["seeds"],
+        "data_dirs": ["seeds", "../designer/dist=>designer/dist"],
         "extra_packages": ["tools"],  # namespace package (no __init__.py)
         "root_symlinks": [
             ("config", "config"),
@@ -167,7 +167,12 @@ def _resolve_config(name: str, spec: dict) -> dict:
     # Derive force_include from data_dirs + config presence
     force_include = {}
     for data_dir in data_dirs:
-        key = f"{pkg_name}/{data_dir}"
+        # Handle source=>dest mapping for data directories
+        if "=>" in data_dir:
+            _, dest_path = data_dir.split("=>", 1)
+            key = f"{pkg_name}/{dest_path}"
+        else:
+            key = f"{pkg_name}/{data_dir}"
         force_include[key] = key
     if has_config:
         force_include["config/templates"] = "config/templates"
@@ -479,11 +484,19 @@ def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
 
     # Copy data directories into the wrapper package
     for data_dir in cfg["data_dirs"]:
-        src = source_dir / data_dir
-        if src.exists():
-            shutil.copytree(src, pkg_dir / data_dir)
+        # Support source=>dest mapping for data directories
+        if "=>" in data_dir:
+            src_path, dest_path = data_dir.split("=>", 1)
+            src = (source_dir / src_path).resolve() if not Path(src_path).is_absolute() else Path(src_path)
+            dest = pkg_dir / dest_path
         else:
-            print(f"WARNING: {cfg['source_dir']}/{data_dir} not found, skipping")
+            src = source_dir / data_dir
+            dest = pkg_dir / data_dir
+
+        if src.exists():
+            shutil.copytree(src, dest)
+        else:
+            print(f"WARNING: {data_dir} (resolved to {src}) not found, skipping")
 
     # Copy the __main__.py shim from tools/pyapp/shims/
     shim_path = SHIMS_DIR / f"{pkg_name}.py"
