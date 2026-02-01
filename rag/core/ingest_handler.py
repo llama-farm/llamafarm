@@ -37,7 +37,7 @@ from observability.event_logger import EventLogger  # noqa: E402
 
 try:
     from config import load_config
-    from config.datamodel import Database, DataProcessingStrategyDefinition, Parser
+    from config.datamodel import Database, DataProcessingStrategy, Parser
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -99,7 +99,7 @@ class IngestHandler:
             project_dir, self.database_config
         )
 
-    def _get_processing_config(self) -> DataProcessingStrategyDefinition:
+    def _get_processing_config(self) -> DataProcessingStrategy:
         """
         Get the data processing strategy configuration.
 

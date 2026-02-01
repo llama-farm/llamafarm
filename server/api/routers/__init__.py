@@ -11,6 +11,14 @@ from .system import disk_router, upgrades_router
 from .vision import vision_router
 from .voice import voice_router
 
+# Import router endpoints (semantic routing/mesh)
+try:
+    from router.api import router as router_router
+    _router_available = True
+except ImportError:
+    _router_available = False
+    router_router = None
+
 __all__ = [
     "projects_router",
     "datasets_router",
@@ -25,4 +33,5 @@ __all__ = [
     "nlp_router",
     "vision_router",
     "voice_router",
+    "router_router",
 ]

@@ -20,13 +20,10 @@ from typing import Any
 
 from config.datamodel import (
     Database,
-    DatabaseEmbeddingStrategy,
-    DatabaseRetrievalStrategy,
-    DataProcessingStrategyDefinition,
+    EmbeddingStrategy,
+    RetrievalStrategy,
+    DataProcessingStrategy,
     LlamaFarmConfig,
-    NamedEmbeddingStrategy,
-    NamedParserDefinition,
-    NamedRetrievalStrategy,
     Parser,
 )
 
@@ -110,7 +107,7 @@ class ComponentResolver:
 
             # Resolve parsers in data processing strategies
             strategies = getattr(rag_cfg, "data_processing_strategies", None) or []
-            resolved_strategies: list[DataProcessingStrategyDefinition] = []
+            resolved_strategies: list[DataProcessingStrategy] = []
             for strategy in strategies:
                 resolved_strategies.append(self._resolve_parsers(strategy))
             rag_cfg.data_processing_strategies = resolved_strategies
@@ -200,10 +197,10 @@ class ComponentResolver:
         return db_copy
 
     def _resolve_parsers(
-        self, strategy: DataProcessingStrategyDefinition
-    ) -> DataProcessingStrategyDefinition:
+        self, strategy: DataProcessingStrategy
+    ) -> DataProcessingStrategy:
         """Expand parser references within a data processing strategy."""
-        strat_copy: DataProcessingStrategyDefinition = strategy.model_copy(deep=True)
+        strat_copy: DataProcessingStrategy = strategy.model_copy(deep=True)
         parsers: list[Any] = getattr(strategy, "parsers", None) or []
         resolved_parsers: list[Parser] = []
 
@@ -246,38 +243,38 @@ class ComponentResolver:
         return collection[ref]
 
     @staticmethod
-    def _to_embedding_strategy(defn: Any) -> DatabaseEmbeddingStrategy:
-        if isinstance(defn, DatabaseEmbeddingStrategy):
+    def _to_embedding_strategy(defn: Any) -> EmbeddingStrategy:
+        if isinstance(defn, EmbeddingStrategy):
             return defn.model_copy(deep=True)
         try:
             payload = (
                 defn.model_dump()
-                if isinstance(defn, NamedEmbeddingStrategy)
+                if hasattr(defn, 'model_dump')
                 else deepcopy(defn)
             )
             if isinstance(payload, dict):
                 type_value = payload.get("type")
                 if hasattr(type_value, "value"):
                     payload["type"] = type_value.value
-            return DatabaseEmbeddingStrategy(**payload)
+            return EmbeddingStrategy(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid embedding strategy definition: {e}") from e
 
     @staticmethod
-    def _to_retrieval_strategy(defn: Any) -> DatabaseRetrievalStrategy:
-        if isinstance(defn, DatabaseRetrievalStrategy):
+    def _to_retrieval_strategy(defn: Any) -> RetrievalStrategy:
+        if isinstance(defn, RetrievalStrategy):
             return defn.model_copy(deep=True)
         try:
             payload = (
                 defn.model_dump()
-                if isinstance(defn, NamedRetrievalStrategy)
+                if hasattr(defn, 'model_dump')
                 else deepcopy(defn)
             )
             if isinstance(payload, dict):
                 type_value = payload.get("type")
                 if hasattr(type_value, "value"):
                     payload["type"] = type_value.value
-            return DatabaseRetrievalStrategy(**payload)
+            return RetrievalStrategy(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid retrieval strategy definition: {e}") from e
 
@@ -288,7 +285,7 @@ class ComponentResolver:
         try:
             payload = (
                 defn.model_dump()
-                if isinstance(defn, NamedParserDefinition)
+                if hasattr(defn, 'model_dump')
                 else deepcopy(defn)
             )
             if isinstance(payload, dict):

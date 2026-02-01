@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from config.datamodel import (
     Database,
-    DatabaseRetrievalStrategy,
+    RetrievalStrategy,
     DatabaseRetrievalType,
     DatabaseType,
     LlamaFarmConfig,
@@ -91,7 +91,7 @@ def config_with_rag():
                     name="main_db",
                     type=DatabaseType.ChromaStore,
                     retrieval_strategies=[
-                        DatabaseRetrievalStrategy(
+                        RetrievalStrategy(
                             name="default_strategy",
                             type=DatabaseRetrievalType.VectorRetriever,
                             default=True,
@@ -207,7 +207,7 @@ class TestProjectChatService:
                         name="db1",
                         type=DatabaseType.ChromaStore,
                         retrieval_strategies=[
-                            DatabaseRetrievalStrategy(
+                            RetrievalStrategy(
                                 name="strat1",
                                 type=DatabaseRetrievalType.VectorRetriever,
                                 config={},
@@ -218,7 +218,7 @@ class TestProjectChatService:
                         name="db2",
                         type=DatabaseType.ChromaStore,
                         retrieval_strategies=[
-                            DatabaseRetrievalStrategy(
+                            RetrievalStrategy(
                                 name="strat2",
                                 type=DatabaseRetrievalType.VectorRetriever,
                                 config={},

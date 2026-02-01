@@ -10,9 +10,9 @@ from unittest.mock import Mock, patch
 import pytest
 from config.datamodel import (
     Database,
-    DatabaseEmbeddingStrategy,
+    EmbeddingStrategy,
     DatabaseEmbeddingType,
-    DatabaseRetrievalStrategy,
+    RetrievalStrategy,
     DatabaseRetrievalType,
     DatabaseType,
 )
@@ -35,14 +35,14 @@ class TestDatabaseService:
                 type=DatabaseType.ChromaStore,
                 config={"collection_name": "documents"},
                 embedding_strategies=[
-                    DatabaseEmbeddingStrategy(
+                    EmbeddingStrategy(
                         name="default_embeddings",
                         type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    DatabaseRetrievalStrategy(
+                    RetrievalStrategy(
                         name="basic_search",
                         type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={"top_k": 10},
@@ -57,14 +57,14 @@ class TestDatabaseService:
                 type=DatabaseType.ChromaStore,
                 config={"collection_name": "secondary"},
                 embedding_strategies=[
-                    DatabaseEmbeddingStrategy(
+                    EmbeddingStrategy(
                         name="secondary_embeddings",
                         type=DatabaseEmbeddingType.OllamaEmbedder,
                         config={"model": "nomic-embed-text"},
                     )
                 ],
                 retrieval_strategies=[
-                    DatabaseRetrievalStrategy(
+                    RetrievalStrategy(
                         name="secondary_search",
                         type=DatabaseRetrievalType.BasicSimilarityStrategy,
                         config={},
@@ -155,14 +155,14 @@ class TestDatabaseService:
             type=DatabaseType.ChromaStore,
             config={"collection_name": "new_collection"},
             embedding_strategies=[
-                DatabaseEmbeddingStrategy(
+                EmbeddingStrategy(
                     name="test_embeddings",
                     type=DatabaseEmbeddingType.OllamaEmbedder,
                     config={"model": "nomic-embed-text"},
                 )
             ],
             retrieval_strategies=[
-                DatabaseRetrievalStrategy(
+                RetrievalStrategy(
                     name="test_retrieval",
                     type=DatabaseRetrievalType.BasicSimilarityStrategy,
                     config={"top_k": 10},
@@ -215,14 +215,14 @@ class TestDatabaseService:
             type=DatabaseType.ChromaStore,
             config={"collection_name": "new_collection"},
             embedding_strategies=[
-                DatabaseEmbeddingStrategy(
+                EmbeddingStrategy(
                     name="fast_embed",
                     type=DatabaseEmbeddingType.OllamaEmbedder,
                     config={"model": "nomic-embed-text"},
                 )
             ],
             retrieval_strategies=[
-                DatabaseRetrievalStrategy(
+                RetrievalStrategy(
                     name="fast_retrieve",
                     type=DatabaseRetrievalType.BasicSimilarityStrategy,
                     config={"top_k": 10},
@@ -335,7 +335,7 @@ class TestDatabaseService:
         mock_load_config.return_value = self.mock_project_config
 
         new_strategies = [
-            DatabaseRetrievalStrategy(
+            RetrievalStrategy(
                 name="new_strategy",
                 type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
                 config={"model_name": "reranker"},
@@ -452,7 +452,7 @@ class TestDatabaseService:
 
         # Create new strategies that don't include "basic_search"
         new_strategies = [
-            DatabaseRetrievalStrategy(
+            RetrievalStrategy(
                 name="new_strategy",
                 type=DatabaseRetrievalType.CrossEncoderRerankedStrategy,
                 config={"model_name": "reranker"},

@@ -22,8 +22,8 @@ try:
     from config import load_config
     from config.datamodel import (
         Database,
-        DatabaseEmbeddingStrategy,
-        DatabaseRetrievalStrategy,
+        EmbeddingStrategy,
+        RetrievalStrategy,
         LlamaFarmConfig,
     )
 except ImportError as e:
@@ -288,7 +288,7 @@ class BaseAPI:
         return None
 
     def _strategy_to_config(
-        self, strategy: DatabaseEmbeddingStrategy | DatabaseRetrievalStrategy
+        self, strategy: EmbeddingStrategy | RetrievalStrategy
     ) -> dict[str, Any]:
         """Convert strategy object to config dictionary."""
         return {

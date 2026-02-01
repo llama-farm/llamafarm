@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from config.datamodel import (
-    DataProcessingStrategyDefinition,
+    DataProcessingStrategy,
     LlamaFarmConfig,
     RAGStrategyConfigurationSchema,
 )
@@ -22,11 +22,11 @@ try:
     from config import load_config
     from config.datamodel import (
         Database,
-        DatabaseEmbeddingStrategy,
+        EmbeddingStrategy,
         DatabaseEmbeddingType,
-        DatabaseRetrievalStrategy,
+        RetrievalStrategy,
         DatabaseRetrievalType,
-        DataProcessingStrategyDefinition,
+        DataProcessingStrategy,
         Extractor,
         Parser,
     )
@@ -38,13 +38,13 @@ except ImportError as e:
 logger = RAGStructLogger("rag.core.strategies.handler")
 
 
-def _create_default_universal_rag_strategy() -> DataProcessingStrategyDefinition:
+def _create_default_universal_rag_strategy() -> DataProcessingStrategy:
     """Create the default universal_rag data processing strategy.
 
     This provides a sensible default for zero-config RAG that handles
     90% of document types with no configuration needed.
     """
-    return DataProcessingStrategyDefinition(
+    return DataProcessingStrategy(
         name="universal_rag",
         description="Universal RAG pipeline using MarkItDown parser with semantic chunking and comprehensive metadata extraction",
         parsers=[
@@ -90,7 +90,7 @@ def _create_default_universal_rag_strategy() -> DataProcessingStrategyDefinition
 class DbProcessingConfig:
     def __init__(
         self,
-        processing_strategy: DataProcessingStrategyDefinition,
+        processing_strategy: DataProcessingStrategy,
         database: Database,
         strategy_name: str,
         source_path: Path | None,
@@ -165,7 +165,7 @@ class SchemaHandler:
 
         return strategies
 
-    def get_default_processing_strategy(self) -> DataProcessingStrategyDefinition:
+    def get_default_processing_strategy(self) -> DataProcessingStrategy:
         """Get the default processing strategy.
 
         Returns universal_rag if no strategies are defined, otherwise
@@ -196,7 +196,7 @@ class SchemaHandler:
 
     def create_processing_config(
         self, strategy_name: str
-    ) -> DataProcessingStrategyDefinition:
+    ) -> DataProcessingStrategy:
         """Create data processing strategy configuration.
 
         If the strategy is 'universal_rag' and not explicitly defined,
@@ -254,7 +254,7 @@ class SchemaHandler:
 
     def get_processing_strategy_config(
         self, proc_name: str
-    ) -> DataProcessingStrategyDefinition | None:
+    ) -> DataProcessingStrategy | None:
         """Get processing strategy configuration by name.
 
         If the strategy is 'universal_rag' and not explicitly defined,
@@ -318,7 +318,7 @@ class SchemaHandler:
         # Return the actual new schema configuration
         return DbProcessingConfig(proc_config, db_config, strategy_name, source_path)
 
-    def get_embedder_config(self, database: Database) -> DatabaseEmbeddingStrategy:
+    def get_embedder_config(self, database: Database) -> EmbeddingStrategy:
         """Get embedder configuration from database config."""
         default_name = database.default_embedding_strategy
         strategies = database.embedding_strategies or []
@@ -335,7 +335,7 @@ class SchemaHandler:
         if strategies:
             return strategies[0]
 
-        return DatabaseEmbeddingStrategy(
+        return EmbeddingStrategy(
             type=DatabaseEmbeddingType.OllamaEmbedder, config={}
         )
 
@@ -346,7 +346,7 @@ class SchemaHandler:
 
     def get_retrieval_strategy_config(
         self, database: Database
-    ) -> DatabaseRetrievalStrategy:
+    ) -> RetrievalStrategy:
         """Get retrieval strategy configuration from database config."""
         default_name = database.default_retrieval_strategy
         strategies = database.retrieval_strategies or []
@@ -363,12 +363,12 @@ class SchemaHandler:
         if strategies:
             return strategies[0]
 
-        return DatabaseRetrievalStrategy(
+        return RetrievalStrategy(
             type=DatabaseRetrievalType.BasicSimilarityStrategy, config={}
         )
 
     def get_parsers_config(
-        self, proc_config: DataProcessingStrategyDefinition
+        self, proc_config: DataProcessingStrategy
     ) -> list[Parser]:
         """Get all parser configurations from processing strategy.
 
@@ -378,7 +378,7 @@ class SchemaHandler:
 
     def get_parser_config(
         self,
-        proc_config: DataProcessingStrategyDefinition,
+        proc_config: DataProcessingStrategy,
         source_path: Path | None = None,
     ) -> Parser:
         """Get first parser configuration (for backward compatibility).
@@ -399,7 +399,7 @@ class SchemaHandler:
         )
 
     def get_extractors_config(
-        self, proc_config: DataProcessingStrategyDefinition
+        self, proc_config: DataProcessingStrategy
     ) -> list[Extractor]:
         """Get extractors configuration from processing strategy."""
         return proc_config.extractors or []
@@ -418,7 +418,7 @@ class SchemaHandler:
             return {}
 
         db_config: Database = combined.database
-        proc_config: DataProcessingStrategyDefinition = combined.processing_strategy
+        proc_config: DataProcessingStrategy = combined.processing_strategy
 
         # Get individual component configs
         embedder = self.get_embedder_config(db_config)

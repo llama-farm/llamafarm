@@ -30,9 +30,41 @@ async def lifespan(app: fastapi.FastAPI):
 
     # Startup
     logger.info("Starting LlamaFarm API")
+    
+    # Initialize router service (semantic routing / mesh)
+    try:
+        from router.service import get_router_service, shutdown_router_service
+        router_service = await get_router_service()
+        logger.info(f"Router service initialized (node_id: {router_service.node_id})")
+        
+        # Register default capabilities
+        await router_service.register_capability(
+            label="llm",
+            description="Large language model text generation and chat"
+        )
+        await router_service.register_capability(
+            label="embeddings",
+            description="Generate semantic embeddings for text"
+        )
+    except ImportError:
+        logger.info("Router service not available (optional)")
+        shutdown_router_service = None
+    except Exception as e:
+        logger.warning(f"Failed to initialize router service: {e}")
+        shutdown_router_service = None
+    
     yield
+    
     # Shutdown
     logger.info("Shutting down LlamaFarm API")
+    
+    # Shutdown router service
+    if shutdown_router_service:
+        try:
+            await shutdown_router_service()
+        except Exception as e:
+            logger.error(f"Error shutting down router service: {e}")
+    
     await cleanup_all_mcp_services()
     await close_runtime_client()
     logger.info("Shutdown complete")
@@ -95,6 +127,9 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.ml_router, prefix=API_PREFIX)
     app.include_router(routers.nlp_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
+    # Router (semantic routing / mesh) if available
+    if routers.router_router:
+        app.include_router(routers.router_router, prefix=API_PREFIX)
     # Voice chat WebSocket - no prefix needed (path already includes /v1)
     app.include_router(routers.voice_router)
     # Health endpoints are exposed at the root (no version prefix)
