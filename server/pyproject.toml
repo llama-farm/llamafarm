@@ -53,6 +53,7 @@ dependencies = [
   "starlette>=0.40.0",
   "filelock>=3.16.1",
   "numpy>=1.26.0",  # Required by voice/vad.py for audio processing
+  "scikit-learn>=1.3.0",  # Required by router for embeddings/matching
 ]
 
 [project.optional-dependencies]
