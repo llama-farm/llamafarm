@@ -5,19 +5,31 @@ sidebar_position: 2
 
 # Specialized ML Models
 
-Beyond text generation, the Universal Runtime provides a comprehensive suite of specialized ML endpoints for document processing, text analysis, and anomaly detection. These endpoints run on the Universal Runtime server (port 11540).
+Beyond text generation, LlamaFarm provides a comprehensive suite of specialized ML endpoints for document processing, text analysis, and anomaly detection.
+
+:::tip Two Ways to Access ML Endpoints
+Most ML endpoints are available on **both** the LlamaFarm Server and Universal Runtime:
+
+| Server | Port | When to Use |
+|--------|------|-------------|
+| **LlamaFarm Server** | 14345 | Recommended for most users. Proxies to Runtime automatically. |
+| **Universal Runtime** | 11540 | Direct access for advanced use cases or standalone deployments. |
+
+The LlamaFarm Server adds conveniences like file upload handling and model versioning.
+:::
 
 ## Quick Reference
 
-| Capability | Endpoint | Use Case |
-|-----------|----------|----------|
-| [OCR](#ocr-text-extraction) | `POST /v1/ocr` | Extract text from images/PDFs |
-| [Document Extraction](#document-extraction) | `POST /v1/documents/extract` | Extract structured data from forms |
-| [Text Classification](#text-classification-pre-trained) | `POST /v1/classify` | Sentiment, spam detection (pre-trained models) |
-| [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
-| [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
-| [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
+| Capability | LlamaFarm Server (14345) | Universal Runtime (11540) | Use Case |
+|-----------|--------------------------|---------------------------|----------|
+| [OCR](#ocr-text-extraction) | `POST /v1/vision/ocr` | `POST /v1/ocr` | Extract text from images/PDFs |
+| [Document Extraction](#document-extraction) | `POST /v1/vision/documents/extract` | `POST /v1/documents/extract` | Extract structured data from forms |
+| [Embeddings](#embeddings) | `POST /v1/nlp/embeddings` | `POST /v1/embeddings` | Generate text embeddings |
+| [Reranking](#reranking-cross-encoder) | `POST /v1/nlp/rerank` | `POST /v1/rerank` | Improve RAG retrieval accuracy |
+| [Text Classification](#text-classification-pre-trained) | `POST /v1/nlp/classify` | `POST /v1/classify` | Zero-shot classification |
+| [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/nlp/ner` | `POST /v1/ner` | Extract people, places, organizations |
+| [Custom Classification](#custom-text-classification-setfit) | `POST /v1/ml/classifier/*` | `POST /v1/classifier/*` | Train your own classifier |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
 
 ## Starting the Universal Runtime
 
@@ -234,9 +246,18 @@ curl -X POST http://localhost:11540/v1/documents/extract \
 
 Use **pre-trained HuggingFace models** for common classification tasks like sentiment analysis. No training required - just pick a model and classify.
 
-:::tip When to Use This vs Custom Classification
-- **Use `/v1/classify`** when a pre-trained model exists for your task (sentiment, spam, toxicity)
-- **Use `/v1/classifier/*`** when you need custom categories specific to your domain (intent routing, ticket categorization)
+:::tip Using the LlamaFarm API (Recommended)
+```bash
+# Via LlamaFarm Server (port 14345)
+curl -X POST http://localhost:14345/v1/nlp/classify \
+  -H "Content-Type: application/json" \
+  -d '{"input": "I love this!", "model": "facebook/bart-large-mnli", "labels": ["positive", "negative"]}'
+```
+:::
+
+:::info When to Use This vs Custom Classification
+- **Use `/v1/nlp/classify`** when a pre-trained model exists for your task (sentiment, spam, toxicity)
+- **Use `/v1/ml/classifier/*`** when you need custom categories specific to your domain (intent routing, ticket categorization)
 :::
 
 ### Popular Models
@@ -493,6 +514,15 @@ curl -X DELETE http://localhost:11540/v1/classifier/models/intent-classifier
 
 Extract named entities (people, organizations, locations) from text.
 
+:::tip Using the LlamaFarm API (Recommended)
+```bash
+# Via LlamaFarm Server (port 14345)
+curl -X POST http://localhost:14345/v1/nlp/ner \
+  -H "Content-Type: application/json" \
+  -d '{"input": "John Smith works at Google.", "model": "dslim/bert-base-NER"}'
+```
+:::
+
 ### Popular Models
 
 | Model | Description |
@@ -542,9 +572,82 @@ curl -X POST http://localhost:11540/v1/ner \
 
 ---
 
+## Embeddings
+
+Generate dense vector representations of text for similarity search, clustering, and semantic analysis.
+
+:::tip Using the LlamaFarm API (Recommended)
+```bash
+# Via LlamaFarm Server (port 14345)
+curl -X POST http://localhost:14345/v1/nlp/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"input": ["Hello world"], "model": "sentence-transformers/all-MiniLM-L6-v2"}'
+```
+:::
+
+### Popular Models
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `sentence-transformers/all-MiniLM-L6-v2` | 80MB | Fast | Good |
+| `sentence-transformers/all-mpnet-base-v2` | 420MB | Medium | Better |
+| `BAAI/bge-small-en-v1.5` | 130MB | Fast | Good |
+| `BAAI/bge-base-en-v1.5` | 440MB | Medium | Better |
+
+### Basic Embeddings
+
+```bash
+curl -X POST http://localhost:11540/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": ["Hello world", "How are you?"],
+    "model": "sentence-transformers/all-MiniLM-L6-v2"
+  }'
+```
+
+### Response Format
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "index": 0,
+      "embedding": [0.123, -0.456, 0.789, ...]
+    },
+    {
+      "object": "embedding",
+      "index": 1,
+      "embedding": [0.234, -0.567, 0.890, ...]
+    }
+  ],
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "usage": {"prompt_tokens": 6, "total_tokens": 6}
+}
+```
+
+### Use Cases
+
+- **Semantic Search**: Find similar documents based on meaning
+- **RAG Retrieval**: Convert queries and documents to vectors for similarity matching
+- **Clustering**: Group similar texts together
+- **Duplicate Detection**: Find near-duplicate content
+
+---
+
 ## Reranking (Cross-Encoder)
 
 Improve RAG retrieval accuracy by reranking candidate documents with a cross-encoder model.
+
+:::tip Using the LlamaFarm API (Recommended)
+```bash
+# Via LlamaFarm Server (port 14345)
+curl -X POST http://localhost:14345/v1/nlp/rerank \
+  -H "Content-Type: application/json" \
+  -d '{"query": "search query", "documents": ["doc1", "doc2"], "top_n": 2}'
+```
+:::
 
 ### Why Rerank?
 

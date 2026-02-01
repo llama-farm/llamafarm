@@ -173,6 +173,13 @@ Common HTTP status codes:
 - `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
 - `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
 
+### NLP (Natural Language Processing)
+
+- `POST /v1/nlp/embeddings` - Generate text embeddings for similarity search
+- `POST /v1/nlp/rerank` - Rerank documents by relevance to a query
+- `POST /v1/nlp/classify` - Zero-shot or trained text classification
+- `POST /v1/nlp/ner` - Extract named entities (people, places, organizations)
+
 ### ML (Custom Classifiers & Anomaly Detection)
 
 - `POST /v1/ml/classifier/fit` - Train custom text classifier (SetFit few-shot)
@@ -3076,6 +3083,283 @@ curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
+```
+
+---
+
+## NLP API (Natural Language Processing)
+
+The NLP API provides text analysis capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime for embeddings, reranking, classification, and named entity recognition.
+
+**Base URL:** `http://localhost:14345/v1/nlp`
+
+:::tip LlamaFarm Server vs Universal Runtime
+The NLP endpoints are available on both servers:
+- **LlamaFarm Server (14345):** `/v1/nlp/embeddings`, `/v1/nlp/rerank`, `/v1/nlp/classify`, `/v1/nlp/ner`
+- **Universal Runtime (11540):** `/v1/embeddings`, `/v1/rerank`, `/v1/classify`, `/v1/ner`
+
+Use the LlamaFarm Server endpoints for convenience—they proxy to the Universal Runtime automatically.
+:::
+
+### Generate Embeddings
+
+Generate dense vector representations of text for similarity search, clustering, and semantic analysis.
+
+**Endpoint:** `POST /v1/nlp/embeddings`
+
+**Request Body:**
+
+```json
+{
+  "input": "string or array of strings",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "encoding_format": "float",
+  "dimensions": null
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `input` | string/array | Yes | - | Text or array of texts to embed |
+| `model` | string | No | `all-MiniLM-L6-v2` | Sentence transformer model ID |
+| `encoding_format` | string | No | `float` | Output format: `float` or `base64` |
+| `dimensions` | int | No | null | Truncate vectors to this dimension |
+
+**Recommended Models:**
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `sentence-transformers/all-MiniLM-L6-v2` | 80MB | Fast | Good |
+| `sentence-transformers/all-mpnet-base-v2` | 420MB | Medium | Better |
+| `BAAI/bge-small-en-v1.5` | 130MB | Fast | Good |
+| `BAAI/bge-base-en-v1.5` | 440MB | Medium | Better |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "index": 0,
+      "embedding": [0.123, -0.456, 0.789, ...]
+    }
+  ],
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "usage": {
+    "prompt_tokens": 5,
+    "total_tokens": 5
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:14345/v1/nlp/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": ["Hello world", "How are you?"],
+    "model": "sentence-transformers/all-MiniLM-L6-v2"
+  }'
+```
+
+### Rerank Documents
+
+Rerank documents by relevance to a query using a cross-encoder model. Cross-encoders are significantly more accurate than bi-encoder similarity (10-20% improvement) for retrieval tasks.
+
+**Endpoint:** `POST /v1/nlp/rerank`
+
+**Request Body:**
+
+```json
+{
+  "query": "search query",
+  "documents": ["doc1", "doc2", "doc3"],
+  "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+  "top_n": 3,
+  "return_documents": true
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `query` | string | Yes | - | The search query |
+| `documents` | array | Yes | - | Array of documents to rerank |
+| `model` | string | No | `ms-marco-MiniLM-L-6-v2` | Cross-encoder model ID |
+| `top_n` | int | No | all | Return only top N results |
+| `return_documents` | bool | No | `true` | Include document text in response |
+
+**Recommended Models:**
+
+| Model | Description |
+|-------|-------------|
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | Fast, general purpose |
+| `cross-encoder/ms-marco-MiniLM-L-12-v2` | Higher accuracy, slower |
+| `BAAI/bge-reranker-v2-m3` | Multilingual, high accuracy |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"index": 0, "relevance_score": 0.92, "document": "Most relevant doc..."},
+    {"index": 2, "relevance_score": 0.87, "document": "Second most relevant..."}
+  ],
+  "model": "cross-encoder/ms-marco-MiniLM-L-6-v2"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:14345/v1/nlp/rerank \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the clinical trial requirements?",
+    "documents": [
+      "Clinical trials must follow FDA regulations.",
+      "The weather is sunny today.",
+      "Phase 3 trials require 300+ participants."
+    ],
+    "top_n": 2
+  }'
+```
+
+### Classify Text
+
+Classify text using zero-shot classification with candidate labels.
+
+**Endpoint:** `POST /v1/nlp/classify`
+
+**Request Body:**
+
+```json
+{
+  "input": "string or array of strings",
+  "model": "facebook/bart-large-mnli",
+  "labels": ["positive", "negative", "neutral"]
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `input` | string/array | Yes | - | Text or array of texts to classify |
+| `model` | string | No | `bart-large-mnli` | Classification model ID |
+| `labels` | array | Yes | - | Candidate labels for zero-shot classification |
+
+**Recommended Models:**
+
+| Model | Description |
+|-------|-------------|
+| `facebook/bart-large-mnli` | Zero-shot classification |
+| `distilbert-base-uncased-finetuned-sst-2-english` | Sentiment (POSITIVE/NEGATIVE) |
+| `cardiffnlp/twitter-roberta-base-sentiment-latest` | Social media sentiment |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "label": "positive",
+      "score": 0.95,
+      "all_scores": {"positive": 0.95, "negative": 0.03, "neutral": 0.02}
+    }
+  ],
+  "model": "facebook/bart-large-mnli"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:14345/v1/nlp/classify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": ["I love this product!", "This is terrible."],
+    "model": "facebook/bart-large-mnli",
+    "labels": ["positive", "negative", "neutral"]
+  }'
+```
+
+### Extract Named Entities (NER)
+
+Extract named entities (people, organizations, locations, etc.) from text.
+
+**Endpoint:** `POST /v1/nlp/ner`
+
+**Request Body:**
+
+```json
+{
+  "input": "string or array of strings",
+  "model": "dslim/bert-base-NER"
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `input` | string/array | Yes | - | Text or array of texts to analyze |
+| `model` | string | No | `bert-base-NER` | NER model ID |
+
+**Recommended Models:**
+
+| Model | Description |
+|-------|-------------|
+| `dslim/bert-base-NER` | English NER (PER/ORG/LOC/MISC) |
+| `Jean-Baptiste/roberta-large-ner-english` | High-accuracy English NER |
+| `xlm-roberta-large-finetuned-conll03-english` | Multilingual NER |
+
+**Entity Types:**
+
+| Label | Description |
+|-------|-------------|
+| `PER` | Person names |
+| `ORG` | Organizations |
+| `LOC` | Locations |
+| `MISC` | Miscellaneous entities |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "index": 0,
+      "entities": [
+        {"text": "John Smith", "label": "PER", "start": 0, "end": 10, "score": 0.99},
+        {"text": "Google", "label": "ORG", "start": 20, "end": 26, "score": 0.98},
+        {"text": "San Francisco", "label": "LOC", "start": 30, "end": 43, "score": 0.97}
+      ]
+    }
+  ],
+  "model": "dslim/bert-base-NER"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:14345/v1/nlp/ner \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "John Smith works at Google in San Francisco.",
+    "model": "dslim/bert-base-NER"
+  }'
 ```
 
 ---
