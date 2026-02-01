@@ -10,6 +10,7 @@ from .embeddings import EmbeddingEngine, EmbeddingConfig
 from .matcher import CapabilityMatcher, MatchResult, RouteDecision, Capability
 from .gradient import GradientTable, GradientEntry
 from .gossip import GossipProtocol, Announcement, CapabilityInfo
+from .learning import RouteLearner, RouteQuality, get_route_learner
 
 __all__ = [
     "EmbeddingEngine",
@@ -23,4 +24,7 @@ __all__ = [
     "GossipProtocol",
     "Announcement",
     "CapabilityInfo",
+    "RouteLearner",
+    "RouteQuality",
+    "get_route_learner",
 ]
