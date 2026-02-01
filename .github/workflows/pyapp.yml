@@ -142,6 +142,7 @@ jobs:
 
       - name: Build designer (for server component)
         if: matrix.component == 'server'
+        shell: bash
         run: |
           cd designer
           npm ci --legacy-peer-deps || npm install --legacy-peer-deps
