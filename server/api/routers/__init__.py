@@ -19,6 +19,14 @@ except ImportError:
     _router_available = False
     router_router = None
 
+# Import autonomous agent endpoints
+try:
+    from .agents import autonomous_router
+    _agents_available = True
+except ImportError:
+    _agents_available = False
+    autonomous_router = None
+
 __all__ = [
     "projects_router",
     "datasets_router",
@@ -34,4 +42,5 @@ __all__ = [
     "vision_router",
     "voice_router",
     "router_router",
+    "autonomous_router",
 ]

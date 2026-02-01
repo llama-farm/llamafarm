@@ -46,6 +46,22 @@ async def lifespan(app: fastapi.FastAPI):
             label="embeddings",
             description="Generate semantic embeddings for text"
         )
+        await router_service.register_capability(
+            label="vision",
+            description="Analyze images, detect objects, OCR, and visual understanding"
+        )
+        await router_service.register_capability(
+            label="rag",
+            description="Retrieval-augmented generation from document knowledge bases"
+        )
+        await router_service.register_capability(
+            label="tool-calling",
+            description="Execute function calls and tool use via structured output"
+        )
+        await router_service.register_capability(
+            label="code-execution",
+            description="Run code in sandboxed environments (Python, JavaScript, etc.)"
+        )
     except ImportError:
         logger.info("Router service not available (optional)")
         shutdown_router_service = None
@@ -130,6 +146,9 @@ def llama_farm_api() -> fastapi.FastAPI:
     # Router (semantic routing / mesh) if available
     if routers.router_router:
         app.include_router(routers.router_router, prefix=API_PREFIX)
+    # Autonomous agents if available
+    if routers.autonomous_router:
+        app.include_router(routers.autonomous_router, prefix=API_PREFIX)
     # Voice chat WebSocket - no prefix needed (path already includes /v1)
     app.include_router(routers.voice_router)
     # Health endpoints are exposed at the root (no version prefix)
