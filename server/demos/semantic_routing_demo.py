@@ -12,20 +12,26 @@ Demonstrates:
 import asyncio
 import numpy as np
 from typing import Dict, List
+from dataclasses import dataclass
 
-from router import (
-    EmbeddingEngine,
-    CapabilityMatcher,
-    MatchResult,
-    Capability,
-)
+from router import EmbeddingEngine
 
 
-def demo_embedding_engine():
+@dataclass
+class DemoCapability:
+    """Simple capability for demo purposes."""
+    name: str
+    description: str
+    examples: List[str]
+    node_id: str
+
+
+async def demo_embedding_engine():
     """Demo: Text embeddings and similarity."""
     print("\n=== Embedding Engine Demo ===")
     
     engine = EmbeddingEngine()
+    await engine.initialize()
     
     # Embed some example texts
     texts = [
@@ -40,7 +46,7 @@ def demo_embedding_engine():
     print("\n Embedding texts...")
     embeddings = []
     for text in texts:
-        emb = engine.embed(text)
+        emb = await engine.embed(text)
         embeddings.append(emb)
         print(f"  '{text}' → {emb.shape[0]}-dim vector")
     
@@ -57,13 +63,17 @@ def demo_embedding_engine():
     return engine
 
 
-def demo_capability_matching():
+async def demo_capability_matching():
     """Demo: Matching intents to capabilities."""
     print("\n\n=== Capability Matching Demo ===")
     
+    # Initialize embedding engine
+    engine = EmbeddingEngine()
+    await engine.initialize()
+    
     # Define capabilities
     capabilities = {
-        "weather": Capability(
+        "weather": DemoCapability(
             name="weather",
             description="Get weather information and forecasts",
             examples=[
@@ -75,7 +85,7 @@ def demo_capability_matching():
             node_id="weather-service-001"
         ),
         
-        "search": Capability(
+        "search": DemoCapability(
             name="search",
             description="Search the web for information",
             examples=[
@@ -87,7 +97,7 @@ def demo_capability_matching():
             node_id="search-service-001"
         ),
         
-        "calculator": Capability(
+        "calculator": DemoCapability(
             name="calculator",
             description="Perform mathematical calculations",
             examples=[
@@ -99,7 +109,7 @@ def demo_capability_matching():
             node_id="math-service-001"
         ),
         
-        "email": Capability(
+        "email": DemoCapability(
             name="email",
             description="Send and manage emails",
             examples=[
@@ -117,8 +127,10 @@ def demo_capability_matching():
         print(f"  • {cap_name}: {cap.description}")
         print(f"    Node: {cap.node_id}")
     
-    # Create matcher
-    matcher = CapabilityMatcher(capabilities)
+    # Create matcher (simplified for demo)
+    # Note: Real matcher uses vectorized capabilities
+    # This demo shows the conceptual flow
+    print("\n Creating semantic matcher...")
     
     # Test queries
     test_queries = [
@@ -134,28 +146,50 @@ def demo_capability_matching():
     print(" " + "=" * 70)
     
     for query in test_queries:
-        result = matcher.match(query, top_k=3)
+        # For demo: simple semantic matching using embeddings
+        query_emb = await engine.embed(query)
         
         print(f"\n Query: '{query}'")
         print(f" Top matches:")
         
-        for i, match in enumerate(result, 1):
-            cap = capabilities[match.capability_name]
-            confidence_pct = match.confidence * 100
-            print(f"   {i}. {match.capability_name} ({confidence_pct:.1f}%)")
+        # Calculate similarity to each capability
+        scores = []
+        for cap_name, cap in capabilities.items():
+            # Average embeddings of examples
+            example_embs = []
+            for example in cap.examples:
+                ex_emb = await engine.embed(example)
+                example_embs.append(ex_emb)
+            
+            if example_embs:
+                cap_emb = np.mean(example_embs, axis=0)
+                cap_emb = cap_emb / np.linalg.norm(cap_emb)  # normalize
+                score = engine.cosine_similarity(query_emb, cap_emb)
+                scores.append((cap_name, score, cap))
+        
+        # Sort by score descending
+        scores.sort(key=lambda x: x[1], reverse=True)
+        
+        for i, (cap_name, score, cap) in enumerate(scores[:3], 1):
+            confidence_pct = score * 100
+            print(f"   {i}. {cap_name} ({confidence_pct:.1f}%)")
             print(f"      Node: {cap.node_id}")
             if i == 1:
                 print(f"      → ROUTE TO THIS")
     
-    return matcher
+    await engine.close()
+    return None
 
 
-def demo_route_decision():
+async def demo_route_decision():
     """Demo: Making routing decisions with thresholds."""
     print("\n\n=== Route Decision Demo ===")
     
+    engine = EmbeddingEngine()
+    await engine.initialize()
+    
     capabilities = {
-        "general_chat": Capability(
+        "general_chat": DemoCapability(
             name="general_chat",
             description="General conversation and chitchat",
             examples=[
@@ -167,7 +201,7 @@ def demo_route_decision():
             node_id="chat-bot-001"
         ),
         
-        "technical_support": Capability(
+        "technical_support": DemoCapability(
             name="technical_support",
             description="Technical troubleshooting and support",
             examples=[
@@ -180,47 +214,58 @@ def demo_route_decision():
         )
     }
     
-    matcher = CapabilityMatcher(capabilities)
-    
     # Test with varying confidence thresholds
     query = "The server is showing a 500 error"
+    query_emb = await engine.embed(query)
     
     print(f"\n Query: '{query}'")
     print("\n Testing with different confidence thresholds:")
     
+    # Calculate scores
+    scores = {}
+    for cap_name, cap in capabilities.items():
+        example_embs = [await engine.embed(ex) for ex in cap.examples]
+        cap_emb = np.mean(example_embs, axis=0)
+        cap_emb = cap_emb / np.linalg.norm(cap_emb)
+        scores[cap_name] = engine.cosine_similarity(query_emb, cap_emb)
+    
+    best_cap = max(scores, key=scores.get)
+    best_score = scores[best_cap]
+    
     for threshold in [0.3, 0.5, 0.7, 0.9]:
-        result = matcher.match(query, threshold=threshold, top_k=1)
-        
-        if result and result[0].confidence >= threshold:
-            match = result[0]
+        if best_score >= threshold:
             print(f"\n  Threshold: {threshold:.1f}")
-            print(f"   → Matched: {match.capability_name} ({match.confidence:.3f})")
+            print(f"   → Matched: {best_cap} ({best_score:.3f})")
         else:
             print(f"\n  Threshold: {threshold:.1f}")
             print(f"   → No match (confidence too low)")
             print(f"   → Would fallback to default handler")
     
-    return matcher
+    await engine.close()
+    return None
 
 
-def demo_multi_capability_routing():
+async def demo_multi_capability_routing():
     """Demo: Routing to multiple capabilities."""
     print("\n\n=== Multi-Capability Routing Demo ===")
     
+    engine = EmbeddingEngine()
+    await engine.initialize()
+    
     capabilities = {
-        "weather": Capability(
+        "weather": DemoCapability(
             name="weather",
             description="Weather information",
             examples=["What's the weather?"],
             node_id="weather-001"
         ),
-        "calendar": Capability(
+        "calendar": DemoCapability(
             name="calendar",
             description="Calendar and scheduling",
             examples=["Check my calendar", "Schedule a meeting"],
             node_id="calendar-001"
         ),
-        "reminder": Capability(
+        "reminder": DemoCapability(
             name="reminder",
             description="Reminders and notifications",
             examples=["Remind me to call John", "Set a reminder"],
@@ -228,19 +273,27 @@ def demo_multi_capability_routing():
         )
     }
     
-    matcher = CapabilityMatcher(capabilities)
-    
     # Complex query that might match multiple capabilities
     query = "Remind me to check the weather before my meeting tomorrow"
+    query_emb = await engine.embed(query)
     
     print(f"\n Query: '{query}'")
     print("\n This query involves multiple capabilities:")
     
-    matches = matcher.match(query, top_k=3)
+    # Calculate all scores
+    scores = []
+    for cap_name, cap in capabilities.items():
+        example_embs = [await engine.embed(ex) for ex in cap.examples]
+        cap_emb = np.mean(example_embs, axis=0)
+        cap_emb = cap_emb / np.linalg.norm(cap_emb)
+        score = engine.cosine_similarity(query_emb, cap_emb)
+        scores.append((cap_name, score))
     
-    for i, match in enumerate(matches, 1):
-        confidence_pct = match.confidence * 100
-        print(f"\n  {i}. {match.capability_name} ({confidence_pct:.1f}%)")
+    scores.sort(key=lambda x: x[1], reverse=True)
+    
+    for i, (cap_name, score) in enumerate(scores, 1):
+        confidence_pct = score * 100
+        print(f"\n  {i}. {cap_name} ({confidence_pct:.1f}%)")
         
         if i == 1:
             print(f"     → Primary capability (execute first)")
@@ -253,6 +306,8 @@ def demo_multi_capability_routing():
     print("  1. Create reminder (primary)")
     print("  2. Query weather (if confidence > 50%)")
     print("  3. Check calendar (if confidence > 50%)")
+    
+    await engine.close()
 
 
 async def main():
@@ -261,10 +316,12 @@ async def main():
     print("=" * 70)
     
     # Run demos
-    engine = demo_embedding_engine()
-    matcher = demo_capability_matching()
-    decision_demo = demo_route_decision()
-    demo_multi_capability_routing()
+    engine = await demo_embedding_engine()
+    await engine.close()
+    
+    await demo_capability_matching()
+    await demo_route_decision()
+    await demo_multi_capability_routing()
     
     print("\n\n" + "=" * 70)
     print("Demo completed successfully! ✅")

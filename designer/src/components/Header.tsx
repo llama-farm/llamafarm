@@ -89,6 +89,7 @@ function Header({ currentVersion }: HeaderProps) {
     { key: 'data', label: 'Data', icon: 'data' },
     { key: 'databases', label: 'RAG', icon: 'rag' },
     { key: 'models', label: 'Models', icon: 'model' },
+    { key: 'router', label: 'Router', icon: 'integration' },
     { key: 'test', label: 'Test', icon: 'test' },
   ] as const
 
@@ -106,6 +107,7 @@ function Header({ currentVersion }: HeaderProps) {
     data: { label: 'Data', icon: 'data', path: '/chat/data' },
     databases: { label: 'RAG', icon: 'rag', path: '/chat/databases' },
     models: { label: 'Models', icon: 'model', path: '/chat/models' },
+    router: { label: 'Router', icon: 'integration', path: '/chat/router' },
     test: { label: 'Test', icon: 'test', path: '/chat/test' },
   }
 

@@ -25,6 +25,7 @@ import DatasetView from './components/Data/DatasetView'
 import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
+import Router from './components/Router/Router'
 import Models from './components/Models/Models'
 import AddInferenceModels from './components/Models/AddInferenceModels'
 import AnomalyModel from './components/Models/AnomalyModel'
@@ -167,6 +168,7 @@ function AppContent() {
                           path="versions"
                           element={<Navigate to="/chat/dashboard" replace />}
                         />
+                        <Route path="router" element={<Router />} />
                         <Route path="data" element={<Data />} />
                         <Route
                           path="data/:datasetId"
