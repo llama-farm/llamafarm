@@ -5,7 +5,20 @@ sidebar_position: 7
 
 # Models & Runtime
 
-LlamaFarm focuses on inference rather than fine-tuning. The runtime section of `llamafarm.yaml` describes how chat completions are executed—whether against local Ollama, Lemonade, a vLLM gateway, or a remote hosted provider.
+LlamaFarm focuses on inference rather than fine-tuning. The runtime section of `llamafarm.yaml` describes how chat completions are executed—whether using the Universal Runtime (recommended), local Ollama/Lemonade, or cloud providers.
+
+## Quick Start: Choosing a Provider
+
+| Provider | Best For | Setup |
+|----------|----------|-------|
+| **[Universal Runtime](#universal-runtime)** ⭐ | Full HuggingFace access, multimodal (images, audio, embeddings), specialized ML | `provider: universal` |
+| **[Cloud Providers](#cloud-providers)** | Production APIs (OpenAI, Grok, Together AI) | `provider: openai` + `base_url` + `api_key` |
+| **[Ollama](#ollama)** | Easy local setup, quantized GGUF models | `provider: ollama` |
+| **[Lemonade](#lemonade)** | NPU/GPU acceleration, Apple Silicon | `provider: lemonade` |
+
+:::tip Recommended Setup
+Start with **Universal Runtime** for development—it provides the most flexibility with access to any HuggingFace model, embeddings, image generation, and specialized ML capabilities (OCR, NER, classification, anomaly detection). Use cloud providers for production workloads requiring enterprise reliability.
+:::
 
 ## Multi-Model Support
 
@@ -13,25 +26,32 @@ LlamaFarm supports configuring multiple models in a single project. You can swit
 
 ```yaml
 runtime:
-  default_model: fast  # Which model to use by default
+  default_model: chat  # Which model to use by default
 
   models:
-    fast:
-      description: "Fast Ollama model for quick responses"
-      provider: ollama
-      model: gemma3:1b
-      prompt_format: unstructured
+    - name: chat
+      description: "Universal Runtime chat model"
+      provider: universal
+      model: microsoft/phi-2
+      base_url: http://127.0.0.1:11540
 
-    powerful:
-      description: "More capable model"
-      provider: ollama
-      model: qwen3:8b
+    - name: embedder
+      description: "Embeddings for RAG"
+      provider: universal
+      model: sentence-transformers/all-MiniLM-L6-v2
+      base_url: http://127.0.0.1:11540
+
+    - name: cloud
+      description: "Cloud fallback for production"
+      provider: openai
+      model: gpt-4o-mini
+      api_key: ${OPENAI_API_KEY}
 ```
 
 **Using multi-model:**
-- CLI: `lf chat --model powerful "your question"`
+- CLI: `lf chat --model cloud "your question"`
 - CLI: `lf models list` (shows all available models)
-- API: `POST /v1/projects/{ns}/{id}/chat/completions` with `{"model": "powerful", ...}`
+- API: `POST /v1/projects/{ns}/{id}/chat/completions` with `{"model": "cloud", ...}`
 
 **Legacy single-model configs are still supported** and automatically converted internally.
 
@@ -42,168 +62,47 @@ runtime:
 - Surface provider errors directly (incorrect model name, missing API key).
 - Cooperate with agent handlers (simple chat, structured output, RAG-aware prompts).
 
-## Choosing a Provider
+## Universal Runtime
 
-| Use Case | Configuration |
-| -------- | ------------- |
-| **Local models (Ollama)** | `provider: ollama` (omit API key). Supports models pulled via `ollama pull`. |
-| **Local models (Lemonade)** | `provider: lemonade` with GGUF models. Hardware-accelerated (NPU/GPU). See [Lemonade Setup](#lemonade-runtime) below. |
-| **Self-hosted vLLM / OpenAI-compatible** | `provider: openai`, set `base_url` to your gateway, `api_key` as required. |
-| **Hosted APIs (OpenAI, Anthropic via proxy, Together, LM Studio)** | `provider: openai`, set `base_url` if not using api.openai.com, provide API key. |
+The Universal Runtime is LlamaFarm's **recommended** runtime provider, supporting **any HuggingFace model** through PyTorch Transformers and Diffusers. Unlike Ollama (GGUF-only) or Lemonade (optimized quantized models), Universal Runtime provides access to the entire HuggingFace Hub ecosystem plus specialized ML capabilities.
 
-Example using vLLM locally:
+### Why Universal Runtime?
 
-```yaml
-runtime:
-  models:
-    - name: vllm-model
-      provider: openai
-      model: mistral-small
-      base_url: http://localhost:8000/v1
-      api_key: sk-local-placeholder
-      instructor_mode: json
-      default: true
-```
-
-## Agent Handlers
-
-LlamaFarm selects an agent handler based on configuration:
-
-- **Simple chat** – direct user/system prompts, suitable for models without tool support.
-- **Structured chat** – uses instructor modes (`tools`, `json`) for models that support function/tool calls.
-- **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
-- **Classifier / Custom** – future handlers for specialized workflows.
-
-Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
-
-## Inline Tools with Dynamic Variables
-
-Models can define tools inline in the config, and these tools support dynamic variable substitution:
-
-```yaml
-runtime:
-  models:
-    - name: assistant
-      provider: universal
-      model: llama3.2:3b
-      tool_call_strategy: native_api
-      tools:
-        - type: function
-          name: search_docs
-          description: "Search {{company_name | the company}} documentation"
-          parameters:
-            type: object
-            properties:
-              query:
-                type: string
-                description: "Search query for {{department | general}} topics"
-            required:
-              - query
-```
-
-Pass values at request time via the `variables` field:
-
-```bash
-curl -X POST .../chat/completions -d '{
-  "messages": [{"role": "user", "content": "Find shipping info"}],
-  "variables": {"company_name": "Acme Corp", "department": "logistics"}
-}'
-```
-
-See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
-
-## Lemonade Runtime
-
-Lemonade is a high-performance local runtime that runs GGUF models with NPU/GPU acceleration. It's an alternative to Ollama with excellent performance on Apple Silicon and other hardware.
+- **Full HuggingFace Access** – Any PyTorch model: text, embeddings, images, audio, vision
+- **Specialized ML** – OCR, document extraction, NER, classification, reranking, anomaly detection
+- **No Pre-conversion** – Models auto-download and work immediately
+- **Port 11540** – Default port (accessed via LlamaFarm Server on port 14345)
 
 ### Quick Setup
 
-**1. Install Lemonade SDK:**
+**1. Start Universal Runtime server:**
 ```bash
-uv pip install lemonade-sdk
+# From project root (recommended)
+nx start universal-runtime
+
+# Or with custom port
+LF_RUNTIME_PORT=8080 nx start universal-runtime
 ```
 
-**2. Download a model:**
-```bash
-# Balanced 4B model (recommended)
-uv run lemonade-server-dev pull user.Qwen3-4B \
-  --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M \
-  --recipe llamacpp
-```
-
-**3. Start Lemonade server:**
-```bash
-# From the llamafarm project root
-LEMONADE_MODEL=user.Qwen3-4B nx start lemonade
-```
-
-> **Note:** The `nx start lemonade` command automatically picks up configuration from your `llamafarm.yaml`. Currently, Lemonade must be manually started. In the future, Lemonade will run as a container and be auto-started by the LlamaFarm server.
-
-**4. Configure your project:**
+**2. Configure your project:**
 ```yaml
 runtime:
   models:
-    - name: lemon
-      description: "Lemonade local model"
-      provider: lemonade
-      model: user.Qwen3-4B
-      base_url: "http://127.0.0.1:11534/v1"
-      default: true
-      lemonade:
-        backend: llamacpp  # llamacpp (GGUF), onnx, or transformers
-        port: 11534
-        context_size: 32768
+    - name: chat
+      description: "Fast small language model"
+      provider: universal
+      model: microsoft/phi-2
+      base_url: http://127.0.0.1:11540
+      transformers:
+        device: auto              # auto, cuda, mps, cpu
+        dtype: auto               # auto, fp16, fp32, bf16
+        trust_remote_code: true
 ```
 
-### Key Features
-
-- **Hardware acceleration**: Automatically detects and uses Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
-- **Multiple backends**: llamacpp (GGUF models), ONNX, or Transformers (PyTorch)
-- **OpenAI-compatible API**: Drop-in replacement for OpenAI-compatible endpoints
-- **Port 11534**: Default port (different from LlamaFarm's 14345 and Ollama's 11434)
-
-### Multi-Model with Lemonade
-
-Run multiple Lemonade instances on different ports:
-
-```yaml
-runtime:
-  models:
-    - name: lemon-fast
-      provider: lemonade
-      model: user.Qwen3-0.6B
-      base_url: "http://127.0.0.1:11534/v1"
-      lemonade:
-        port: 11534
-
-    - name: lemon-powerful
-      provider: lemonade
-      model: user.Qwen3-8B
-      base_url: "http://127.0.0.1:11535/v1"
-      lemonade:
-        port: 11535
-```
-
-Start each instance in a separate terminal (from the llamafarm project root):
+**3. Start chatting:**
 ```bash
-# Terminal 1
-LEMONADE_MODEL=user.Qwen3-0.6B LEMONADE_PORT=11534 nx start lemonade
-
-# Terminal 2
-LEMONADE_MODEL=user.Qwen3-8B LEMONADE_PORT=11535 nx start lemonade
+lf chat --model chat "Explain quantum computing"
 ```
-
-> **Note:** In the future, Lemonade instances will run as containers and be auto-started by the LlamaFarm server.
-
-### More Information
-
-For detailed setup instructions, model recommendations, and troubleshooting, see:
-- [Lemonade Quickstart](#quick-setup)
-- [Lemonade Runtime overview](#lemonade-runtime)
-
-## Universal Runtime
-
-The Universal Runtime is LlamaFarm's most versatile runtime provider, supporting **any HuggingFace model** through PyTorch Transformers and Diffusers. Unlike Ollama (GGUF-only) or Lemonade (optimized quantized models), Universal Runtime provides access to the entire HuggingFace Hub ecosystem.
 
 ### Supported Model Formats
 
@@ -260,76 +159,7 @@ runtime:
         cache_type_v: q4_0   # Quantize KV cache values
 ```
 
-#### Memory Estimation
-
-| Parameter | Memory Impact |
-|-----------|--------------|
-| `n_ctx: 2048` | ~256MB KV cache |
-| `n_ctx: 8192` | ~1GB KV cache |
-| `n_batch: 2048` | ~1.2GB compute buffer |
-| `n_batch: 512` | ~300MB compute buffer |
-| `cache_type: q4_0` | ~4x reduction vs f16 |
-
-#### Memory Guard (Automatic)
-
-When available memory drops below 3GB, Universal Runtime automatically:
-1. Reduces `n_batch` from 2048 to 512
-2. Logs a warning with the adjustment
-
-This prevents out-of-memory crashes on constrained devices.
-
-#### Offline Operation
-
-GGUF models support fully offline operation:
-1. Download model once (requires network)
-2. Model is cached in `~/.cache/huggingface/hub/`
-3. Subsequent loads use cache without network
-4. Works on air-gapped systems
-
-```bash
-# First run downloads the model
-curl -X POST http://localhost:11540/v1/chat/completions \
-  -d '{"model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M", "messages": [...]}'
-
-# Subsequent runs work offline
-# (disconnect network and it still works)
-```
-
-### Quick Setup
-
-**1. Start Universal Runtime server:**
-```bash
-# From project root (recommended)
-nx start universal-runtime
-
-# Or with custom port
-LF_RUNTIME_PORT=8080 nx start universal-runtime
-```
-
-**2. Configure your project:**
-```yaml
-runtime:
-  models:
-    - name: phi-2
-      description: "Fast small language model"
-      provider: universal
-      model: microsoft/phi-2
-      base_url: http://127.0.0.1:11540
-      transformers:
-        device: auto              # auto, cuda, mps, cpu
-        dtype: auto               # auto, fp16, fp32, bf16
-        trust_remote_code: true
-        model_type: text          # text, embedding, image
-```
-
-**3. Start chatting:**
-```bash
-lf chat --model phi-2 "Explain quantum computing"
-```
-
-### Configuration Examples
-
-**Example 1: Multi-Model Setup (Chat + Embeddings + Images)**
+### Multi-Model Setup Example
 
 ```yaml
 runtime:
@@ -350,9 +180,6 @@ runtime:
       provider: universal
       model: microsoft/phi-2
       base_url: http://127.0.0.1:11540
-      transformers:
-        device: auto
-        dtype: auto
 
     # Embeddings for RAG
     - name: embedder
@@ -360,8 +187,6 @@ runtime:
       model: sentence-transformers/all-MiniLM-L6-v2
       base_url: http://127.0.0.1:11540
       transformers:
-        device: auto
-        dtype: auto
         model_type: embedding
 
     # Image generation
@@ -370,191 +195,328 @@ runtime:
       model: stabilityai/stable-diffusion-2-1
       base_url: http://127.0.0.1:11540
       transformers:
-        device: auto
-        dtype: auto
         model_type: image
       diffusion:
         default_steps: 30
         default_guidance: 7.5
         default_size: "512x512"
-        scheduler: euler
-        enable_optimizations: true
-```
-
-**Example 2: RAG with Universal Embeddings**
-
-```yaml
-runtime:
-  models:
-    - name: chat
-      provider: universal
-      model: microsoft/phi-2
-      base_url: http://127.0.0.1:11540
-
-    - name: embedder
-      provider: universal
-      model: nomic-ai/nomic-embed-text-v1.5
-      base_url: http://127.0.0.1:11540
-      transformers:
-        model_type: embedding
-
-rag:
-  databases:
-    - name: main_database
-      type: ChromaStore
-      embedding_strategies:
-        - name: default_embeddings
-          type: UniversalEmbedder
-          config:
-            model: nomic-ai/nomic-embed-text-v1.5
-            dimension: 768
-            batch_size: 16
 ```
 
 ### Hardware Acceleration
 
 Universal Runtime automatically detects and optimizes for your hardware:
 
-**Detection Priority:**
-1. **NVIDIA CUDA** – Best performance on NVIDIA GPUs
-2. **Apple Metal (MPS)** – Optimized for Apple Silicon (M1/M2/M3)
-3. **CPU** – Fallback for all platforms
+| Device | Configuration | Best For |
+|--------|--------------|----------|
+| **NVIDIA CUDA** | `device: cuda` | Best performance on NVIDIA GPUs |
+| **Apple Metal** | `device: mps` | Optimized for Apple Silicon (M1/M2/M3) |
+| **CPU** | `device: cpu` | Fallback for all platforms |
+| **Auto** | `device: auto` | Recommended: auto-detect best device |
 
-**Device Configuration:**
 ```yaml
 transformers:
   device: auto    # Recommended: auto-detect best device
-  device: cuda    # Force CUDA (NVIDIA)
-  device: mps     # Force Metal (Apple Silicon)
-  device: cpu     # Force CPU (compatible everywhere)
-```
-
-**Data Type Configuration:**
-```yaml
-transformers:
   dtype: auto     # auto (fp16 on GPU, fp32 on CPU)
-  dtype: fp16     # Half precision (faster, less memory)
-  dtype: fp32     # Full precision (highest quality)
-  dtype: bf16     # BFloat16 (NVIDIA Ampere+)
 ```
 
-### Environment Variables
+### Specialized ML Capabilities
+
+Beyond text generation, Universal Runtime provides specialized ML endpoints:
+
+| Capability | Endpoint | Use Case |
+|-----------|----------|----------|
+| **OCR** | `POST /v1/vision/ocr` | Extract text from images/PDFs |
+| **Document Extraction** | `POST /v1/vision/documents/extract` | Extract structured data from forms |
+| **Text Classification** | `POST /v1/nlp/classify` | Sentiment analysis, routing |
+| **Named Entity Recognition** | `POST /v1/nlp/ner` | Extract people, places, organizations |
+| **Reranking** | `POST /v1/nlp/rerank` | Improve RAG retrieval accuracy |
+| **Embeddings** | `POST /v1/nlp/embeddings` | Generate vector embeddings |
+| **Anomaly Detection** | `POST /v1/ml/anomaly/*` | Detect outliers in data |
+
+See the detailed guides:
+- [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
+- [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
+
+---
+
+## Cloud Providers
+
+LlamaFarm supports any **OpenAI-compatible API** for production workloads. Use `provider: openai` with custom `base_url` and `api_key` to connect to cloud services.
+
+### OpenAI
+
+```yaml
+runtime:
+  models:
+    - name: gpt4
+      description: "OpenAI GPT-4o"
+      provider: openai
+      model: gpt-4o
+      api_key: ${OPENAI_API_KEY}  # Set via environment variable
+
+    - name: gpt4-mini
+      description: "OpenAI GPT-4o Mini (cost-effective)"
+      provider: openai
+      model: gpt-4o-mini
+      api_key: ${OPENAI_API_KEY}
+```
+
+:::tip Environment Variables
+Store API keys in environment variables: `export OPENAI_API_KEY=sk-proj-xxx`
+LlamaFarm automatically substitutes `${VAR_NAME}` in config files.
+:::
+
+### xAI Grok
+
+```yaml
+runtime:
+  models:
+    - name: grok
+      description: "xAI Grok"
+      provider: openai
+      model: grok-beta
+      base_url: https://api.x.ai/v1
+      api_key: ${XAI_API_KEY}
+```
+
+### Together AI
+
+```yaml
+runtime:
+  models:
+    - name: together-llama
+      description: "Llama 3.1 70B on Together AI"
+      provider: openai
+      model: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+      base_url: https://api.together.xyz/v1
+      api_key: ${TOGETHER_API_KEY}
+
+    - name: together-mixtral
+      description: "Mixtral 8x7B on Together AI"
+      provider: openai
+      model: mistralai/Mixtral-8x7B-Instruct-v0.1
+      base_url: https://api.together.xyz/v1
+      api_key: ${TOGETHER_API_KEY}
+```
+
+### Groq (Fast Inference)
+
+```yaml
+runtime:
+  models:
+    - name: groq-llama
+      description: "Llama 3.1 on Groq (ultra-fast)"
+      provider: openai
+      model: llama-3.1-70b-versatile
+      base_url: https://api.groq.com/openai/v1
+      api_key: ${GROQ_API_KEY}
+
+    - name: groq-mixtral
+      description: "Mixtral on Groq"
+      provider: openai
+      model: mixtral-8x7b-32768
+      base_url: https://api.groq.com/openai/v1
+      api_key: ${GROQ_API_KEY}
+```
+
+### Fireworks AI
+
+```yaml
+runtime:
+  models:
+    - name: fireworks-llama
+      description: "Llama 3.1 on Fireworks"
+      provider: openai
+      model: accounts/fireworks/models/llama-v3p1-70b-instruct
+      base_url: https://api.fireworks.ai/inference/v1
+      api_key: ${FIREWORKS_API_KEY}
+```
+
+### Mistral AI
+
+```yaml
+runtime:
+  models:
+    - name: mistral-large
+      description: "Mistral Large"
+      provider: openai
+      model: mistral-large-latest
+      base_url: https://api.mistral.ai/v1
+      api_key: ${MISTRAL_API_KEY}
+
+    - name: mistral-small
+      description: "Mistral Small (cost-effective)"
+      provider: openai
+      model: mistral-small-latest
+      base_url: https://api.mistral.ai/v1
+      api_key: ${MISTRAL_API_KEY}
+```
+
+### Self-Hosted vLLM
+
+```yaml
+runtime:
+  models:
+    - name: vllm-local
+      description: "Self-hosted vLLM"
+      provider: openai
+      model: mistral-7b
+      base_url: http://localhost:8000/v1
+      api_key: not-needed  # vLLM doesn't require auth by default
+      instructor_mode: json
+```
+
+### LM Studio
+
+```yaml
+runtime:
+  models:
+    - name: lmstudio
+      description: "LM Studio local model"
+      provider: openai
+      model: local-model  # Model name from LM Studio
+      base_url: http://localhost:1234/v1
+      api_key: not-needed
+```
+
+### Cloud Provider Reference
+
+| Provider | Base URL | Model Examples |
+|----------|----------|----------------|
+| **OpenAI** | (default) | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
+| **xAI Grok** | `https://api.x.ai/v1` | `grok-beta` |
+| **Together AI** | `https://api.together.xyz/v1` | `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo` |
+| **Groq** | `https://api.groq.com/openai/v1` | `llama-3.1-70b-versatile`, `mixtral-8x7b-32768` |
+| **Fireworks** | `https://api.fireworks.ai/inference/v1` | `accounts/fireworks/models/llama-v3p1-70b-instruct` |
+| **Mistral AI** | `https://api.mistral.ai/v1` | `mistral-large-latest`, `mistral-small-latest` |
+| **vLLM** | `http://localhost:8000/v1` | Your deployed model |
+| **LM Studio** | `http://localhost:1234/v1` | Your loaded model |
+
+---
+
+## Other Local Runtimes
+
+### Ollama
+
+Ollama provides easy local model setup with quantized GGUF models. Great for getting started quickly.
+
+```yaml
+runtime:
+  models:
+    - name: ollama-fast
+      description: "Fast Ollama model"
+      provider: ollama
+      model: gemma3:1b
+
+    - name: ollama-powerful
+      description: "More capable Ollama model"
+      provider: ollama
+      model: qwen3:8b
+```
+
+**Setup:**
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull models
+ollama pull gemma3:1b
+ollama pull qwen3:8b
+```
+
+**Port:** 11434 (default)
+
+### Lemonade
+
+Lemonade is a high-performance local runtime that runs GGUF models with NPU/GPU acceleration. Excellent on Apple Silicon.
+
+**Quick Setup:**
 
 ```bash
-# Server configuration
-UNIVERSAL_RUNTIME_HOST=127.0.0.1
-UNIVERSAL_RUNTIME_PORT=11540
+# 1. Install Lemonade SDK
+uv pip install lemonade-sdk
 
-# Model caching
-TRANSFORMERS_CACHE=~/.cache/huggingface
-HF_TOKEN=hf_xxxxx  # For gated models (Llama, etc.)
+# 2. Download a model
+uv run lemonade-server-dev pull user.Qwen3-4B \
+  --checkpoint unsloth/Qwen3-4B-GGUF:Q4_K_M \
+  --recipe llamacpp
 
-# Device control
-TRANSFORMERS_FORCE_CPU=1     # Force CPU mode
-TRANSFORMERS_SKIP_MPS=1      # Skip MPS, use CPU instead
+# 3. Start Lemonade server
+LEMONADE_MODEL=user.Qwen3-4B nx start lemonade
 ```
 
-### API Usage
+**Configure:**
+```yaml
+runtime:
+  models:
+    - name: lemon
+      description: "Lemonade local model"
+      provider: lemonade
+      model: user.Qwen3-4B
+      base_url: "http://127.0.0.1:11534/v1"
+      lemonade:
+        backend: llamacpp
+        port: 11534
+        context_size: 32768
+```
 
-Universal Runtime provides an OpenAI-compatible API:
+**Port:** 11534 (default)
 
-**Chat Completions:**
+**Key Features:**
+- Hardware acceleration: Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel)
+- Multiple backends: llamacpp (GGUF), ONNX, Transformers
+- OpenAI-compatible API
+
+---
+
+## Agent Handlers
+
+LlamaFarm selects an agent handler based on configuration:
+
+- **Simple chat** – direct user/system prompts, suitable for models without tool support.
+- **Structured chat** – uses instructor modes (`tools`, `json`) for models that support function/tool calls.
+- **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
+- **Classifier / Custom** – future handlers for specialized workflows.
+
+Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
+
+## Inline Tools with Dynamic Variables
+
+Models can define tools inline in the config, and these tools support dynamic variable substitution:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: search_docs
+          description: "Search {{company_name | the company}} documentation"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | general}} topics"
+            required:
+              - query
+```
+
+Pass values at request time via the `variables` field:
+
 ```bash
-curl -X POST http://localhost:11540/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "microsoft/phi-2",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 50
-  }'
+curl -X POST .../chat/completions -d '{
+  "messages": [{"role": "user", "content": "Find shipping info"}],
+  "variables": {"company_name": "Acme Corp", "department": "logistics"}
+}'
 ```
 
-**Embeddings:**
-```bash
-curl -X POST http://localhost:11540/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sentence-transformers/all-MiniLM-L6-v2",
-    "input": "Hello world"
-  }'
-```
+See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
 
-**Image Generation:**
-```bash
-curl -X POST http://localhost:11540/v1/images/generations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "a serene mountain lake at sunset",
-    "model": "stabilityai/stable-diffusion-2-1",
-    "size": "512x512"
-  }'
-```
-
-### Supported Model Categories
-
-1. **Text Generation (CausalLM)** – GPT-2, Llama, Mistral, Qwen, Phi
-2. **Embeddings (Encoder)** – BERT, sentence-transformers, BGE, nomic-embed
-3. **Image Generation (Diffusion)** – Stable Diffusion, SDXL, FLUX
-4. **Vision Classification** – ViT, CLIP, DINOv2
-5. **Audio Processing** – Whisper, Wav2Vec2
-6. **Multimodal (Vision-Language)** – BLIP, LLaVA, Florence
-
-### Key Differences: Universal vs Other Runtimes
-
-| Feature | Universal Runtime | Ollama | Lemonade |
-|---------|------------------|--------|----------|
-| **Model Format** | PyTorch (Transformers) | GGUF (llama.cpp) | GGUF (llama.cpp) |
-| **Model Source** | HuggingFace Hub | Ollama library | HuggingFace GGUF |
-| **Model Types** | 6 types (text, image, audio, etc.) | Text only | Text only |
-| **Optimization** | PyTorch native | Quantized CPU/GPU | NPU/GPU accelerated |
-| **Memory Usage** | Higher (full precision) | Lower (quantized) | Lower (quantized) |
-| **Setup** | Auto-download from HF | `ollama pull` | `lemonade-server-dev pull` |
-| **Default Port** | 11540 | 11434 | 11534 |
-| **Best For** | Flexibility, multimodal | CPU speed, ease of use | NPU/GPU acceleration |
-
-### When to Use Universal Runtime
-
-**Choose Universal Runtime when you need:**
-- Access to any HuggingFace model (latest research models, domain-specific fine-tunes)
-- Multimodal capabilities (images, audio, vision)
-- Embedding generation for RAG
-- Custom model configurations (LoRA, adapters)
-
-**Choose Ollama when you need:**
-- Fast CPU inference with quantized models
-- Simplest setup experience
-- Established model library
-
-**Choose Lemonade when you need:**
-- Maximum performance on Apple Silicon
-- NPU/GPU acceleration
-- GGUF model optimization
-
-### Troubleshooting
-
-**Model not found:**
-```bash
-# Models auto-download from HuggingFace on first use
-# Check internet connection and HF_TOKEN for gated models
-export HF_TOKEN=hf_your_token_here
-```
-
-**Out of memory:**
-```bash
-# Use smaller models or force CPU mode
-TRANSFORMERS_FORCE_CPU=1 nx start universal-runtime
-
-# Or reduce batch size in config
-transformers:
-  batch_size: 1
-```
-
-**Slow inference:**
-```bash
-# Ensure GPU is detected
-# Check device selection in logs
-# Consider using GGUF models with Ollama/Lemonade instead
-```
+---
 
 ## Extending Provider Support
 
@@ -570,23 +532,6 @@ To add a new provider enum:
 
 - **Advanced agent handler configuration** – choose handlers per command and dataset.
 - **Fine-tuning pipeline integration** – track status in the roadmap.
-
-## Specialized ML Models
-
-Beyond text generation, the Universal Runtime provides specialized ML capabilities:
-
-| Capability | Endpoint | Use Case |
-|-----------|----------|----------|
-| **OCR** | `POST /v1/ocr` | Extract text from images/PDFs |
-| **Document Extraction** | `POST /v1/documents/extract` | Extract structured data from forms |
-| **Text Classification** | `POST /v1/classify` | Sentiment analysis, routing |
-| **Named Entity Recognition** | `POST /v1/ner` | Extract people, places, organizations |
-| **Reranking** | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| **Anomaly Detection** | `POST /v1/anomaly/*` | Detect outliers in data |
-
-See the detailed guides:
-- [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
-- [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
 
 ## Next Steps
 
