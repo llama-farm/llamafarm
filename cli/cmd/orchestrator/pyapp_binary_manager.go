@@ -130,7 +130,8 @@ func (m *BinaryManager) downloadBinaryFromArtifact(component string) error {
 	platformSuffix := getPlatformSuffix()
 
 	// Build artifact name pattern (matches what pyapp.yml uploads)
-	artifactName := fmt.Sprintf("llamafarm-pyapp-%s", platformSuffix)
+	// Each component has its own artifact: llamafarm-{component}-pyapp-{platform}
+	artifactName := fmt.Sprintf("llamafarm-%s-pyapp-%s", component, platformSuffix)
 
 	utils.LogDebug(fmt.Sprintf("Downloading %s binary from artifact %s (run %s)\n", component, artifactName, runID))
 

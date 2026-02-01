@@ -571,19 +571,34 @@ jobs:
             echo "Using latest PyApp run from branch: $RUN_ID"
           fi
 
-          # Verify the artifact exists for our platform
-          ARTIFACT_NAME="llamafarm-pyapp-${{ matrix.pyapp_os }}"
-          ARTIFACT_COUNT=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" \
-            --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .name" 2>/dev/null | wc -l || echo "0")
+          # Verify all three component artifacts exist for our platform
+          PLATFORM="${{ matrix.pyapp_os }}"
+          COMPONENTS=("server" "rag" "runtime")
+          MISSING_ARTIFACTS=()
 
-          if [ "$ARTIFACT_COUNT" -eq 0 ]; then
-            echo "::error::Artifact $ARTIFACT_NAME not found in run $RUN_ID"
+          for component in "${COMPONENTS[@]}"; do
+            ARTIFACT_NAME="llamafarm-${component}-pyapp-${PLATFORM}"
+            ARTIFACT_COUNT=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" \
+              --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .name" 2>/dev/null | wc -l || echo "0")
+
+            if [ "$ARTIFACT_COUNT" -eq 0 ]; then
+              MISSING_ARTIFACTS+=("$ARTIFACT_NAME")
+            else
+              echo "✓ Found artifact: $ARTIFACT_NAME"
+            fi
+          done
+
+          if [ ${#MISSING_ARTIFACTS[@]} -gt 0 ]; then
+            echo "::error::Missing PyApp artifacts for platform $PLATFORM in run $RUN_ID:"
+            for artifact in "${MISSING_ARTIFACTS[@]}"; do
+              echo "  - $artifact"
+            done
             exit 1
           fi
 
-          echo "✓ PyApp artifact verified: $ARTIFACT_NAME (run $RUN_ID)"
+          echo "✓ All PyApp artifacts verified for platform $PLATFORM (run $RUN_ID)"
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Configure binary deploy mode
