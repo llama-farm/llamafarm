@@ -1,0 +1,279 @@
+# Multi-Node Agent Configuration Example
+# 
+# This example shows how to configure:
+# - Multiple agents with different capabilities
+# - Node mesh for distributed routing
+# - Semantic routing between agents and nodes
+#
+# Use Cases:
+# 1. Simple: Route between agents on the SAME device
+#    - Research agent for deep analysis
+#    - Quick agent for fast responses
+#    - Code agent for programming tasks
+#
+# 2. Complex: Route across NODES in a mesh
+#    - Mac with GPU for vision tasks
+#    - Jetson for edge inference
+#    - Cloud for heavy compute
+
+version: v1
+name: multi-node-agents
+namespace: llamafarm
+
+# ============================================================
+# Runtime Configuration
+# ============================================================
+runtime:
+  default_model: quick
+  models:
+    # Fast local model for quick responses
+    - name: quick
+      provider: ollama
+      model: qwen3:1.7b
+      description: Fast local model for quick responses
+      keep_loaded: true
+    
+    # Larger model for detailed analysis
+    - name: research
+      provider: ollama
+      model: qwen3:14b
+      description: Larger model for deep research and analysis
+      prompts: [research_prompt]
+    
+    # Code-focused model
+    - name: code
+      provider: ollama
+      model: qwen3-coder:7b
+      description: Specialized model for code generation and review
+      prompts: [code_prompt]
+    
+    # Vision model on Universal Runtime
+    - name: vision
+      provider: universal
+      model: llava:7b
+      description: Vision-language model for image understanding
+
+# ============================================================
+# Prompt Sets
+# ============================================================
+prompts:
+  - name: research_prompt
+    messages:
+      - role: system
+        content: |
+          You are a research assistant specializing in deep analysis.
+          Take your time to provide thorough, well-reasoned responses.
+          Cite sources when possible and consider multiple perspectives.
+  
+  - name: code_prompt
+    messages:
+      - role: system
+        content: |
+          You are a senior software engineer with expertise in:
+          - Python, TypeScript, Go, Rust
+          - System design and architecture
+          - Code review and best practices
+          
+          Write clean, tested, production-ready code.
+
+# ============================================================
+# Agents Configuration
+# ============================================================
+agents:
+  enabled: true
+  default_agent: router
+  session_storage: sessions.json
+  idle_timeout_sec: 3600
+  
+  definitions:
+    # Main router agent - decides where to send requests
+    - name: router
+      description: Routes incoming requests to the best agent or capability
+      model: quick
+      capabilities:
+        - intent-routing
+        - task-delegation
+      can_spawn: true
+      spawn_allowed_agents: [research, code, quick-answer]
+      max_iterations: 10
+      system_prompt: |
+        You are a routing agent. Analyze incoming requests and decide:
+        1. If it's a quick factual question → handle directly
+        2. If it requires research → spawn research agent
+        3. If it's a code task → spawn code agent
+        4. If it needs specific hardware → route to appropriate node
+    
+    # Research agent for deep analysis
+    - name: research
+      description: Deep research and analysis with memory
+      model: research
+      capabilities:
+        - research
+        - analysis
+        - summarization
+        - fact-checking
+      can_spawn: false
+      max_iterations: 50
+      memory:
+        enabled: true
+        max_short_term: 200
+        max_long_term: 2000
+        storage_path: memory/research_agent.json
+    
+    # Code agent for programming tasks
+    - name: code
+      description: Code generation, review, and debugging
+      model: code
+      capabilities:
+        - code-generation
+        - code-review
+        - debugging
+        - refactoring
+        - testing
+      can_spawn: false
+      max_iterations: 100
+      tools:
+        - type: function
+          name: run_tests
+          description: Run test suite for the current project
+          parameters:
+            type: object
+            properties:
+              test_pattern:
+                type: string
+                description: Pattern to match test files
+    
+    # Quick answer agent for simple queries
+    - name: quick-answer
+      description: Fast responses for simple queries
+      model: quick
+      capabilities:
+        - quick-answer
+        - calculations
+        - conversions
+        - definitions
+      max_iterations: 5
+
+# ============================================================
+# Nodes Configuration
+# ============================================================
+nodes:
+  enabled: true
+  
+  # This node's identity
+  self:
+    node_id: macbook-pro
+    display_name: MacBook Pro M3
+    capabilities:
+      - name: text-generation
+        description: General text generation and chat
+        examples:
+          - "Write a story about..."
+          - "Explain the concept of..."
+        handler: model:quick
+      
+      - name: code-generation
+        description: Generate, review, and debug code
+        examples:
+          - "Write a Python function that..."
+          - "Review this code for bugs"
+        handler: agent:code
+      
+      - name: research
+        description: Deep research and analysis
+        examples:
+          - "Research the history of..."
+          - "Analyze the implications of..."
+        handler: agent:research
+  
+  # Peer nodes in the mesh
+  peers:
+    # Dell workstation with NVIDIA GPU
+    - name: dell-gpu
+      url: http://192.168.1.100:14345
+      auth:
+        type: bearer
+        token: ${env:DELL_NODE_TOKEN}
+      capabilities:
+        - vision
+        - image-generation
+        - video-processing
+      priority: 10
+      hardware:
+        device_type: linux
+        accelerator: cuda
+        memory_gb: 64
+    
+    # Jetson for edge inference
+    - name: jetson-edge
+      url: http://192.168.1.101:14345
+      auth:
+        type: none
+      capabilities:
+        - edge-inference
+        - sensor-processing
+        - real-time-detection
+      priority: 5
+      hardware:
+        device_type: jetson
+        accelerator: cuda
+        memory_gb: 8
+        power_mode: plugged
+    
+    # Raspberry Pi for lightweight tasks
+    - name: rpi-monitor
+      url: http://192.168.1.102:14345
+      capabilities:
+        - monitoring
+        - data-collection
+        - alerts
+      priority: 1
+      hardware:
+        device_type: rpi
+        accelerator: none
+        memory_gb: 8
+        power_mode: plugged
+  
+  # Discovery settings
+  discovery:
+    mdns: true
+    gossip_interval_sec: 30
+    stale_threshold_sec: 120
+
+# ============================================================
+# Router Configuration
+# ============================================================
+router:
+  enabled: true
+  
+  embedding:
+    # Default LlamaFarm embedding model (same as RAG)
+    model: sentence-transformers/all-MiniLM-L6-v2
+    dimension: 384
+    backend: universal  # Use Universal Runtime for embeddings
+  
+  matching:
+    min_score: 0.5       # Minimum similarity to consider a match
+    local_bias: 0.1      # Slight preference for local execution
+    max_hops: 3          # Maximum routing hops
+  
+  learning:
+    enabled: true
+    degradation_threshold: 0.7  # Quality below this triggers alerts
+
+# ============================================================
+# RAG Configuration (for agent memory)
+# ============================================================
+rag:
+  default_database: agent_memory
+  databases:
+    - name: agent_memory
+      type: chroma
+      config:
+        persist_directory: ./data/agent_memory
+        collection_name: memories
+      embedding_strategies:
+        - name: semantic
+          type: UniversalEmbedder
+          config:
+            model: nomic-embed-text

@@ -21,18 +21,28 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingBackend(Enum):
     """Available embedding backends."""
+    UNIVERSAL = "universal"  # LlamaFarm Universal Runtime (preferred)
     OLLAMA = "ollama"
-    LLAMAFARM = "llamafarm"
+    LLAMAFARM = "llamafarm"  # Cloud API
 
 
 @dataclass
 class EmbeddingConfig:
-    """Configuration for embedding engine."""
-    backend: EmbeddingBackend = EmbeddingBackend.OLLAMA
-    model: str = "nomic-embed-text"
-    dimension: int = 768
+    """Configuration for embedding engine.
+    
+    Default model: sentence-transformers/all-MiniLM-L6-v2 (384 dims)
+    This matches LlamaFarm's default RAG configuration.
+    """
+    backend: EmbeddingBackend = EmbeddingBackend.UNIVERSAL
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    dimension: int = 384
+    # Universal Runtime (local LlamaFarm) - default port 14345
+    universal_host: str = "localhost"
+    universal_port: int = 14345
+    # Ollama fallback
     ollama_host: str = "localhost"
     ollama_port: int = 11434
+    # Cloud fallback
     llamafarm_url: str = "https://llamafarm.dev/api"
     llamafarm_api_key: Optional[str] = None
     timeout: float = 30.0
@@ -147,6 +157,117 @@ class OllamaProvider(EmbeddingProvider):
         return np.stack(results)
 
 
+class UniversalRuntimeProvider(EmbeddingProvider):
+    """
+    LlamaFarm Universal Runtime embedding provider.
+    
+    Uses the local Universal Runtime's OpenAI-compatible /v1/embeddings endpoint.
+    This is the preferred provider as it:
+    - Runs locally (no API key needed)
+    - Uses the same infrastructure as inference
+    - Supports any HuggingFace embedding model
+    - Provides consistent performance
+    """
+
+    def __init__(self, config: EmbeddingConfig):
+        self.config = config
+        self.base_url = f"http://{config.universal_host}:{config.universal_port}"
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.config.timeout)
+            )
+        return self._session
+
+    async def close(self):
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def health_check(self) -> bool:
+        """Check if Universal Runtime is running."""
+        try:
+            session = await self._get_session()
+            async with session.get(f"{self.base_url}/health") as resp:
+                if resp.status != 200:
+                    return False
+                data = await resp.json()
+                return data.get("status") == "healthy"
+        except Exception as e:
+            logger.debug(f"Universal Runtime health check failed: {e}")
+            return False
+
+    async def embed(self, text: str) -> np.ndarray:
+        """Generate embedding using Universal Runtime's OpenAI-compatible API."""
+        session = await self._get_session()
+
+        payload = {
+            "model": self.config.model,
+            "input": text
+        }
+
+        for attempt in range(self.config.max_retries):
+            try:
+                async with session.post(
+                    f"{self.base_url}/v1/embeddings",
+                    json=payload
+                ) as resp:
+                    if resp.status != 200:
+                        error = await resp.text()
+                        raise RuntimeError(f"Universal Runtime error: {error}")
+
+                    data = await resp.json()
+                    # OpenAI-compatible response format
+                    embedding_data = data["data"][0]["embedding"]
+                    embedding = np.array(embedding_data, dtype=np.float32)
+
+                    if len(embedding) != self.config.dimension:
+                        logger.warning(
+                            f"Unexpected embedding dimension: {len(embedding)}, "
+                            f"expected {self.config.dimension}"
+                        )
+
+                    return embedding
+
+            except aiohttp.ClientError as e:
+                if attempt < self.config.max_retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                raise RuntimeError(f"Universal Runtime request failed: {e}")
+
+        raise RuntimeError("Max retries exceeded")
+
+    async def embed_batch(self, texts: List[str]) -> np.ndarray:
+        """Generate embeddings for multiple texts (batched API call)."""
+        session = await self._get_session()
+
+        payload = {
+            "model": self.config.model,
+            "input": texts  # OpenAI API supports batch input
+        }
+
+        try:
+            async with session.post(
+                f"{self.base_url}/v1/embeddings",
+                json=payload
+            ) as resp:
+                if resp.status != 200:
+                    error = await resp.text()
+                    raise RuntimeError(f"Universal Runtime error: {error}")
+
+                data = await resp.json()
+                embeddings = [d["embedding"] for d in data["data"]]
+                return np.array(embeddings, dtype=np.float32)
+
+        except aiohttp.ClientError as e:
+            # Fallback to individual requests
+            logger.warning(f"Batch embedding failed, falling back to individual: {e}")
+            tasks = [self.embed(text) for text in texts]
+            results = await asyncio.gather(*tasks)
+            return np.stack(results)
+
+
 class LlamaFarmProvider(EmbeddingProvider):
     """LlamaFarm cloud embedding provider."""
 
@@ -258,23 +379,69 @@ class EmbeddingEngine:
         self._cache_max_size = 1000
 
     async def initialize(self) -> None:
-        """Initialize the embedding engine, selecting best available backend."""
+        """Initialize the embedding engine, selecting best available backend.
+        
+        If a specific backend is configured, use that. Otherwise:
+        Priority order:
+        1. Universal Runtime (local LlamaFarm) - preferred for consistency
+        2. Ollama (local) - fallback, no API key needed
+        3. LlamaFarm Cloud - remote fallback, requires API key
+        """
         if self._initialized:
             return
 
-        # Try Ollama first (local, no API key needed)
+        # If specific backend is configured, use it directly
+        if self.config.backend == EmbeddingBackend.UNIVERSAL:
+            universal = UniversalRuntimeProvider(self.config)
+            if await universal.health_check():
+                logger.info("Using Universal Runtime backend for embeddings (configured)")
+                self._provider = universal
+                self._initialized = True
+                return
+            # Fall through to auto-detect if Universal not available
+        
+        if self.config.backend == EmbeddingBackend.OLLAMA:
+            ollama = OllamaProvider(self.config)
+            if await ollama.health_check():
+                logger.info("Using Ollama backend for embeddings (configured)")
+                self._provider = ollama
+                self._initialized = True
+                return
+            # Fall through to auto-detect if Ollama not available
+        
+        if self.config.backend == EmbeddingBackend.LLAMAFARM:
+            try:
+                llamafarm = LlamaFarmProvider(self.config)
+                if await llamafarm.health_check():
+                    logger.info("Using LlamaFarm Cloud backend for embeddings (configured)")
+                    self._provider = llamafarm
+                    self._initialized = True
+                    return
+            except ValueError:
+                pass
+            # Fall through to auto-detect
+
+        # Auto-detect: Try Universal Runtime first (local LlamaFarm infrastructure)
+        universal = UniversalRuntimeProvider(self.config)
+        if await universal.health_check():
+            logger.info("Using Universal Runtime backend for embeddings (auto-detected)")
+            self._provider = universal
+            self._initialized = True
+            return
+
+        # Auto-detect: Fallback to Ollama (local, no API key needed)
         ollama = OllamaProvider(self.config)
         if await ollama.health_check():
-            logger.info("Using Ollama backend for embeddings")
+            logger.info("Using Ollama backend for embeddings (auto-detected)")
             self._provider = ollama
             self._initialized = True
             return
 
-        # Fallback to LlamaFarm
+        # Auto-detect: Last resort - LlamaFarm Cloud
         try:
             llamafarm = LlamaFarmProvider(self.config)
             if await llamafarm.health_check():
-                logger.info("Using LlamaFarm backend for embeddings")
+                logger.info("Using LlamaFarm Cloud backend for embeddings (auto-detected)")
                 self._provider = llamafarm
                 self._initialized = True
                 return
@@ -283,8 +450,9 @@ class EmbeddingEngine:
 
         raise RuntimeError(
             "No embedding backend available. Either:\n"
-            "1. Install and run Ollama with: ollama pull nomic-embed-text\n"
-            "2. Set LLAMAFARM_API_KEY environment variable"
+            "1. Start Universal Runtime: cd runtimes/universal && uv run python server.py\n"
+            "2. Install and run Ollama with: ollama pull nomic-embed-text\n"
+            "3. Set LLAMAFARM_API_KEY environment variable for cloud fallback"
         )
 
     async def close(self) -> None:
@@ -412,7 +580,9 @@ class EmbeddingEngine:
     @property
     def backend(self) -> Optional[str]:
         """Return current backend name."""
-        if isinstance(self._provider, OllamaProvider):
+        if isinstance(self._provider, UniversalRuntimeProvider):
+            return "universal"
+        elif isinstance(self._provider, OllamaProvider):
             return "ollama"
         elif isinstance(self._provider, LlamaFarmProvider):
             return "llamafarm"

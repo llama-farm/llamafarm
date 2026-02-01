@@ -539,6 +539,161 @@ properties:
               Lower values increase sensitivity but may produce false positives.
             default: 0.4
 
+  agents:
+    type: object
+    description: |
+      Agent configuration for autonomous agents and multi-agent orchestration.
+      Agents can be defined in config or spawned dynamically at runtime.
+    properties:
+      enabled:
+        type: boolean
+        description: Enable agent subsystem
+        default: true
+      default_agent:
+        type: string
+        description: Default agent to use for requests without explicit agent specification
+        pattern: "^[a-z][a-z0-9_-]*$"
+      session_storage:
+        type: string
+        description: Path to session storage file (JSON). Relative to config directory.
+        default: sessions.json
+      idle_timeout_sec:
+        type: integer
+        description: Seconds of inactivity before marking session idle
+        default: 3600
+        minimum: 60
+      definitions:
+        type: array
+        description: List of agent definitions
+        items:
+          $ref: "#/definitions/AgentDefinition"
+        default: []
+
+  nodes:
+    type: object
+    description: |
+      Node configuration for multi-node mesh networking and semantic routing.
+      Defines nodes in the cluster and how to connect to them.
+    properties:
+      enabled:
+        type: boolean
+        description: Enable multi-node routing
+        default: true
+      self:
+        type: object
+        description: Configuration for this node's identity in the mesh
+        properties:
+          node_id:
+            type: string
+            description: Unique identifier for this node. Auto-generated if not specified.
+            pattern: "^[a-z][a-z0-9_-]*$"
+          display_name:
+            type: string
+            description: Human-readable name for this node
+          capabilities:
+            type: array
+            description: List of capabilities this node advertises
+            items:
+              $ref: "#/definitions/Capability"
+            default: []
+      peers:
+        type: array
+        description: List of peer nodes to connect to
+        items:
+          $ref: "#/definitions/NodePeer"
+        default: []
+      discovery:
+        type: object
+        description: Node discovery configuration
+        properties:
+          mdns:
+            type: boolean
+            description: Enable mDNS/Bonjour discovery for local network nodes
+            default: true
+          gossip_interval_sec:
+            type: integer
+            description: Interval between gossip announcements
+            default: 30
+            minimum: 5
+          stale_threshold_sec:
+            type: integer
+            description: Time after which a node is considered stale
+            default: 120
+            minimum: 30
+
+  router:
+    type: object
+    description: |
+      Semantic router configuration for intent-based routing.
+      Routes requests to the best-matching capability across local and remote nodes.
+    properties:
+      enabled:
+        type: boolean
+        description: Enable semantic routing
+        default: true
+      embedding:
+        type: object
+        description: Embedding configuration for semantic matching
+        properties:
+          model:
+            type: string
+            description: |
+              Embedding model for semantic routing. Supports:
+              - nomic-embed-text (768d, default)
+              - Any model available on Universal Runtime
+            default: nomic-embed-text
+          dimension:
+            type: integer
+            description: Embedding dimension (must match model)
+            default: 768
+          backend:
+            type: string
+            enum: [universal, ollama, llamafarm]
+            description: |
+              Embedding backend:
+              - universal: Local Universal Runtime (preferred)
+              - ollama: Local Ollama instance
+              - llamafarm: LlamaFarm cloud API
+            default: universal
+      matching:
+        type: object
+        description: Matching configuration
+        properties:
+          min_score:
+            type: number
+            description: Minimum similarity score to consider a match
+            default: 0.5
+            minimum: 0.0
+            maximum: 1.0
+          local_bias:
+            type: number
+            description: |
+              Bias towards local capabilities (0-1).
+              Higher values prefer local execution over remote routing.
+            default: 0.1
+            minimum: 0.0
+            maximum: 1.0
+          max_hops:
+            type: integer
+            description: Maximum number of hops for remote routing
+            default: 3
+            minimum: 1
+            maximum: 10
+      learning:
+        type: object
+        description: Route learning and quality tracking
+        properties:
+          enabled:
+            type: boolean
+            description: Enable route quality tracking
+            default: true
+          degradation_threshold:
+            type: number
+            description: Quality threshold below which a route is considered degraded
+            default: 0.7
+            minimum: 0.0
+            maximum: 1.0
+
 definitions:
   Tool:
     type: object
@@ -562,3 +717,211 @@ definitions:
         type: object
         description: Parameters of the tool
         additionalProperties: true
+
+  AgentDefinition:
+    title: AgentDefinition
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        description: Unique agent identifier
+        pattern: "^[a-z][a-z0-9_-]*$"
+      description:
+        type: string
+        description: Human-readable description of the agent's purpose
+      model:
+        type: string
+        description: |
+          Reference to a model name in runtime.models[].
+          If not specified, uses the default model.
+      system_prompt:
+        type: string
+        description: |
+          Custom system prompt for this agent.
+          Can reference prompt sets using ${prompts.prompt_name} syntax.
+      prompts:
+        type: array
+        description: List of prompt set names to use for this agent
+        items:
+          type: string
+        default: []
+      tools:
+        type: array
+        description: List of tools available to this agent
+        items:
+          $ref: "#/definitions/Tool"
+        default: []
+      mcp_servers:
+        type: array
+        description: List of MCP server names available to this agent
+        items:
+          type: string
+        default: []
+      capabilities:
+        type: array
+        description: |
+          Capabilities this agent provides.
+          Used for semantic routing to determine which agent handles a request.
+        items:
+          type: string
+        default: []
+      can_spawn:
+        type: boolean
+        description: |
+          Whether this agent can spawn sub-agents.
+          When true, the agent can create child sessions for task delegation.
+        default: false
+      spawn_allowed_agents:
+        type: array
+        description: |
+          List of agent names this agent is allowed to spawn.
+          Empty list means all agents. Only used when can_spawn is true.
+        items:
+          type: string
+        default: []
+      max_iterations:
+        type: integer
+        description: Maximum iterations for autonomous task loops
+        default: 100
+        minimum: 1
+        maximum: 10000
+      memory:
+        type: object
+        description: Memory configuration for this agent
+        properties:
+          enabled:
+            type: boolean
+            description: Enable memory persistence
+            default: true
+          max_short_term:
+            type: integer
+            description: Maximum short-term memory entries
+            default: 100
+          max_long_term:
+            type: integer
+            description: Maximum long-term memory entries
+            default: 1000
+          storage_path:
+            type: string
+            description: |
+              Path to memory storage file. Relative to config directory.
+              Uses agent name if not specified.
+
+  Capability:
+    title: Capability
+    type: object
+    required:
+      - name
+      - description
+    properties:
+      name:
+        type: string
+        description: Capability identifier
+        pattern: "^[a-z][a-z0-9_-]*$"
+      description:
+        type: string
+        description: |
+          Semantic description of the capability.
+          This is used for embedding-based matching, so be descriptive.
+      examples:
+        type: array
+        description: Example queries that match this capability
+        items:
+          type: string
+        default: []
+      handler:
+        type: string
+        description: |
+          Handler for this capability:
+          - agent:<agent_name> - Route to an agent
+          - model:<model_name> - Route to a specific model
+          - mcp:<server>:<tool> - Route to an MCP tool
+          - url:<endpoint> - Route to an HTTP endpoint
+        pattern: "^(agent|model|mcp|url):.+"
+      models:
+        type: array
+        description: List of required models for this capability
+        items:
+          type: string
+        default: []
+      latency_hint:
+        type: string
+        enum: [fast, normal, slow]
+        description: Expected latency hint for routing decisions
+        default: normal
+
+  NodePeer:
+    title: NodePeer
+    type: object
+    required:
+      - name
+      - url
+    properties:
+      name:
+        type: string
+        description: Human-readable name for this peer
+        pattern: "^[a-z][a-z0-9_-]*$"
+      url:
+        type: string
+        description: |
+          URL to connect to this peer.
+          Supports http://, https://, or ssh:// protocols.
+        example: http://192.168.1.100:14345
+      auth:
+        type: object
+        description: Authentication for this peer
+        properties:
+          type:
+            type: string
+            enum: [none, bearer, basic, ssh_key]
+            description: Authentication type
+            default: none
+          token:
+            type: string
+            description: Bearer token (for type=bearer)
+          username:
+            type: string
+            description: Username (for type=basic)
+          password:
+            type: string
+            description: Password (for type=basic)
+          key_path:
+            type: string
+            description: Path to SSH key (for type=ssh_key)
+      capabilities:
+        type: array
+        description: |
+          Known capabilities of this peer.
+          If not specified, capabilities are discovered via gossip.
+        items:
+          type: string
+        default: []
+      priority:
+        type: integer
+        description: |
+          Priority for this peer (higher = preferred).
+          Used to break ties when multiple peers can handle a request.
+        default: 0
+        minimum: -100
+        maximum: 100
+      hardware:
+        type: object
+        description: Hardware profile of this peer (for smart routing)
+        properties:
+          device_type:
+            type: string
+            enum: [mac, linux, windows, jetson, rpi, esp32, cloud]
+            description: Device type
+          accelerator:
+            type: string
+            enum: [none, cuda, mps, tpu, npu]
+            description: Hardware accelerator
+          memory_gb:
+            type: number
+            description: Available memory in GB
+          power_mode:
+            type: string
+            enum: [plugged, battery, constrained]
+            description: Power mode

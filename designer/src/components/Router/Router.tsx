@@ -5,7 +5,7 @@ import FontIcon from '../../common/FontIcon'
 import RouteResult from './RouteResult'
 import RouterDemo from './RouterDemo'
 import NodeCard from './NodeCard'
-import { useActiveProject } from '../../hooks/useActiveProject'
+
 import { useToast } from '../ui/toast'
 
 interface RouteResponse {
@@ -34,7 +34,6 @@ const Router = () => {
   const [isLoadingCapabilities, setIsLoadingCapabilities] = useState(false)
   const [healthStatus, setHealthStatus] = useState<'healthy' | 'unhealthy' | 'unknown'>('unknown')
   
-  const activeProject = useActiveProject()
   const { toast } = useToast()
 
   // Check health on mount
@@ -66,16 +65,15 @@ const Router = () => {
         setCapabilities(data)
       } else {
         toast({
-          title: 'Failed to load capabilities',
-          description: 'Could not fetch registered capabilities from the router.',
+          message: 'Failed to load capabilities',
           variant: 'destructive',
         })
       }
     } catch (error) {
       console.error('Failed to load capabilities:', error)
       toast({
-        title: 'Error',
-        description: 'Failed to connect to router service.',
+        message: 'Error connecting to router',
+        
         variant: 'destructive',
       })
     } finally {
@@ -86,8 +84,8 @@ const Router = () => {
   const handleRoute = async () => {
     if (!intent.trim()) {
       toast({
-        title: 'Empty intent',
-        description: 'Please enter an intent to route.',
+        message: 'Please enter an intent to route',
+        
         variant: 'destructive',
       })
       return
@@ -107,18 +105,18 @@ const Router = () => {
         const data = await response.json()
         setResult(data)
       } else {
-        const errorData = await response.json().catch(() => ({}))
+        await response.json().catch(() => ({}))
         toast({
-          title: 'Routing failed',
-          description: errorData.detail || 'Failed to route the intent.',
+          message: 'Routing failed',
+          
           variant: 'destructive',
         })
       }
     } catch (error) {
       console.error('Routing error:', error)
       toast({
-        title: 'Error',
-        description: 'Failed to connect to router service.',
+        message: 'Error connecting to router',
+        
         variant: 'destructive',
       })
     } finally {
