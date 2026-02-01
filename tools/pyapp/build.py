@@ -62,6 +62,13 @@ PYAPP_SOURCE_URL = (
 #   wheel_packages  [pkg_name] + root_symlink names
 #   force_include   derived from data_dirs + config presence
 #   bundled_packages derived from root_symlinks via _INTERNAL_PACKAGES
+#   inner_packages  auto-discovered from __init__.py presence + extra_packages
+
+# Directories to exclude from inner-package auto-discovery.
+_EXCLUDE_DIRS = frozenset({
+    "tests", "test", "__pycache__", "scripts", "docs", "data",
+    "samples", "htmlcov", "dist", "control",
+})
 
 # Maps root_symlink names to (PyPI name, source dir relative to PROJECT_ROOT).
 # Only packages with their own pyproject.toml (external deps to merge) are listed.
@@ -72,14 +79,31 @@ _INTERNAL_PACKAGES: dict[str, tuple[str, str]] = {
     # observability has no external deps — no pyproject.toml to read
 }
 
+
+def _discover_inner_packages(source_dir: str, data_dirs: list[str]) -> list[str]:
+    """Auto-discover inner packages by scanning for __init__.py in source_dir.
+
+    Returns sorted list of immediate subdirectory names that are Python
+    packages (contain __init__.py), excluding data directories, test
+    directories, and other non-package dirs.
+    """
+    src = PROJECT_ROOT / source_dir
+    exclude = _EXCLUDE_DIRS | set(data_dirs)
+    packages = []
+    for child in sorted(src.iterdir()):
+        if not child.is_dir() or child.name in exclude or child.name.startswith("."):
+            continue
+        if (child / "__init__.py").exists():
+            packages.append(child.name)
+    return packages
+
+
 _COMPONENT_SPECS: dict[str, dict] = {
     "server": {
         "source_dir": "server",
         "modules": ["main.py"],
         "data_dirs": ["seeds"],
-        "inner_packages": [
-            "api", "core", "agents", "services", "context_providers", "tools",
-        ],
+        "extra_packages": ["tools"],  # namespace package (no __init__.py)
         "root_symlinks": [
             ("config", "config"),
             ("llamafarm_common", "common/llamafarm_common"),
@@ -93,9 +117,6 @@ _COMPONENT_SPECS: dict[str, dict] = {
     "rag": {
         "source_dir": "rag",
         "modules": ["main.py", "celery_app.py", "api.py"],
-        "inner_packages": [
-            "core", "components", "tasks", "utils", "cli",
-        ],
         "root_symlinks": [
             ("config", "config"),
             ("llamafarm_common", "common/llamafarm_common"),
@@ -111,9 +132,6 @@ _COMPONENT_SPECS: dict[str, dict] = {
         "pkg_name": "runtime",  # differs from component name
         "modules": ["server.py", "download_model.py", "state.py"],
         "data_dirs": ["config"],
-        "inner_packages": [
-            "models", "utils", "core", "routers", "api_types", "services",
-        ],
         "root_symlinks": [
             ("llamafarm_common", "common/llamafarm_common"),
             ("llamafarm_llama", "packages/llamafarm-llama/src/llamafarm_llama"),
@@ -127,9 +145,17 @@ _COMPONENT_SPECS: dict[str, dict] = {
 def _resolve_config(name: str, spec: dict) -> dict:
     """Derive the full component configuration from a minimal spec."""
     pkg_name = spec.get("pkg_name", name)
+    source_dir = spec["source_dir"]
+    data_dirs = spec.get("data_dirs", [])
     symlinks = spec.get("root_symlinks", [])
     symlink_names = [n for n, _ in symlinks]
     has_config = "config" in symlink_names
+
+    # Auto-discover inner packages + any manually listed extras
+    inner_packages = _discover_inner_packages(source_dir, data_dirs)
+    inner_packages += [
+        p for p in spec.get("extra_packages", []) if p not in inner_packages
+    ]
 
     # Derive bundled_packages from root_symlinks
     bundled = {}
@@ -140,7 +166,7 @@ def _resolve_config(name: str, spec: dict) -> dict:
 
     # Derive force_include from data_dirs + config presence
     force_include = {}
-    for data_dir in spec.get("data_dirs", []):
+    for data_dir in data_dirs:
         key = f"{pkg_name}/{data_dir}"
         force_include[key] = key
     if has_config:
@@ -149,13 +175,13 @@ def _resolve_config(name: str, spec: dict) -> dict:
         force_include["config/schema.deref.yaml"] = "config/schema.deref.yaml"
 
     return {
-        "source_dir": spec["source_dir"],
+        "source_dir": source_dir,
         "pkg_name": pkg_name,
         "binary_prefix": f"llamafarm-{pkg_name}",
         "exec_module": pkg_name,
         "modules": spec["modules"],
-        "data_dirs": spec.get("data_dirs", []),
-        "inner_packages": spec["inner_packages"],
+        "data_dirs": data_dirs,
+        "inner_packages": inner_packages,
         "root_symlinks": symlinks,
         "needs_config": has_config,
         "pip_extra_args": spec.get("pip_extra_args", ""),
