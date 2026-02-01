@@ -309,3 +309,180 @@ async def trigger_announcement():
     await _gossip.announce()
     
     return {"status": "announced"}
+
+
+# ============================================================
+# Learning & Quality Endpoints
+# ============================================================
+
+class RouteFeedbackRequest(BaseModel):
+    """Request to record route feedback."""
+    route_id: str = Field(..., description="Capability/route ID")
+    success: bool = Field(..., description="Whether the route was successful")
+    latency_ms: float = Field(0.0, ge=0, description="Request latency in ms")
+    error_type: Optional[str] = Field(None, description="Error type if failed")
+
+
+class RouteQualityResponse(BaseModel):
+    """Response with route quality metrics."""
+    route_id: str
+    total_requests: int
+    successful_requests: int
+    failed_requests: int
+    success_rate: float
+    avg_latency_ms: float
+    p95_latency_ms: float
+    quality_score: float
+
+
+class LearningStatsResponse(BaseModel):
+    """Learning subsystem statistics."""
+    routes_tracked: int
+    total_feedback: int
+    avg_quality_score: float
+    degraded_routes: int
+    total_requests: int
+    total_failures: int
+
+
+# Global learner reference (set by service)
+_learner = None
+
+
+def set_route_learner(learner):
+    """Set the route learner reference (called from service)."""
+    global _learner
+    _learner = learner
+
+
+@router.post("/feedback")
+async def record_route_feedback(request: RouteFeedbackRequest):
+    """
+    Record feedback for a routing decision.
+    
+    Call this after a routed request completes to improve future routing.
+    """
+    if not _learner:
+        # Try to get learner from service module
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    if request.success:
+        learner.record_success(
+            route_id=request.route_id,
+            latency_ms=request.latency_ms
+        )
+    else:
+        learner.record_failure(
+            route_id=request.route_id,
+            latency_ms=request.latency_ms,
+            error_type=request.error_type
+        )
+    
+    return {
+        "status": "recorded",
+        "route_id": request.route_id,
+        "success": request.success
+    }
+
+
+@router.get("/quality/{route_id}", response_model=RouteQualityResponse)
+async def get_route_quality(route_id: str):
+    """Get quality metrics for a specific route."""
+    if not _learner:
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    quality = learner.get_quality(route_id)
+    if not quality:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No quality data for route: {route_id}"
+        )
+    
+    return RouteQualityResponse(
+        route_id=quality.route_id,
+        total_requests=quality.total_requests,
+        successful_requests=quality.successful_requests,
+        failed_requests=quality.failed_requests,
+        success_rate=quality.success_rate(),
+        avg_latency_ms=quality.avg_latency_ms,
+        p95_latency_ms=quality.p95_latency_ms,
+        quality_score=quality.quality_score
+    )
+
+
+@router.get("/quality", response_model=List[RouteQualityResponse])
+async def get_all_route_quality():
+    """Get quality metrics for all tracked routes."""
+    if not _learner:
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    qualities = learner.get_all_quality()
+    
+    return [
+        RouteQualityResponse(
+            route_id=q.route_id,
+            total_requests=q.total_requests,
+            successful_requests=q.successful_requests,
+            failed_requests=q.failed_requests,
+            success_rate=q.success_rate(),
+            avg_latency_ms=q.avg_latency_ms,
+            p95_latency_ms=q.p95_latency_ms,
+            quality_score=q.quality_score
+        )
+        for q in qualities.values()
+    ]
+
+
+@router.get("/learning/stats", response_model=LearningStatsResponse)
+async def get_learning_stats():
+    """Get learning subsystem statistics."""
+    if not _learner:
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    stats = learner.stats()
+    
+    return LearningStatsResponse(**stats)
+
+
+@router.get("/learning/degraded")
+async def get_degraded_routes(threshold: float = 0.7):
+    """Get routes with quality below threshold."""
+    if not _learner:
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    degraded = learner.get_degraded_routes(threshold)
+    
+    return {
+        "threshold": threshold,
+        "degraded_routes": degraded,
+        "count": len(degraded)
+    }
+
+
+@router.post("/learning/reset/{route_id}")
+async def reset_route_quality(route_id: str):
+    """Reset quality metrics for a route."""
+    if not _learner:
+        from .learning import get_route_learner
+        learner = get_route_learner()
+    else:
+        learner = _learner
+    
+    learner.reset_route(route_id)
+    
+    return {"status": "reset", "route_id": route_id}

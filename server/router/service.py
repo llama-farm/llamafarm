@@ -19,6 +19,7 @@ from .matcher import CapabilityMatcher, Capability
 from .gradient import GradientTable
 from .gossip import GossipProtocol, CapabilityInfo
 from .discovery import PeerDiscovery
+from .learning import RouteLearner, get_route_learner
 from .api import init_router_state
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,7 @@ class RouterService:
         self.matcher: Optional[CapabilityMatcher] = None
         self.gossip: Optional[GossipProtocol] = None
         self.discovery: Optional[PeerDiscovery] = None
+        self.learner: Optional[RouteLearner] = None
         
         # State
         self.local_capabilities: List[Capability] = []
@@ -127,7 +129,11 @@ class RouterService:
             await self.discovery.start()
             logger.info("Peer discovery started")
         
-        # 6. Start maintenance task
+        # 6. Initialize route learner
+        self.learner = get_route_learner()
+        logger.info("Route learner initialized")
+        
+        # 7. Start maintenance task
         self._maintenance_task = asyncio.create_task(self._maintenance_loop())
         
         # 7. Initialize API state
@@ -265,10 +271,70 @@ class RouterService:
                     if removed > 0:
                         logger.debug(f"Pruned {removed} expired gradient entries")
                 
+                # Save learner state periodically
+                if self.learner:
+                    self.learner.save()
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Maintenance task error: {e}")
+    
+    def record_route_success(
+        self,
+        route_id: str,
+        latency_ms: float,
+        metadata: Optional[dict] = None
+    ) -> None:
+        """
+        Record a successful routing decision.
+        
+        Call this after a routed request completes successfully.
+        
+        Args:
+            route_id: The capability ID that was routed to
+            latency_ms: End-to-end latency in milliseconds
+            metadata: Optional metadata about the request
+        """
+        if self.learner:
+            self.learner.record_success(route_id, latency_ms, metadata)
+            logger.debug(f"Recorded success for route {route_id} ({latency_ms:.0f}ms)")
+    
+    def record_route_failure(
+        self,
+        route_id: str,
+        latency_ms: float = 0.0,
+        error_type: Optional[str] = None,
+        metadata: Optional[dict] = None
+    ) -> None:
+        """
+        Record a failed routing decision.
+        
+        Call this when a routed request fails.
+        
+        Args:
+            route_id: The capability ID that was routed to
+            latency_ms: Time before failure in milliseconds
+            error_type: Type of error (e.g., "timeout", "error", "rejected")
+            metadata: Optional metadata about the request
+        """
+        if self.learner:
+            self.learner.record_failure(route_id, latency_ms, error_type, metadata)
+            logger.debug(f"Recorded failure for route {route_id}: {error_type}")
+    
+    def get_route_quality(self, route_id: str) -> Optional[dict]:
+        """Get quality metrics for a specific route."""
+        if self.learner:
+            quality = self.learner.get_quality(route_id)
+            if quality:
+                return quality.to_dict()
+        return None
+    
+    def get_degraded_routes(self, threshold: float = 0.7) -> List[str]:
+        """Get list of routes with quality below threshold."""
+        if self.learner:
+            return self.learner.get_degraded_routes(threshold)
+        return []
     
     def get_stats(self) -> dict:
         """Get router service statistics."""
@@ -286,6 +352,9 @@ class RouterService:
         
         if self.discovery:
             stats["known_peers"] = len(self.discovery.get_known_peers())
+        
+        if self.learner:
+            stats["learning"] = self.learner.stats()
         
         return stats
 
