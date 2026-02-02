@@ -149,8 +149,8 @@ class MeshNode:
         for peer_id, peer in self.network.peers.items():
             if peer_id != exclude and peer.connected:
                 try:
-                    await self.network.send_to_peer(
-                        peer,
+                    await self.network.send(
+                        peer_id,
                         MessageType.CAPABILITY_ANNOUNCE,
                         updated_payload
                     )
@@ -159,15 +159,11 @@ class MeshNode:
     
     async def send_intent(self, intent: str) -> Dict:
         """Send an intent and route it through the mesh."""
-        # Embed the intent
-        intent_vector = await self.router.embedding_engine.embed(intent)
-        
         # Find best route
-        route_result = await self.router.route_intent(intent, intent_vector)
+        route_result = await self.router.route(intent)
         
         intent_payload = {
             "intent": intent,
-            "intent_vector": intent_vector.tolist(),
             "requester": self.node.node_id,
             "timestamp": time.time()
         }
@@ -188,8 +184,8 @@ class MeshNode:
             # Send to next hop
             peer = self.network.peers.get(route_result.next_hop)
             if peer and peer.connected:
-                await self.network.send_to_peer(
-                    peer,
+                await self.network.send(
+                    route_result.next_hop,
                     MessageType.INTENT,
                     intent_payload
                 )

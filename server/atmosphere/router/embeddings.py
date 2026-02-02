@@ -54,21 +54,16 @@ class EmbeddingEngine:
         ollama_config = OllamaConfig(
             host=self.config.ollama_host,
             port=self.config.ollama_port,
-            timeout=self.config.timeout,
-            embedding_model=self.config.model
+            model=self.config.model
         )
         
         ollama = OllamaBackend(ollama_config)
         
-        if await ollama.health_check():
-            # Verify embedding model is available
-            if await ollama.has_model(self.config.model):
-                self._backend = ollama
-                self._initialized = True
-                logger.info(f"Using Ollama backend with {self.config.model}")
-                return
-            else:
-                logger.warning(f"Model {self.config.model} not found in Ollama")
+        if await ollama.connect():
+            self._backend = ollama
+            self._initialized = True
+            logger.info(f"Using Ollama backend with {self.config.model}")
+            return
 
         raise RuntimeError(
             "No embedding backend available. Run:\n"
@@ -78,7 +73,7 @@ class EmbeddingEngine:
     async def close(self) -> None:
         """Close the embedding engine."""
         if self._backend:
-            await self._backend.close()
+            await self._backend.disconnect()
         self._initialized = False
 
     def _normalize(self, vec: np.ndarray) -> np.ndarray:
