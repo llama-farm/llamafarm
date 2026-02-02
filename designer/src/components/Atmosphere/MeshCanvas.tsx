@@ -21,9 +21,13 @@ interface D3Node extends MeshNode {
   fy?: number | null
 }
 
-interface D3Link extends MeshConnection {
+interface D3Link {
   source: D3Node
   target: D3Node
+  type: MeshConnection['type']
+  active: boolean
+  latency?: number
+  strength?: number
 }
 
 export default function MeshCanvas({
@@ -113,7 +117,7 @@ export default function MeshCanvas({
         .strength(0.5))
       .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => getNodeRadius(d.type) + 20))
+      .force('collision', d3.forceCollide().radius((d: any) => getNodeRadius(d.type) + 20))
 
     simulationRef.current = simulation
 
@@ -215,7 +219,7 @@ export default function MeshCanvas({
     const drawIntentPaths = () => {
       intentsGroup.selectAll('*').remove()
 
-      activeIntents.forEach((intent, idx) => {
+      activeIntents.forEach((intent) => {
         if (intent.route.length < 2) return
 
         const routeNodes = intent.route
@@ -225,7 +229,7 @@ export default function MeshCanvas({
         if (routeNodes.length < 2) return
 
         // Create path
-        const pathData = routeNodes.map((node, i) => ({
+        const pathData = routeNodes.map((node) => ({
           x: node.x || 0,
           y: node.y || 0,
         }))

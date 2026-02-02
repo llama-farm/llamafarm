@@ -41,6 +41,7 @@ import RetrievalMethod from './components/Rag/RetrievalMethod'
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
 // Projects standalone page removed; Home now hosts projects section
+import MeshView from './components/Atmosphere/MeshView'
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import {
   useUpgradeAvailability,
@@ -157,6 +158,7 @@ function AppContent() {
                       {/* Redirect '/projects' to Home; Home will scroll to projects */}
                       <Route path="/projects" element={<Home />} />
                       <Route path="/samples" element={<SampleProjects />} />
+                      <Route path="/atmosphere" element={<MeshView />} />
                       <Route path="/chat" element={<Chat />}>
                         <Route
                           index
