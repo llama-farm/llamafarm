@@ -83,7 +83,7 @@ class AddonService:
             await self._update_task_status_async(
                 task_id, "in_progress", 50, "Installing addon..."
             )
-            result = subprocess.run(
+            subprocess.run(
                 [cli_path, "addons", "install", addon_name],
                 check=True,
                 capture_output=True,
