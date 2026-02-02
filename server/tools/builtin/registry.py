@@ -3,97 +3,35 @@ Builtin Tools Registry.
 
 This module defines the registry of all builtin tools and provides
 filtering based on model configuration.
+
+The registry only tracks tool names. Tool definitions are derived from
+the Pydantic models in the tool classes themselves (single source of truth).
 """
 
 from config.datamodel import Model
 
-from agents.base.types import ToolDefinition
-
-# Registry of all builtin tools keyed by name
-BUILTIN_TOOLS: dict[str, ToolDefinition] = {
-    "tasks": ToolDefinition(
-        name="tasks",
-        description=(
-            "Manage tasks for the current session. Create, update, list, and get tasks "
-            "to track work items. Tasks can have dependencies (blockedBy/blocks) and "
-            "status (pending, in_progress, completed). Use status='deleted' to remove a task."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": ["create", "update", "list", "get"],
-                    "description": "The operation to perform on tasks",
-                },
-                "taskId": {
-                    "type": "string",
-                    "description": "Task ID (required for get, update operations)",
-                },
-                "subject": {
-                    "type": "string",
-                    "description": "Task subject/title (for create, update)",
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Task description (for create, update)",
-                },
-                "activeForm": {
-                    "type": "string",
-                    "description": (
-                        "Present continuous form for display (e.g., 'Running tests')"
-                    ),
-                },
-                "status": {
-                    "type": "string",
-                    "enum": ["pending", "in_progress", "completed", "deleted"],
-                    "description": (
-                        "Task status (for update). Use 'deleted' to remove. "
-                        "Note: Completed tasks cannot be reopened; create a new task instead."
-                    ),
-                },
-                "blockedBy": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Task IDs that must complete before this task (create)",
-                },
-                "addBlockedBy": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Task IDs to add to blockedBy list (update)",
-                },
-                "addBlocks": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Task IDs that this task blocks (update)",
-                },
-            },
-            "required": ["operation"],
-        },
-    ),
-}
+# Registry of all builtin tool names
+BUILTIN_TOOL_NAMES: set[str] = {"tasks"}
 
 
-def get_enabled_builtin_tools(model_config: Model) -> list[ToolDefinition]:
-    """Return builtin tools based on model config include list.
+def get_enabled_builtin_tool_names(model_config: Model) -> set[str]:
+    """Return names of enabled builtin tools based on model config include list.
 
     Args:
         model_config: The model configuration containing builtin_tools settings
 
     Returns:
-        List of ToolDefinition objects for enabled builtin tools
+        Set of tool names that are enabled for this model
     """
     builtin_config = model_config.builtin_tools
 
     # Default: no tools enabled
     if builtin_config is None:
-        return []
+        return set()
 
-    # Only include explicitly listed tools
+    # Only include explicitly listed tools that exist in registry
     include_list = builtin_config.include or []
     if not include_list:
-        return []
+        return set()
 
-    return [
-        tool for name, tool in BUILTIN_TOOLS.items() if name in include_list
-    ]
+    return {name for name in include_list if name in BUILTIN_TOOL_NAMES}

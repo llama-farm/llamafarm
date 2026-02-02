@@ -2,7 +2,7 @@
 Tests for Builtin Tools Infrastructure.
 
 This module contains comprehensive TDD tests for:
-1. Registry (get_enabled_builtin_tools) - filtering builtin tools based on config
+1. Registry (get_enabled_builtin_tool_names) - filtering builtin tools based on config
 2. BuiltinToolFactory - creating tool instances with context injection
 3. TasksTool - the tasks management tool implementation
 
@@ -20,14 +20,14 @@ from pydantic import BaseModel
 # These imports are what we expect the implementation to provide
 try:
     from tools.builtin.factory import BuiltinToolFactory
-    from tools.builtin.registry import BUILTIN_TOOLS, get_enabled_builtin_tools
+    from tools.builtin.registry import BUILTIN_TOOL_NAMES, get_enabled_builtin_tool_names
     from tools.builtin.tasks_tool import TasksTool
 except ImportError:
     # Define placeholder classes for type hints in tests
     # These will be replaced by actual imports once implementation exists
-    BUILTIN_TOOLS = {}
+    BUILTIN_TOOL_NAMES: set[str] = set()
 
-    def get_enabled_builtin_tools(model_config):
+    def get_enabled_builtin_tool_names(model_config):
         raise NotImplementedError("Registry not implemented yet")
 
     class BuiltinToolFactory:
@@ -48,12 +48,12 @@ except ImportError:
 from config.datamodel import BuiltinTools, Model, Provider
 
 # ==============================================================================
-# REGISTRY TESTS (get_enabled_builtin_tools)
+# REGISTRY TESTS (get_enabled_builtin_tool_names)
 # ==============================================================================
 
 
-class TestGetEnabledBuiltinTools:
-    """Test cases for the get_enabled_builtin_tools registry function."""
+class TestGetEnabledBuiltinToolNames:
+    """Test cases for the get_enabled_builtin_tool_names registry function."""
 
     @pytest.fixture
     def base_model_config(self):
@@ -86,22 +86,21 @@ class TestGetEnabledBuiltinTools:
 
     def test_no_tools_returned_when_no_builtin_tools_config(self, base_model_config):
         """Test that no tools are returned when no builtin_tools config is specified."""
-        tools = get_enabled_builtin_tools(base_model_config)
+        tools = get_enabled_builtin_tool_names(base_model_config)
 
         # No builtin tools should be returned (default is disabled)
         assert len(tools) == 0
 
     def test_tools_returned_when_included(self, model_config_include_all):
         """Test that tools are returned when explicitly included."""
-        tools = get_enabled_builtin_tools(model_config_include_all)
+        tools = get_enabled_builtin_tool_names(model_config_include_all)
 
         # Only included tools should be returned
-        tool_names = {t.name for t in tools}
-        assert "tasks" in tool_names
+        assert "tasks" in tools
 
     def test_no_tools_returned_when_empty_include(self, model_config_include_none):
         """Test that no tools are returned when include list is empty."""
-        tools = get_enabled_builtin_tools(model_config_include_none)
+        tools = get_enabled_builtin_tool_names(model_config_include_none)
 
         # No tools should be returned
         assert len(tools) == 0
@@ -115,10 +114,9 @@ class TestGetEnabledBuiltinTools:
             builtin_tools=BuiltinTools(include=["tasks"]),
         )
 
-        tools = get_enabled_builtin_tools(model_config)
+        tools = get_enabled_builtin_tool_names(model_config)
 
-        tool_names = {t.name for t in tools}
-        assert "tasks" in tool_names
+        assert "tasks" in tools
         assert len(tools) == 1
 
     def test_unknown_tool_names_in_include_ignored(self):
@@ -133,33 +131,14 @@ class TestGetEnabledBuiltinTools:
         )
 
         # Should not raise an error
-        tools = get_enabled_builtin_tools(model_config)
+        tools = get_enabled_builtin_tool_names(model_config)
 
         # No tools should be returned since included ones don't exist
         assert len(tools) == 0
 
     def test_registry_contains_tasks_tool(self):
-        """Test that the BUILTIN_TOOLS registry contains the tasks tool."""
-        assert "tasks" in BUILTIN_TOOLS
-
-        tasks_tool_def = BUILTIN_TOOLS["tasks"]
-        assert tasks_tool_def.name == "tasks"
-        assert tasks_tool_def.description is not None
-        assert "parameters" in dir(tasks_tool_def) or hasattr(
-            tasks_tool_def, "parameters"
-        )
-
-    def test_tool_definitions_have_required_fields(self):
-        """Test that all tool definitions have required name, description, parameters."""
-        for name, tool_def in BUILTIN_TOOLS.items():
-            assert tool_def.name == name, f"Tool {name} has mismatched name"
-            assert tool_def.description, f"Tool {name} missing description"
-            assert isinstance(
-                tool_def.parameters, dict
-            ), f"Tool {name} parameters not a dict"
-            assert (
-                tool_def.parameters.get("type") == "object"
-            ), f"Tool {name} parameters not object type"
+        """Test that the BUILTIN_TOOL_NAMES registry contains the tasks tool."""
+        assert "tasks" in BUILTIN_TOOL_NAMES
 
 
 # ==============================================================================
@@ -195,8 +174,8 @@ class TestBuiltinToolFactory:
 
         assert tasks_tool is not None
         # The tool should be a class that can be instantiated
-        assert hasattr(tasks_tool, "mcp_tool_name")
-        assert tasks_tool.mcp_tool_name == "tasks"
+        assert hasattr(tasks_tool, "tool_name")
+        assert tasks_tool.tool_name == "tasks"
 
     def test_factory_returns_none_for_tasks_tool_when_no_session_id(
         self, temp_project_dir
@@ -228,7 +207,7 @@ class TestBuiltinToolFactory:
 
         tools = factory.create_all_tools()
 
-        tool_names = [getattr(t, "mcp_tool_name", None) for t in tools]
+        tool_names = [getattr(t, "tool_name", None) for t in tools]
         assert "tasks" in tool_names
 
     def test_create_all_tools_excludes_tasks_tool_without_session(
@@ -239,13 +218,13 @@ class TestBuiltinToolFactory:
 
         tools = factory.create_all_tools()
 
-        tool_names = [getattr(t, "mcp_tool_name", None) for t in tools]
+        tool_names = [getattr(t, "tool_name", None) for t in tools]
         assert "tasks" not in tool_names
 
-    def test_tool_classes_have_mcp_tool_name_attribute(
+    def test_tool_classes_have_tool_name_attribute(
         self, temp_project_dir, session_id
     ):
-        """Test that tool classes have the correct mcp_tool_name attribute."""
+        """Test that tool classes have the correct tool_name attribute."""
         factory = BuiltinToolFactory(
             project_dir=temp_project_dir, session_id=session_id
         )
@@ -253,8 +232,8 @@ class TestBuiltinToolFactory:
         tools = factory.create_all_tools()
 
         for tool in tools:
-            assert hasattr(tool, "mcp_tool_name"), f"Tool {tool} missing mcp_tool_name"
-            assert isinstance(tool.mcp_tool_name, str)
+            assert hasattr(tool, "tool_name"), f"Tool {tool} missing tool_name"
+            assert isinstance(tool.tool_name, str)
 
     def test_factory_injects_project_dir_into_tasks_tool(
         self, temp_project_dir, session_id
@@ -329,10 +308,10 @@ class TestTasksToolSchema:
         output_schema = TasksTool.output_schema
         assert issubclass(output_schema, BaseModel)
 
-    def test_tasks_tool_has_mcp_tool_name(self):
-        """Test that TasksTool has mcp_tool_name attribute."""
-        assert hasattr(TasksTool, "mcp_tool_name")
-        assert TasksTool.mcp_tool_name == "tasks"
+    def test_tasks_tool_has_tool_name(self):
+        """Test that TasksTool has tool_name attribute."""
+        assert hasattr(TasksTool, "tool_name")
+        assert TasksTool.tool_name == "tasks"
 
 
 class TestTasksToolOperations:
@@ -716,14 +695,13 @@ class TestBuiltinToolsIntegration:
         )
         factory_tools = factory.create_all_tools()
 
-        factory_tool_names = {getattr(t, "mcp_tool_name", None) for t in factory_tools}
-        registry_tool_names = set(BUILTIN_TOOLS.keys())
+        factory_tool_names = {getattr(t, "tool_name", None) for t in factory_tools}
 
         # Factory tools should be a subset of registry tools
         # (some tools may not be created if no session_id, etc.)
         for name in factory_tool_names:
             if name is not None:
-                assert name in registry_tool_names
+                assert name in BUILTIN_TOOL_NAMES
 
     @pytest.mark.asyncio
     async def test_full_task_workflow(self, temp_project_dir, session_id):

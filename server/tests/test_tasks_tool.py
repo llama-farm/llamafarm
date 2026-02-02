@@ -14,7 +14,7 @@ import pytest
 from config.datamodel import BuiltinTools, Model
 
 from tools.builtin.factory import BuiltinToolFactory
-from tools.builtin.registry import BUILTIN_TOOLS, get_enabled_builtin_tools
+from tools.builtin.registry import BUILTIN_TOOL_NAMES, get_enabled_builtin_tool_names
 from tools.builtin.tasks_tool import TasksTool, TasksToolInput, TasksToolOutput
 
 
@@ -335,7 +335,7 @@ class TestBuiltinToolFactory:
 
         assert len(tools) >= 1
         # Verify tasks tool is included
-        tool_names = [getattr(t, "mcp_tool_name", None) for t in tools]
+        tool_names = [getattr(t, "tool_name", None) for t in tools]
         assert "tasks" in tool_names
 
     def test_factory_create_all_tools_without_session(self, temp_project_dir):
@@ -351,13 +351,10 @@ class TestBuiltinToolsRegistry:
     """Tests for builtin tools registry and filtering."""
 
     def test_registry_contains_tasks_tool(self):
-        """Test registry contains the tasks tool definition."""
-        assert "tasks" in BUILTIN_TOOLS
-        tasks_def = BUILTIN_TOOLS["tasks"]
-        assert tasks_def.name == "tasks"
-        assert "operation" in tasks_def.parameters["properties"]
+        """Test registry contains the tasks tool name."""
+        assert "tasks" in BUILTIN_TOOL_NAMES
 
-    def test_get_enabled_builtin_tools_none_by_default(self):
+    def test_get_enabled_builtin_tool_names_none_by_default(self):
         """Test no builtin tools are enabled by default."""
         model_config = Model(
             name="test",
@@ -365,12 +362,12 @@ class TestBuiltinToolsRegistry:
             model="test-model",
         )
 
-        enabled = get_enabled_builtin_tools(model_config)
+        enabled = get_enabled_builtin_tool_names(model_config)
 
         # No tools should be enabled by default
         assert len(enabled) == 0
 
-    def test_get_enabled_builtin_tools_with_include(self):
+    def test_get_enabled_builtin_tool_names_with_include(self):
         """Test including specific tools via config."""
         model_config = Model(
             name="test",
@@ -379,14 +376,13 @@ class TestBuiltinToolsRegistry:
             builtin_tools=BuiltinTools(include=["tasks"]),
         )
 
-        enabled = get_enabled_builtin_tools(model_config)
+        enabled = get_enabled_builtin_tool_names(model_config)
 
         # Tasks should be included
-        tool_names = [t.name for t in enabled]
-        assert "tasks" in tool_names
+        assert "tasks" in enabled
         assert len(enabled) == 1
 
-    def test_get_enabled_builtin_tools_empty_include(self):
+    def test_get_enabled_builtin_tool_names_empty_include(self):
         """Test empty include list disables all builtin tools."""
         model_config = Model(
             name="test",
@@ -395,11 +391,11 @@ class TestBuiltinToolsRegistry:
             builtin_tools=BuiltinTools(include=[]),
         )
 
-        enabled = get_enabled_builtin_tools(model_config)
+        enabled = get_enabled_builtin_tool_names(model_config)
 
         assert len(enabled) == 0
 
-    def test_get_enabled_builtin_tools_unknown_tool_ignored(self):
+    def test_get_enabled_builtin_tool_names_unknown_tool_ignored(self):
         """Test unknown tool names in include list are ignored."""
         model_config = Model(
             name="test",
@@ -408,7 +404,7 @@ class TestBuiltinToolsRegistry:
             builtin_tools=BuiltinTools(include=["unknown_tool"]),
         )
 
-        enabled = get_enabled_builtin_tools(model_config)
+        enabled = get_enabled_builtin_tool_names(model_config)
 
         # Unknown tool is ignored, so no tools returned
         assert len(enabled) == 0

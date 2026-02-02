@@ -85,8 +85,8 @@ class TasksTool(BaseTool):
     _project_dir: str = ""
     _session_id: str = ""
 
-    # MCP-compatible name for tool identification
-    mcp_tool_name: str = "tasks"
+    # Tool name for identification
+    tool_name: str = "tasks"
 
     def run(self, params: TasksToolInput) -> TasksToolOutput:
         """Execute the task operation synchronously."""

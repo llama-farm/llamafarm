@@ -285,7 +285,7 @@ class TestChatOrchestratorAgent:
 
         # Mock MCP tool
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(
@@ -333,7 +333,7 @@ class TestChatOrchestratorAgent:
         )
 
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(
@@ -400,7 +400,7 @@ class TestChatOrchestratorAgent:
         ]
 
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(side_effect=Exception("Tool failed"))
@@ -472,7 +472,7 @@ class TestChatOrchestratorAgent:
             # Mock tool
             mock_tool_class = MagicMock()
             mock_tool_class.__name__ = "TestTool"
-            mock_tool_class.mcp_tool_name = "test_tool"
+            mock_tool_class.tool_name = "test_tool"
             mock_tool_instance = AsyncMock()
             mock_tool_instance.arun = AsyncMock(
                 return_value=SimpleNamespace(result="Tool result")
@@ -656,10 +656,10 @@ class TestChatOrchestratorAgent:
             # Mock tools
             mock_tool1 = MagicMock()
             mock_tool1.__name__ = "Tool1"
-            mock_tool1.mcp_tool_name = "tool1"
+            mock_tool1.tool_name = "tool1"
             mock_tool2 = MagicMock()
             mock_tool2.__name__ = "Tool2"
-            mock_tool2.mcp_tool_name = "tool2"
+            mock_tool2.tool_name = "tool2"
 
             with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
                 mock_factory_instance = AsyncMock()
@@ -671,8 +671,8 @@ class TestChatOrchestratorAgent:
                 await agent.enable_mcp()
 
                 assert len(agent._mcp_tools) == 2
-                assert agent._mcp_tools[0].mcp_tool_name == "tool1"
-                assert agent._mcp_tools[1].mcp_tool_name == "tool2"
+                assert agent._mcp_tools[0].tool_name == "tool1"
+                assert agent._mcp_tools[1].tool_name == "tool2"
 
     @pytest.mark.asyncio
     async def test_mcp_servers_subset_selection(self, config_with_multiple_mcp_servers):

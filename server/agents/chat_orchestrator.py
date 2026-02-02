@@ -46,7 +46,7 @@ from services.prompt_service import PromptService  # type: ignore  # type: ignor
 from services.runtime_service.runtime_service import RuntimeService
 from services.template_service import TemplateService
 from tools.builtin.factory import BuiltinToolFactory
-from tools.builtin.registry import get_enabled_builtin_tools
+from tools.builtin.registry import get_enabled_builtin_tool_names
 from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 logger = FastAPIStructLogger(__name__)
@@ -206,14 +206,12 @@ class ChatOrchestratorAgent(LFAgent):
         iteration = 0
 
         # Get enabled builtin tools based on model config
-        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
         enabled_builtin = self._get_enabled_builtin_tools()
 
-        # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
+        # Merge: mcp_tools + builtin_tools + config_tools
         tools = (
-            builtin_tool_defs
-            + [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
-            + [ToolDefinition.from_mcp_tool(t) for t in enabled_builtin]
+            [ToolDefinition.from_tool_class(t) for t in self._mcp_tools]
+            + [ToolDefinition.from_tool_class(t) for t in enabled_builtin]
             + (tools or [])
         )
 
@@ -331,14 +329,12 @@ class ChatOrchestratorAgent(LFAgent):
         """Stream chat with MCP and builtin tool execution support."""
 
         # Get enabled builtin tools based on model config
-        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
         enabled_builtin = self._get_enabled_builtin_tools()
 
-        # Merge: builtin_definitions + mcp_tools + builtin_executors + config_tools
+        # Merge: mcp_tools + builtin_tools + config_tools
         tools = (
-            builtin_tool_defs
-            + [ToolDefinition.from_mcp_tool(t) for t in self._mcp_tools]
-            + [ToolDefinition.from_mcp_tool(t) for t in enabled_builtin]
+            [ToolDefinition.from_tool_class(t) for t in self._mcp_tools]
+            + [ToolDefinition.from_tool_class(t) for t in enabled_builtin]
             + (tools or [])
         )
 
@@ -551,7 +547,7 @@ class ChatOrchestratorAgent(LFAgent):
             "MCP tools loaded",
             tool_count=len(self._mcp_tools),
             tool_names=[
-                getattr(t, "mcp_tool_name", t.__name__) for t in self._mcp_tools
+                getattr(t, "tool_name", t.__name__) for t in self._mcp_tools
             ],
         )
 
@@ -563,7 +559,7 @@ class ChatOrchestratorAgent(LFAgent):
             "Builtin tools loaded",
             tool_count=len(self._builtin_tools),
             tool_names=[
-                getattr(t, "mcp_tool_name", getattr(t, "__name__", "unknown"))
+                getattr(t, "tool_name", getattr(t, "__name__", "unknown"))
                 for t in self._builtin_tools
             ],
         )
@@ -573,29 +569,28 @@ class ChatOrchestratorAgent(LFAgent):
 
         Filters self._builtin_tools based on the include list in model config.
         """
-        builtin_tool_defs = get_enabled_builtin_tools(self._model_config_template)
-        enabled_names = {t.name for t in builtin_tool_defs}
+        enabled_names = get_enabled_builtin_tool_names(self._model_config_template)
         return [
             t
             for t in self._builtin_tools
-            if getattr(t, "mcp_tool_name", "") in enabled_names
+            if getattr(t, "tool_name", "") in enabled_names
         ]
 
     def _can_execute_tool_call(
         self, tool_call: ChatCompletionMessageFunctionToolCallParam
     ) -> bool:
         """Check if a tool call can be executed on the server (MCP or builtin)."""
-        tool_name = tool_call.function.name
+        name = tool_call.function.name
         all_tools = self._mcp_tools + self._get_enabled_builtin_tools()
-        return any(getattr(t, "mcp_tool_name", None) == tool_name for t in all_tools)
+        return any(getattr(t, "tool_name", None) == name for t in all_tools)
 
-    async def _execute_tool(self, tool_name: str, arguments: str | None) -> str:
+    async def _execute_tool(self, name: str, arguments: str | None) -> str:
         """Unified wrapper to execute any invocable tool (MCP or builtin).
 
         Dispatches to the appropriate executor based on tool type.
 
         Args:
-            tool_name: Name of the tool to execute
+            name: Name of the tool to execute
             arguments: Tool parameters as JSON string
 
         Returns:
@@ -606,22 +601,22 @@ class ChatOrchestratorAgent(LFAgent):
         """
         # Check MCP tools first
         mcp_tool = next(
-            (t for t in self._mcp_tools if getattr(t, "mcp_tool_name", None) == tool_name),
+            (t for t in self._mcp_tools if getattr(t, "tool_name", None) == name),
             None,
         )
         if mcp_tool:
-            return await self._execute_mcp_tool(tool_name, arguments)
+            return await self._execute_mcp_tool(name, arguments)
 
         # Check enabled builtin tools only
         enabled_builtin = self._get_enabled_builtin_tools()
         builtin_tool = next(
-            (t for t in enabled_builtin if getattr(t, "mcp_tool_name", None) == tool_name),
+            (t for t in enabled_builtin if getattr(t, "tool_name", None) == name),
             None,
         )
         if builtin_tool:
             return await self._execute_builtin_tool(builtin_tool, arguments)
 
-        raise ValueError(f"Tool '{tool_name}' not found in MCP or builtin tools")
+        raise ValueError(f"Tool '{name}' not found in MCP or builtin tools")
 
     async def _execute_builtin_tool(
         self, tool_class: type[BaseTool], arguments: str | None
@@ -649,7 +644,7 @@ class ChatOrchestratorAgent(LFAgent):
             logger.info(
                 "Builtin tool execution successful",
                 tool_name=getattr(
-                    tool_class, "mcp_tool_name", getattr(tool_class, "__name__", "unknown")
+                    tool_class, "tool_name", getattr(tool_class, "__name__", "unknown")
                 ),
                 result_length=len(str(result_content)),
             )
@@ -657,18 +652,18 @@ class ChatOrchestratorAgent(LFAgent):
             return str(result_content)
 
         except Exception as e:
-            tool_name = getattr(
-                tool_class, "mcp_tool_name", getattr(tool_class, "__name__", "unknown")
+            name = getattr(
+                tool_class, "tool_name", getattr(tool_class, "__name__", "unknown")
             )
-            error_msg = f"Error executing builtin tool '{tool_name}': {str(e)}"
+            error_msg = f"Error executing builtin tool '{name}': {str(e)}"
             logger.error(error_msg, exc_info=True)
             return error_msg
 
-    async def _execute_mcp_tool(self, tool_name: str, arguments: str | None) -> str:
+    async def _execute_mcp_tool(self, name: str, arguments: str | None) -> str:
         """Execute an MCP tool and return the result.
 
         Args:
-            tool_name: Name of the tool to execute
+            name: Name of the tool to execute
             arguments: Tool parameters
 
         Returns:
@@ -679,17 +674,17 @@ class ChatOrchestratorAgent(LFAgent):
             (
                 t
                 for t in self._mcp_tools
-                if getattr(t, "mcp_tool_name", None) == tool_name
+                if getattr(t, "tool_name", None) == name
             ),
             None,
         )
 
         if not tool_class:
-            error_msg = f"Tool '{tool_name}' not found"
+            error_msg = f"Tool '{name}' not found"
             logger.error(
                 error_msg,
                 available_tools=[
-                    getattr(t, "mcp_tool_name", t.__name__) for t in self._mcp_tools
+                    getattr(t, "tool_name", t.__name__) for t in self._mcp_tools
                 ],
             )
             return f"Error: {error_msg}"
@@ -701,7 +696,7 @@ class ChatOrchestratorAgent(LFAgent):
 
             # Create input with tool_name discriminator
             tool_input = input_schema_class(
-                tool_name=tool_name, **json.loads(arguments or "{}")
+                tool_name=name, **json.loads(arguments or "{}")
             )
 
             # Execute tool
@@ -712,14 +707,14 @@ class ChatOrchestratorAgent(LFAgent):
 
             logger.info(
                 "Tool execution successful",
-                tool_name=tool_name,
+                tool_name=name,
                 result_length=len(str(result_content)),
             )
 
             return str(result_content)
 
         except Exception as e:
-            error_msg = f"Error executing tool '{tool_name}': {str(e)}"
+            error_msg = f"Error executing tool '{name}': {str(e)}"
             logger.error(error_msg, exc_info=True)
             return error_msg
 

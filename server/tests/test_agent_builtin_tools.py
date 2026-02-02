@@ -183,7 +183,7 @@ class TestBuiltinToolsLoading:
             # Mock the factory
             with patch("agents.chat_orchestrator.BuiltinToolFactory") as mock_factory:
                 mock_tool_class = MagicMock()
-                mock_tool_class.mcp_tool_name = "tasks"
+                mock_tool_class.tool_name = "tasks"
                 mock_factory_instance = MagicMock()
                 mock_factory_instance.create_all_tools.return_value = [mock_tool_class]
                 mock_factory.return_value = mock_factory_instance
@@ -269,7 +269,7 @@ class TestToolExecutionDispatch:
 
             # Mock an MCP tool
             mock_tool = MagicMock()
-            mock_tool.mcp_tool_name = "mcp_test_tool"
+            mock_tool.tool_name = "mcp_test_tool"
             agent._mcp_tools = [mock_tool]
             agent._builtin_tools = []
 
@@ -296,28 +296,20 @@ class TestToolExecutionDispatch:
 
             # Mock a builtin tool
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             agent._mcp_tools = []
             agent._builtin_tools = [mock_builtin]
 
-            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            # Mock get_enabled_builtin_tool_names to return the "tasks" name
             with (
                 patch(
-                    "agents.chat_orchestrator.get_enabled_builtin_tools"
+                    "agents.chat_orchestrator.get_enabled_builtin_tool_names"
                 ) as mock_registry,
                 patch.object(
                     agent, "_execute_builtin_tool", new_callable=AsyncMock
                 ) as mock_execute,
             ):
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Tasks tool",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
                 mock_execute.return_value = "builtin result"
 
                 result = await agent._execute_tool("tasks", '{"operation": "list"}')
@@ -412,7 +404,7 @@ class TestToolMerging:
 
             # Mock builtin tool
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             mock_builtin.__doc__ = "Manage tasks"
             mock_builtin.input_schema = MagicMock()
             mock_builtin.input_schema.model_json_schema.return_value = {
@@ -424,17 +416,9 @@ class TestToolMerging:
 
             # Mock registry to say tasks is enabled
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Manage tasks",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
 
                 await agent.run_async(
                     messages=[
@@ -467,14 +451,14 @@ class TestToolMerging:
 
             # Mock builtin tool that would normally be loaded
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             agent._builtin_tools = [mock_builtin]
 
             # Mock registry to return empty (disabled)
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                mock_registry.return_value = []  # All disabled
+                mock_registry.return_value = set()  # All disabled
 
                 await agent.run_async(
                     messages=[
@@ -507,14 +491,14 @@ class TestToolMerging:
 
             # Mock builtin tool
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             agent._builtin_tools = [mock_builtin]
 
             # Mock registry to return empty for excluded tool
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                mock_registry.return_value = []  # Tasks excluded
+                mock_registry.return_value = set()  # Tasks excluded
 
                 await agent.run_async(
                     messages=[
@@ -547,7 +531,7 @@ class TestToolMerging:
 
             # Mock MCP tool
             mock_mcp = MagicMock()
-            mock_mcp.mcp_tool_name = "mcp_tool"
+            mock_mcp.tool_name = "mcp_tool"
             mock_mcp.__doc__ = "MCP tool"
             mock_mcp.input_schema = MagicMock()
             mock_mcp.input_schema.model_json_schema.return_value = {
@@ -558,7 +542,7 @@ class TestToolMerging:
 
             # Mock builtin tool
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             mock_builtin.__doc__ = "Tasks tool"
             mock_builtin.input_schema = MagicMock()
             mock_builtin.input_schema.model_json_schema.return_value = {
@@ -569,17 +553,9 @@ class TestToolMerging:
 
             # Mock registry to return tasks enabled
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Tasks tool",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
 
                 # Also pass config tools
                 from agents.base.types import ToolDefinition
@@ -625,7 +601,7 @@ class TestToolDetection:
 
             # Mock MCP tool
             mock_mcp = MagicMock()
-            mock_mcp.mcp_tool_name = "mcp_test_tool"
+            mock_mcp.tool_name = "mcp_test_tool"
             agent._mcp_tools = [mock_mcp]
             agent._builtin_tools = []
 
@@ -646,23 +622,15 @@ class TestToolDetection:
 
             # Mock builtin tool
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             agent._mcp_tools = []
             agent._builtin_tools = [mock_builtin]
 
-            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            # Mock get_enabled_builtin_tool_names to return the "tasks" name
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Tasks tool",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
 
                 # Create tool call
                 tool_call = make_tool_call(name="tasks", arguments='{"operation": "list"}')
@@ -699,25 +667,17 @@ class TestToolDetection:
 
             # Mock both MCP and builtin tools
             mock_mcp = MagicMock()
-            mock_mcp.mcp_tool_name = "mcp_tool"
+            mock_mcp.tool_name = "mcp_tool"
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             agent._mcp_tools = [mock_mcp]
             agent._builtin_tools = [mock_builtin]
 
-            # Mock get_enabled_builtin_tools to return the "tasks" tool definition
+            # Mock get_enabled_builtin_tool_names to return the "tasks" name
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Tasks tool",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
 
                 # Both should be found
                 mcp_call = make_tool_call(name="mcp_tool", arguments="{}")
@@ -771,7 +731,7 @@ class TestBuiltinToolsAgentIntegration:
             mock_input_schema.return_value = MagicMock()
 
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             mock_builtin.return_value = mock_instance
             mock_builtin.input_schema = mock_input_schema
 
@@ -780,17 +740,9 @@ class TestBuiltinToolsAgentIntegration:
 
             # Mock registry
             with patch(
-                "agents.chat_orchestrator.get_enabled_builtin_tools"
+                "agents.chat_orchestrator.get_enabled_builtin_tool_names"
             ) as mock_registry:
-                from agents.base.types import ToolDefinition
-
-                mock_registry.return_value = [
-                    ToolDefinition(
-                        name="tasks",
-                        description="Tasks",
-                        parameters={"type": "object", "properties": {}},
-                    )
-                ]
+                mock_registry.return_value = {"tasks"}
 
                 # Run the agent
                 response = await agent.run_async(
@@ -826,7 +778,7 @@ class TestBuiltinToolsAgentIntegration:
 
             # Mock builtin factory
             mock_builtin = MagicMock()
-            mock_builtin.mcp_tool_name = "tasks"
+            mock_builtin.tool_name = "tasks"
             mock_builtin_instance = MagicMock()
             mock_builtin_instance.create_all_tools.return_value = [mock_builtin]
             mock_builtin_factory.return_value = mock_builtin_instance
