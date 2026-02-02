@@ -8,6 +8,7 @@ from agents.base.clients.client import (
     LFChatCompletionChunk,
 )
 from agents.base.types import ToolDefinition
+from config.datamodel import PromptsMode, ToolsMode
 from core.logging import FastAPIStructLogger
 
 from .context_provider import LFAgentContextProvider
@@ -47,6 +48,87 @@ class LFAgent:
             for t in self._client._model_config.tools or []
         ]
 
+    @property
+    def tools_mode(self) -> ToolsMode:
+        """Get the tools_mode from model config, defaulting to api_supplement."""
+        return self._client._model_config.tools_mode or ToolsMode.api_supplement
+
+    @property
+    def prompts_mode(self) -> PromptsMode:
+        """Get the prompts_mode from model config, defaulting to api_supplement."""
+        return self._client._model_config.prompts_mode or PromptsMode.api_supplement
+
+    def _combine_tools(
+        self, api_tools: list[ToolDefinition] | None
+    ) -> list[ToolDefinition]:
+        """Combine config tools with API tools based on tools_mode.
+
+        Args:
+            api_tools: Tools provided via the API request (may include MCP tools).
+                       None means not provided; empty list means explicitly no tools.
+
+        Returns:
+            Combined tool list based on the model's tools_mode setting:
+            - config_only: Only config tools; API tools are ignored
+            - api_replace: API tools replace config tools (empty list = no tools;
+                          None falls back to config for backwards compatibility)
+            - api_supplement: API tools are added to config tools (default)
+        """
+        mode = self.tools_mode
+        config_tools = self.config_tools
+
+        if mode == ToolsMode.config_only:
+            # Secure mode: ignore all API-provided tools
+            if api_tools:
+                logger.debug(
+                    "tools_mode=config_only: ignoring %d API-provided tools",
+                    len(api_tools),
+                )
+            return config_tools
+
+        if mode == ToolsMode.api_replace:
+            # API tools completely replace config tools
+            if api_tools is not None:
+                logger.debug(
+                    "tools_mode=api_replace: using %d API tools, ignoring %d config tools",
+                    len(api_tools),
+                    len(config_tools),
+                )
+                return api_tools
+            # No API tools provided (None), fall back to config tools
+            return config_tools
+
+        # Default: api_supplement - combine both
+        return config_tools + (api_tools or [])
+
+    def _extract_system_messages(
+        self, messages: list[LFChatCompletionMessageParam] | None
+    ) -> tuple[
+        list[LFChatCompletionMessageParam] | None, list[LFChatCompletionMessageParam]
+    ]:
+        """Separate system messages from other messages.
+
+        System messages are applied per-request but not stored in history.
+        This follows OpenAI-compatible behavior where the client sends
+        the system prompt with each request.
+
+        Returns:
+            Tuple of (system_messages, non_system_messages).
+            system_messages is None if messages was None (preserves distinction
+            between "not provided" and "explicitly empty").
+        """
+        if messages is None:
+            return None, []
+
+        system_msgs = []
+        other_msgs = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_msgs.append(msg)
+            else:
+                other_msgs.append(msg)
+        return system_msgs, other_msgs
+
     async def run_async(
         self,
         *,
@@ -54,14 +136,18 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> LFChatCompletion:
-        if messages:
-            for message in messages:
-                self.history.add_message(message)
+        # Separate system messages (per-request) from other messages (stored in history)
+        request_system_msgs, other_msgs = self._extract_system_messages(messages)
 
-        messages = self._prepare_messages()
+        # Only add non-system messages to history
+        for message in other_msgs:
+            self.history.add_message(message)
 
-        # Combine config tools with extra tools
-        tools = self.config_tools + (tools or [])
+        # Prepare messages including request system prompts for this request only
+        messages = self._prepare_messages(request_system_messages=request_system_msgs)
+
+        # Combine tools based on tools_mode setting
+        tools = self._combine_tools(tools)
 
         return await self._client.chat(
             messages=messages, tools=tools, extra_body=extra_body
@@ -74,13 +160,18 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        if messages:
-            for message in messages:
-                self.history.add_message(message)
-        messages = self._prepare_messages()
+        # Separate system messages (per-request) from other messages (stored in history)
+        request_system_msgs, other_msgs = self._extract_system_messages(messages)
 
-        # Combine config tools with extra tools
-        tools = self.config_tools + (tools or [])
+        # Only add non-system messages to history
+        for message in other_msgs:
+            self.history.add_message(message)
+
+        # Prepare messages including request system prompts for this request only
+        messages = self._prepare_messages(request_system_messages=request_system_msgs)
+
+        # Combine tools based on tools_mode setting
+        tools = self._combine_tools(tools)
 
         async for chunk in self._client.stream_chat(
             messages=messages, tools=tools, extra_body=extra_body
@@ -104,14 +195,77 @@ class LFAgent:
         """Reset the agent's conversation history."""
         self.history.history.clear()
 
-    def _prepare_messages(self) -> list[LFChatCompletionMessageParam]:
-        messages: list[LFChatCompletionMessageParam] = []
-        system_prompt = self._system_prompt_generator.generate_prompt()
-        if system_prompt:
-            messages.append(
-                LFChatCompletionSystemMessageParam(role="system", content=system_prompt)
-            )
+    def _prepare_messages(
+        self,
+        request_system_messages: list[LFChatCompletionMessageParam] | None = None,
+    ) -> list[LFChatCompletionMessageParam]:
+        """Prepare the full message list for the LLM.
 
+        Message order depends on prompts_mode:
+        - config_only: Only config prompts (API system prompts ignored)
+        - api_replace: API system prompts replace config prompts (empty list = no
+                      system prompt; None falls back to config for backwards compat)
+        - api_supplement: Config prompts + API system prompts (default)
+
+        Then conversation history is appended.
+
+        Args:
+            request_system_messages: System messages from the current API request.
+                These are included for this request only, not stored in history.
+                None means not provided; empty list means explicitly no prompts.
+        """
+        messages: list[LFChatCompletionMessageParam] = []
+        mode = self.prompts_mode
+
+        # Get config system prompt
+        config_system_prompt = self._system_prompt_generator.generate_prompt()
+
+        if mode == PromptsMode.config_only:
+            # Secure mode: only use config prompts, ignore API system prompts
+            if request_system_messages:
+                logger.debug(
+                    "prompts_mode=config_only: ignoring %d API-provided system messages",
+                    len(request_system_messages),
+                )
+            if config_system_prompt:
+                messages.append(
+                    LFChatCompletionSystemMessageParam(
+                        role="system", content=config_system_prompt
+                    )
+                )
+
+        elif mode == PromptsMode.api_replace:
+            # API system prompts replace config prompts entirely
+            if request_system_messages is not None:
+                logger.debug(
+                    "prompts_mode=api_replace: using %d API system messages, ignoring config prompt",
+                    len(request_system_messages),
+                )
+                for sys_msg in request_system_messages:
+                    serialized = LFAgentHistory._serialize_message(sys_msg)
+                    messages.append(serialized)
+            elif config_system_prompt:
+                # No API prompts provided (None), fall back to config
+                messages.append(
+                    LFChatCompletionSystemMessageParam(
+                        role="system", content=config_system_prompt
+                    )
+                )
+
+        else:
+            # Default: api_supplement - config prompts + API system prompts
+            if config_system_prompt:
+                messages.append(
+                    LFChatCompletionSystemMessageParam(
+                        role="system", content=config_system_prompt
+                    )
+                )
+            if request_system_messages:
+                for sys_msg in request_system_messages:
+                    serialized = LFAgentHistory._serialize_message(sys_msg)
+                    messages.append(serialized)
+
+        # Append conversation history
         for message in self.history.history:
             # Serialize messages to ensure proper JSON-compatible format
             # This handles OpenAI SDK types (Pydantic models) that may not
