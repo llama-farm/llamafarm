@@ -16,8 +16,23 @@ const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 const API_HOST = (import.meta.env as any).VITE_APP_API_URL as string | undefined
 
 // Universal Runtime URL for direct TTS/STT calls
-// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-const RUNTIME_BASE_URL = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || 'http://127.0.0.1:11540'
+function getRuntimeBaseUrl(): string {
+  // 1) Explicit URL from env (for custom deployments)
+  const envUrl = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl
+  }
+
+  // 2) Derive from current window location (works for localhost and remote access)
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:11540`
+  }
+
+  // 3) Fallback for SSR or edge cases
+  return 'http://localhost:11540'
+}
+
+const RUNTIME_BASE_URL = getRuntimeBaseUrl()
 
 function resolveBaseUrl(): string {
   // 1) Explicit host from env
@@ -35,16 +50,7 @@ function resolveBaseUrl(): string {
     return base
   }
 
-  // 2) Local dev convenience: if running on localhost, prefer direct API to avoid proxy flakiness
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname === 'localhost'
-  ) {
-    // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-    return `http://127.0.0.1:14345/${API_VERSION}`
-  }
-
-  // 3) Default to vite proxy
+  // 2) Default to relative path
   return `/api/${API_VERSION}`
 }
 

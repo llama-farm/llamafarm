@@ -10,8 +10,23 @@ import { runtimeClient } from './client'
 import { devToolsEmitter } from '../utils/devToolsEmitter'
 
 // Server URL for voice WebSocket (goes through API gateway)
-// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-const API_HOST = (import.meta.env as Record<string, string>).VITE_APP_API_URL || 'http://127.0.0.1:14345'
+function getApiHost(): string {
+  // 1) Explicit URL from env (for custom deployments)
+  const envUrl = (import.meta.env as Record<string, string>).VITE_APP_API_URL
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl
+  }
+
+  // 2) Derive from current window location (works for localhost and remote access)
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.host}`
+  }
+
+  // 3) Fallback for SSR or edge cases
+  return 'http://localhost:14345'
+}
+
+const API_HOST = getApiHost()
 
 // =============================================================================
 // Types
