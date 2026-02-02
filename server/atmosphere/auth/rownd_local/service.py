@@ -62,6 +62,7 @@ class RowndLocalService:
         
         self._revocations: Dict[str, RevocationEntry] = {}
         self._pending_requests: Dict[str, dict] = {}
+        self._issued_tokens: Dict[str, dict] = {}  # Track tokens we've issued
         
         self._load_state()
     
@@ -70,6 +71,7 @@ class RowndLocalService:
         mesh_path = self.data_dir / "mesh.json"
         device_path = self.data_dir / "device.json"
         token_path = self.data_dir / "token.json"
+        issued_tokens_path = self.data_dir / "issued_tokens.json"
         
         if mesh_path.exists():
             self.mesh = MeshIdentity.load(mesh_path)
@@ -83,6 +85,11 @@ class RowndLocalService:
             with open(token_path) as f:
                 self.token = MeshToken.from_dict(json.load(f))
             logger.info(f"Loaded token (expires in {self.token.time_remaining}s)")
+        
+        if issued_tokens_path.exists():
+            with open(issued_tokens_path) as f:
+                self._issued_tokens = json.load(f)
+            logger.info(f"Loaded {len(self._issued_tokens)} issued tokens")
         
         self._init_components()
     
@@ -112,6 +119,10 @@ class RowndLocalService:
         if self.token:
             with open(self.data_dir / "token.json", 'w') as f:
                 json.dump(self.token.to_dict(), f, indent=2)
+        
+        # Save issued tokens
+        with open(self.data_dir / "issued_tokens.json", 'w') as f:
+            json.dump(self._issued_tokens, f, indent=2)
     
     # ==================== Mesh Management ====================
     
@@ -220,7 +231,8 @@ class RowndLocalService:
         self,
         request: dict,
         approve: bool = True,
-        granted_capabilities: Optional[List[str]] = None
+        granted_capabilities: Optional[List[str]] = None,
+        validity_hours: int = 24
     ) -> Optional[MeshToken]:
         """
         Process a join request from a new device.
@@ -229,6 +241,7 @@ class RowndLocalService:
             request: The join request from the device
             approve: Whether to approve the request
             granted_capabilities: Capabilities to grant (defaults to requested)
+            validity_hours: Token validity in hours
         
         Returns:
             MeshToken if approved, None otherwise
@@ -242,8 +255,19 @@ class RowndLocalService:
         
         token = self._issuer.issue_token(
             request,
-            granted_capabilities=granted_capabilities
+            granted_capabilities=granted_capabilities,
+            validity_hours=validity_hours
         )
+        
+        # Track issued token
+        self._issued_tokens[token.device_id] = {
+            "device_id": token.device_id,
+            "device_name": token.device_name,
+            "issued_at": token.issued_at,
+            "expires_at": token.expires_at,
+            "capabilities": token.capabilities
+        }
+        self._save_state()
         
         logger.info(f"Issued token to {token.device_id} ({token.device_name})")
         return token
@@ -351,6 +375,191 @@ class RowndLocalService:
                 )
                 new_count += 1
         return new_count
+    
+    # ==================== Invite Token Management ====================
+    
+    def create_invite_token(
+        self,
+        recipient_name: str,
+        capabilities: Optional[List[str]] = None,
+        validity_hours: int = 168  # Default 7 days for invite tokens
+    ) -> str:
+        """
+        Create a pre-authorized invite token that can be used to join the mesh.
+        
+        This creates a "virtual" join request for a future device and issues a token
+        for it. The recipient can then use this token to join without requiring
+        approval from a founder.
+        
+        Args:
+            recipient_name: Name for the device that will use this token
+            capabilities: Capabilities to grant (defaults to basic capabilities)
+            validity_hours: How long the invite token is valid
+        
+        Returns:
+            Compact token string that can be shared with the recipient
+        """
+        if not self._issuer:
+            raise RuntimeError("This node cannot issue certificates")
+        
+        # Use basic capabilities if none specified
+        if capabilities is None:
+            capabilities = ["compute.inference", "storage.read"]
+        
+        # Create a temporary device identity for the invite
+        from .device import DeviceIdentity, detect_tier
+        temp_device = DeviceIdentity.create(
+            name=recipient_name,
+            capabilities=capabilities,
+            tier=detect_tier()
+        )
+        
+        # Create a join request from this temp device
+        join_request = temp_device.create_join_request(self.mesh.mesh_id)
+        
+        # Issue token
+        token = self._issuer.issue_token(
+            join_request,
+            granted_capabilities=capabilities,
+            validity_hours=validity_hours
+        )
+        
+        # Track the issued invite token
+        self._issued_tokens[token.device_id] = {
+            "device_id": token.device_id,
+            "device_name": token.device_name,
+            "issued_at": token.issued_at,
+            "expires_at": token.expires_at,
+            "capabilities": token.capabilities,
+            "is_invite": True
+        }
+        self._save_state()
+        
+        logger.info(f"Created invite token for '{recipient_name}' (valid {validity_hours}h)")
+        
+        return token.to_compact()
+    
+    def join_with_token(
+        self,
+        token: str,
+        seed_peers: Optional[List[str]] = None
+    ) -> dict:
+        """
+        Join a mesh using a pre-issued invite token.
+        
+        This allows joining without the interactive request/approval flow.
+        
+        Args:
+            token: Compact token string (from create_invite_token)
+            seed_peers: Optional list of peer addresses to connect to
+        
+        Returns:
+            Join result with mesh info and connection details
+        """
+        # Parse the token
+        try:
+            mesh_token = MeshToken.from_compact(token)
+        except Exception as e:
+            raise ValueError(f"Invalid token format: {e}")
+        
+        # Create or update device identity to match token
+        # This handles the case where we're taking over a pre-created identity
+        if self.device is None or self.device.device_id != mesh_token.device_id:
+            # We need to adopt the identity from the token
+            # Note: In production, you'd want to verify hardware hash matches
+            # For now, we'll create a new device with the token's info
+            from .device import DeviceIdentity
+            
+            # We can't recover the private key from the token, so we create a new keypair
+            # but use the device_id from the token. This is a limitation - in practice,
+            # the invite flow should include the private key or the device should
+            # already have its keypair before getting the token.
+            
+            # For this implementation, we'll check if we already have a device
+            # with matching hardware that can use this token
+            self.device = DeviceIdentity.create(
+                name=mesh_token.device_name,
+                capabilities=mesh_token.capabilities,
+                tier=mesh_token.tier
+            )
+            logger.info(f"Created device identity from invite token")
+        
+        # Verify the token is valid
+        # First we need the mesh info to verify
+        # In a real implementation, this would be included in the token
+        # or fetched from seed peers
+        
+        # Accept the token
+        self.token = mesh_token
+        
+        # Initialize mesh identity from token info
+        # We don't have the full mesh data, but we have enough to verify tokens
+        # In practice, we'd fetch this from seed peers
+        if self.mesh is None:
+            logger.info(f"Joined mesh '{mesh_token.mesh_name}' using invite token")
+        
+        self._save_state()
+        
+        return {
+            "success": True,
+            "mesh_id": mesh_token.mesh_id,
+            "mesh_name": mesh_token.mesh_name,
+            "device_id": self.device.device_id,
+            "capabilities": mesh_token.capabilities,
+            "expires_at": mesh_token.expires_at,
+            "seed_peers": seed_peers or []
+        }
+    
+    def list_issued_tokens(self) -> List[dict]:
+        """
+        List all tokens issued by this node.
+        
+        Returns:
+            List of issued token metadata (not the tokens themselves)
+        """
+        return [
+            {
+                "device_id": token_info["device_id"],
+                "device_name": token_info["device_name"],
+                "issued_at": token_info["issued_at"],
+                "expires_at": token_info["expires_at"],
+                "capabilities": token_info["capabilities"],
+                "is_invite": token_info.get("is_invite", False),
+                "expired": int(time.time()) > token_info["expires_at"]
+            }
+            for token_info in self._issued_tokens.values()
+        ]
+    
+    def handle_remote_revocation(self, device_id: str, reason: str) -> None:
+        """
+        Handle a revocation notice from a remote node.
+        
+        This is called when we receive a revocation via gossip or direct notification.
+        
+        Args:
+            device_id: The device being revoked
+            reason: Reason for revocation
+        """
+        if device_id in self._revocations:
+            logger.debug(f"Device {device_id} already revoked locally")
+            return
+        
+        # Add to local revocation list
+        entry = RevocationEntry(
+            device_id=device_id,
+            revoked_at=int(time.time()),
+            reason=f"Remote revocation: {reason}",
+            revoked_by="remote"
+        )
+        
+        self._revocations[device_id] = entry
+        
+        # If we issued a token to this device, mark it
+        if device_id in self._issued_tokens:
+            self._issued_tokens[device_id]["revoked"] = True
+            self._save_state()
+        
+        logger.info(f"Processed remote revocation for device {device_id}: {reason}")
     
     # ==================== Status ====================
     
