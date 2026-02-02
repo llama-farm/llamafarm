@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -177,9 +178,12 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 	// Atomically rename temp file to target file
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("failed to remove existing config at %s: %w", path, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(path); err == nil {
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("failed to remove existing config at %s: %w", path, err)
+			}
 		}
 	}
 

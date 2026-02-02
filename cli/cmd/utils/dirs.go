@@ -39,9 +39,12 @@ func GetProjectsRoot() (string, error) {
 // to copy + delete when a cross-device link error is detected.
 func MoveFile(src, dst string) error {
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if _, err := os.Stat(dst); err == nil {
-		if err := os.Remove(dst); err != nil {
-			return fmt.Errorf("failed to remove existing file at %s: %w", dst, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(dst); err == nil {
+			if err := os.Remove(dst); err != nil {
+				return fmt.Errorf("failed to remove existing file at %s: %w", dst, err)
+			}
 		}
 	}
 
@@ -69,9 +72,12 @@ func MoveFile(src, dst string) error {
 // to recursive copy + delete when a cross-device link error is detected.
 func MoveDir(src, dst string) error {
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if stat, err := os.Stat(dst); err == nil && stat.IsDir() {
-		if err := os.RemoveAll(dst); err != nil {
-			return fmt.Errorf("failed to remove existing directory at %s: %w", dst, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if stat, err := os.Stat(dst); err == nil && stat.IsDir() {
+			if err := os.RemoveAll(dst); err != nil {
+				return fmt.Errorf("failed to remove existing directory at %s: %w", dst, err)
+			}
 		}
 	}
 

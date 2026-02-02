@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -355,9 +356,12 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 
 	// Atomically rename temp file to target file
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if _, err := os.Stat(targetPath); err == nil {
-		if err := os.Remove(targetPath); err != nil {
-			return fmt.Errorf("failed to remove existing file at %s: %w", targetPath, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(targetPath); err == nil {
+			if err := os.Remove(targetPath); err != nil {
+				return fmt.Errorf("failed to remove existing file at %s: %w", targetPath, err)
+			}
 		}
 	}
 

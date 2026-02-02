@@ -258,9 +258,12 @@ func (m *BinaryManager) downloadAndInstallBinary(downloadURL, filename string, h
 	destPath := filepath.Join(binDir, filename)
 
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if _, err := os.Stat(destPath); err == nil {
-		if err := os.Remove(destPath); err != nil {
-			return fmt.Errorf("failed to remove existing binary at %s: %w", destPath, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(destPath); err == nil {
+			if err := os.Remove(destPath); err != nil {
+				return fmt.Errorf("failed to remove existing binary at %s: %w", destPath, err)
+			}
 		}
 	}
 
@@ -385,9 +388,12 @@ func (m *BinaryManager) downloadAndInstallBinaryFromZip(downloadURL, filename st
 	destPath := filepath.Join(binDir, filename)
 
 	// On Windows, os.Rename fails if destination exists. Remove it first.
-	if _, err := os.Stat(destPath); err == nil {
-		if err := os.Remove(destPath); err != nil {
-			return fmt.Errorf("failed to remove existing binary at %s: %w", destPath, err)
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(destPath); err == nil {
+			if err := os.Remove(destPath); err != nil {
+				return fmt.Errorf("failed to remove existing binary at %s: %w", destPath, err)
+			}
 		}
 	}
 
