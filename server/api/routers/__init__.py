@@ -1,3 +1,4 @@
+from .addons import router as addons_router
 from .datasets import router as datasets_router
 from .event_logs import router as event_logs_router
 from .examples import router as examples_router
@@ -12,6 +13,7 @@ from .vision import vision_router
 from .voice import voice_router
 
 __all__ = [
+    "addons_router",
     "projects_router",
     "datasets_router",
     "health_router",

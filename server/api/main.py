@@ -84,6 +84,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     # Register global exception handlers
     register_exception_handlers(app)
 
+    app.include_router(routers.addons_router)
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
