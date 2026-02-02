@@ -38,6 +38,13 @@ func GetProjectsRoot() (string, error) {
 // It first attempts os.Rename (fast path for same filesystem), then falls back
 // to copy + delete when a cross-device link error is detected.
 func MoveFile(src, dst string) error {
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	if _, err := os.Stat(dst); err == nil {
+		if err := os.Remove(dst); err != nil {
+			return fmt.Errorf("failed to remove existing file at %s: %w", dst, err)
+		}
+	}
+
 	err := os.Rename(src, dst)
 	if err == nil {
 		return nil
@@ -61,6 +68,13 @@ func MoveFile(src, dst string) error {
 // It first attempts os.Rename (fast path for same filesystem), then falls back
 // to recursive copy + delete when a cross-device link error is detected.
 func MoveDir(src, dst string) error {
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	if stat, err := os.Stat(dst); err == nil && stat.IsDir() {
+		if err := os.RemoveAll(dst); err != nil {
+			return fmt.Errorf("failed to remove existing directory at %s: %w", dst, err)
+		}
+	}
+
 	err := os.Rename(src, dst)
 	if err == nil {
 		return nil

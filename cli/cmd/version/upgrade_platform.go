@@ -186,6 +186,12 @@ func (u *UnixUpgradeStrategy) atomicReplace(current, new string) error {
 }
 
 func (u *UnixUpgradeStrategy) restoreBackup(backupPath, current string) error {
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	if _, err := os.Stat(current); err == nil {
+		if err := os.Remove(current); err != nil {
+			return fmt.Errorf("failed to remove existing binary at %s: %w", current, err)
+		}
+	}
 	return os.Rename(backupPath, current)
 }
 
@@ -302,6 +308,12 @@ func (w *WindowsUpgradeStrategy) atomicReplace(current, new string) error {
 }
 
 func (w *WindowsUpgradeStrategy) restoreBackup(backupPath, current string) error {
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	if _, err := os.Stat(current); err == nil {
+		if err := os.Remove(current); err != nil {
+			return fmt.Errorf("failed to remove existing binary at %s: %w", current, err)
+		}
+	}
 	return os.Rename(backupPath, current)
 }
 

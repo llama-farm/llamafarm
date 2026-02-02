@@ -176,6 +176,13 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 
 	// Atomically rename temp file to target file
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	if _, err := os.Stat(path); err == nil {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("failed to remove existing config at %s: %w", path, err)
+		}
+	}
+
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}
