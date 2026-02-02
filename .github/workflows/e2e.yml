@@ -468,6 +468,8 @@ jobs:
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1
+      # Disable Metal backend initialization completely (prevents SIGSEGV during llama_context creation)
+      GGML_METAL_ENABLE: 0
 
     steps:
       # ============================================================
