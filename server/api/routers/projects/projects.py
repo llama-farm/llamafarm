@@ -444,6 +444,18 @@ class ChatRequest(BaseModel):
         "Example: {'user_name': 'Alice', 'company': 'Acme Corp'}",
     )
 
+    # RAG sources visibility for debugging/testing
+    include_sources: bool | None = Field(
+        default=None,
+        description="Include retrieved RAG chunks in streaming response as custom SSE event.",
+    )
+    sources_limit: int | None = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of sources to include (default 10, max 50).",
+    )
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -578,6 +590,8 @@ async def chat(
                 think=request.think,
                 thinking_budget=request.thinking_budget,
                 max_tokens=request.max_tokens,
+                include_sources=request.include_sources or False,
+                sources_limit=request.sources_limit or 10,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -981,8 +995,19 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                 failed_count = 0
 
                 for result in results:
-                    # New format: [success, info]
-                    success, info = result[0], result[1]
+                    # Handle multiple result formats
+                    if isinstance(result, (list, tuple)) and len(result) >= 2:
+                        # New format: [success, info]
+                        success, info = result[0], result[1]
+                    elif isinstance(result, dict):
+                        # Dict format from failed tasks or legacy format
+                        success = result.get("success", True)
+                        info = result.get("details", result)
+                    else:
+                        logger.warning(f"Unexpected result format: {type(result)}")
+                        success = False
+                        info = {"error": "Unexpected result format"}
+
                     if not success:
                         failed_count += 1
                         continue

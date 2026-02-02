@@ -85,7 +85,7 @@ build_test_binaries() {
     # Install go-jsonschema if needed
     if ! command -v go-jsonschema >/dev/null 2>&1; then
         info "Installing go-jsonschema..."
-        go install github.com/atombender/go-jsonschema@v0.20.0 || error "Failed to install go-jsonschema"
+        go install github.com/atombender/go-jsonschema@v0.21.0 || error "Failed to install go-jsonschema"
     fi
 
     # Generate Go types

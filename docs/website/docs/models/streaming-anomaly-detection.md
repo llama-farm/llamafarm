@@ -26,7 +26,7 @@ The streaming API is designed for scenarios where:
 
 ```bash
 # Send streaming data point
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-stream",
@@ -157,7 +157,7 @@ During the first few samples, rolling statistics have insufficient history. Pola
 **Example with Rolling Features:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{
     "model": "fraud-detector",
@@ -208,7 +208,7 @@ Choose the right algorithm for your use case:
 
 ```bash
 # Get full backend information
-curl http://localhost:8000/v1/ml/anomaly/backends
+curl http://localhost:14345/v1/ml/anomaly/backends
 ```
 
 | Backend | Category | Speed | Memory | Best For |
@@ -233,7 +233,7 @@ curl http://localhost:8000/v1/ml/anomaly/backends
 ### List All Active Detectors
 
 ```bash
-curl http://localhost:8000/v1/ml/anomaly/stream/detectors
+curl http://localhost:14345/v1/ml/anomaly/stream/detectors
 ```
 
 Response:
@@ -259,7 +259,7 @@ Response:
 ### Get Specific Detector Stats
 
 ```bash
-curl http://localhost:8000/v1/ml/anomaly/stream/sensor-stream
+curl http://localhost:14345/v1/ml/anomaly/stream/sensor-stream
 ```
 
 ### Reset Detector
@@ -267,7 +267,7 @@ curl http://localhost:8000/v1/ml/anomaly/stream/sensor-stream
 Clear all data and restart cold start:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream/sensor-stream/reset
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream/sensor-stream/reset
 ```
 
 ### Delete Detector
@@ -275,7 +275,7 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/stream/sensor-stream/reset
 Remove detector and free memory:
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/ml/anomaly/stream/sensor-stream
+curl -X DELETE http://localhost:14345/v1/ml/anomaly/stream/sensor-stream
 ```
 
 ---
@@ -285,7 +285,7 @@ curl -X DELETE http://localhost:8000/v1/ml/anomaly/stream/sensor-stream
 Send multiple data points in one request:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-stream",
@@ -323,7 +323,7 @@ Response includes results for each point:
 Enable automatic feature engineering for time-series patterns:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{
     "model": "enhanced-sensor",
@@ -356,7 +356,7 @@ import random
 async def stream_sensor_data():
     """Simulate streaming sensor data with occasional anomalies."""
     async with httpx.AsyncClient() as client:
-        base_url = "http://localhost:8000/v1/ml/anomaly/stream"
+        base_url = "http://localhost:14345/v1/ml/anomaly/stream"
 
         for i in range(200):
             # Normal data
@@ -403,7 +403,7 @@ import httpx
 
 async def advanced_streaming():
     async with httpx.AsyncClient() as client:
-        base_url = "http://localhost:8000/v1/ml"
+        base_url = "http://localhost:14345/v1/ml"
 
         # Create a Polars buffer for custom feature engineering
         await client.post(f"{base_url}/polars/buffers", json={
@@ -481,7 +481,7 @@ The sliding window and periodic retraining naturally handle drift:
 For sudden distribution shifts:
 ```bash
 # Reset and restart cold start
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream/my-detector/reset
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream/my-detector/reset
 ```
 
 ---

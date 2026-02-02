@@ -39,17 +39,17 @@ lf start
 
 This automatically launches:
 
-- The FastAPI server (port 8000)
+- The FastAPI server (port 14345)
 - The RAG worker
-- The Designer web UI (port **8000**)
+- The Designer web UI (port **14345**)
 
 Once started, open your browser to:
 
 ```
-http://localhost:8000
+http://localhost:14345
 ```
 
-The Designer is served by the same FastAPI server, so it shares port 8000 with the API.
+The Designer is served by the same FastAPI server, so it shares port 14345 with the API.
 
 ![Designer Home Page](./screenshots/designer-home.png)
 _The Designer home page where you can create and select projects_
@@ -136,12 +136,12 @@ Every section includes a toggle to switch between Designer (visual) mode and Con
 **Designer won't load:**
 
 - Ensure the server is running (`lf start` or check Docker containers)
-- Verify the server is accessible at `http://localhost:8000/health/liveness`
+- Verify the server is accessible at `http://localhost:14345/health/liveness`
 - Check browser console for connection errors
 
 **Can't connect to API:**
 
-- The Designer expects the server at `localhost:8000` by default
+- The Designer expects the server at `localhost:14345` by default
 - If using a custom setup, set the `VITE_APP_API_URL` environment variable
 
 **Changes not saving:**

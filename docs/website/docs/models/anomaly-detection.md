@@ -24,13 +24,13 @@ The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Un
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000) - with versioning
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+# Via LlamaFarm API (port 14345) - with versioning
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
 
 # Use -latest suffix to auto-resolve
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor-latest", "backend": "isolation_forest", "data": [...]}'
 ```
@@ -41,7 +41,7 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
 ### 1. Train on Normal Data
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-monitor",
@@ -58,7 +58,7 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
 ### 2. Detect Anomalies
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-monitor",
@@ -471,11 +471,11 @@ Training data: [normal, normal, normal, anomaly, normal, ...]
 
 ```bash
 # Start conservative (assume clean training data)
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -d '{"model": "test", "data": [...], "contamination": 0.05}'
 
 # Test on data with known anomalies
-curl -X POST http://localhost:8000/v1/ml/anomaly/score \
+curl -X POST http://localhost:14345/v1/ml/anomaly/score \
   -d '{"model": "test", "data": [known_normal, known_anomaly, ...]}'
 
 # If too many false positives → increase contamination
@@ -503,7 +503,7 @@ Real-world data often includes both numeric and categorical features. Use the `s
 
 ```bash
 # Train with mixed data
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -527,7 +527,7 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
 
 ```bash
 # Detect anomalies (schema already learned)
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -551,7 +551,7 @@ The encoder is automatically cached with the model - no need to pass the schema 
 After training, save the model for production use:
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/save \
+curl -X POST http://localhost:14345/v1/ml/anomaly/save \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -579,7 +579,7 @@ Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames
 Load a pre-trained model (e.g., after server restart):
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/anomaly/load \
+curl -X POST http://localhost:14345/v1/ml/anomaly/load \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -592,7 +592,7 @@ The model is loaded from the standard location based on its name. The encoder an
 ### List Saved Models
 
 ```bash
-curl http://localhost:8000/v1/ml/anomaly/models
+curl http://localhost:14345/v1/ml/anomaly/models
 ```
 
 Response:
@@ -611,7 +611,7 @@ Response:
 ### Delete Model
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/ml/anomaly/models/api_detector_v1.joblib
+curl -X DELETE http://localhost:14345/v1/ml/anomaly/models/api_detector_v1.joblib
 ```
 
 ---
@@ -628,7 +628,7 @@ For real-time data streams, LlamaFarm provides a streaming API that handles:
 
 ```bash
 # Send streaming data points
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
   -H "Content-Type: application/json" \
   -d '{
     "model": "live-sensor",
@@ -687,16 +687,16 @@ curl -X POST http://localhost:8000/v1/ml/anomaly/stream \
 
 ```bash
 # List all active detectors
-curl http://localhost:8000/v1/ml/anomaly/stream/detectors
+curl http://localhost:14345/v1/ml/anomaly/stream/detectors
 
 # Get specific detector stats
-curl http://localhost:8000/v1/ml/anomaly/stream/live-sensor
+curl http://localhost:14345/v1/ml/anomaly/stream/live-sensor
 
 # Reset detector (clears data, restarts cold start)
-curl -X POST http://localhost:8000/v1/ml/anomaly/stream/live-sensor/reset
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream/live-sensor/reset
 
 # Delete detector
-curl -X DELETE http://localhost:8000/v1/ml/anomaly/stream/live-sensor
+curl -X DELETE http://localhost:14345/v1/ml/anomaly/stream/live-sensor
 ```
 
 ### Recommended Backends for Streaming
@@ -728,7 +728,7 @@ Most users should use the streaming anomaly detection API, which manages Polars 
 ### Create a Buffer
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/polars/buffers \
+curl -X POST http://localhost:14345/v1/ml/polars/buffers \
   -H "Content-Type: application/json" \
   -d '{"buffer_id": "sensor-data", "window_size": 1000}'
 ```
@@ -737,7 +737,7 @@ curl -X POST http://localhost:8000/v1/ml/polars/buffers \
 
 ```bash
 # Single record
-curl -X POST http://localhost:8000/v1/ml/polars/append \
+curl -X POST http://localhost:14345/v1/ml/polars/append \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -745,7 +745,7 @@ curl -X POST http://localhost:8000/v1/ml/polars/append \
   }'
 
 # Batch append
-curl -X POST http://localhost:8000/v1/ml/polars/append \
+curl -X POST http://localhost:14345/v1/ml/polars/append \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -760,7 +760,7 @@ curl -X POST http://localhost:8000/v1/ml/polars/append \
 ### Compute Rolling Features
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/polars/features \
+curl -X POST http://localhost:14345/v1/ml/polars/features \
   -H "Content-Type: application/json" \
   -d '{
     "buffer_id": "sensor-data",
@@ -781,22 +781,22 @@ Response includes computed columns like:
 
 ```bash
 # List all buffers
-curl http://localhost:8000/v1/ml/polars/buffers
+curl http://localhost:14345/v1/ml/polars/buffers
 
 # Get buffer stats
-curl http://localhost:8000/v1/ml/polars/buffers/sensor-data
+curl http://localhost:14345/v1/ml/polars/buffers/sensor-data
 
 # Get raw data
-curl "http://localhost:8000/v1/ml/polars/buffers/sensor-data/data?tail=10"
+curl "http://localhost:14345/v1/ml/polars/buffers/sensor-data/data?tail=10"
 
 # Get data with features
-curl "http://localhost:8000/v1/ml/polars/buffers/sensor-data/data?with_features=true&tail=10"
+curl "http://localhost:14345/v1/ml/polars/buffers/sensor-data/data?with_features=true&tail=10"
 
 # Clear buffer (keep structure)
-curl -X POST http://localhost:8000/v1/ml/polars/buffers/sensor-data/clear
+curl -X POST http://localhost:14345/v1/ml/polars/buffers/sensor-data/clear
 
 # Delete buffer
-curl -X DELETE http://localhost:8000/v1/ml/polars/buffers/sensor-data
+curl -X DELETE http://localhost:14345/v1/ml/polars/buffers/sensor-data
 ```
 
 ### Buffer Statistics

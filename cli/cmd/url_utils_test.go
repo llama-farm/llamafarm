@@ -9,10 +9,10 @@ func TestBuildServerURL(t *testing.T) {
 		path string
 		want string
 	}{
-		{"no_trailing_base_with_leading_path", "http://localhost:8000", "/v1/info", "http://localhost:8000/v1/info"},
-		{"trailing_base_with_leading_path", "http://localhost:8000/", "/v1/info", "http://localhost:8000/v1/info"},
-		{"trailing_base_without_leading_path", "http://localhost:8000/", "v1/info", "http://localhost:8000/v1/info"},
-		{"no_path", "http://localhost:8000/", "", "http://localhost:8000"},
+		{"no_trailing_base_with_leading_path", "http://localhost:14345", "/v1/info", "http://localhost:14345/v1/info"},
+		{"trailing_base_with_leading_path", "http://localhost:14345/", "/v1/info", "http://localhost:14345/v1/info"},
+		{"trailing_base_without_leading_path", "http://localhost:14345/", "v1/info", "http://localhost:14345/v1/info"},
+		{"no_path", "http://localhost:14345/", "", "http://localhost:14345"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

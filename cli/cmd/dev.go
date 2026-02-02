@@ -19,7 +19,7 @@ var devCmd = &cobra.Command{
 	Long:    "Start your LlamaFarm project locally and open an interactive chat session for development and testing.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(serverURL) == "" {
-			serverURL = "http://localhost:8000"
+			serverURL = "http://localhost:14345"
 		}
 
 		// Resolve ollamaHost for dev: flag > env > default

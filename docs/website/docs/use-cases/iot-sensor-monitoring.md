@@ -66,7 +66,7 @@ import random
 from datetime import datetime
 
 # Configuration
-LLAMAFARM_URL = "http://localhost:8000/v1/ml"
+LLAMAFARM_URL = "http://localhost:14345/v1/ml"
 MODEL_ID = "factory-sensors"
 BACKEND = "ecod"
 
@@ -270,7 +270,7 @@ import httpx
 import random
 from datetime import datetime
 
-LLAMAFARM_URL = "http://localhost:8000/v1/ml"
+LLAMAFARM_URL = "http://localhost:14345/v1/ml"
 MODEL_ID = "factory-sensors"
 
 async def main():

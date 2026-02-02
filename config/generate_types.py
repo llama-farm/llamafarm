@@ -46,7 +46,7 @@ def main() -> int:
             "run",
             "datamodel-codegen",
             "--input",
-            "schema.deref.yaml",
+            "schema.yaml",
             "--output",
             "datamodel.py",
             "--input-file-type=jsonschema",

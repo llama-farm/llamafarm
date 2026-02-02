@@ -82,7 +82,7 @@ Set `LLAMAFARM_BACKEND=cpu` to force CPU mode if GPU detection causes issues.
 | Issue | Cause | Fix |
 | ----- | ----- | --- |
 | `nx build docs` sqlite I/O error | Nx cache database lock or permission issue | Remove `.nx/` cache directory or run with `NX_SKIP_NX_CACHE=1`. |
-| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 8000/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
+| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 14345/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
 | Python module import errors | Virtual environment not activated or dependencies not installed | Run `cd server && uv sync` or `cd rag && uv sync` to install dependencies. |
 
 ## Extensibility Pitfalls

@@ -11,7 +11,7 @@ MANUAL_FILE="$SCRIPT_DIR/../cli/cmd/config/types.go"
 SCHEMA_FILE="$SCRIPT_DIR/schema.deref.yaml"
 
 echo "Installing/updating go-jsonschema..."
-go install github.com/atombender/go-jsonschema@v0.20.0
+go install github.com/atombender/go-jsonschema@v0.21.0
 
 # Get GOPATH to find installed binary
 GOPATH=$(go env GOPATH)

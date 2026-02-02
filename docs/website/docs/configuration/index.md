@@ -66,7 +66,7 @@ The original flat runtime configuration is automatically converted internally:
 runtime:
   provider: openai
   model: qwen2.5:7b
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-local-placeholder
   instructor_mode: tools
   model_api_parameters:
@@ -128,7 +128,7 @@ runtime:
 
 ### Prompts
 
-Prompts are named sets of messages that seed instructions for each session.
+Prompts are named sets of messages that seed instructions for each session. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax.
 
 ```yaml
 prompts:
@@ -144,25 +144,110 @@ prompts:
 - Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
 
+#### Dynamic Variable Substitution
+
+Use Jinja2-style `{{variable}}` syntax to inject values at request time:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          The customer's name is {{user_name | Valued Customer}}.
+          Account tier: {{account_tier | standard}}
+```
+
+**Syntax:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `{{variable}}` | Required variable | `Hello {{name}}` → Error if `name` not provided |
+| `{{variable \| default}}` | Variable with default | `Hello {{name \| Guest}}` → `Hello Guest` if missing |
+| `{{ variable }}` | Whitespace allowed | Same as above |
+
+**Passing variables via API:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/ns/project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi"}],
+    "variables": {
+      "company_name": "TechCorp",
+      "user_name": "Alice",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+Variables can be used in:
+- **Prompt message content** - Personalize system instructions
+- **Tool descriptions** - Customize tool behavior per request
+- **Tool parameter descriptions** - Dynamic parameter help text
+
+See the [Prompts Guide](../prompts/index.md) for detailed examples.
+
 ### RAG Configuration
 
 The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  parsers:
+    - name: pdf_parser
+      type: PDFParser_LlamaIndex
+      config:
+        chunk_size: 1500
+        chunk_overlap: 200
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+    parser: pdf_parser
+
 rag:
   databases:
     - name: main_db
       type: ChromaStore
+      # Reuse components by reference (defaults also apply when fields are omitted)
+      embedding_strategy: default_embeddings
+      retrieval_strategy: semantic_search
+  data_processing_strategies:
+    - name: pdf_ingest
+      parsers:
+        - pdf_parser         # reference to components.parsers
+      extractors:
+        - type: HeadingExtractor
+        - type: ContentStatisticsExtractor
+```
+
+Inline (legacy) configs are still supported:
+
+```yaml
+rag:
+  databases:
+    - name: inline_db
+      type: ChromaStore
       default_embedding_strategy: default_embeddings
-      default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
       retrieval_strategies:
         - name: semantic_search
-          type: VectorRetriever
+          type: BasicSimilarityStrategy
           config:
             top_k: 5
   data_processing_strategies:
@@ -182,7 +267,12 @@ Key points:
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
+- Inline parsers can omit `name` (only `type`/`config` are required); `name` is required only for reusable parsers declared under `components.parsers` so they can be referenced by string or set as defaults. This keeps older inline configs valid while allowing named, reusable components.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
+
+Defaults and persistence:
+- `components.defaults` are used when a database or processing strategy omits a field.
+- Server resolves references at load time and persists fully inlined configs; GET responses return the expanded strategies (no reference strings).
 
 ### Memory Configuration
 
