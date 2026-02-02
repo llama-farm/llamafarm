@@ -54,7 +54,7 @@ class MeshDiscovery:
     Usage:
         discovery = MeshDiscovery(
             node_id="abc123",
-            port=11434,
+            port=11450,  # Atmosphere gossip port (not 11434/Ollama or 14345/LlamaFarm)
             mesh_id="mymesh"
         )
         
@@ -248,8 +248,8 @@ class ManualDiscovery:
     def __init__(self):
         self._peers: Dict[str, DiscoveredPeer] = {}
     
-    def add_peer(self, host: str, port: int = 11434) -> None:
-        """Add a peer by address."""
+    def add_peer(self, host: str, port: int = 11450) -> None:
+        """Add a peer by address. Default port 11450 (Atmosphere gossip)."""
         peer_id = f"{host}:{port}"
         self._peers[peer_id] = DiscoveredPeer(
             node_id=peer_id,
@@ -258,8 +258,8 @@ class ManualDiscovery:
             port=port
         )
     
-    def remove_peer(self, host: str, port: int = 11434) -> None:
-        """Remove a peer."""
+    def remove_peer(self, host: str, port: int = 11450) -> None:
+        """Remove a peer. Default port 11450 (Atmosphere gossip)."""
         peer_id = f"{host}:{port}"
         self._peers.pop(peer_id, None)
     

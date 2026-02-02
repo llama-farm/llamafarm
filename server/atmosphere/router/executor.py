@@ -63,7 +63,7 @@ class Executor:
         self,
         router: SemanticRouter,
         node_id: str,
-        port: int = 11434
+        port: int = 11450  # Atmosphere gossip port
     ):
         self.router = router
         self.node_id = node_id
