@@ -7,6 +7,7 @@ Commands:
     nodes       List connected nodes
     token       Manage tokens (create, revoke)
     intent      Route an intent through the mesh
+    demo        Interactive demo/test mode
 """
 
 import argparse
@@ -24,6 +25,7 @@ from .commands import (
     cmd_intent,
     cmd_start,
 )
+from .demo import cmd_demo
 
 
 def main():
@@ -101,6 +103,9 @@ def main():
     start_parser.add_argument("--api-port", type=int, default=11451, help="API port")
     start_parser.add_argument("--foreground", "-f", action="store_true", help="Run in foreground")
     
+    # demo (interactive test mode)
+    demo_parser = subparsers.add_parser("demo", help="Interactive demo/test mode")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -125,6 +130,8 @@ def main():
             asyncio.run(cmd_intent(args, data_dir))
         elif args.command == "start":
             asyncio.run(cmd_start(args, data_dir))
+        elif args.command == "demo":
+            asyncio.run(cmd_demo(args, data_dir))
         else:
             parser.print_help()
             sys.exit(1)
