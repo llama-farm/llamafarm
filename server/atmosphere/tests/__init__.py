@@ -1,1 +1,1 @@
-"""Atmosphere tests."""
+"""Atmosphere integration tests."""

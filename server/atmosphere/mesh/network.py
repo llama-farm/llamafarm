@@ -303,25 +303,35 @@ class GossipNetwork:
         """Read messages from peer."""
         try:
             while self._running and peer.connected:
-                line = await reader.readline()
+                try:
+                    line = await asyncio.wait_for(reader.readline(), timeout=PEER_TIMEOUT_SEC)
+                except asyncio.TimeoutError:
+                    logger.warning(f"Read timeout from {peer.node_id}, disconnecting")
+                    break
+                
                 if not line:
+                    logger.info(f"Connection closed by {peer.node_id}")
                     break
                 
                 try:
                     msg = GossipMessage.from_json(line.decode())
                     peer.touch()
                     await self._handle_message(peer, msg)
-                except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON from {peer.node_id}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON from {peer.node_id}: {e}")
+                    # Don't disconnect on parse errors, just skip
                 except Exception as e:
-                    logger.error(f"Error handling message from {peer.node_id}: {e}")
+                    logger.error(f"Error handling message from {peer.node_id}: {e}", exc_info=True)
         
         except asyncio.CancelledError:
-            pass
+            logger.debug(f"Message reader cancelled for {peer.node_id}")
+        except ConnectionResetError:
+            logger.info(f"Connection reset by {peer.node_id}")
         except Exception as e:
             logger.warning(f"Connection lost to {peer.node_id}: {e}")
         finally:
             peer.connected = False
+            logger.info(f"Peer disconnected: {peer.node_id}")
     
     async def _close_peer(self, peer: Peer):
         """Close peer connection."""
@@ -379,7 +389,8 @@ class GossipNetwork:
     async def send(self, peer_id: str, msg_type: MessageType, payload: Dict):
         """Send message to specific peer."""
         peer = self.peers.get(peer_id)
-        if not peer or not peer.connected:
+        if not peer or not peer.connected or not peer.writer:
+            logger.debug(f"Cannot send to {peer_id}: peer not connected")
             return False
         
         msg = GossipMessage(
@@ -390,9 +401,18 @@ class GossipNetwork:
         )
         
         try:
-            peer.writer.write((msg.to_json() + "\n").encode())
-            await peer.writer.drain()
+            data = (msg.to_json() + "\n").encode()
+            peer.writer.write(data)
+            await asyncio.wait_for(peer.writer.drain(), timeout=5.0)
             return True
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout sending to {peer_id}")
+            peer.connected = False
+            return False
+        except ConnectionResetError:
+            logger.info(f"Connection reset while sending to {peer_id}")
+            peer.connected = False
+            return False
         except Exception as e:
             logger.warning(f"Failed to send to {peer_id}: {e}")
             peer.connected = False
@@ -404,22 +424,37 @@ class GossipNetwork:
         exclude.add(self.node_id)
         
         data = (msg.to_json() + "\n").encode()
+        failed_peers = []
         
         for peer_id, peer in list(self.peers.items()):
-            if peer_id in exclude or not peer.connected:
+            if peer_id in exclude or not peer.connected or not peer.writer:
                 continue
             
             try:
                 peer.writer.write(data)
-                await peer.writer.drain()
+                await asyncio.wait_for(peer.writer.drain(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout propagating to {peer_id}")
+                peer.connected = False
+                failed_peers.append(peer_id)
+            except ConnectionResetError:
+                logger.debug(f"Connection reset while propagating to {peer_id}")
+                peer.connected = False
+                failed_peers.append(peer_id)
             except Exception as e:
                 logger.warning(f"Failed to propagate to {peer_id}: {e}")
                 peer.connected = False
+                failed_peers.append(peer_id)
+        
+        if failed_peers:
+            logger.debug(f"Message propagation failed to {len(failed_peers)} peer(s)")
     
     # === Background Tasks ===
     
     async def _connect_seeds(self):
-        """Connect to seed peers with retry."""
+        """Connect to seed peers with exponential backoff retry."""
+        retry_delays = {}  # Track per-peer retry delays
+        
         while self._running:
             for address in self.seed_peers:
                 # Check if already connected
@@ -428,7 +463,24 @@ class GossipNetwork:
                     for p in self.peers.values()
                 )
                 if not existing:
-                    await self._connect_peer(address)
+                    # Initialize delay for new peer
+                    if address not in retry_delays:
+                        retry_delays[address] = RECONNECT_DELAY_SEC
+                    
+                    peer = await self._connect_peer(address)
+                    
+                    if peer:
+                        # Connection successful - reset delay
+                        retry_delays[address] = RECONNECT_DELAY_SEC
+                    else:
+                        # Connection failed - exponential backoff
+                        retry_delays[address] = min(
+                            retry_delays[address] * 2,
+                            MAX_RECONNECT_DELAY_SEC
+                        )
+                        logger.debug(
+                            f"Next retry for {address} in {retry_delays[address]}s"
+                        )
             
             await asyncio.sleep(30)
     
