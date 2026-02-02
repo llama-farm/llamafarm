@@ -37,6 +37,7 @@ except ImportError:
 
     class Task(BaseModel):
         """Task model - placeholder until implementation exists."""
+
         id: str
         subject: str
         description: str
@@ -47,18 +48,22 @@ except ImportError:
 
     class TaskNotFoundError(Exception):
         """Raised when a task is not found."""
+
         pass
 
     class CycleDetectedError(Exception):
         """Raised when adding a dependency would create a cycle."""
+
         pass
 
     class InvalidStatusTransitionError(Exception):
         """Raised when a status transition is not allowed."""
+
         pass
 
     class TasksService:
         """Placeholder TasksService class - tests will fail until implementation exists."""
+
         pass
 
 
@@ -148,7 +153,9 @@ class TestTaskCreation:
 
         assert task3.blockedBy == ["1", "2"]
 
-    def test_create_task_updates_bidirectional_references(self, temp_project_dir, session_id):
+    def test_create_task_updates_bidirectional_references(
+        self, temp_project_dir, session_id
+    ):
         """Test that blockedBy creates corresponding blocks on referenced tasks."""
         # Create prerequisite task
         TasksService.create_task(
@@ -173,7 +180,9 @@ class TestTaskCreation:
         assert "2" in updated_task1.blocks
         assert "1" in task2.blockedBy
 
-    def test_create_task_error_on_nonexistent_blocked_by(self, temp_project_dir, session_id):
+    def test_create_task_error_on_nonexistent_blocked_by(
+        self, temp_project_dir, session_id
+    ):
         """Test that creating a task with non-existent blockedBy raises an error."""
         with pytest.raises(TaskNotFoundError, match="Task '999' not found"):
             TasksService.create_task(
@@ -203,7 +212,9 @@ class TestTaskCreation:
         assert saved_data["subject"] == "Persistent task"
         assert saved_data["description"] == "This should be saved to disk"
 
-    def test_create_task_creates_directory_structure(self, temp_project_dir, session_id):
+    def test_create_task_creates_directory_structure(
+        self, temp_project_dir, session_id
+    ):
         """Test that create_task creates necessary directories if they don't exist."""
         # Ensure tasks directory doesn't exist
         tasks_dir = Path(temp_project_dir) / "tasks" / session_id
@@ -244,14 +255,18 @@ class TestTaskRetrieval:
             activeForm="Testing task retrieval",
         )
 
-        retrieved_task = TasksService.get_task(temp_project_dir, session_id, created_task.id)
+        retrieved_task = TasksService.get_task(
+            temp_project_dir, session_id, created_task.id
+        )
 
         assert retrieved_task.id == created_task.id
         assert retrieved_task.subject == "Test task"
         assert retrieved_task.description == "For retrieval testing"
         assert retrieved_task.activeForm == "Testing task retrieval"
 
-    def test_get_task_raises_error_for_nonexistent_task(self, temp_project_dir, session_id):
+    def test_get_task_raises_error_for_nonexistent_task(
+        self, temp_project_dir, session_id
+    ):
         """Test that get_task raises TaskNotFoundError for non-existent task."""
         with pytest.raises(TaskNotFoundError, match="Task '999' not found"):
             TasksService.get_task(temp_project_dir, session_id, "999")
@@ -319,7 +334,9 @@ class TestTaskRetrieval:
         assert tasks[1].id == "2"
         assert tasks[2].id == "3"
 
-    def test_list_tasks_returns_empty_list_for_no_tasks(self, temp_project_dir, session_id):
+    def test_list_tasks_returns_empty_list_for_no_tasks(
+        self, temp_project_dir, session_id
+    ):
         """Test that list_tasks returns empty list when no tasks exist."""
         tasks = TasksService.list_tasks(temp_project_dir, session_id)
         assert tasks == []
@@ -345,7 +362,9 @@ class TestTaskUpdate:
     def session_id(self):
         return "test-session-789"
 
-    def test_update_task_status_pending_to_in_progress(self, temp_project_dir, session_id):
+    def test_update_task_status_pending_to_in_progress(
+        self, temp_project_dir, session_id
+    ):
         """Test updating task status from pending to in_progress."""
         task = TasksService.create_task(
             project_dir=temp_project_dir,
@@ -364,7 +383,9 @@ class TestTaskUpdate:
 
         assert updated_task.status == "in_progress"
 
-    def test_update_task_status_in_progress_to_completed(self, temp_project_dir, session_id):
+    def test_update_task_status_in_progress_to_completed(
+        self, temp_project_dir, session_id
+    ):
         """Test updating task status from in_progress to completed."""
         task = TasksService.create_task(
             project_dir=temp_project_dir,
@@ -501,7 +522,9 @@ class TestTaskUpdate:
         updated_task1 = TasksService.get_task(temp_project_dir, session_id, "1")
         assert "2" in updated_task1.blocks
 
-    def test_update_task_completing_removes_from_blocked_by(self, temp_project_dir, session_id):
+    def test_update_task_completing_removes_from_blocked_by(
+        self, temp_project_dir, session_id
+    ):
         """Test that completing a task removes it from blockedBy of dependent tasks."""
         task1 = TasksService.create_task(
             project_dir=temp_project_dir,
@@ -567,7 +590,9 @@ class TestTaskUpdate:
                 subject="Updated",
             )
 
-    def test_cannot_reopen_completed_task_to_pending(self, temp_project_dir, session_id):
+    def test_cannot_reopen_completed_task_to_pending(
+        self, temp_project_dir, session_id
+    ):
         """Completed tasks cannot be set back to pending."""
         task = TasksService.create_task(
             project_dir=temp_project_dir,
@@ -582,7 +607,9 @@ class TestTaskUpdate:
             status="completed",
         )
 
-        with pytest.raises(InvalidStatusTransitionError, match="Cannot reopen completed task"):
+        with pytest.raises(
+            InvalidStatusTransitionError, match="Cannot reopen completed task"
+        ):
             TasksService.update_task(
                 project_dir=temp_project_dir,
                 session_id=session_id,
@@ -590,7 +617,9 @@ class TestTaskUpdate:
                 status="pending",
             )
 
-    def test_cannot_reopen_completed_task_to_in_progress(self, temp_project_dir, session_id):
+    def test_cannot_reopen_completed_task_to_in_progress(
+        self, temp_project_dir, session_id
+    ):
         """Completed tasks cannot be set back to in_progress."""
         task = TasksService.create_task(
             project_dir=temp_project_dir,
@@ -605,7 +634,9 @@ class TestTaskUpdate:
             status="completed",
         )
 
-        with pytest.raises(InvalidStatusTransitionError, match="Cannot reopen completed task"):
+        with pytest.raises(
+            InvalidStatusTransitionError, match="Cannot reopen completed task"
+        ):
             TasksService.update_task(
                 project_dir=temp_project_dir,
                 session_id=session_id,
@@ -683,7 +714,9 @@ class TestTaskDeletion:
         assert deleted_task.id == task.id
         assert deleted_task.subject == "To be deleted"
 
-    def test_delete_task_removes_from_blocks_of_related_tasks(self, temp_project_dir, session_id):
+    def test_delete_task_removes_from_blocks_of_related_tasks(
+        self, temp_project_dir, session_id
+    ):
         """Test that deleting a task removes it from blocks of tasks it was blocking."""
         TasksService.create_task(
             project_dir=temp_project_dir,
@@ -710,7 +743,9 @@ class TestTaskDeletion:
         updated_task1 = TasksService.get_task(temp_project_dir, session_id, "1")
         assert "2" not in updated_task1.blocks
 
-    def test_delete_task_removes_from_blocked_by_of_related_tasks(self, temp_project_dir, session_id):
+    def test_delete_task_removes_from_blocked_by_of_related_tasks(
+        self, temp_project_dir, session_id
+    ):
         """Test that deleting a task removes it from blockedBy of dependent tasks."""
         TasksService.create_task(
             project_dir=temp_project_dir,
@@ -1010,15 +1045,17 @@ class TestConcurrency:
         assert len(results) == num_threads
         assert len(set(results)) == num_threads
 
-    def test_concurrent_updates_preserve_consistency(self, temp_project_dir, session_id):
+    def test_concurrent_updates_preserve_consistency(
+        self, temp_project_dir, session_id
+    ):
         """Test that concurrent updates to different tasks maintain consistency."""
         # Create initial tasks
         for i in range(5):
             TasksService.create_task(
                 project_dir=temp_project_dir,
                 session_id=session_id,
-                subject=f"Task {i+1}",
-                description=f"Description {i+1}",
+                subject=f"Task {i + 1}",
+                description=f"Description {i + 1}",
             )
 
         errors = []
@@ -1036,7 +1073,7 @@ class TestConcurrency:
 
         threads = []
         for i in range(5):
-            t = threading.Thread(target=update_task, args=(i+1, "in_progress"))
+            t = threading.Thread(target=update_task, args=(i + 1, "in_progress"))
             threads.append(t)
 
         for t in threads:
@@ -1178,7 +1215,9 @@ class TestEdgeCases:
 
     def test_special_characters_in_subject(self, temp_project_dir, session_id):
         """Test that special characters in subject are handled correctly."""
-        special_subject = "Task with 'quotes' and \"double quotes\" and <angle> & {braces}"
+        special_subject = (
+            "Task with 'quotes' and \"double quotes\" and <angle> & {braces}"
+        )
         task = TasksService.create_task(
             project_dir=temp_project_dir,
             session_id=session_id,
@@ -1379,8 +1418,8 @@ class TestConcurrencyStress:
             TasksService.create_task(
                 project_dir=temp_project_dir,
                 session_id=session_id,
-                subject=f"Task {i+1}",
-                description=f"Initial description {i+1}",
+                subject=f"Task {i + 1}",
+                description=f"Initial description {i + 1}",
             )
 
         read_errors = []
@@ -1402,12 +1441,17 @@ class TestConcurrencyStress:
         def read_task(task_id):
             try:
                 for _ in range(10):
-                    task = TasksService.get_task(temp_project_dir, session_id, str(task_id))
+                    task = TasksService.get_task(
+                        temp_project_dir, session_id, str(task_id)
+                    )
                     # Verify task data is valid (not partial/corrupted)
                     assert task.id == str(task_id)
                     assert task.subject == f"Task {task_id}"
                     # Description should be a complete string, not partial
-                    assert "description" in task.description.lower() or "Updated" in task.description
+                    assert (
+                        "description" in task.description.lower()
+                        or "Updated" in task.description
+                    )
                     read_results.append(True)
             except Exception as e:
                 read_errors.append(str(e))
@@ -1663,7 +1707,7 @@ class TestComplexDependencyGraphs:
             task = TasksService.create_task(
                 project_dir=temp_project_dir,
                 session_id=session_id,
-                subject=f"Dependent Task {i+1}",
+                subject=f"Dependent Task {i + 1}",
                 description="Blocked by A",
                 blockedBy=["1"],
             )
@@ -1737,6 +1781,275 @@ class TestComplexDependencyGraphs:
             )
 
 
+class TestOwnerAndMetadata:
+    """Test cases for owner and metadata fields."""
+
+    @pytest.fixture
+    def temp_project_dir(self):
+        """Create a temporary project directory for testing."""
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+
+    @pytest.fixture
+    def session_id(self):
+        return "test-session-owner-metadata"
+
+    def test_task_has_owner_field_default_empty(self, temp_project_dir, session_id):
+        """Test that Task has owner field with empty string default."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task without owner",
+            description="Should have empty owner by default",
+        )
+
+        assert task.owner == ""
+
+    def test_task_has_metadata_field_default_empty_dict(
+        self, temp_project_dir, session_id
+    ):
+        """Test that Task has metadata field with empty dict default."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task without metadata",
+            description="Should have empty metadata by default",
+        )
+
+        assert task.metadata == {}
+
+    def test_create_task_with_metadata(self, temp_project_dir, session_id):
+        """Test creating a task with initial metadata."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with metadata",
+            description="Has initial metadata",
+            metadata={"priority": "high", "estimate_hours": 4},
+        )
+
+        assert task.metadata == {"priority": "high", "estimate_hours": 4}
+
+    def test_update_task_owner(self, temp_project_dir, session_id):
+        """Test updating task owner."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to claim",
+            description="Will be claimed by an agent",
+        )
+
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            owner="agent-123",
+        )
+
+        assert updated_task.owner == "agent-123"
+
+    def test_update_task_owner_persists(self, temp_project_dir, session_id):
+        """Test that owner update is persisted to disk."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to claim",
+            description="Owner should persist",
+        )
+
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            owner="worker-abc",
+        )
+
+        # Read from disk directly
+        task_file = Path(temp_project_dir) / "tasks" / session_id / f"{task.id}.json"
+        with open(task_file) as f:
+            saved_data = json.load(f)
+
+        assert saved_data["owner"] == "worker-abc"
+
+    def test_update_task_metadata_merge(self, temp_project_dir, session_id):
+        """Test that metadata updates merge with existing metadata."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with metadata",
+            description="Metadata will be merged",
+            metadata={"key1": "value1", "key2": "value2"},
+        )
+
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            metadata={"key2": "updated", "key3": "new"},
+        )
+
+        assert updated_task.metadata == {
+            "key1": "value1",
+            "key2": "updated",
+            "key3": "new",
+        }
+
+    def test_update_task_metadata_delete_key(self, temp_project_dir, session_id):
+        """Test that setting metadata key to None deletes it."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with metadata",
+            description="Metadata key will be deleted",
+            metadata={"key1": "value1", "key2": "value2", "key3": "value3"},
+        )
+
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            metadata={"key2": None},
+        )
+
+        assert updated_task.metadata == {"key1": "value1", "key3": "value3"}
+
+    def test_update_task_metadata_mixed_operations(self, temp_project_dir, session_id):
+        """Test adding, updating, and deleting metadata keys in one operation."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with metadata",
+            description="Multiple metadata operations",
+            metadata={
+                "existing": "unchanged",
+                "to_update": "old",
+                "to_delete": "remove_me",
+            },
+        )
+
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            metadata={
+                "to_update": "new",
+                "to_delete": None,
+                "new_key": "added",
+            },
+        )
+
+        assert updated_task.metadata == {
+            "existing": "unchanged",
+            "to_update": "new",
+            "new_key": "added",
+        }
+
+    def test_metadata_persists_to_disk(self, temp_project_dir, session_id):
+        """Test that metadata is persisted correctly."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with metadata",
+            description="Metadata should persist",
+            metadata={"complex": {"nested": "value"}, "list": [1, 2, 3]},
+        )
+
+        # Read from disk directly
+        task_file = Path(temp_project_dir) / "tasks" / session_id / f"{task.id}.json"
+        with open(task_file) as f:
+            saved_data = json.load(f)
+
+        assert saved_data["metadata"] == {
+            "complex": {"nested": "value"},
+            "list": [1, 2, 3],
+        }
+
+    def test_get_task_includes_owner_and_metadata(self, temp_project_dir, session_id):
+        """Test that get_task returns owner and metadata fields."""
+        TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task with all fields",
+            description="Complete task",
+            metadata={"key": "value"},
+        )
+
+        # Update owner
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id="1",
+            owner="test-owner",
+        )
+
+        task = TasksService.get_task(temp_project_dir, session_id, "1")
+
+        assert task.owner == "test-owner"
+        assert task.metadata == {"key": "value"}
+
+    def test_list_tasks_includes_owner_and_metadata(self, temp_project_dir, session_id):
+        """Test that list_tasks returns tasks with owner and metadata."""
+        TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task 1",
+            description="First task",
+            metadata={"priority": 1},
+        )
+        TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task 2",
+            description="Second task",
+            metadata={"priority": 2},
+        )
+
+        # Set owner on first task
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id="1",
+            owner="agent-1",
+        )
+
+        tasks = TasksService.list_tasks(temp_project_dir, session_id)
+
+        assert len(tasks) == 2
+        assert tasks[0].owner == "agent-1"
+        assert tasks[0].metadata == {"priority": 1}
+        assert tasks[1].owner == ""
+        assert tasks[1].metadata == {"priority": 2}
+
+    def test_empty_string_owner_accepted(self, temp_project_dir, session_id):
+        """Test that setting owner to empty string works (unclaim)."""
+        task = TasksService.create_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            subject="Task to unclaim",
+            description="Will be unclaimed",
+        )
+
+        # Claim the task
+        TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            owner="agent-1",
+        )
+
+        # Unclaim by setting empty string
+        updated_task = TasksService.update_task(
+            project_dir=temp_project_dir,
+            session_id=session_id,
+            task_id=task.id,
+            owner="",
+        )
+
+        assert updated_task.owner == ""
+
+
 class TestDataIntegrity:
     """Tests for data integrity and persistence."""
 
@@ -1772,6 +2085,7 @@ class TestDataIntegrity:
         import importlib
 
         import services.tasks_service as ts_module
+
         importlib.reload(ts_module)
 
         # Get task using the "restarted" service

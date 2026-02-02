@@ -12,7 +12,7 @@ This service provides CRUD operations for tasks with:
 import contextlib
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from filelock import FileLock
 from pydantic import BaseModel, Field
@@ -46,6 +46,8 @@ class Task(BaseModel):
     status: Literal["pending", "in_progress", "completed"] = "pending"
     blocks: list[str] = Field(default_factory=list)
     blockedBy: list[str] = Field(default_factory=list)
+    owner: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TasksService:
@@ -139,9 +141,7 @@ class TasksService:
         """
         # Check for self-reference
         if task_id in new_blocked_by:
-            raise CycleDetectedError(
-                f"Task '{task_id}' cannot be blocked by itself"
-            )
+            raise CycleDetectedError(f"Task '{task_id}' cannot be blocked by itself")
 
         # Build a mapping of task_id -> blockedBy for existing tasks
         blocked_by_map: dict[str, list[str]] = {}
@@ -190,6 +190,7 @@ class TasksService:
         description: str,
         activeForm: str = "",
         blockedBy: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Task:
         """
         Create a new task in the session.
@@ -201,6 +202,7 @@ class TasksService:
             description: Task description
             activeForm: Present continuous form for spinner display
             blockedBy: List of task IDs that block this task
+            metadata: Arbitrary key-value pairs to attach to the task
 
         Returns:
             The created Task
@@ -210,6 +212,7 @@ class TasksService:
             CycleDetectedError: If blockedBy would create a cycle
         """
         blockedBy = blockedBy or []
+        metadata = metadata or {}
         tasks_dir = cls._get_tasks_dir(project_dir, session_id)
         lock = cls._get_lock(tasks_dir)
 
@@ -234,6 +237,7 @@ class TasksService:
                 description=description,
                 activeForm=activeForm,
                 blockedBy=blockedBy,
+                metadata=metadata,
             )
 
             # Write the task
@@ -320,6 +324,8 @@ class TasksService:
         activeForm: str | None = None,
         addBlocks: list[str] | None = None,
         addBlockedBy: list[str] | None = None,
+        owner: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Task:
         """
         Update a task.
@@ -334,6 +340,8 @@ class TasksService:
             activeForm: New activeForm
             addBlocks: Task IDs to add to blocks list
             addBlockedBy: Task IDs to add to blockedBy list
+            owner: Agent/worker ID claiming this task
+            metadata: Key-value pairs to merge (set key to None to delete)
 
         Returns:
             The updated Task
@@ -355,7 +363,11 @@ class TasksService:
             task = cls._read_task(tasks_dir, task_id)
 
             # Reject reopening completed tasks
-            if status is not None and task.status == "completed" and status != "completed":
+            if (
+                status is not None
+                and task.status == "completed"
+                and status != "completed"
+            ):
                 raise InvalidStatusTransitionError(
                     f"Cannot reopen completed task '{task_id}'. Create a new task instead."
                 )
@@ -369,6 +381,17 @@ class TasksService:
                 task.description = description
             if activeForm is not None:
                 task.activeForm = activeForm
+            if owner is not None:
+                task.owner = owner
+
+            # Handle metadata merge
+            if metadata is not None:
+                for key, value in metadata.items():
+                    if value is None:
+                        # Delete key if set to None
+                        task.metadata.pop(key, None)
+                    else:
+                        task.metadata[key] = value
 
             # Handle addBlockedBy
             if addBlockedBy:
