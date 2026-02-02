@@ -213,8 +213,8 @@ func (m *BinaryManager) downloadAndInstallBinary(downloadURL, filename string, h
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	// Download to temp file first
-	tmpFile, err := os.CreateTemp("", "pyapp-*.bin")
+	// Download to temp file in binDir to ensure os.Rename works (same filesystem)
+	tmpFile, err := os.CreateTemp(binDir, ".pyapp-*.tmp")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -341,7 +341,14 @@ func (m *BinaryManager) downloadAndInstallBinaryFromZip(downloadURL, filename st
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	destPath := filepath.Join(binDir, filename)
+	// Extract to temp file in binDir for atomic installation
+	tmpFile, err := os.CreateTemp(binDir, ".pyapp-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+	defer tmpFile.Close()
 
 	// Open the file in the zip
 	rc, err := binaryFile.Open()
@@ -350,26 +357,26 @@ func (m *BinaryManager) downloadAndInstallBinaryFromZip(downloadURL, filename st
 	}
 	defer rc.Close()
 
-	// Create destination file
-	outFile, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
-
 	// Extract with checksum
 	hash := sha256.New()
-	writer := io.MultiWriter(outFile, hash)
+	writer := io.MultiWriter(tmpFile, hash)
 	extracted, err := io.Copy(writer, rc)
 	if err != nil {
 		return fmt.Errorf("failed to extract binary: %w", err)
 	}
+	tmpFile.Close()
 
 	// Make executable on Unix
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(destPath, 0755); err != nil {
+		if err := os.Chmod(tmpPath, 0755); err != nil {
 			return fmt.Errorf("failed to make binary executable: %w", err)
 		}
+	}
+
+	// Atomic move to final location
+	destPath := filepath.Join(binDir, filename)
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("failed to move binary to %s: %w", destPath, err)
 	}
 
 	checksumStr := hex.EncodeToString(hash.Sum(nil))

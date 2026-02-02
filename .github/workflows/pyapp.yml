@@ -34,7 +34,7 @@ on:
       - published
 
 permissions:
-  contents: write  # Required for uploading release assets
+  contents: read  # Default to read-only, write permission granted per-job
 
 env:
   PYTHON_VERSION: "3.12"
@@ -185,8 +185,14 @@ jobs:
         shell: bash
         run: |
           cd dist/pyapp
+          # Use shasum on macOS (sha256sum not available by default)
+          if command -v sha256sum &> /dev/null; then
+            HASH_CMD="sha256sum"
+          else
+            HASH_CMD="shasum -a 256"
+          fi
           for file in llamafarm-${{ matrix.component }}-*; do
-            sha256sum "$file" > "$file.sha256"
+            $HASH_CMD "$file" > "$file.sha256"
             echo "SHA256: $(cat $file.sha256)"
           done
 
@@ -248,6 +254,6 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            dist/llamafarm-${{ matrix.component }}-*
-            dist/llamafarm-${{ matrix.component }}-*.sha256
+            dist/pyapp/llamafarm-${{ matrix.component }}-*
+            dist/pyapp/llamafarm-${{ matrix.component }}-*.sha256
           fail_on_unmatched_files: true
