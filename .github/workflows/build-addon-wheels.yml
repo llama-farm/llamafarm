@@ -117,6 +117,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Build addon wheels
         shell: bash
         run: |
