@@ -56,7 +56,6 @@ Security Notes:
 """
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -73,11 +72,14 @@ from .pyod_backend import (
     get_decision_scores,
     is_valid_backend,
 )
+from utils.safe_home import get_data_dir
 
 logger = logging.getLogger(__name__)
 
-# Safe directory for anomaly models
-_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+# Safe directory for anomaly models - uses standard LlamaFarm data directory
+# ~/.llamafarm/models/anomaly/ (or LF_DATA_DIR/models/anomaly/)
+# Only files within this directory can be loaded - prevents path traversal attacks
+_LF_DATA_DIR = get_data_dir()
 ANOMALY_MODELS_DIR = (_LF_DATA_DIR / "models" / "anomaly").resolve()
 
 

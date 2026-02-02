@@ -1,6 +1,7 @@
 """Tests for model loading and training services (Phase 2)."""
 
 import asyncio
+import os
 import time
 
 import numpy as np
@@ -294,6 +295,10 @@ class TestClassifierModelNonBlocking:
     """Test classifier model non-blocking fit."""
 
     @pytest.mark.skipif(not _check_setfit_installed(), reason="SetFit not installed")
+    @pytest.mark.skipif(
+        os.environ.get("CI") == "true",
+        reason="SetFit training segfaults in accelerate memory cleanup on CI runners without GPU",
+    )
     @pytest.mark.asyncio
     async def test_classifier_fit_uses_executor(self):
         """Test that classifier model fit uses thread pool executor."""

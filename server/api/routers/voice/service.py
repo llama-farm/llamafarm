@@ -479,7 +479,7 @@ class VoiceChatService:
         )
 
         # Reusable TTS WebSocket connection
-        self._tts_ws: websockets.WebSocketClientProtocol | None = None
+        self._tts_ws: websockets.ClientConnection | None = None
 
     async def warm_up(self) -> None:
         """Pre-warm connections to minimize first-request latency.
@@ -878,7 +878,7 @@ class VoiceChatService:
             logger.error(f"LLM streaming error: {e}")
             raise
 
-    async def _get_tts_websocket(self) -> websockets.WebSocketClientProtocol:
+    async def _get_tts_websocket(self) -> websockets.ClientConnection:
         """Get or create TTS WebSocket connection.
 
         Reuses existing connection to avoid handshake overhead (~50-100ms per connection).

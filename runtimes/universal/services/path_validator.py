@@ -12,9 +12,11 @@ import os
 import re
 from pathlib import Path
 
+from utils.safe_home import get_data_dir
+
 # Base data directory - uses standard LlamaFarm data directory
 # ~/.llamafarm/ (or LF_DATA_DIR if set)
-_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+_LF_DATA_DIR = get_data_dir()
 
 # Safe directories for model storage
 MODELS_BASE_DIR = (_LF_DATA_DIR / "models").resolve()
