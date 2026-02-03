@@ -148,22 +148,6 @@ class ChatCompletionsService:
             # Check for audio content in messages
             audio_in_request = has_audio_content(messages_dict)
 
-            # Load language model first to check for native audio support
-            # (We'll handle audio transcription after if model doesn't support native audio)
-            model = await self.load_language(
-                model_id,
-                n_ctx=n_ctx,
-                n_batch=n_batch,
-                n_gpu_layers=n_gpu_layers,
-                n_threads=n_threads,
-                flash_attn=flash_attn,
-                use_mmap=use_mmap,
-                use_mlock=use_mlock,
-                cache_type_k=cache_type_k,
-                cache_type_v=cache_type_v,
-                preferred_quantization=gguf_quantization,
-            )
-
             # Extract thinking params from extra_body if not set at top level
             # (OpenAI SDK sends custom params via extra_body)
             think_param = chat_request.think
@@ -179,253 +163,299 @@ class ChatCompletionsService:
                         "thinking_budget"
                     )
 
-            # Check if this is a GGUF model - use native chat completion for proper template
-            # GGUF models have create_chat_completion() which uses the embedded chat template
-            # This is essential for models like Qwen that use special tokens (<|im_start|>, etc.)
-            # and thinking tags (<think>)
-            is_gguf = isinstance(model, GGUFLanguageModel)
-
-            # Handle audio content - either native audio or STT transcription
-            use_native_audio = False
-            audio_bytes = None
-            audio_format = "wav"
-
-            if audio_in_request:
-                # Check if model supports native audio input
-                model_supports_audio = is_gguf and getattr(model, "supports_audio", False)
-
-                if model_supports_audio:
-                    # Use native audio input (no transcription needed)
-                    logger.info("Model supports native audio input - using direct audio processing")
-                    use_native_audio = True
-
-                    # Extract audio data (only first audio part for now)
-                    audio_parts = extract_audio_from_messages(messages_dict)
-                    if audio_parts:
-                        msg_idx, audio_input = audio_parts[0]
-                        audio_bytes = base64.b64decode(audio_input.data)
-                        audio_format = audio_input.format
-                        logger.info(
-                            f"Using native audio: {len(audio_bytes)} bytes, format={audio_format}"
-                        )
-                else:
-                    # Fall back to STT transcription
-                    logger.info("Audio content detected - transcribing via STT (model doesn't support native audio)")
-
-                    # Extract and transcribe all audio parts
-                    audio_parts = extract_audio_from_messages(messages_dict)
-                    transcriptions: dict[int, str] = {}
-
-                    for msg_idx, audio_input in audio_parts:
-                        # Decode base64 audio
-                        audio_bytes_for_stt = base64.b64decode(audio_input.data)
-                        # Transcribe
-                        transcription = await self._transcribe_audio(
-                            audio_bytes_for_stt, audio_input.format
-                        )
-                        transcriptions[msg_idx] = transcription
-                        logger.debug(
-                            f"Transcribed audio in message {msg_idx}: "
-                            f"'{transcription[:100]}{'...' if len(transcription) > 100 else ''}'"
-                        )
-
-                    # Replace audio content with transcribed text
-                    messages_dict = replace_audio_with_text(messages_dict, transcriptions)
-                    logger.info(f"Replaced {len(audio_parts)} audio parts with transcriptions")
-
-            # Inject thinking control (Qwen soft switch: /think or /no_think)
-            # Default is OFF - inject /no_think unless explicitly enabled with think=true
-            if is_gguf:
-                # think=True -> enable, think=False or None -> disable
-                enable_thinking = think_param is True
-                messages_dict = inject_thinking_control(
-                    messages_dict, enable_thinking=enable_thinking
-                )
-                logger.info(
-                    f"Thinking mode {'enabled' if enable_thinking else 'disabled'} via soft switch"
-                )
-
-            # Calculate total token budget for generation
-            # - max_tokens: for the final answer (default: 512)
-            # - thinking_budget: for the thinking process (default: 1024 if thinking enabled)
-            # Total = thinking_budget + max_tokens (so answer isn't cut short by thinking)
-            answer_tokens = chat_request.max_tokens or 512
-
-            # Determine if thinking is enabled (default: OFF for predictable behavior)
-            # User must explicitly set think=true to enable thinking mode
-            thinking_enabled = think_param is True
-
-            if thinking_enabled and is_gguf:
-                # Use provided thinking_budget or default to 1024
-                thinking_tokens = thinking_budget_param or 1024
-                total_max_tokens = thinking_tokens + answer_tokens
-                logger.info(
-                    f"Token allocation: {thinking_tokens} for thinking + {answer_tokens} for answer = {total_max_tokens} total"
-                )
-            else:
-                # No thinking, just use answer tokens
-                total_max_tokens = answer_tokens
-                thinking_tokens = 0
-
             # Convert tools to dict format if provided (for streaming)
             tools_dict = None
             if chat_request.tools:
                 tools_dict = [dict(tool) for tool in chat_request.tools]
 
-            # Context management for GGUF models
-            context_usage_info = None
+            async def prepare_generation():
+                model = await self.load_language(
+                    model_id,
+                    n_ctx=n_ctx,
+                    n_batch=n_batch,
+                    n_gpu_layers=n_gpu_layers,
+                    n_threads=n_threads,
+                    flash_attn=flash_attn,
+                    use_mmap=use_mmap,
+                    use_mlock=use_mlock,
+                    cache_type_k=cache_type_k,
+                    cache_type_v=cache_type_v,
+                    preferred_quantization=gguf_quantization,
+                )
 
-            if is_gguf and model.context_manager:
-                # Apply history compression to reduce token usage
-                compressor = HistoryCompressor(model.token_counter)
-                messages_dict = compressor.compress(messages_dict)
+                # Check if this is a GGUF model - use native chat completion for proper template
+                # GGUF models have create_chat_completion() which uses the embedded chat template
+                # This is essential for models like Qwen that use special tokens (<|im_start|>, etc.)
+                # and thinking tags (<think>)
+                is_gguf = isinstance(model, GGUFLanguageModel)
 
-                # Validate context and truncate if needed
-                usage = model.context_manager.validate_messages(messages_dict)
+                # Handle audio content - either native audio or STT transcription
+                use_native_audio = False
+                audio_bytes = None
+                audio_format = "wav"
+                prepared_messages = messages_dict
 
-                if model.context_manager.needs_truncation(messages_dict):
-                    auto_truncate = chat_request.auto_truncate
-                    if auto_truncate is None:
-                        auto_truncate = True  # Default to auto-truncate
+                if audio_in_request:
+                    # Check if model supports native audio input
+                    model_supports_audio = is_gguf and getattr(
+                        model, "supports_audio", False
+                    )
 
-                    if not auto_truncate:
-                        # Return error instead of truncating
+                    if model_supports_audio:
+                        # Use native audio input (no transcription needed)
+                        logger.info(
+                            "Model supports native audio input - using direct audio processing"
+                        )
+                        use_native_audio = True
+
+                        # Extract audio data (only first audio part for now)
+                        audio_parts = extract_audio_from_messages(prepared_messages)
+                        if audio_parts:
+                            _, audio_input = audio_parts[0]
+                            audio_bytes = base64.b64decode(audio_input.data)
+                            audio_format = audio_input.format
+                            logger.info(
+                                f"Using native audio: {len(audio_bytes)} bytes, format={audio_format}"
+                            )
+                    else:
+                        # Fall back to STT transcription
+                        logger.info(
+                            "Audio content detected - transcribing via STT (model doesn't support native audio)"
+                        )
+
+                        # Extract and transcribe all audio parts
+                        audio_parts = extract_audio_from_messages(prepared_messages)
+                        transcriptions: dict[int, str] = {}
+
+                        for msg_idx, audio_input in audio_parts:
+                            # Decode base64 audio
+                            audio_bytes_for_stt = base64.b64decode(audio_input.data)
+                            # Transcribe
+                            transcription = await self._transcribe_audio(
+                                audio_bytes_for_stt, audio_input.format
+                            )
+                            transcriptions[msg_idx] = transcription
+                            logger.debug(
+                                f"Transcribed audio in message {msg_idx}: "
+                                f"'{transcription[:100]}{'...' if len(transcription) > 100 else ''}'"
+                            )
+
+                        # Replace audio content with transcribed text
+                        prepared_messages = replace_audio_with_text(
+                            prepared_messages, transcriptions
+                        )
+                        logger.info(
+                            f"Replaced {len(audio_parts)} audio parts with transcriptions"
+                        )
+
+                # Inject thinking control (Qwen soft switch: /think or /no_think)
+                # Default is OFF - inject /no_think unless explicitly enabled with think=true
+                if is_gguf:
+                    # think=True -> enable, think=False or None -> disable
+                    enable_thinking = think_param is True
+                    prepared_messages = inject_thinking_control(
+                        prepared_messages, enable_thinking=enable_thinking
+                    )
+                    logger.info(
+                        f"Thinking mode {'enabled' if enable_thinking else 'disabled'} via soft switch"
+                    )
+
+                # Calculate total token budget for generation
+                # - max_tokens: for the final answer (default: 512)
+                # - thinking_budget: for the thinking process (default: 1024 if thinking enabled)
+                # Total = thinking_budget + max_tokens (so answer isn't cut short by thinking)
+                answer_tokens = chat_request.max_tokens or 512
+
+                # Determine if thinking is enabled (default: OFF for predictable behavior)
+                # User must explicitly set think=true to enable thinking mode
+                thinking_enabled = think_param is True
+
+                if thinking_enabled and is_gguf:
+                    # Use provided thinking_budget or default to 1024
+                    thinking_tokens = thinking_budget_param or 1024
+                    total_max_tokens = thinking_tokens + answer_tokens
+                    logger.info(
+                        f"Token allocation: {thinking_tokens} for thinking + {answer_tokens} for answer = {total_max_tokens} total"
+                    )
+                else:
+                    # No thinking, just use answer tokens
+                    total_max_tokens = answer_tokens
+                    thinking_tokens = 0
+
+                # Context management for GGUF models
+                context_usage_info = None
+
+                if is_gguf and model.context_manager:
+                    # Apply history compression to reduce token usage
+                    compressor = HistoryCompressor(model.token_counter)
+                    prepared_messages = compressor.compress(prepared_messages)
+
+                    # Validate context and truncate if needed
+                    usage = model.context_manager.validate_messages(prepared_messages)
+
+                    if model.context_manager.needs_truncation(prepared_messages):
+                        auto_truncate = chat_request.auto_truncate
+                        if auto_truncate is None:
+                            auto_truncate = True  # Default to auto-truncate
+
+                        if not auto_truncate:
+                            # Return error instead of truncating
+                            raise HTTPException(
+                                status_code=400,
+                                detail={
+                                    "error": "context_length_exceeded",
+                                    "message": (
+                                        f"Prompt ({usage.prompt_tokens} tokens) exceeds "
+                                        f"context limit ({usage.total_context} tokens). "
+                                        "Set auto_truncate=true to automatically truncate."
+                                    ),
+                                    "context_usage": {
+                                        "total_context": usage.total_context,
+                                        "prompt_tokens": usage.prompt_tokens,
+                                        "available_for_completion": usage.available_for_completion,
+                                    },
+                                },
+                            )
+
+                        # Determine truncation strategy
+                        strategy = None
+                        if chat_request.truncation_strategy:
+                            try:
+                                strategy = TruncationStrategy(
+                                    chat_request.truncation_strategy
+                                )
+                            except ValueError:
+                                logger.warning(
+                                    f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
+                                    "using default (summarize)"
+                                )
+                                strategy = TruncationStrategy.SUMMARIZE
+                        else:
+                            strategy = TruncationStrategy.SUMMARIZE  # Default
+
+                        # Handle summarization strategy (async, needs special handling)
+                        if strategy == TruncationStrategy.SUMMARIZE:
+                            try:
+                                # Pass the server's load_language for proper caching
+                                summarizer = ContextSummarizer(
+                                    load_language=self.load_language
+                                )
+                                prepared_messages = (
+                                    await summarizer.summarize_messages(
+                                        prepared_messages
+                                    )
+                                )
+                                # Re-validate after summarization
+                                usage = model.context_manager.validate_messages(
+                                    prepared_messages
+                                )
+
+                                # Check if we STILL need truncation after summarization
+                                # (e.g., if recent messages are still too large)
+                                if model.context_manager.needs_truncation(
+                                    prepared_messages
+                                ):
+                                    logger.warning(
+                                        f"Still over budget after summarization "
+                                        f"({usage.prompt_tokens} tokens), applying fallback truncation"
+                                    )
+                                    prepared_messages, usage = (
+                                        model.context_manager.truncate_if_needed(
+                                            prepared_messages,
+                                            TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                        )
+                                    )
+                                    usage = type(usage)(
+                                        total_context=usage.total_context,
+                                        prompt_tokens=usage.prompt_tokens,
+                                        available_for_completion=usage.available_for_completion,
+                                        truncated=True,
+                                        truncated_messages=usage.truncated_messages,
+                                        strategy_used="summarize+keep_system",
+                                    )
+                                else:
+                                    usage = type(usage)(
+                                        total_context=usage.total_context,
+                                        prompt_tokens=usage.prompt_tokens,
+                                        available_for_completion=usage.available_for_completion,
+                                        truncated=True,
+                                        truncated_messages=0,  # Summarized, not removed
+                                        strategy_used="summarize",
+                                    )
+                                logger.info(
+                                    f"Context summarized: {usage.prompt_tokens} tokens after summarization"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Summarization failed: {e}, falling back to keep_system"
+                                )
+                                prepared_messages, usage = (
+                                    model.context_manager.truncate_if_needed(
+                                        prepared_messages,
+                                        TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                    )
+                                )
+                        else:
+                            # Use regular truncation strategy
+                            prepared_messages, usage = (
+                                model.context_manager.truncate_if_needed(
+                                    prepared_messages, strategy
+                                )
+                            )
+                            logger.info(
+                                f"Context truncated: {usage.truncated_messages} messages removed, "
+                                f"strategy={usage.strategy_used}"
+                            )
+
+                    # Store context usage for response
+                    context_usage_info = ContextUsageInfo(
+                        total_context=usage.total_context,
+                        prompt_tokens=usage.prompt_tokens,
+                        available_for_completion=usage.available_for_completion,
+                        truncated=usage.truncated,
+                        truncated_messages=usage.truncated_messages,
+                        strategy_used=usage.strategy_used,
+                    )
+
+                    # Final safety check: ensure we're actually under budget
+                    if model.context_manager.needs_truncation(prepared_messages):
+                        final_usage = model.context_manager.validate_messages(
+                            prepared_messages
+                        )
+                        logger.error(
+                            f"CRITICAL: Still over context budget after all truncation: "
+                            f"{final_usage.prompt_tokens} tokens > "
+                            f"{model.context_manager.budget.max_prompt_tokens} max"
+                        )
                         raise HTTPException(
                             status_code=400,
                             detail={
-                                "error": "context_length_exceeded",
+                                "error": "context_truncation_failed",
                                 "message": (
-                                    f"Prompt ({usage.prompt_tokens} tokens) exceeds "
-                                    f"context limit ({usage.total_context} tokens). "
-                                    "Set auto_truncate=true to automatically truncate."
+                                    f"Failed to reduce context to fit within budget. "
+                                    f"Current: {final_usage.prompt_tokens} tokens, "
+                                    f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
+                                    "Try sending fewer or shorter messages."
                                 ),
                                 "context_usage": {
-                                    "total_context": usage.total_context,
-                                    "prompt_tokens": usage.prompt_tokens,
-                                    "available_for_completion": usage.available_for_completion,
+                                    "total_context": final_usage.total_context,
+                                    "prompt_tokens": final_usage.prompt_tokens,
+                                    "available_for_completion": final_usage.available_for_completion,
                                 },
                             },
                         )
 
-                    # Determine truncation strategy
-                    strategy = None
-                    if chat_request.truncation_strategy:
-                        try:
-                            strategy = TruncationStrategy(
-                                chat_request.truncation_strategy
-                            )
-                        except ValueError:
-                            logger.warning(
-                                f"Unknown truncation strategy: {chat_request.truncation_strategy}, "
-                                "using default (summarize)"
-                            )
-                            strategy = TruncationStrategy.SUMMARIZE
-                    else:
-                        strategy = TruncationStrategy.SUMMARIZE  # Default
-
-                    # Handle summarization strategy (async, needs special handling)
-                    if strategy == TruncationStrategy.SUMMARIZE:
-                        try:
-                            # Pass the server's load_language for proper caching
-                            summarizer = ContextSummarizer(
-                                load_language=self.load_language
-                            )
-                            messages_dict = await summarizer.summarize_messages(
-                                messages_dict
-                            )
-                            # Re-validate after summarization
-                            usage = model.context_manager.validate_messages(
-                                messages_dict
-                            )
-
-                            # Check if we STILL need truncation after summarization
-                            # (e.g., if recent messages are still too large)
-                            if model.context_manager.needs_truncation(messages_dict):
-                                logger.warning(
-                                    f"Still over budget after summarization "
-                                    f"({usage.prompt_tokens} tokens), applying fallback truncation"
-                                )
-                                messages_dict, usage = (
-                                    model.context_manager.truncate_if_needed(
-                                        messages_dict,
-                                        TruncationStrategy.KEEP_SYSTEM_SLIDING,
-                                    )
-                                )
-                                usage = type(usage)(
-                                    total_context=usage.total_context,
-                                    prompt_tokens=usage.prompt_tokens,
-                                    available_for_completion=usage.available_for_completion,
-                                    truncated=True,
-                                    truncated_messages=usage.truncated_messages,
-                                    strategy_used="summarize+keep_system",
-                                )
-                            else:
-                                usage = type(usage)(
-                                    total_context=usage.total_context,
-                                    prompt_tokens=usage.prompt_tokens,
-                                    available_for_completion=usage.available_for_completion,
-                                    truncated=True,
-                                    truncated_messages=0,  # Summarized, not removed
-                                    strategy_used="summarize",
-                                )
-                            logger.info(
-                                f"Context summarized: {usage.prompt_tokens} tokens after summarization"
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"Summarization failed: {e}, falling back to keep_system"
-                            )
-                            messages_dict, usage = (
-                                model.context_manager.truncate_if_needed(
-                                    messages_dict,
-                                    TruncationStrategy.KEEP_SYSTEM_SLIDING,
-                                )
-                            )
-                    else:
-                        # Use regular truncation strategy
-                        messages_dict, usage = model.context_manager.truncate_if_needed(
-                            messages_dict, strategy
-                        )
-                        logger.info(
-                            f"Context truncated: {usage.truncated_messages} messages removed, "
-                            f"strategy={usage.strategy_used}"
-                        )
-
-                # Store context usage for response
-                context_usage_info = ContextUsageInfo(
-                    total_context=usage.total_context,
-                    prompt_tokens=usage.prompt_tokens,
-                    available_for_completion=usage.available_for_completion,
-                    truncated=usage.truncated,
-                    truncated_messages=usage.truncated_messages,
-                    strategy_used=usage.strategy_used,
+                return (
+                    model,
+                    is_gguf,
+                    prepared_messages,
+                    use_native_audio,
+                    audio_bytes,
+                    audio_format,
+                    total_max_tokens,
+                    thinking_tokens,
+                    context_usage_info,
                 )
-
-                # Final safety check: ensure we're actually under budget
-                if model.context_manager.needs_truncation(messages_dict):
-                    final_usage = model.context_manager.validate_messages(messages_dict)
-                    logger.error(
-                        f"CRITICAL: Still over context budget after all truncation: "
-                        f"{final_usage.prompt_tokens} tokens > "
-                        f"{model.context_manager.budget.max_prompt_tokens} max"
-                    )
-                    raise HTTPException(
-                        status_code=400,
-                        detail={
-                            "error": "context_truncation_failed",
-                            "message": (
-                                f"Failed to reduce context to fit within budget. "
-                                f"Current: {final_usage.prompt_tokens} tokens, "
-                                f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
-                                "Try sending fewer or shorter messages."
-                            ),
-                            "context_usage": {
-                                "total_context": final_usage.total_context,
-                                "prompt_tokens": final_usage.prompt_tokens,
-                                "available_for_completion": final_usage.available_for_completion,
-                            },
-                        },
-                    )
 
             # Handle streaming if requested
             if chat_request.stream:
@@ -453,12 +483,26 @@ class ChatCompletionsService:
                         ],
                     )
                     yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
+                    # Force an immediate flush before any model loading.
+                    await asyncio.sleep(0)
+
+                    (
+                        model,
+                        is_gguf,
+                        prepared_messages,
+                        use_native_audio,
+                        audio_bytes,
+                        audio_format,
+                        total_max_tokens,
+                        thinking_tokens,
+                        _,
+                    ) = await prepare_generation()
 
                     # Stream tokens - use native audio if supported, otherwise text
                     if use_native_audio and audio_bytes:
                         # Use native audio processing (no STT transcription)
                         token_stream = model.generate_stream_with_audio(
-                            messages=messages_dict,
+                            messages=prepared_messages,
                             audio_data=audio_bytes,
                             audio_format=audio_format,
                             max_tokens=total_max_tokens,
@@ -471,7 +515,7 @@ class ChatCompletionsService:
                     else:
                         # Standard text generation (audio already transcribed if present)
                         token_stream = model.generate_stream(
-                            messages=messages_dict,
+                            messages=prepared_messages,
                             max_tokens=total_max_tokens,
                             temperature=chat_request.temperature
                             if chat_request.temperature is not None
@@ -747,10 +791,22 @@ class ChatCompletionsService:
                 )
 
             # Non-streaming response - use native audio if supported, otherwise text
+            (
+                model,
+                is_gguf,
+                prepared_messages,
+                use_native_audio,
+                audio_bytes,
+                audio_format,
+                total_max_tokens,
+                thinking_tokens,
+                context_usage_info,
+            ) = await prepare_generation()
+
             if use_native_audio and audio_bytes:
                 # Use native audio processing (no STT transcription)
                 response_text = await model.generate_with_audio(
-                    messages=messages_dict,
+                    messages=prepared_messages,
                     audio_data=audio_bytes,
                     audio_format=audio_format,
                     max_tokens=total_max_tokens,
@@ -763,7 +819,7 @@ class ChatCompletionsService:
             else:
                 # Standard text generation (audio already transcribed if present)
                 response_text = await model.generate(
-                    messages=messages_dict,
+                    messages=prepared_messages,
                     max_tokens=total_max_tokens,
                     temperature=chat_request.temperature
                     if chat_request.temperature is not None
