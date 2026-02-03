@@ -2,18 +2,15 @@
 Language model wrapper for text generation or embedding.
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import AsyncGenerator
 from threading import Thread
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedTokenizerBase,
-    TextIteratorStreamer,
-)
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizerBase
 
 from .base import BaseModel
 
@@ -30,6 +27,8 @@ class LanguageModel(BaseModel):
 
     async def load(self) -> None:
         """Load the causal language model."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
         logger.info(f"Loading causal LM: {self.model_id}")
 
         dtype = self.get_dtype()
@@ -113,6 +112,8 @@ class LanguageModel(BaseModel):
         # Format messages using chat template
         prompt = self.format_messages(messages)
 
+        import torch
+
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
         max_new_tokens = max_tokens or 512
@@ -172,6 +173,8 @@ class LanguageModel(BaseModel):
         max_new_tokens = max_tokens or 512
 
         # Create a streamer that will yield tokens as they're generated
+        from transformers import AutoTokenizer, TextIteratorStreamer
+
         streamer = TextIteratorStreamer(
             cast(AutoTokenizer, self.tokenizer),
             skip_prompt=True,

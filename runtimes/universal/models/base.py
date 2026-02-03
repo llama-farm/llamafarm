@@ -2,12 +2,15 @@
 Base model class for all HuggingFace models (transformers & diffusers).
 """
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch
-from transformers import PreTrainedTokenizerBase
+if TYPE_CHECKING:
+    import torch
+    from transformers import PreTrainedTokenizerBase
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +57,24 @@ class BaseModel(ABC):
         self.feature_extractor = None
         self.pipe = None
 
-        # Clear CUDA cache if available
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            logger.debug("Cleared CUDA cache")
+        # Clear GPU cache if torch is available
+        try:
+            import torch
 
-        # Clear MPS cache if available (PyTorch 2.0+)
-        if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
-            try:
-                torch.mps.empty_cache()
-                logger.debug("Cleared MPS cache")
-            except Exception:
-                pass
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("Cleared CUDA cache")
+
+            if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
+                try:
+                    torch.mps.empty_cache()
+                    logger.debug("Cleared MPS cache")
+                except Exception:
+                    # MPS cache clearing can fail on some macOS versions; not critical
+                    pass
+        except ImportError:
+            # torch not installed (GGUF-only deployment)
+            pass
 
         logger.info(f"Model unloaded: {self.model_id}")
 
@@ -84,6 +93,8 @@ class BaseModel(ABC):
         Args:
             force_float32: Force float32 for models with MPS compatibility issues
         """
+        import torch
+
         if force_float32:
             return torch.float32
         if self.device == "cuda" or self.device == "mps":
@@ -102,6 +113,8 @@ class BaseModel(ABC):
             dtype: Optional dtype override. If None, only moves to device without
                    changing dtype for integer tensors, or uses get_dtype() for floats.
         """
+        import torch
+
         # Don't change dtype for integer tensors (e.g., input_ids, attention_mask)
         if tensor.dtype in (
             torch.int32,
