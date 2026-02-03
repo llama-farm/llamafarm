@@ -7,7 +7,13 @@ Follows the same pattern as MCPToolFactory for consistency.
 
 from atomic_agents import BaseTool
 
-from tools.builtin.tasks_tool import TasksTool
+from tools.builtin.tasks_tool import (
+    TaskCreateTool,
+    TaskGetTool,
+    TaskListTool,
+    TasksTool,
+    TaskUpdateTool,
+)
 
 
 class BuiltinToolFactory:
@@ -23,8 +29,13 @@ class BuiltinToolFactory:
         self._project_dir = project_dir
         self._session_id = session_id
 
-    def create_tasks_tool(self) -> type[BaseTool] | None:
-        """Create tasks tool class with context injected.
+    def _create_injected_tool(
+        self, base_class: type[BaseTool]
+    ) -> type[BaseTool] | None:
+        """Create a tool class with context injected.
+
+        Args:
+            base_class: The base tool class to inject context into.
 
         Returns:
             Tool class with _project_dir and _session_id set, or None if no session_id.
@@ -32,18 +43,57 @@ class BuiltinToolFactory:
         if self._session_id is None:
             return None
 
-        # Create a new class with injected context
-        # This follows atomic-agents pattern where tool classes have class-level config
         project_dir = self._project_dir
         session_id = self._session_id
 
-        class InjectedTasksTool(TasksTool):
-            """TasksTool with injected project_dir and session_id."""
-
+        class InjectedTool(base_class):  # type: ignore[valid-type]
             _project_dir = project_dir
             _session_id = session_id
 
-        return InjectedTasksTool
+        return InjectedTool
+
+    def create_task_create_tool(self) -> type[BaseTool] | None:
+        """Create task_create tool class with context injected.
+
+        Returns:
+            Tool class with _project_dir and _session_id set, or None if no session_id.
+        """
+        return self._create_injected_tool(TaskCreateTool)
+
+    def create_task_update_tool(self) -> type[BaseTool] | None:
+        """Create task_update tool class with context injected.
+
+        Returns:
+            Tool class with _project_dir and _session_id set, or None if no session_id.
+        """
+        return self._create_injected_tool(TaskUpdateTool)
+
+    def create_task_list_tool(self) -> type[BaseTool] | None:
+        """Create task_list tool class with context injected.
+
+        Returns:
+            Tool class with _project_dir and _session_id set, or None if no session_id.
+        """
+        return self._create_injected_tool(TaskListTool)
+
+    def create_task_get_tool(self) -> type[BaseTool] | None:
+        """Create task_get tool class with context injected.
+
+        Returns:
+            Tool class with _project_dir and _session_id set, or None if no session_id.
+        """
+        return self._create_injected_tool(TaskGetTool)
+
+    def create_tasks_tool(self) -> type[BaseTool] | None:
+        """DEPRECATED: Use create_task_create_tool() instead.
+
+        This method is kept for backwards compatibility. It returns the same
+        result as create_task_create_tool() using the legacy TasksTool class.
+
+        Returns:
+            Tool class with _project_dir and _session_id set, or None if no session_id.
+        """
+        return self._create_injected_tool(TasksTool)
 
     def create_all_tools(self) -> list[type[BaseTool]]:
         """Create all built-in tools.
@@ -53,10 +103,13 @@ class BuiltinToolFactory:
             Tools that require session context are excluded in stateless mode.
         """
         tools: list[type[BaseTool]] = []
-
-        # Add tasks tool if we have a session
-        tasks_tool = self.create_tasks_tool()
-        if tasks_tool is not None:
-            tools.append(tasks_tool)
-
+        for creator in [
+            self.create_task_create_tool,
+            self.create_task_update_tool,
+            self.create_task_list_tool,
+            self.create_task_get_tool,
+        ]:
+            tool = creator()
+            if tool is not None:
+                tools.append(tool)
         return tools
