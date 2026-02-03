@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -421,8 +422,11 @@ func (m *BinaryManager) buildDownloadURL(filename string) string {
 		version = "v" + version
 	}
 
+	// URL-encode the version to handle special characters like + (becomes %2B)
+	encodedVersion := url.PathEscape(version)
+
 	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		githubOwner, githubRepo, version, filename)
+		githubOwner, githubRepo, encodedVersion, filename)
 }
 
 // areBinariesInstalled checks if all required binaries are already present and match the CLI version
