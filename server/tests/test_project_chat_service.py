@@ -439,3 +439,183 @@ class TestProjectChatService:
 
         value = service._extract_config_value(config, "top_k", "test_strategy")
         assert value is None
+
+    @pytest.mark.asyncio
+    @patch("services.project_chat_service.ProjectChatService._perform_rag_search")
+    async def test_stream_chat_includes_sources_when_requested(
+        self, mock_search, config_with_rag
+    ):
+        """Test that sources event is yielded before content when include_sources=True."""
+        # Mock RAG search results
+        mock_result1 = MagicMock()
+        mock_result1.content = "Context chunk 1"
+        mock_result1.metadata = {"source": "doc1.txt", "similarity_score": 0.9}
+
+        mock_result2 = MagicMock()
+        mock_result2.content = "Context chunk 2"
+        mock_result2.metadata = {"source": "doc2.txt", "similarity_score": 0.85}
+
+        mock_search.return_value = [mock_result1, mock_result2]
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Create mock agent with context_providers
+            mock_agent = AsyncMock(spec=ChatOrchestratorAgent)
+            mock_agent.history = MagicMock()
+            mock_agent.register_context_provider = MagicMock()
+            mock_agent.remove_context_provider = MagicMock()
+            mock_agent.model_name = "test-model"
+
+            # Mock get_context_provider with RAG chunks
+            mock_chunk1 = MagicMock()
+            mock_chunk1.content = "Context chunk 1"
+            mock_chunk1.metadata = {"source": "doc1.txt", "similarity_score": 0.9}
+
+            mock_chunk2 = MagicMock()
+            mock_chunk2.content = "Context chunk 2"
+            mock_chunk2.metadata = {"source": "doc2.txt", "similarity_score": 0.85}
+
+            mock_rag_context = MagicMock()
+            mock_rag_context.chunks = [mock_chunk1, mock_chunk2]
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
+
+            # Mock run_async_stream as an async generator
+            async def mock_stream(*args, **kwargs):
+                yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Answer"))])
+
+            mock_agent.run_async_stream = mock_stream
+
+            service = ProjectChatService()
+
+            chunks = []
+            async for chunk in service.stream_chat(
+                project_dir=project_dir,
+                project_config=config_with_rag,
+                chat_agent=mock_agent,
+                messages=[
+                    LFChatCompletionUserMessageParam(role="user", content="Question")
+                ],
+                rag_enabled=True,
+                include_sources=True,
+                sources_limit=10,
+            ):
+                chunks.append(chunk)
+
+            # First chunk should be sources event
+            assert len(chunks) >= 1
+            first_chunk = chunks[0]
+            assert isinstance(first_chunk, dict)
+            assert first_chunk.get("type") == "sources"
+            assert isinstance(first_chunk.get("sources"), list)
+            assert len(first_chunk["sources"]) == 2
+
+            # Verify source structure
+            source1 = first_chunk["sources"][0]
+            assert source1["content"] == "Context chunk 1"
+            assert source1["source"] == "doc1.txt"
+            assert source1["score"] == 0.9
+
+    @pytest.mark.asyncio
+    @patch("services.project_chat_service.ProjectChatService._perform_rag_search")
+    async def test_stream_chat_no_sources_when_disabled(
+        self, mock_search, config_with_rag
+    ):
+        """Test that sources event is not yielded when include_sources=False."""
+        mock_search.return_value = []
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            mock_agent = AsyncMock(spec=ChatOrchestratorAgent)
+            mock_agent.history = MagicMock()
+            mock_agent.register_context_provider = MagicMock()
+            mock_agent.remove_context_provider = MagicMock()
+            mock_agent.model_name = "test-model"
+
+            # Mock get_context_provider with RAG chunks
+            mock_chunk = MagicMock()
+            mock_chunk.content = "Context chunk"
+            mock_chunk.metadata = {"source": "doc.txt", "similarity_score": 0.9}
+            mock_rag_context = MagicMock()
+            mock_rag_context.chunks = [mock_chunk]
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
+
+            async def mock_stream(*args, **kwargs):
+                yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Answer"))])
+
+            mock_agent.run_async_stream = mock_stream
+
+            service = ProjectChatService()
+
+            chunks = []
+            async for chunk in service.stream_chat(
+                project_dir=project_dir,
+                project_config=config_with_rag,
+                chat_agent=mock_agent,
+                messages=[
+                    LFChatCompletionUserMessageParam(role="user", content="Question")
+                ],
+                rag_enabled=True,
+                include_sources=False,  # Disabled
+            ):
+                chunks.append(chunk)
+
+            # No sources event should be present
+            for chunk in chunks:
+                if isinstance(chunk, dict):
+                    assert chunk.get("type") != "sources"
+
+    @pytest.mark.asyncio
+    @patch("services.project_chat_service.ProjectChatService._perform_rag_search")
+    async def test_stream_chat_sources_respects_limit(
+        self, mock_search, config_with_rag
+    ):
+        """Test that sources_limit parameter is respected."""
+        mock_search.return_value = []
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            mock_agent = AsyncMock(spec=ChatOrchestratorAgent)
+            mock_agent.history = MagicMock()
+            mock_agent.register_context_provider = MagicMock()
+            mock_agent.remove_context_provider = MagicMock()
+            mock_agent.model_name = "test-model"
+
+            # Create 10 mock chunks but set limit to 3
+            mock_chunks = []
+            for i in range(10):
+                mock_chunk = MagicMock()
+                mock_chunk.content = f"Context chunk {i}"
+                mock_chunk.metadata = {"source": f"doc{i}.txt", "similarity_score": 0.9}
+                mock_chunks.append(mock_chunk)
+
+            mock_rag_context = MagicMock()
+            mock_rag_context.chunks = mock_chunks
+            mock_agent.get_context_provider = MagicMock(return_value=mock_rag_context)
+
+            async def mock_stream(*args, **kwargs):
+                yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Answer"))])
+
+            mock_agent.run_async_stream = mock_stream
+
+            service = ProjectChatService()
+
+            chunks = []
+            async for chunk in service.stream_chat(
+                project_dir=project_dir,
+                project_config=config_with_rag,
+                chat_agent=mock_agent,
+                messages=[
+                    LFChatCompletionUserMessageParam(role="user", content="Question")
+                ],
+                rag_enabled=True,
+                include_sources=True,
+                sources_limit=3,  # Limit to 3
+            ):
+                chunks.append(chunk)
+
+            # Find sources event
+            sources_event = None
+            for chunk in chunks:
+                if isinstance(chunk, dict) and chunk.get("type") == "sources":
+                    sources_event = chunk
+                    break
+
+            assert sources_event is not None
+            assert len(sources_event["sources"]) == 3  # Should respect limit

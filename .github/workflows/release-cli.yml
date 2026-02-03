@@ -26,6 +26,9 @@ jobs:
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
+        exclude:
+          - goos: darwin
+            goarch: amd64
 
     steps:
       - name: Checkout code
@@ -115,8 +118,6 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: darwin
-            goarch: amd64
           - goos: darwin
             goarch: arm64
           - goos: windows

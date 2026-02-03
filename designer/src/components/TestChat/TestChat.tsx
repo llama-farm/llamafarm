@@ -11,7 +11,12 @@ import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSessio
 import { useProjectSession } from '../../hooks/useProjectSession'
 import { useChatbox } from '../../hooks/useChatbox'
 import { useVoiceInput } from '../../hooks/useVoiceInput'
-import { ChatStreamChunk } from '../../types/chat'
+import {
+  ChatStreamChunk,
+  RAGSource,
+  isSourcesEvent,
+  isChatChunk,
+} from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
@@ -2106,6 +2111,7 @@ export default function TestChat({
       type: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
       content: msg.content,
       timestamp: new Date(msg.timestamp),
+      sources: msg.sources,
     })
   )
   // Transient streaming assistant message (not persisted)
@@ -2461,6 +2467,7 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
+      let currentSources: RAGSource[] = []
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -2525,11 +2532,29 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              // Handle content chunks
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                currentSources = chunk.sources
+                // Update streaming message to show sources immediately
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: currentSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2538,6 +2563,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: currentSources,
                 })
               }
             },
@@ -2549,9 +2575,15 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                // Append final assistant message once and clear transient bubble
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                // Append final assistant message with sources and clear transient bubble
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  currentSources
+                )
               }
+              currentSources = []
               setStreamingMessage(null)
             },
           },
@@ -2733,6 +2765,7 @@ export default function TestChat({
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
+        let testSources: RAGSource[] = []
         const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
@@ -2775,10 +2808,28 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                testSources = chunk.sources
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: testSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2787,6 +2838,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: testSources,
                 })
               }
             },
@@ -2797,8 +2849,14 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  testSources
+                )
               }
+              testSources = []
               setStreamingMessage(null)
             },
           },
@@ -5047,8 +5105,26 @@ function ActionLink({
 }
 
 function References({ sources }: { sources: any[] }) {
-  const [open, setOpen] = useState<boolean>(true)
+  const [open, setOpen] = useState<boolean>(false)
+  const [expandedChunks, setExpandedChunks] = useState<Set<number>>(
+    () => new Set()
+  )
   const count = sources.length
+  const previewLineMax = 150
+  const previewFallbackMax = 120
+
+  const toggleChunk = (index: number) => {
+    setExpandedChunks(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="mt-2 rounded-md border border-border bg-card/40">
       <button
@@ -5063,25 +5139,71 @@ function References({ sources }: { sources: any[] }) {
       </button>
       {open && (
         <div id="references-panel" className="divide-y divide-border">
-          {sources.map((s, idx) => (
-            <div key={idx} className="px-3 py-2">
-              {s.content && (
-                <div className="text-sm text-foreground whitespace-pre-wrap line-clamp-2">
-                  {s.content}
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                <div className="truncate">
-                  {s.source || s.metadata?.source || 'source'}
-                </div>
-                {typeof s.score === 'number' && (
-                  <span className="ml-2 text-[11px]">
-                    {(s.score * 100).toFixed(1)}%
-                  </span>
+          {sources.map((s, idx) => {
+            const content =
+              typeof s.content === 'string' ? s.content : String(s.content ?? '')
+            const firstLine = content.split('\n', 1)[0] ?? ''
+            const hasNewline = content.includes('\n')
+            const previewLine = hasNewline
+              ? firstLine
+              : content.slice(0, previewFallbackMax)
+            const previewText =
+              previewLine.length > previewLineMax
+                ? `${previewLine.slice(0, previewLineMax).trimEnd()}...`
+                : previewLine
+            const isLong = content.length > previewText.length
+            const isExpanded = expandedChunks.has(idx)
+            const displayContent =
+              !isLong || isExpanded
+                ? content
+                : previewText
+
+            return (
+              <div key={idx} className="px-3 py-2">
+                {content && (
+                  <div
+                    className={[
+                      'text-sm text-foreground whitespace-pre-wrap',
+                      isLong
+                        ? 'cursor-pointer hover:bg-accent/20 rounded-sm p-1 -m-1'
+                        : '',
+                    ].join(' ')}
+                    role={isLong ? 'button' : undefined}
+                    tabIndex={isLong ? 0 : undefined}
+                    onClick={isLong ? () => toggleChunk(idx) : undefined}
+                    onKeyDown={
+                      isLong
+                        ? (event: React.KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              toggleChunk(idx)
+                            }
+                          }
+                        : undefined
+                    }
+                    aria-expanded={isLong ? isExpanded : undefined}
+                  >
+                    {isLong && (
+                      <span className="mr-1 text-xs text-muted-foreground">
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
+                    )}
+                    {displayContent}
+                  </div>
                 )}
+                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="truncate">
+                    {s.source || s.metadata?.source || 'source'}
+                  </div>
+                  {typeof s.score === 'number' && (
+                    <span className="ml-2 text-[11px]">
+                      {(s.score * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

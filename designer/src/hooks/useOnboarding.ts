@@ -90,9 +90,14 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
   // This avoids storing files on the global window object
   const actualFilesRef = useRef<File[]>([])
 
+  // Counter to force re-evaluation of demo status when project is converted from demo to regular
+  // This is incremented when removeDemoProject() is called to invalidate the memoized values
+  const [demoStatusVersion, setDemoStatusVersion] = useState(0)
+
   // Check if this is a demo project
-  const demoConfig = useMemo(() => getDemoConfigForProject(projectId), [projectId])
-  const isDemo = useMemo(() => isDemoProject(projectId), [projectId])
+  // Include demoStatusVersion in deps to re-evaluate after "Build your own" converts a demo project
+  const demoConfig = useMemo(() => getDemoConfigForProject(projectId), [projectId, demoStatusVersion])
+  const isDemo = useMemo(() => isDemoProject(projectId), [projectId, demoStatusVersion])
 
   // Reload state when project changes
   useEffect(() => {
@@ -424,6 +429,9 @@ export function useOnboarding(projectId: string | null = null): UseOnboardingRet
     // This allows the user to "Build your own" from a demo and get a fresh onboarding experience
     if (isDemo) {
       removeDemoProject(projectId)
+      // Increment version to force re-evaluation of demoConfig/isDemo memos
+      // Without this, the old demo checklist would still be shown after wizard completes
+      setDemoStatusVersion(v => v + 1)
     }
 
     setState({

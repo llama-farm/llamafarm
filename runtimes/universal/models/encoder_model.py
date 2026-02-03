@@ -8,21 +8,15 @@ Supports modern encoder architectures including:
 - Cross-encoder rerankers.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch
-import torch.nn.functional as F
-from transformers import (
-    AutoConfig,
-    AutoModel,
-    AutoModelForSequenceClassification,
-    AutoModelForTokenClassification,
-    AutoTokenizer,
-    PreTrainedTokenizerBase,
-)
+if TYPE_CHECKING:
+    from transformers import AutoConfig
 
 from .base import BaseModel
 
@@ -104,6 +98,14 @@ class EncoderModel(BaseModel):
         All blocking transformers operations are wrapped in asyncio.to_thread()
         to avoid blocking the FastAPI event loop during model loading.
         """
+        from transformers import (
+            AutoConfig,
+            AutoModel,
+            AutoModelForSequenceClassification,
+            AutoModelForTokenClassification,
+            AutoTokenizer,
+        )
+
         logger.info(f"Loading encoder model ({self.task}): {self.model_id}")
 
         # Load config first to detect capabilities
@@ -220,6 +222,8 @@ class EncoderModel(BaseModel):
             return False
 
         # Check torch version
+        import torch
+
         torch_version = tuple(map(int, torch.__version__.split(".")[:2]))
         if torch_version < (2, 0):
             return False
@@ -235,6 +239,8 @@ class EncoderModel(BaseModel):
 
     def _mean_pooling(self, model_output, attention_mask):
         """Mean pooling - take attention mask into account for correct averaging."""
+        import torch
+
         token_embeddings = model_output[0]
         input_mask_expanded = (
             attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
@@ -273,6 +279,9 @@ class EncoderModel(BaseModel):
         encoded = {k: v.to(self.device) for k, v in encoded.items()}
 
         # Generate embeddings
+        import torch
+        import torch.nn.functional as F
+
         with torch.no_grad():
             model_output = self.model(**encoded)
 
@@ -312,6 +321,8 @@ class EncoderModel(BaseModel):
         encoded = {k: v.to(self.device) for k, v in encoded.items()}
 
         # Classify
+        import torch
+
         with torch.no_grad():
             outputs = self.model(**encoded)
             predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
@@ -371,6 +382,8 @@ class EncoderModel(BaseModel):
             encoded = {k: v.to(self.device) for k, v in encoded.items()}
 
             # Get predictions
+            import torch
+
             with torch.no_grad():
                 outputs = self.model(**encoded)
                 predictions = torch.argmax(outputs.logits, dim=-1)[0]
@@ -491,6 +504,8 @@ class EncoderModel(BaseModel):
             encoded = {k: v.to(self.device) for k, v in encoded.items()}
 
             # Get relevance score
+            import torch
+
             with torch.no_grad():
                 outputs = self.model(**encoded)
                 logits = outputs.logits

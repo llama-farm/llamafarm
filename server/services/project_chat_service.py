@@ -370,7 +370,9 @@ class ProjectChatService:
         think: bool | None = None,
         thinking_budget: int | None = None,
         max_tokens: int | None = None,
-    ) -> AsyncGenerator[LFChatCompletionChunk]:
+        include_sources: bool = False,
+        sources_limit: int = 10,
+    ) -> AsyncGenerator[LFChatCompletionChunk | dict]:
         """Yield assistant content chunks, using agent-native streaming if available."""
         # Create event logger (gracefully handles test mocks)
         event_logger = self._create_event_logger(project_config)
@@ -399,6 +401,16 @@ class ProjectChatService:
         first_token_logged = False
 
         try:
+            rag_params = self._resolve_rag_parameters(
+                project_config,
+                rag_enabled=rag_enabled,
+                database=database,
+                retrieval_strategy=retrieval_strategy,
+                rag_top_k=rag_top_k,
+                rag_score_threshold=rag_score_threshold,
+                rag_queries=rag_queries,
+            )
+
             if latest_user_message:
                 await self._perform_rag_with_logging(
                     event_logger,
@@ -413,6 +425,44 @@ class ProjectChatService:
                     rag_score_threshold=rag_score_threshold,
                     rag_queries=rag_queries,
                 )
+
+            # Yield sources event before LLM stream (if requested)
+            if include_sources and rag_params.rag_enabled:
+                # Use get_context_provider method to access RAG context
+                context_provider = None
+                if hasattr(chat_agent, "get_context_provider"):
+                    context_provider = chat_agent.get_context_provider("rag_context")
+                if context_provider and hasattr(context_provider, "chunks"):
+                    chunks = context_provider.chunks
+                    if chunks:
+                        def _first_not_none(*values: object) -> object:
+                            for value in values:
+                                if value is not None:
+                                    return value
+                            return 0.0
+
+                        # Limit chunks to prevent performance issues
+                        limited_chunks = chunks[:sources_limit]
+                        sources = [
+                            {
+                                "content": chunk.content,
+                                "source": chunk.metadata.get("source", "unknown"),
+                                "score": _first_not_none(
+                                    chunk.metadata.get("score"),
+                                    chunk.metadata.get("similarity_score"),
+                                    chunk.metadata.get("_score"),
+                                    getattr(chunk, "score", None),
+                                    getattr(chunk, "similarity_score", None),
+                                ),
+                                "metadata": {
+                                    k: v
+                                    for k, v in chunk.metadata.items()
+                                    if k not in ("_score", "embeddings")
+                                },
+                            }
+                            for chunk in limited_chunks
+                        ]
+                        yield {"type": "sources", "sources": sources}
 
             logger.debug("Running async stream")
 

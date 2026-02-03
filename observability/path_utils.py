@@ -56,7 +56,12 @@ def get_data_dir() -> str:
 
     # Fall back to environment variable or default if settings didn't provide a value
     if not data_dir:
-        data_dir = os.getenv("LF_DATA_DIR", str(Path.home() / ".llamafarm"))
+        try:
+            _home = str(Path.home() / ".llamafarm")
+        except RuntimeError:
+            _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+            _home = str((Path(_fb) if _fb else Path.cwd()) / ".llamafarm")
+        data_dir = os.getenv("LF_DATA_DIR", _home)
 
     return data_dir
 

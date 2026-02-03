@@ -5,12 +5,15 @@
  * Only server-provided session IDs are stored - no client session generation.
  */
 
+import type { RAGSource } from '../types/chat'
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'tool'
   content: string
   timestamp: string
   tool_call_id?: string
+  sources?: RAGSource[]
 }
 
 interface SessionData {
@@ -89,7 +92,8 @@ function findExistingSession(
 function createMessage(
   role: 'user' | 'assistant' | 'tool',
   content: string,
-  tool_call_id?: string
+  tool_call_id?: string,
+  sources?: RAGSource[]
 ): ChatMessage {
   if (!content || content.trim() === '') {
     throw new Error('Cannot create message with empty content')
@@ -104,6 +108,10 @@ function createMessage(
 
   if (tool_call_id) {
     message.tool_call_id = tool_call_id
+  }
+
+  if (sources && sources.length > 0) {
+    message.sources = sources
   }
 
   return message
