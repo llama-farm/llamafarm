@@ -372,7 +372,9 @@ class ChatOrchestratorAgent(LFAgent):
                     yield chunk
                     continue
 
-                if tool_call.type != "function":
+                # Only validate type on first chunk (when function name is present).
+                # Subsequent chunks may have type=None but still contain arguments.
+                if tool_call.function.name and tool_call.type != "function":
                     logger.warning(
                         "Model returned a tool call of type %s, but we only support function tool calls",
                         tool_call.type,
@@ -380,11 +382,13 @@ class ChatOrchestratorAgent(LFAgent):
                     yield chunk
                     continue
 
+                # Accumulate arguments from all chunks
                 if accumulated_tool_call and tool_call.function.arguments:
                     accumulated_tool_call.function.arguments += (
                         tool_call.function.arguments
                     )
-                else:
+                elif tool_call.function.name:
+                    # This is the first chunk - start accumulating
                     accumulated_tool_call = tool_call
 
                 # Tool calls are streamed in multiple chunks. The first chunk should
@@ -546,9 +550,7 @@ class ChatOrchestratorAgent(LFAgent):
         logger.info(
             "MCP tools loaded",
             tool_count=len(self._mcp_tools),
-            tool_names=[
-                getattr(t, "tool_name", t.__name__) for t in self._mcp_tools
-            ],
+            tool_names=[getattr(t, "tool_name", t.__name__) for t in self._mcp_tools],
         )
 
     async def _load_builtin_tools(self):
@@ -642,11 +644,11 @@ class ChatOrchestratorAgent(LFAgent):
             result_content = result.result if hasattr(result, "result") else str(result)
 
             logger.info(
-                "Builtin tool execution successful",
+                "Builtin tool execution completed",
                 tool_name=getattr(
                     tool_class, "tool_name", getattr(tool_class, "__name__", "unknown")
                 ),
-                result_length=len(str(result_content)),
+                result_preview=str(result_content)[:200],
             )
 
             return str(result_content)
@@ -671,11 +673,7 @@ class ChatOrchestratorAgent(LFAgent):
         """
         # Find the tool class
         tool_class = next(
-            (
-                t
-                for t in self._mcp_tools
-                if getattr(t, "tool_name", None) == name
-            ),
+            (t for t in self._mcp_tools if getattr(t, "tool_name", None) == name),
             None,
         )
 

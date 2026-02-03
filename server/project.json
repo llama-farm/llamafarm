@@ -23,11 +23,18 @@
         "command": "docker build -t llamafarm-api -f server/Dockerfile ."
       }
     },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{workspaceRoot}/server",
+        "command": "uv run ruff check ."
+      }
+    },
     "test": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{workspaceRoot}/server",
-        "command": "uv run pytest -v --cov=. --cov-report=term-missing"
+        "command": "uv run pytest -v"
       }
     }
   }
