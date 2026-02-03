@@ -25,7 +25,10 @@ on:
         required: true
         default: true
         type: boolean
-  pull_request: {}
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   release:
     types:
       - published
