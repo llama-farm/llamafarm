@@ -3698,6 +3698,7 @@ export default function TestChat({
                     key={m.id}
                     message={m}
                     allowRanking={allowRanking}
+                    showReferences={showReferences}
                     showPrompts={showPrompts}
                     showThinking={showThinking}
                     lastUserInput={lastUserInputRef.current}
@@ -4607,6 +4608,7 @@ export default function TestChat({
 interface TestChatMessageProps {
   message: ChatboxMessage
   allowRanking: boolean
+  showReferences?: boolean
   showPrompts?: boolean
   showThinking?: boolean
   lastUserInput?: string
@@ -4616,6 +4618,7 @@ interface TestChatMessageProps {
 export function TestChatMessage({
   message,
   allowRanking,
+  showReferences,
   showPrompts,
   // showThinking - no longer used here; thinking is always shown if present in message
   lastUserInput,
@@ -4814,8 +4817,9 @@ export function TestChatMessage({
         )}
       </div>
 
-      {/* References - show when RAG was enabled (sources array exists, even if empty) */}
-      {isAssistant &&
+      {/* References - show when showReferences is enabled and RAG was enabled (sources array exists, even if empty) */}
+      {showReferences &&
+        isAssistant &&
         !message.isStreaming &&
         !message.isLoading &&
         Array.isArray(message.sources) && <References sources={message.sources} />}
