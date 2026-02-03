@@ -8,7 +8,7 @@ platforms:
 
   - name: macos-x86_64
     runner: macos-13
-    enabled: true
+    enabled: false  # Temporarily disabled due to GitHub Actions macos-13 runner unavailability
 
   - name: linux-x86_64
     runner: ubuntu-latest
