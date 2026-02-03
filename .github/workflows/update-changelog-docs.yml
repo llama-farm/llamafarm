@@ -1,0 +1,243 @@
+name: Update Changelog Docs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to update (leave empty to detect from context)'
+        required: false
+        type: string
+      version:
+        description: 'Version to generate changelog for (auto-detected if empty)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  NX_NO_CLOUD: true
+
+jobs:
+  update-changelog-docs:
+    # Only run on release-please PRs (or manual dispatch)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.pull_request.title, 'chore(main): release') ||
+      startsWith(github.event.pull_request.title, 'chore: release')
+
+    runs-on: gpu-med
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: Detect version from CHANGELOG.md
+        id: detect-version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Extract the latest version from CHANGELOG.md (first ## [version] line)
+            VERSION=$(grep -m1 '## \[' CHANGELOG.md | sed 's/.*\[\([^]]*\)\].*/\1/')
+          fi
+
+          if [[ -z "$VERSION" ]]; then
+            echo "Error: Could not detect version from CHANGELOG.md" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if changelog doc already exists
+        id: check-exists
+        run: |
+          VERSION="${{ steps.detect-version.outputs.version }}"
+          if [[ -f "docs/website/docs/changelog/v${VERSION}.md" ]]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Changelog doc for v${VERSION} already exists, will update it"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Changelog doc for v${VERSION} does not exist, will create it"
+          fi
+
+      - name: Generate prose changelog
+        id: generate-prose
+        uses: ./.github/actions/prose-changelog
+        with:
+          version: ${{ steps.detect-version.outputs.version }}
+          changelog_file: CHANGELOG.md
+
+      - name: Extract release date from CHANGELOG.md
+        id: release-date
+        run: |
+          VERSION="${{ steps.detect-version.outputs.version }}"
+          # Extract date from CHANGELOG.md (format: ## [version] (YYYY-MM-DD))
+          DATE=$(grep -m1 "## \[${VERSION}\]" CHANGELOG.md | sed 's/.*(\([0-9-]*\)).*/\1/')
+
+          if [[ -z "$DATE" ]]; then
+            # Fallback to today's date
+            DATE=$(date +%Y-%m-%d)
+          fi
+
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "Release date: $DATE"
+
+      - name: Update changelog index with expandable section
+        env:
+          VERSION: ${{ steps.detect-version.outputs.version }}
+          DATE: ${{ steps.release-date.outputs.date }}
+          PROSE_CHANGELOG: ${{ steps.generate-prose.outputs.prose_changelog }}
+        run: |
+          INDEX_FILE="docs/website/docs/changelog/index.md"
+
+          # Check if this version is already in the index
+          if grep -q "v${VERSION}" "$INDEX_FILE"; then
+            echo "Version v${VERSION} already in index, skipping update"
+            exit 0
+          fi
+
+          # Create a temporary file with the new release section
+          cat > /tmp/new-release-section.md <<'RELEASE_EOF'
+<details open>
+<summary><strong>v${VERSION} (${DATE})</strong> - Latest</summary>
+
+<br/>
+
+*Released on ${DATE}*
+
+${PROSE_CHANGELOG}
+
+---
+
+**Full Changelog**: [v${VERSION}](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${VERSION//./})
+
+</details>
+
+RELEASE_EOF
+
+          # Substitute variables in the template
+          sed -i "s/\${VERSION}/${VERSION}/g" /tmp/new-release-section.md
+          sed -i "s/\${DATE}/${DATE}/g" /tmp/new-release-section.md
+
+          # Escape special characters in PROSE_CHANGELOG for sed
+          PROSE_ESCAPED=$(echo "$PROSE_CHANGELOG" | sed 's/[&/\]/\\&/g')
+          sed -i "s|\${PROSE_CHANGELOG}|${PROSE_ESCAPED}|g" /tmp/new-release-section.md
+
+          # Remove 'open' attribute from existing details tags (so only latest is open)
+          sed -i 's/<details open>/<details>/g' "$INDEX_FILE"
+
+          # Remove " - Latest" from existing releases
+          sed -i 's/ - Latest<\/strong>/<\/strong>/g' "$INDEX_FILE"
+
+          # Find the line with "## Recent Releases" and insert after it
+          awk '
+            /^## Recent Releases$/ {
+              print
+              print ""
+              system("cat /tmp/new-release-section.md")
+              next
+            }
+            { print }
+          ' "$INDEX_FILE" > /tmp/index-updated.md
+
+          mv /tmp/index-updated.md "$INDEX_FILE"
+          rm -f /tmp/new-release-section.md
+
+          echo "✅ Updated $INDEX_FILE with expandable section for v${VERSION}"
+
+      - name: Commit changelog docs
+        id: commit
+        run: |
+          VERSION="${{ steps.detect-version.outputs.version }}"
+
+          git config user.name "llama-farm-bot"
+          git config user.email "ops@llamafarm.dev"
+
+          git add docs/website/docs/changelog/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            echo "committed=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "docs: update changelog for v${VERSION}
+
+          Automated changelog documentation update for release v${VERSION}.
+          Generated from conventional commits using LlamaFarm AI."
+
+            git push
+            echo "committed=true" >> $GITHUB_OUTPUT
+            echo "Committed and pushed changelog docs for v${VERSION}"
+          fi
+
+      - name: Comment on PR (success)
+        if: steps.commit.outputs.committed == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          script: |
+            const version = '${{ steps.detect-version.outputs.version }}';
+            const prNumber = context.payload.pull_request?.number || ${{ inputs.pr_number }};
+
+            if (!prNumber) {
+              console.log('No PR number available, skipping comment');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `✅ **Changelog docs updated successfully for v${version}**\n\nThe human-readable changelog has been added as an expandable section in:\n- \`docs/website/docs/changelog/index.md\`\n\nThe new release appears at the top and is expanded by default. Preview the changes in this PR before merging.`
+            });
+
+      - name: Comment on PR (no changes)
+        if: steps.commit.outputs.committed == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          script: |
+            const version = '${{ steps.detect-version.outputs.version }}';
+            const prNumber = context.payload.pull_request?.number || ${{ inputs.pr_number }};
+
+            if (!prNumber) {
+              console.log('No PR number available, skipping comment');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `ℹ️ **Changelog docs for v${version}** are already up to date.\n\nNo changes needed.`
+            });
+
+      - name: Comment on PR (failure)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request?.number || ${{ inputs.pr_number }};
+
+            if (!prNumber) {
+              console.log('No PR number available, skipping comment');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `❌ **Changelog docs generation failed**\n\nThe automated changelog documentation update encountered an error. This won't block the release.\n\nYou can:\n1. Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details\n2. Run the manual script: \`./scripts/update-changelog-docs.sh\`\n3. Merge without changelog docs (they can be added later)`
+            });
