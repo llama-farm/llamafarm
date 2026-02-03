@@ -1,6 +1,7 @@
 """Addon management API endpoints."""
 
 import uuid
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from .service import AddonService

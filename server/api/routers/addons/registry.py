@@ -1,9 +1,10 @@
 """Addon registry loader."""
 
 import logging
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
