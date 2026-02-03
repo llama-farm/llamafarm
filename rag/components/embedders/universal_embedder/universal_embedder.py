@@ -1,7 +1,7 @@
 """Universal Runtime-based embedding generator with circuit breaker protection."""
 
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -84,12 +84,17 @@ class UniversalEmbedder(Embedder):
         self._consecutive_failures = 0
 
     def validate_config(self) -> bool:
-        """Validate configuration and check Universal Runtime availability."""
+        """Validate configuration and check Universal Runtime availability.
+
+        Retries with exponential backoff to handle cases where the runtime
+        is still loading models (e.g., embedding model on first request).
+        """
         health_url = self.base_url.replace("/v1", "/health")
         models_url = f"{self.base_url}/models"
         last_error: Exception | None = None
+        max_attempts = self.validation_retries + 1
 
-        for attempt in range(self.validation_retries + 1):
+        for attempt in range(max_attempts):
             try:
                 # Check if server is available
                 response = requests.get(
@@ -120,6 +125,10 @@ class UniversalEmbedder(Embedder):
             if attempt < self.validation_retries:
                 backoff = self.validation_retry_backoff * (2**attempt)
                 if backoff > 0:
+                    logger.info(
+                        "Retrying embedder validation in "
+                        f"{backoff:.0f}s (attempt {attempt + 1}/{max_attempts})"
+                    )
                     time.sleep(backoff)
 
         if last_error is not None:

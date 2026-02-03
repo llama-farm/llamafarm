@@ -182,7 +182,7 @@ runtime:
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1")
+client = OpenAI(base_url="http://localhost:14345/v1")
 response = client.chat.completions.create(
     model="unsloth/Qwen3-1.7B-GGUF:Q8_0",  # Specify quantization in model name
     messages=[{"role": "user", "content": "Hello!"}]

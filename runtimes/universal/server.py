@@ -22,12 +22,12 @@ Environment Variables:
 import asyncio
 import os
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
+from utils.safe_home import get_data_dir
 from models import (
     AnomalyModel,
     BaseModel,
@@ -189,6 +189,39 @@ def _preload_async_backends():
 _preload_async_backends()
 
 
+def _patch_cache_artifact_factory():
+    """Make CacheArtifactFactory.register idempotent (PyApp Windows workaround).
+
+    In PyApp-packaged binaries on Windows, importing torch._dynamo fails partway
+    through (after package.py registers artifact types but before __init__ completes).
+    Python cleans up the failed torch._dynamo.* submodules from sys.modules, but the
+    registrations persist in CacheArtifactFactory._artifact_types. On the next import
+    attempt, package.py re-runs and @register asserts the type is already registered.
+
+    Patching register() to skip duplicates breaks this cycle.
+    """
+    try:
+        from torch.compiler._cache import CacheArtifactFactory
+
+        if not getattr(CacheArtifactFactory, "_register_patched", False):
+            _orig = CacheArtifactFactory.register.__func__
+
+            @classmethod  # type: ignore[misc]
+            def _safe_register(cls, artifact_cls):
+                if artifact_cls.type() in cls._artifact_types:
+                    return artifact_cls
+                return _orig(cls, artifact_cls)
+
+            CacheArtifactFactory.register = _safe_register
+            CacheArtifactFactory._register_patched = True
+    except (ImportError, AttributeError):
+        pass  # torch not installed or API changed
+
+
+_patch_cache_artifact_factory()
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
@@ -289,12 +322,12 @@ _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 
 # Data directories
-_LF_DATA_DIR = Path.home() / ".llamafarm"
+_LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
 
 # ============================================================================
-# Helper Functions
+# Language Model Loading (for chat_completions router)
 # ============================================================================
 
 
@@ -653,6 +686,17 @@ async def load_classifier(
 ) -> "ClassifierModel":
     """Load or get cached classifier model."""
     cache_key = _make_classifier_cache_key(model_id)
+
+    # Evict cached model if base_model changed (prevents returning a model
+    # initialized with a different base_model for the same model_id)
+    cached = _classifiers.get(cache_key) if cache_key in _classifiers else None
+    if cached is not None and getattr(cached, "base_model", None) != base_model:
+        logger.info(
+            f"Evicting classifier '{model_id}': base_model changed "
+            f"({cached.base_model} -> {base_model})"
+        )
+        _classifiers.pop(cache_key, None)
+        await cached.unload()
 
     if cache_key not in _classifiers:
         async with _model_load_lock:

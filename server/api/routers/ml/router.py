@@ -83,6 +83,10 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         batch_size=request.batch_size,
     )
 
+    # Save description metadata if provided (model auto-saves during fit)
+    if request.description:
+        MLModelService.save_description("classifier", versioned_name, request.description)
+
     # Add versioning info to response
     result["base_name"] = request.model
     result["versioned_name"] = versioned_name
@@ -280,6 +284,10 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
+
+    # Save description metadata if provided (model auto-saves during fit)
+    if request.description:
+        MLModelService.save_description("anomaly", versioned_name, request.description)
 
     # Add versioning info to response
     result["base_name"] = request.model

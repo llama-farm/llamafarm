@@ -26,13 +26,14 @@ from pathlib import Path
 from typing import Any
 
 from .base import BaseModel
+from utils.safe_home import get_data_dir
 
 logger = logging.getLogger(__name__)
 
 # Safe directory for classifier models - uses standard LlamaFarm data directory
 # ~/.llamafarm/models/classifier/ (or LF_DATA_DIR/models/classifier/)
 # Only files within this directory can be loaded - prevents path traversal attacks
-_LF_DATA_DIR = Path(os.environ.get("LF_DATA_DIR", Path.home() / ".llamafarm"))
+_LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = (_LF_DATA_DIR / "models" / "classifier").resolve()
 
 

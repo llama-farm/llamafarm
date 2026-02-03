@@ -24,13 +24,13 @@ The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Un
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000) - with versioning
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+# Via LlamaFarm API (port 14345) - with versioning
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
 
 # Use -latest suffix to auto-resolve
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor-latest", "backend": "isolation_forest", "data": [...]}'
 ```

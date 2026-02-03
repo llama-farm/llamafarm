@@ -108,7 +108,7 @@ class TestUniversalParserOCREndpoint:
             call_args = mock_post.call_args
 
             # Verify the endpoint URL
-            assert call_args[0][0] == "http://127.0.0.1:8000/v1/vision/ocr"
+            assert call_args[0][0] == "http://127.0.0.1:14345/v1/vision/ocr"
 
             # Verify the request contains base64 image
             request_json = call_args[1]["json"]
@@ -321,7 +321,7 @@ class TestUniversalParserOCREndpointConfig:
         from components.parsers.universal import UniversalParser
 
         parser = UniversalParser()
-        assert parser.ocr_endpoint == "http://127.0.0.1:8000/v1/vision/ocr"
+        assert parser.ocr_endpoint == "http://127.0.0.1:14345/v1/vision/ocr"
 
     def test_uses_custom_ocr_endpoint(self):
         """Test: Uses custom OCR endpoint from config."""

@@ -10,6 +10,7 @@ Provides:
 
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -17,11 +18,24 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _safe_home() -> Path:
+    """Return the user's home directory with fallback for embedded Python."""
+    try:
+        return Path.home()
+    except RuntimeError:
+        fb = (
+            os.environ.get("USERPROFILE")
+            or os.environ.get("APPDATA")
+            or os.environ.get("LOCALAPPDATA")
+        )
+        return Path(fb) if fb else Path.cwd()
+
+
 class MLModelService:
     """Service for managing ML model storage and versioning."""
 
     # Base directory for all models
-    MODELS_DIR = Path.home() / ".llamafarm" / "models"
+    MODELS_DIR = _safe_home() / ".llamafarm" / "models"
 
     # Subdirectories by model type
     CLASSIFIER_DIR = "classifier"

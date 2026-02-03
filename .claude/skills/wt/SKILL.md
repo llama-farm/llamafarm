@@ -126,7 +126,7 @@ http://designer.feat-my-task.localhost
 
 - **Worktrees location**: `~/worktrees/llamafarm/`
 - **Data directories**: `~/.llamafarm/worktrees/<name>/`
-- **Port allocation**: Deterministic hash of worktree name (8000+offset, 5000+offset, 11000+offset)
+- **Port allocation**: Deterministic hash of worktree name (14345+offset, 5000+offset, 11000+offset)
 - **Logs**: `~/.llamafarm/worktrees/<name>/logs/`
 
 ---

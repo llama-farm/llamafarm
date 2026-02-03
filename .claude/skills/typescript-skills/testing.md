@@ -100,7 +100,7 @@ import { server } from '../../test/mocks/server'
 import { listProjects, createProject } from '../projectService'
 import { createMockProject, createMockProjectsList } from '../../test/factories/projectFactory'
 
-const API_BASE = 'http://localhost:8000/v1'
+const API_BASE = 'http://localhost:14345/v1'
 
 describe('projectService', () => {
   beforeEach(() => {

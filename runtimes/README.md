@@ -31,7 +31,7 @@ See `runtimes/lemonade/README.md` for detailed documentation.
 
 ### Port Allocation
 
-- **8000**: LlamaFarm main server
+- **14345**: LlamaFarm main server
 - **11434**: Ollama (default)
 - **11534**: Lemonade
 - **Future runtimes**: Will use similar high-numbered ports

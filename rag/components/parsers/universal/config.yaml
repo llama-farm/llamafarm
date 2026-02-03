@@ -89,7 +89,7 @@ parsers:
       chunk_overlap: 100
       chunk_strategy: semantic  # semantic, sections, paragraphs, sentences, characters
       use_ocr: true
-      ocr_endpoint: "http://127.0.0.1:8000/v1/vision/ocr"
+      ocr_endpoint: "http://127.0.0.1:14345/v1/vision/ocr"
       extract_metadata: true
       min_chunk_size: 50
       max_chunk_size: 8000

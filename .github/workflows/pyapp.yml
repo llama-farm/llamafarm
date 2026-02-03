@@ -1,0 +1,259 @@
+name: Build Native Binaries (PyApp)
+
+# Build standalone binaries for LlamaFarm components using PyApp.
+# PyApp produces a Rust binary that bootstraps Python + deps on first run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to build"
+        required: true
+        default: "server"
+        type: choice
+        options:
+          - server
+          - rag
+          - runtime
+          - all
+      version:
+        description: "Version (e.g. 0.0.26). Leave empty to use git ref."
+        required: false
+        type: string
+      embed_python:
+        description: "Embed Python distribution in binary"
+        required: true
+        default: true
+        type: boolean
+  pull_request:
+    paths:
+      - "tools/pyapp/**"
+      - ".github/workflows/pyapp.yml"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read  # Default to read-only, write permission granted per-job
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  # Generate the build matrix based on the selected component.
+  # On PR: build all components. On dispatch: build selected component(s).
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          ALL_PLATFORMS='[
+            {"os":"linux-x86_64","runner":"ubuntu-latest"},
+            {"os":"linux-arm64","runner":"ubuntu-24.04-arm"},
+            {"os":"macos-arm64","runner":"macos-latest"},
+            {"os":"windows-x86_64","runner":"windows-latest"}
+          ]'
+
+          COMPONENT="${{ github.event.inputs.component }}"
+
+          # On PR, release, or "all": build every component
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "release" || "$COMPONENT" == "all" ]]; then
+            COMPONENTS='["server","rag","runtime"]'
+          else
+            COMPONENTS="[\"$COMPONENT\"]"
+          fi
+
+          # Build the matrix JSON: cross-product of platforms x components
+          MATRIX=$(jq -cn \
+            --argjson platforms "$ALL_PLATFORMS" \
+            --argjson components "$COMPONENTS" \
+            '{include: [
+              $platforms[] as $p | $components[] as $c |
+              {os: $p.os, runner: $p.runner, component: $c}
+            ]}')
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  build:
+    name: Build ${{ matrix.component }} on ${{ matrix.os }}
+    needs: setup
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/pyapp/.cache/**/target
+          key: cargo-pyapp-${{ matrix.os }}-${{ hashFiles('tools/pyapp/**') }}
+          restore-keys: |
+            cargo-pyapp-${{ matrix.os }}-
+
+      - name: Install build dependencies
+        run: |
+          uv pip install --system -e ./config -e ./common
+
+      - name: Install server dependencies
+        if: matrix.component == 'server'
+        run: |
+          uv pip install --system -e ./server
+
+      - name: Install rag dependencies
+        if: matrix.component == 'rag'
+        run: |
+          uv pip install --system -e ./rag
+
+      - name: Install runtime dependencies
+        if: matrix.component == 'runtime'
+        run: |
+          uv pip install --system -e ./packages/llamafarm-llama -e "./runtimes/universal"
+
+      - name: Generate config types
+        run: |
+          cd config && python generate_types.py
+
+      - name: Build designer (for server component)
+        if: matrix.component == 'server'
+        shell: bash
+        run: |
+          cd designer
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+          # Verify build output
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: Designer build failed - dist/index.html not found" >&2
+            exit 1
+          fi
+          echo "✓ Designer built successfully"
+
+      - name: Build with PyApp
+        run: |
+          python tools/pyapp/build.py --component ${{ matrix.component }} --skip-types ${{ github.event.inputs.version && format('--version {0}', github.event.inputs.version) || '' }} ${{ github.event.inputs.embed_python == 'false' && '--no-embed-python' || '' }}
+
+      - name: List build output
+        shell: bash
+        run: |
+          echo "Build output:"
+          ls -la dist/pyapp/ || echo "No output found"
+
+      - name: Test binary runs
+        shell: bash
+        run: |
+          COMPONENT="${{ matrix.component }}"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            BINARY=$(ls dist/pyapp/llamafarm-${COMPONENT}-*.exe)
+          else
+            chmod +x dist/pyapp/llamafarm-${COMPONENT}-*
+            BINARY=$(ls dist/pyapp/llamafarm-${COMPONENT}-*)
+          fi
+
+          echo "Testing self commands..."
+          # self --help should work without bootstrapping
+          timeout 30 "$BINARY" self --help || true
+
+          echo "Binary executed successfully"
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist/pyapp
+          # Use shasum on macOS (sha256sum not available by default)
+          if command -v sha256sum &> /dev/null; then
+            HASH_CMD="sha256sum"
+          else
+            HASH_CMD="shasum -a 256"
+          fi
+          for file in llamafarm-${{ matrix.component }}-*; do
+            $HASH_CMD "$file" > "$file.sha256"
+            echo "SHA256: $(cat $file.sha256)"
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
+          path: |
+            dist/pyapp/llamafarm-${{ matrix.component }}-*
+            dist/pyapp/llamafarm-${{ matrix.component }}-*.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  # Upload binaries to GitHub release when triggered by a release event
+  upload-release:
+    name: Upload PyApp Binaries to Release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - os: linux-x86_64
+            component: server
+          - os: linux-x86_64
+            component: rag
+          - os: linux-x86_64
+            component: runtime
+          - os: linux-arm64
+            component: server
+          - os: linux-arm64
+            component: rag
+          - os: linux-arm64
+            component: runtime
+          - os: macos-arm64
+            component: server
+          - os: macos-arm64
+            component: rag
+          - os: macos-arm64
+            component: runtime
+          - os: windows-x86_64
+            component: server
+          - os: windows-x86_64
+            component: rag
+          - os: windows-x86_64
+            component: runtime
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
+          path: dist/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist/pyapp/llamafarm-${{ matrix.component }}-*
+            dist/pyapp/llamafarm-${{ matrix.component }}-*.sha256
+          fail_on_unmatched_files: true
