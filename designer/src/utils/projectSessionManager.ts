@@ -110,7 +110,9 @@ function createMessage(
     message.tool_call_id = tool_call_id
   }
 
-  if (sources && sources.length > 0) {
+  // Preserve sources array even if empty - this distinguishes
+  // "RAG enabled but found nothing" from "RAG disabled"
+  if (sources !== undefined) {
     message.sources = sources
   }
 
