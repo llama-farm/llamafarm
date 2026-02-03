@@ -448,6 +448,7 @@ class TestTaskCreateToolOperations:
         assert "task" in result_data
         assert result_data["task"]["subject"] == "Test task"
         assert result_data["task"]["description"] == "A test task description"
+        assert result_data["task"]["status"] == "pending"
 
     @pytest.mark.asyncio
     async def test_create_task_full(self, create_tool):
