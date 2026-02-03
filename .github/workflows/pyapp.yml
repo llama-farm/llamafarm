@@ -25,10 +25,7 @@ on:
         required: true
         default: true
         type: boolean
-  pull_request:
-    paths:
-      - "tools/pyapp/**"
-      - ".github/workflows/pyapp.yml"
+  pull_request: {}
   release:
     types:
       - published
