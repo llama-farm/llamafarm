@@ -247,7 +247,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
-          path: dist/
+          path: dist/pyapp/
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
