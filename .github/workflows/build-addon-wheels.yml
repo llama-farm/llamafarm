@@ -163,37 +163,15 @@ jobs:
 
   # Upload wheel bundles to GitHub release when triggered by a release event
   upload-release:
-    name: Upload Addon Wheels to Release
+    name: Upload Addon Wheels to Release (${{ matrix.addon }}, ${{ matrix.platform }})
     if: github.event_name == 'release'
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
-      matrix:
-        include:
-          # STT addon - all platforms
-          - platform: macos-arm64
-            addon: stt
-          - platform: macos-x86_64
-            addon: stt
-          - platform: linux-x86_64
-            addon: stt
-          - platform: linux-aarch64
-            addon: stt
-          - platform: windows-x86_64
-            addon: stt
-          # TTS addon - all platforms
-          - platform: macos-arm64
-            addon: tts
-          - platform: macos-x86_64
-            addon: tts
-          - platform: linux-x86_64
-            addon: tts
-          - platform: linux-aarch64
-            addon: tts
-          - platform: windows-x86_64
-            addon: tts
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Download artifact
