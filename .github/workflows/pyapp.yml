@@ -25,16 +25,13 @@ on:
         required: true
         default: true
         type: boolean
-  pull_request:
-    paths:
-      - "tools/pyapp/**"
-      - ".github/workflows/pyapp.yml"
+  pull_request: {}
   release:
     types:
       - published
 
 permissions:
-  contents: read  # Default to read-only, write permission granted per-job
+  contents: read # Default to read-only, write permission granted per-job
 
 env:
   PYTHON_VERSION: "3.12"
