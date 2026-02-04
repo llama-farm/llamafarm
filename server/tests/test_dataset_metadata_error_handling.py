@@ -27,6 +27,14 @@ from services.project_service import ProjectService
 class TestDatasetMetadataErrorHandling:
     """Test cases for dataset metadata error handling."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
+
     def setup_method(self):
         """Set up test fixtures before each test method."""
         # Sample file hashes
@@ -652,6 +660,14 @@ class TestDatasetMetadataErrorHandling:
 
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across the entire system."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")

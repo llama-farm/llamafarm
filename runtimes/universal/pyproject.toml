@@ -31,6 +31,10 @@ dependencies = [
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
   # Anomaly detection
   "scikit-learn>=1.3.0",
+  "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
+  "numba>=0.60.0",  # Explicit pin for Python 3.12 compatibility (pyod -> numba -> llvmlite)
+  # High-performance data processing for streaming ML
+  "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
   # Text classification (few-shot learning with SetFit)
   "setfit>=1.1.0",
   "sentence-transformers>=3.0.0",

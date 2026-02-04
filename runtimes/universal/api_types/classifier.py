@@ -9,6 +9,13 @@ from pydantic import BaseModel
 # =============================================================================
 
 
+class TrainingExample(BaseModel):
+    """A single training example for the classifier."""
+
+    text: str
+    label: str
+
+
 class ClassifierFitRequest(BaseModel):
     """Classifier fitting request using SetFit few-shot learning.
 
@@ -17,7 +24,7 @@ class ClassifierFitRequest(BaseModel):
 
     model: str  # Model identifier (for caching/saving)
     base_model: str = "sentence-transformers/all-MiniLM-L6-v2"  # Base transformer
-    training_data: list[dict[str, str]]  # List of {"text": ..., "label": ...}
+    training_data: list[TrainingExample]
     num_iterations: int = 20  # Training iterations
     batch_size: int = 16  # Training batch size
     overwrite: bool = True  # If True, overwrite existing model; if False, version it
