@@ -7,6 +7,14 @@ imports (from runtime.models import ...).
 import os
 import sys
 
+# Inject addon paths from PYTHONPATH into sys.path
+# PyApp's Python doesn't automatically process PYTHONPATH, so we need to do it manually
+pythonpath = os.environ.get('PYTHONPATH', '')
+if pythonpath:
+    for path in pythonpath.split(os.pathsep):
+        if path and path not in sys.path:
+            sys.path.insert(0, path)
+
 # Allow bare imports (from models.xxx, from routers.xxx, etc.)
 sys.path.insert(0, os.path.dirname(__file__))
 

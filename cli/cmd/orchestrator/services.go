@@ -420,6 +420,41 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
+	// Inject addon paths into PYTHONPATH (same logic as binary mode)
+	addonPaths, err := sm.getAddonPythonPaths(serviceDef.Name)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
+	} else if len(addonPaths) > 0 {
+		// Get existing PYTHONPATH from environment and remove it from env slice
+		var existingPath string
+		filteredEnv := make([]string, 0, len(env))
+		for _, envVar := range env {
+			if strings.HasPrefix(envVar, "PYTHONPATH=") {
+				existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+				// Skip this entry - we'll add the combined path below
+			} else {
+				filteredEnv = append(filteredEnv, envVar)
+			}
+		}
+		env = filteredEnv
+
+		// If not in env list, check OS environment
+		if existingPath == "" {
+			existingPath = os.Getenv("PYTHONPATH")
+		}
+
+		// Build new PYTHONPATH (existing first, then addon paths)
+		// Put addons last so venv packages take precedence and avoid conflicts
+		var allPaths []string
+		if existingPath != "" {
+			allPaths = append(allPaths, existingPath)
+		}
+		allPaths = append(allPaths, addonPaths...)
+		newPath := strings.Join(allPaths, string(os.PathListSeparator))
+		env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
+		utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
+	}
+
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
 }
 
@@ -520,8 +555,13 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 			existingPath = os.Getenv("PYTHONPATH")
 		}
 
-		// Build new PYTHONPATH (addon paths first, then existing)
-		allPaths := append(addonPaths, existingPath)
+		// Build new PYTHONPATH (existing first, then addon paths)
+		// Put addons last so venv packages take precedence and avoid conflicts
+		var allPaths []string
+		if existingPath != "" {
+			allPaths = append(allPaths, existingPath)
+		}
+		allPaths = append(allPaths, addonPaths...)
 		newPath := strings.Join(allPaths, string(os.PathListSeparator))
 		env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
 		utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
