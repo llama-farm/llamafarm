@@ -13,7 +13,7 @@ The streaming API is designed for scenarios where:
 - Data arrives continuously (sensors, logs, metrics)
 - You need immediate anomaly scores
 - The underlying data distribution may drift over time
-- You can't wait to collect a large batch before training
+- You can't wait to collect a large batch before training.
 
 **Key Features:**
 - **Cold Start Handling**: Collects initial samples before first training
