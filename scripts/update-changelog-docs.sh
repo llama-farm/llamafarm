@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Manual script to generate and update changelog documentation
 #
-# This script can be run manually if the automated workflow fails,
-# or for backfilling historical releases.
+# This script creates individual changelog files per release and updates
+# the changelog index. Use this if the automated workflow fails or for
+# backfilling historical releases.
 #
 # Usage:
 #   ./scripts/update-changelog-docs.sh                    # Latest version
@@ -46,6 +47,12 @@ generate_changelog_for_version() {
         return 1
     fi
 
+    # Check if file already exists
+    if [[ -f "$DOCS_CHANGELOG_DIR/v${version}.md" ]]; then
+        log_warn "v${version}.md already exists, skipping"
+        return 0
+    fi
+
     # Extract release date
     local date
     date=$(grep -m1 "## \[${version}\]" "$CHANGELOG_FILE" | sed 's/.*(\([0-9-]*\)).*/\1/')
@@ -58,32 +65,26 @@ generate_changelog_for_version() {
     log_info "Running prose changelog generator..."
     cd "$REPO_ROOT"
 
-    INPUT_VERSION="$version" \
-    INPUT_CHANGELOG_FILE="$CHANGELOG_FILE" \
-    .github/actions/prose-changelog/generate.sh > /tmp/prose-changelog-${version}.txt
-
     local prose_content
-    prose_content=$(cat /tmp/prose-changelog-${version}.txt)
+    prose_content=$(INPUT_VERSION="$version" \
+        INPUT_CHANGELOG_FILE="$CHANGELOG_FILE" \
+        .github/actions/prose-changelog/generate.sh 2>/dev/null || echo "")
 
     if [[ -z "$prose_content" ]]; then
         log_error "Failed to generate prose changelog for version ${version}"
         return 1
     fi
 
-    # Update index with expandable section instead of separate file
-    if grep -q "v${version}" "$DOCS_CHANGELOG_DIR/index.md"; then
-        log_info "v${version} already in index.md, skipping"
-        return 0
-    fi
+    # Create the individual changelog doc
+    local output_file="$DOCS_CHANGELOG_DIR/v${version}.md"
 
-    log_info "Adding v${version} as expandable section to index.md..."
+    cat > "$output_file" <<EOF
+---
+title: v${version}
+description: Release notes for LlamaFarm v${version}
+---
 
-    # Create temporary file with new release section
-    cat > /tmp/new-release-section-${version}.md <<RELEASE_EOF
-<details open>
-<summary><strong>v${version} (${date})</strong> - Latest</summary>
-
-<br/>
+# v${version}
 
 *Released on ${date}*
 
@@ -91,35 +92,39 @@ ${prose_content}
 
 ---
 
-**Full Changelog**: [v${version}](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${version//./})
+**Full Changelog**: [v${version} on GitHub](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${version//./})
+EOF
 
-</details>
+    log_info "Created $output_file"
 
-RELEASE_EOF
+    # Update index if this version isn't already listed
+    # Use specific pattern to avoid matching v1.2 when checking for v1.20
+    if ! grep -qE "<strong>v${version}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
+        log_info "Adding v${version} to index.md..."
 
-    # Remove 'open' attribute from existing details tags
-    sed -i.bak 's/<details open>/<details>/g' "$DOCS_CHANGELOG_DIR/index.md"
+        # Extract highlights (first meaningful sentence)
+        local highlights
+        highlights=$(echo "$prose_content" | grep -E "^(This release|Added|New|Introduces|Features)" | head -1 | cut -c1-50)
+        if [[ -z "$highlights" ]]; then
+            highlights="See release notes"
+        fi
 
-    # Remove " - Latest" from existing releases
-    sed -i.bak 's/ - Latest<\/strong>/<\/strong>/g' "$DOCS_CHANGELOG_DIR/index.md"
+        # Create new table row
+        local new_row="| [v${version}](./v${version}.md) | ${date} | ${highlights} |"
 
-    # Insert new section after "## Recent Releases"
-    awk '
-        /^## Recent Releases$/ {
-            print
-            print ""
-            system("cat /tmp/new-release-section-'"$version"'.md")
-            next
-        }
-        { print }
-    ' "$DOCS_CHANGELOG_DIR/index.md" > "$DOCS_CHANGELOG_DIR/index.md.tmp"
+        # Insert after the table header separator
+        awk -v row="$new_row" '
+            /^\|[-]+\|[-]+\|[-]+\|$/ {
+                print
+                print row
+                next
+            }
+            { print }
+        ' "$DOCS_CHANGELOG_DIR/index.md" > "$DOCS_CHANGELOG_DIR/index.md.tmp"
 
-    mv "$DOCS_CHANGELOG_DIR/index.md.tmp" "$DOCS_CHANGELOG_DIR/index.md"
-    rm -f "$DOCS_CHANGELOG_DIR/index.md.bak" /tmp/new-release-section-${version}.md
-
-    log_info "✅ Updated index.md with expandable section for v${version}"
-
-    rm -f /tmp/prose-changelog-${version}.txt
+        mv "$DOCS_CHANGELOG_DIR/index.md.tmp" "$DOCS_CHANGELOG_DIR/index.md"
+        log_info "Updated index.md"
+    fi
 
     log_info "✅ Successfully generated changelog docs for v${version}"
 }
@@ -152,7 +157,7 @@ main() {
 
         for version in $versions; do
             log_info "Processing version $version..."
-            generate_changelog_for_version "$version" || log_warn "Failed to generate changelog for $version, continuing..."
+            generate_changelog_for_version "$version" || log_warn "Failed for $version, continuing..."
         done
 
     else
@@ -162,11 +167,11 @@ main() {
     fi
 
     log_info ""
-    log_info "🎉 Changelog documentation updated successfully!"
+    log_info "🎉 Changelog documentation updated!"
     log_info ""
     log_info "Next steps:"
-    log_info "  1. Review the generated files in docs/website/docs/changelog/"
-    log_info "  2. Commit the changes: git add docs/website/docs/changelog/ && git commit -m 'docs: update changelog'"
+    log_info "  1. Review files in docs/website/docs/changelog/"
+    log_info "  2. Commit: git add docs/website/docs/changelog/ && git commit -m 'docs: update changelog'"
     log_info "  3. Push to your branch"
 }
 
