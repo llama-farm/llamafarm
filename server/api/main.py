@@ -124,6 +124,11 @@ def llama_farm_api() -> fastapi.FastAPI:
         # Registered last so API routes take precedence
         @app.get("/{path:path}", include_in_schema=False)
         async def serve_designer_spa(path: str):
+            # Skip WebSocket paths (they won't be caught by GET routes normally,
+            # but we need to exclude them explicitly to avoid issues)
+            if "/voice/chat" in path:
+                raise fastapi.HTTPException(status_code=404, detail="Not found")
+
             # API routes are already registered and will match first
             # This handler only runs if no API route matched
 
