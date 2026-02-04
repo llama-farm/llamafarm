@@ -136,11 +136,15 @@ jobs:
           sed -i 's/<details open>/<details>/g' "$INDEX_FILE"
 
           # 2. Insert new release after "## Latest Release" heading
-          awk -v newrelease="$(cat /tmp/new-release.md)" '
+          # Use getline to read file content safely (avoids shell escaping issues)
+          awk '
             /^## Latest Release$/ {
               print
               print ""
-              print newrelease
+              while ((getline line < "/tmp/new-release.md") > 0) {
+                print line
+              }
+              close("/tmp/new-release.md")
               next
             }
             { print }

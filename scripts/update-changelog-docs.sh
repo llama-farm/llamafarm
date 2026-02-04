@@ -75,56 +75,47 @@ generate_changelog_for_version() {
         return 1
     fi
 
-    # Create the individual changelog doc
-    local output_file="$DOCS_CHANGELOG_DIR/v${version}.md"
+    # Check if version already exists in index (use specific pattern)
+    if grep -qE "<strong>v${version}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
+        log_warn "v${version} already in index.md, skipping"
+        return 0
+    fi
 
-    cat > "$output_file" <<EOF
----
-title: v${version}
-description: Release notes for LlamaFarm v${version}
----
+    log_info "Adding v${version} as accordion to index.md..."
 
-# v${version}
-
-*Released on ${date}*
+    # Create new accordion section
+    local tmp_section="/tmp/new-release-section-${version}.md"
+    cat > "$tmp_section" <<EOF
+<details open>
+<summary><strong>v${version}</strong> — ${date}</summary>
 
 ${prose_content}
 
----
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v${version})**
 
-**Full Changelog**: [v${version} on GitHub](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${version//./})
+</details>
 EOF
 
-    log_info "Created $output_file"
+    # Close the currently open accordion (remove 'open' attribute)
+    sed -i '' 's/<details open>/<details>/g' "$DOCS_CHANGELOG_DIR/index.md"
 
-    # Update index if this version isn't already listed
-    # Use specific pattern to avoid matching v1.2 when checking for v1.20
-    if ! grep -qE "<strong>v${version}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
-        log_info "Adding v${version} to index.md..."
-
-        # Extract highlights (first meaningful sentence)
-        local highlights
-        highlights=$(echo "$prose_content" | grep -E "^(This release|Added|New|Introduces|Features)" | head -1 | cut -c1-50)
-        if [[ -z "$highlights" ]]; then
-            highlights="See release notes"
-        fi
-
-        # Create new table row
-        local new_row="| [v${version}](./v${version}.md) | ${date} | ${highlights} |"
-
-        # Insert after the table header separator
-        awk -v row="$new_row" '
-            /^\|[-]+\|[-]+\|[-]+\|$/ {
-                print
-                print row
-                next
+    # Insert new section after "## Latest Release" heading
+    awk -v section_file="$tmp_section" '
+        /^## Latest Release$/ {
+            print
+            print ""
+            while ((getline line < section_file) > 0) {
+                print line
             }
-            { print }
-        ' "$DOCS_CHANGELOG_DIR/index.md" > "$DOCS_CHANGELOG_DIR/index.md.tmp"
+            close(section_file)
+            next
+        }
+        { print }
+    ' "$DOCS_CHANGELOG_DIR/index.md" > "$DOCS_CHANGELOG_DIR/index.md.tmp"
 
-        mv "$DOCS_CHANGELOG_DIR/index.md.tmp" "$DOCS_CHANGELOG_DIR/index.md"
-        log_info "Updated index.md"
-    fi
+    mv "$DOCS_CHANGELOG_DIR/index.md.tmp" "$DOCS_CHANGELOG_DIR/index.md"
+    rm -f "$tmp_section"
+    log_info "Updated index.md with v${version} accordion"
 
     log_info "✅ Successfully generated changelog docs for v${version}"
 }
