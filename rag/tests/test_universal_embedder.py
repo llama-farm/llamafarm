@@ -84,23 +84,71 @@ class TestUniversalEmbedder:
         embedder = UniversalEmbedder()
         assert embedder.validate_config() is True
 
+    @patch("time.sleep")
     @patch("requests.get")
-    def test_validate_config_failure(self, mock_get):
-        """Test configuration validation failure."""
+    def test_validate_config_failure(self, mock_get, mock_sleep):
+        """Test configuration validation failure after all retries."""
         mock_response = Mock()
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
         embedder = UniversalEmbedder()
         assert embedder.validate_config() is False
+        # Should have retried (4 attempts total = 3 sleeps)
+        assert mock_sleep.call_count == 3
 
+    @patch("time.sleep")
     @patch("requests.get")
-    def test_validate_config_exception(self, mock_get):
-        """Test configuration validation with exception."""
+    def test_validate_config_exception(self, mock_get, mock_sleep):
+        """Test configuration validation with exception after all retries."""
         mock_get.side_effect = Exception("Connection error")
 
         embedder = UniversalEmbedder()
         assert embedder.validate_config() is False
+        # Should have retried (4 attempts total = 3 sleeps)
+        assert mock_sleep.call_count == 3
+
+    @patch("time.sleep")
+    @patch("requests.get")
+    def test_validate_config_retry_then_success(self, mock_get, mock_sleep):
+        """Test validation succeeds after initial failures."""
+        mock_health_ok = Mock()
+        mock_health_ok.status_code = 200
+        mock_models_ok = Mock()
+        mock_models_ok.status_code = 200
+
+        # First attempt: exception, second attempt: success
+        mock_get.side_effect = [
+            Exception("Connection refused"),
+            mock_health_ok,
+            mock_models_ok,
+        ]
+
+        embedder = UniversalEmbedder()
+        assert embedder.validate_config() is True
+        # One retry sleep
+        assert mock_sleep.call_count == 1
+
+    @patch("time.sleep")
+    @patch("requests.get")
+    def test_validate_config_health_retry_then_success(self, mock_get, mock_sleep):
+        """Test validation retries when health check fails then succeeds."""
+        mock_health_fail = Mock()
+        mock_health_fail.status_code = 503
+        mock_health_ok = Mock()
+        mock_health_ok.status_code = 200
+        mock_models_ok = Mock()
+        mock_models_ok.status_code = 200
+
+        mock_get.side_effect = [
+            mock_health_fail,  # attempt 1: health fails
+            mock_health_ok,    # attempt 2: health ok
+            mock_models_ok,    # attempt 2: models ok
+        ]
+
+        embedder = UniversalEmbedder()
+        assert embedder.validate_config() is True
+        assert mock_sleep.call_count == 1
 
     @patch("requests.post")
     def test_embed_single_text(self, mock_post):

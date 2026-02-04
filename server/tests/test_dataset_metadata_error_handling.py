@@ -27,6 +27,14 @@ from services.project_service import ProjectService
 class TestDatasetMetadataErrorHandling:
     """Test cases for dataset metadata error handling."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
+
     def setup_method(self):
         """Set up test fixtures before each test method."""
         # Sample file hashes
@@ -653,6 +661,14 @@ class TestDatasetMetadataErrorHandling:
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across the entire system."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
+
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")
     def test_production_like_error_scenario(self, mock_list_files, mock_load_config):
@@ -777,7 +793,8 @@ class TestErrorHandlingIntegration:
         mock_load_config.return_value = production_config
 
         # Simulate realistic production errors
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        # Note: This function is defined for future use but not currently attached to a mock
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == production_hashes[0]:
                 return metadata_1
             elif file_content_hash == production_hashes[1]:

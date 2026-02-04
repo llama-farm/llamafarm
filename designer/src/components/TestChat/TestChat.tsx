@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Mic, MicOff, Loader2, Volume2 } from 'lucide-react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -9,13 +10,22 @@ import { useStreamingChatCompletionMessage } from '../../hooks/useChatCompletion
 import { useProjectChatStreamingSession } from '../../hooks/useProjectChatSession'
 import { useProjectSession } from '../../hooks/useProjectSession'
 import { useChatbox } from '../../hooks/useChatbox'
-import { ChatStreamChunk } from '../../types/chat'
+import { useVoiceInput } from '../../hooks/useVoiceInput'
+import {
+  ChatStreamChunk,
+  RAGSource,
+  isSourcesEvent,
+  isChatChunk,
+} from '../../types/chat'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
 import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
 import { Selector } from '../ui/selector'
+import { SpeechTestPanel, Waveform } from '../speech'
+import { checkRuntimeHealth } from '../../api/voiceService'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
   DOCUMENT_SCANNING_LANGUAGES,
@@ -33,8 +43,8 @@ import {
 
 export interface TestChatProps {
   // Mode selection
-  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder'
-  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder') => void
+  modelType: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech'
+  onModelTypeChange: (type: 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech') => void
   // Existing props
   showReferences: boolean
   allowRanking: boolean
@@ -1783,6 +1793,34 @@ export default function TestChat({
   // Reranking right panel tab state
   const [rerankRightPanelTab, setRerankRightPanelTab] = useState<'inputs' | 'history'>('inputs')
 
+  // Speech mode - Universal Runtime connection status
+  const [speechRuntimeConnected, setSpeechRuntimeConnected] = useState<boolean | null>(null)
+  // Speech mode - clear function ref and message tracking
+  const speechClearRef = useRef<(() => void) | null>(null)
+  const [speechHasMessages, setSpeechHasMessages] = useState(false)
+
+  // ============================================================================
+  // Voice Input for Text Generation (Mic button in input area)
+  // ============================================================================
+
+  // Track if user has dismissed the "Switch to Speech" suggestion this session
+  // (resets each session so user sees it again next time they use voice)
+  const [hasDismissedSpeechSuggestion, setHasDismissedSpeechSuggestion] = useState(false)
+  // Track first voice usage for showing the Speech mode suggestion
+  const [hasUsedVoiceInput, setHasUsedVoiceInput] = useState(false)
+
+  // Voice input state is set up after updateInput is defined below
+
+  // Check runtime health once when speech mode is selected
+  useEffect(() => {
+    if (modelType !== 'speech') {
+      setSpeechRuntimeConnected(null)
+      return
+    }
+
+    checkRuntimeHealth().then(setSpeechRuntimeConnected)
+  }, [modelType])
+
   // Project chat streaming session management
   const projectChatStreamingSession = useProjectChatStreamingSession()
 
@@ -2073,6 +2111,7 @@ export default function TestChat({
       type: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
       content: msg.content,
       timestamp: new Date(msg.timestamp),
+      sources: msg.sources,
     })
   )
   // Transient streaming assistant message (not persisted)
@@ -2178,6 +2217,47 @@ export default function TestChat({
     },
     [USE_PROJECT_CHAT, fallbackUpdateInput]
   )
+
+  // Voice input hook for Text Generation mode - now that updateInput is available
+  const voiceInput = useVoiceInput({
+    onTranscriptionComplete: (text) => {
+      // Insert transcribed text into the input field
+      // Since we can't use a function updater, we use the ref pattern
+      const currentValue = USE_PROJECT_CHAT ? projectInputValue : fallbackInputValue
+      const newValue = currentValue ? `${currentValue} ${text}` : text
+      updateInput(newValue)
+      // Mark that user has used voice input (for showing speech mode suggestion)
+      if (!hasUsedVoiceInput) {
+        setHasUsedVoiceInput(true)
+      }
+    },
+    onError: (error) => {
+      console.error('Voice input error:', error)
+    },
+  })
+
+  // Handler for mic button click
+  const handleMicClick = useCallback(async () => {
+    if (voiceInput.recordingState === 'recording') {
+      // Stop recording and transcribe
+      await voiceInput.stopRecording()
+    } else if (voiceInput.recordingState === 'idle') {
+      // Start recording
+      await voiceInput.startRecording()
+    }
+    // If processing, do nothing (wait for transcription)
+  }, [voiceInput])
+
+  // Dismiss the speech mode suggestion for this session
+  const dismissSpeechSuggestion = useCallback(() => {
+    setHasDismissedSpeechSuggestion(true)
+  }, [])
+
+  // Switch to Speech mode
+  const switchToSpeechMode = useCallback(() => {
+    dismissSpeechSuggestion()
+    onModelTypeChange('speech')
+  }, [dismissSpeechSuggestion, onModelTypeChange])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -2387,6 +2467,7 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
+      let currentSources: RAGSource[] = []
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -2451,11 +2532,29 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              // Handle content chunks
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                currentSources = chunk.sources
+                // Update streaming message to show sources immediately
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: currentSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2464,6 +2563,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: currentSources,
                 })
               }
             },
@@ -2475,9 +2575,15 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                // Append final assistant message once and clear transient bubble
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                // Append final assistant message with sources and clear transient bubble
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  currentSources
+                )
               }
+              currentSources = []
               setStreamingMessage(null)
             },
           },
@@ -2659,6 +2765,7 @@ export default function TestChat({
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
+        let testSources: RAGSource[] = []
         const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
@@ -2701,10 +2808,28 @@ export default function TestChat({
             rag_top_k: ragEnabled ? ragTopK : undefined,
             rag_score_threshold: ragEnabled ? ragScoreThreshold : undefined,
             rag_retrieval_strategy: ragEnabled && selectedStrategy ? selectedStrategy : undefined,
+            // Include RAG sources in response when showReferences is enabled
+            include_sources: showReferences && ragEnabled,
+            sources_limit: 10,
           },
           streamingOptions: {
             onChunk: (chunk: ChatStreamChunk) => {
-              if (chunk.choices?.[0]?.delta?.content) {
+              // Handle sources event (type guard for type safety)
+              if (isSourcesEvent(chunk)) {
+                testSources = chunk.sources
+                setStreamingMessage(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        sources: testSources,
+                      }
+                    : null
+                )
+                return
+              }
+
+              // Handle content chunks (type guard)
+              if (isChatChunk(chunk) && chunk.choices?.[0]?.delta?.content) {
                 accumulatedContent += chunk.choices[0].delta.content
                 setStreamingMessage({
                   id: transientId,
@@ -2713,6 +2838,7 @@ export default function TestChat({
                   timestamp: new Date(),
                   isStreaming: true,
                   isLoading: false,
+                  sources: testSources,
                 })
               }
             },
@@ -2723,8 +2849,14 @@ export default function TestChat({
             },
             onComplete: () => {
               if (accumulatedContent && accumulatedContent.trim()) {
-                projectSession.addMessage(accumulatedContent, 'assistant')
+                projectSession.addMessage(
+                  accumulatedContent,
+                  'assistant',
+                  undefined,
+                  testSources
+                )
               }
+              testSources = []
               setStreamingMessage(null)
             },
           },
@@ -3245,6 +3377,9 @@ export default function TestChat({
               } else if (modelType === 'encoder') {
                 // Encoder mode: clear results
                 clearEncoderResults()
+              } else if (modelType === 'speech') {
+                // Speech mode: call the clear function via ref
+                speechClearRef.current?.()
               }
             }}
             disabled={
@@ -3256,7 +3391,11 @@ export default function TestChat({
                     ? (!classifierResult && !classifierError)
                     : modelType === 'document_scanning'
                       ? (!scanResults && !scanError && !scanFile)
-                      : (!embeddingResult && !rerankResult && !encoderError)
+                      : modelType === 'encoder'
+                        ? (!embeddingResult && !rerankResult && !encoderError)
+                        : modelType === 'speech'
+                          ? !speechHasMessages
+                          : true
             }
             className="text-xs px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -3265,20 +3404,34 @@ export default function TestChat({
         </div>
         {/* Second row: Model Type and mode-specific selectors */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:gap-x-5">
-          {/* Model Type selector - FIRST dropdown */}
-          <Selector
-            value={modelType}
-            options={[
-              { value: 'inference', label: 'Text Generation' },
-              { value: 'anomaly', label: 'Anomaly Detection' },
-              { value: 'classifier', label: 'Classifier' },
-              { value: 'document_scanning', label: 'Document Scanning' },
-              { value: 'encoder', label: 'Encoder' },
-            ]}
-            onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder')}
-            label="Model Type"
-            className="w-[200px]"
-          />
+          {/* Model Type selector with optional status tag */}
+          <div className="flex items-end gap-2">
+            <Selector
+              value={modelType}
+              options={[
+                { value: 'inference', label: 'Text Generation' },
+                { value: 'anomaly', label: 'Anomaly Detection' },
+                { value: 'classifier', label: 'Classifier' },
+                { value: 'document_scanning', label: 'Document Scanning' },
+                { value: 'encoder', label: 'Encoder' },
+                { value: 'speech', label: 'Speech' },
+              ]}
+              onChange={(v) => onModelTypeChange(v as 'inference' | 'anomaly' | 'classifier' | 'document_scanning' | 'encoder' | 'speech')}
+              label="Model Type"
+              className="w-[200px]"
+            />
+            {/* Speech mode runtime status tag */}
+            {modelType === 'speech' && speechRuntimeConnected !== null && (
+              <span className={`inline-flex items-center gap-1 px-2 py-1.5 h-9 text-xs rounded-md border ${
+                speechRuntimeConnected
+                  ? 'bg-green-500/10 text-green-600 border-green-500/30'
+                  : 'bg-red-500/10 text-red-600 border-red-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${speechRuntimeConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                {speechRuntimeConnected ? 'Runtime Connected' : 'Runtime Offline'}
+              </span>
+            )}
+          </div>
 
           {/* Inference-specific selectors */}
           {modelType === 'inference' && USE_PROJECT_CHAT && (
@@ -3804,6 +3957,15 @@ export default function TestChat({
               </div>
             )}
           </div>
+        ) : modelType === 'speech' ? (
+          /* Speech: Full speech test panel with STT, TTS, and voice cloning */
+          <div className="absolute inset-0 overflow-hidden">
+            <SpeechTestPanel
+              className="h-full"
+              clearRef={speechClearRef}
+              onMessagesChange={setSpeechHasMessages}
+            />
+          </div>
         ) : (
           /* Encoder: Embedding similarity or Reranking */
           <div className="absolute inset-0 flex overflow-hidden">
@@ -4093,43 +4255,155 @@ export default function TestChat({
         )}
       </div>
 
-      {/* Input Area - mode conditional (hidden for encoder/reranking since inputs are in right panel) */}
-      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && (
+      {/* Input Area - mode conditional (hidden for encoder/reranking and speech since they have their own inputs) */}
+      {!(modelType === 'encoder' && encoderSubMode === 'reranking') && modelType !== 'speech' && (
       <div className={inputContainerClasses}>
         {modelType === 'inference' ? (
-          /* Inference: Chat input */
+          /* Inference: Chat input with voice support */
           <>
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={e => updateInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={combinedIsSending || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0}
-              placeholder={
-                unifiedModels.length === 0
-                  ? 'Add an inference model to start chatting...'
-                  : combinedIsSending
-                    ? 'Waiting for response…'
-                    : !MOCK_MODE && !chatParams
-                      ? 'Select a project to start chatting…'
-                      : 'Type a message and press Enter'
-              }
-              className={textareaClasses}
-              aria-label="Message input"
-            />
-            <div className="flex items-center justify-between">
-              {combinedIsSending && (
-                <span className="text-xs text-muted-foreground">
-                  {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
-                </span>
-              )}
-              <FontIcon
-                isButton
-                type="arrow-filled"
-                className={`w-8 h-8 self-end ${!combinedCanSend || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0 ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
-                handleOnClick={unifiedModels.length === 0 ? undefined : handleSend}
-              />
-            </div>
+            {/* Speech mode suggestion - shown after first voice use */}
+            {hasUsedVoiceInput && !hasDismissedSpeechSuggestion && (
+              <div className="flex items-center justify-between gap-2 px-3 py-2 mb-2 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span className="text-muted-foreground">
+                    Want to hear responses spoken aloud?
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={switchToSpeechMode}
+                    className="px-2 py-1 text-xs font-medium rounded bg-primary text-primary-foreground hover:opacity-90"
+                  >
+                    Try Speech Mode
+                  </button>
+                  <button
+                    onClick={dismissSpeechSuggestion}
+                    className="text-muted-foreground hover:text-foreground p-1"
+                    aria-label="Dismiss"
+                  >
+                    <FontIcon type="close" className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Recording state: Show waveform when recording */}
+            {voiceInput.recordingState === 'recording' && voiceInput.activeStream ? (
+              <div className="flex items-center gap-3 min-h-[40px]">
+                <div className="flex-1 flex flex-col items-center justify-center gap-1">
+                  <Waveform
+                    stream={voiceInput.activeStream}
+                    isActive={true}
+                    height={24}
+                    barCount={60}
+                    gap={1}
+                    color="rgb(156, 163, 175)"
+                    className="w-full"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Listening... Click stop when done
+                  </span>
+                </div>
+                {/* Stop recording button */}
+                <button
+                  onClick={handleMicClick}
+                  className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500 text-white hover:bg-red-600 transition-colors flex-shrink-0"
+                  aria-label="Stop recording"
+                >
+                  <div className="w-3 h-3 rounded-sm bg-white" />
+                </button>
+              </div>
+            ) : (
+              /* Normal input state */
+              <>
+                <div className="relative">
+                  <textarea
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={e => updateInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={combinedIsSending || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0 || voiceInput.recordingState === 'processing'}
+                    placeholder={
+                      voiceInput.recordingState === 'processing'
+                        ? 'Transcribing...'
+                        : unifiedModels.length === 0
+                          ? 'Add an inference model to start chatting...'
+                          : combinedIsSending
+                            ? 'Waiting for response…'
+                            : !MOCK_MODE && !chatParams
+                              ? 'Select a project to start chatting…'
+                              : 'Type a message and press Enter'
+                    }
+                    className={`${textareaClasses} pr-20`}
+                    aria-label="Message input"
+                  />
+                  {/* Mic and Send buttons overlay */}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {/* Mic button */}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleMicClick}
+                            disabled={voiceInput.recordingState === 'processing' || combinedIsSending}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                              voiceInput.recordingState === 'processing'
+                                ? 'text-muted-foreground'
+                                : voiceInput.micPermission === 'denied'
+                                  ? 'text-muted-foreground hover:text-foreground'
+                                  : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                            }`}
+                            aria-label={
+                              voiceInput.recordingState === 'processing'
+                                ? 'Transcribing...'
+                                : voiceInput.micPermission === 'denied'
+                                  ? 'Microphone access denied'
+                                  : 'Start voice input'
+                            }
+                          >
+                            {voiceInput.recordingState === 'processing' ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : voiceInput.micPermission === 'denied' ? (
+                              <MicOff className="w-5 h-5" />
+                            ) : (
+                              <Mic className="w-5 h-5" />
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {voiceInput.recordingState === 'processing'
+                            ? 'Transcribing audio...'
+                            : voiceInput.micPermission === 'denied'
+                              ? 'Microphone access denied. Click to retry.'
+                              : 'Click to speak'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    {/* Send button */}
+                    <FontIcon
+                      isButton
+                      type="arrow-filled"
+                      className={`w-8 h-8 ${!combinedCanSend || (!MOCK_MODE && !chatParams) || unifiedModels.length === 0 ? 'text-muted-foreground opacity-50' : 'text-primary'}`}
+                      handleOnClick={unifiedModels.length === 0 ? undefined : handleSend}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  {combinedIsSending && (
+                    <span className="text-xs text-muted-foreground">
+                      {USE_PROJECT_CHAT ? 'Sending to project…' : 'Sending…'}
+                    </span>
+                  )}
+                  {voiceInput.error && (
+                    <span className="text-xs text-red-500">
+                      {voiceInput.error}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </>
         ) : modelType === 'anomaly' ? (
           /* Anomaly: Data input */
@@ -4831,8 +5105,26 @@ function ActionLink({
 }
 
 function References({ sources }: { sources: any[] }) {
-  const [open, setOpen] = useState<boolean>(true)
+  const [open, setOpen] = useState<boolean>(false)
+  const [expandedChunks, setExpandedChunks] = useState<Set<number>>(
+    () => new Set()
+  )
   const count = sources.length
+  const previewLineMax = 150
+  const previewFallbackMax = 120
+
+  const toggleChunk = (index: number) => {
+    setExpandedChunks(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="mt-2 rounded-md border border-border bg-card/40">
       <button
@@ -4847,25 +5139,71 @@ function References({ sources }: { sources: any[] }) {
       </button>
       {open && (
         <div id="references-panel" className="divide-y divide-border">
-          {sources.map((s, idx) => (
-            <div key={idx} className="px-3 py-2">
-              {s.content && (
-                <div className="text-sm text-foreground whitespace-pre-wrap line-clamp-2">
-                  {s.content}
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                <div className="truncate">
-                  {s.source || s.metadata?.source || 'source'}
-                </div>
-                {typeof s.score === 'number' && (
-                  <span className="ml-2 text-[11px]">
-                    {(s.score * 100).toFixed(1)}%
-                  </span>
+          {sources.map((s, idx) => {
+            const content =
+              typeof s.content === 'string' ? s.content : String(s.content ?? '')
+            const firstLine = content.split('\n', 1)[0] ?? ''
+            const hasNewline = content.includes('\n')
+            const previewLine = hasNewline
+              ? firstLine
+              : content.slice(0, previewFallbackMax)
+            const previewText =
+              previewLine.length > previewLineMax
+                ? `${previewLine.slice(0, previewLineMax).trimEnd()}...`
+                : previewLine
+            const isLong = content.length > previewText.length
+            const isExpanded = expandedChunks.has(idx)
+            const displayContent =
+              !isLong || isExpanded
+                ? content
+                : previewText
+
+            return (
+              <div key={idx} className="px-3 py-2">
+                {content && (
+                  <div
+                    className={[
+                      'text-sm text-foreground whitespace-pre-wrap',
+                      isLong
+                        ? 'cursor-pointer hover:bg-accent/20 rounded-sm p-1 -m-1'
+                        : '',
+                    ].join(' ')}
+                    role={isLong ? 'button' : undefined}
+                    tabIndex={isLong ? 0 : undefined}
+                    onClick={isLong ? () => toggleChunk(idx) : undefined}
+                    onKeyDown={
+                      isLong
+                        ? (event: React.KeyboardEvent<HTMLDivElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              toggleChunk(idx)
+                            }
+                          }
+                        : undefined
+                    }
+                    aria-expanded={isLong ? isExpanded : undefined}
+                  >
+                    {isLong && (
+                      <span className="mr-1 text-xs text-muted-foreground">
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
+                    )}
+                    {displayContent}
+                  </div>
                 )}
+                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="truncate">
+                    {s.source || s.metadata?.source || 'source'}
+                  </div>
+                  {typeof s.score === 'number' && (
+                    <span className="ml-2 text-[11px]">
+                      {(s.score * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

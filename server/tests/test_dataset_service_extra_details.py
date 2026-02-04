@@ -7,6 +7,7 @@ focusing on the list_datasets_with_file_details method and file metadata handlin
 
 from unittest.mock import patch
 
+import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
@@ -29,6 +30,14 @@ from services.project_service import ProjectService
 
 class TestDatasetServiceExtraDetails:
     """Test cases for DatasetService extra details functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
@@ -238,7 +247,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to return appropriate metadata for each hash
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -319,7 +328,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = config_with_various_files
 
         # Configure metadata with different file types
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1  # PDF
             elif file_content_hash == self.file_hash_2:
@@ -393,7 +402,7 @@ class TestDatasetServiceExtraDetails:
         mock_load_config.return_value = self.mock_project_config
 
         # Configure metadata lookup to fail for second file
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -480,7 +489,7 @@ class TestDatasetServiceExtraDetails:
         """Test DatasetWithFileDetails contains all expected fields."""
         mock_load_config.return_value = self.mock_project_config
 
-        def metadata_side_effect(namespace, project_id, dataset, file_content_hash):
+        def _metadata_side_effect(namespace, project_id, dataset, file_content_hash):
             if file_content_hash == self.file_hash_1:
                 return self.metadata_1
             elif file_content_hash == self.file_hash_2:
@@ -528,6 +537,14 @@ class TestDatasetServiceExtraDetails:
 # Integration test for the full workflow
 class TestDatasetServiceExtraDetailsIntegration:
     """Integration tests for DatasetService extra details workflows."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")

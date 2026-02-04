@@ -127,7 +127,7 @@ POST /v1/ml/anomaly/detect
 ### Document Processing Pipeline
 Extract structured data from invoices and forms:
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@invoice.pdf" \
   -F "model=surya"
 ```
@@ -272,12 +272,12 @@ lf start
 This command:
 - Starts the API server and Universal Runtime natively
 - Opens the interactive chat TUI
-- Launches the Designer web UI at `http://localhost:8000`
+- Launches the Designer web UI at `http://localhost:14345`
 
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
 **TIP: Use the Designer Web UI**
-Prefer a visual interface? Open `http://localhost:8000` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
+Prefer a visual interface? Open `http://localhost:14345` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
 
 See the [Designer documentation](../designer/index.md) for details.
 
@@ -696,17 +696,17 @@ lf start
 
 This automatically launches:
 
-- The FastAPI server (port 8000)
+- The FastAPI server (port 14345)
 - The RAG worker
-- The Designer web UI (port **8000**)
+- The Designer web UI (port **14345**)
 
 Once started, open your browser to:
 
 ```
-http://localhost:8000
+http://localhost:14345
 ```
 
-The Designer is served by the same FastAPI server, so it shares port 8000 with the API.
+The Designer is served by the same FastAPI server, so it shares port 14345 with the API.
 
 ![Designer Home Page](./screenshots/designer-home.png)
 _The Designer home page where you can create and select projects_
@@ -793,12 +793,12 @@ Every section includes a toggle to switch between Designer (visual) mode and Con
 **Designer won't load:**
 
 - Ensure the server is running (`lf start` or check Docker containers)
-- Verify the server is accessible at `http://localhost:8000/health/liveness`
+- Verify the server is accessible at `http://localhost:14345/health/liveness`
 - Check browser console for connection errors
 
 **Can't connect to API:**
 
-- The Designer expects the server at `localhost:8000` by default
+- The Designer expects the server at `localhost:14345` by default
 - If using a custom setup, set the `VITE_APP_API_URL` environment variable
 
 **Changes not saving:**
@@ -1164,7 +1164,7 @@ uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 
 Verify the server is running:
 ```bash
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ### 4. Start the Development Server
@@ -1178,7 +1178,7 @@ npm run dev
 The Designer will start on `http://localhost:5173` (Vite's default port).
 
 Vite will automatically:
-- Proxy API requests to `http://localhost:8000`
+- Proxy API requests to `http://localhost:14345`
 - Hot-reload when you edit source files
 - Display build errors in the browser
 
@@ -1218,7 +1218,7 @@ During development, Vite proxies API requests to avoid CORS issues. This is conf
 server: {
   proxy: {
     '/api': {
-      target: process.env.API_URL || 'http://localhost:8000',
+      target: process.env.API_URL || 'http://localhost:14345',
       changeOrigin: true,
       rewrite: path => path.replace(/^\/api/, ''),
     },
@@ -1226,7 +1226,7 @@ server: {
 }
 ```
 
-The client code (`src/api/client.ts`) automatically detects localhost and connects directly to `http://localhost:8000`.
+The client code (`src/api/client.ts`) automatically detects localhost and connects directly to `http://localhost:14345`.
 
 ### Environment Variables
 
@@ -1234,7 +1234,7 @@ You can customize the API URL using environment variables:
 
 ```bash
 # .env.local
-VITE_APP_API_URL=http://localhost:8000
+VITE_APP_API_URL=http://localhost:14345
 ```
 
 Available variables:
@@ -1325,7 +1325,7 @@ The Dockerfile:
 docker run -d \
   --name llamafarm-designer \
   -p 3123:80 \
-  -e VITE_APP_API_URL=http://localhost:8000 \
+  -e VITE_APP_API_URL=http://localhost:14345 \
   llamafarm-designer
 ```
 
@@ -1430,7 +1430,7 @@ Use the browser Network tab to inspect:
 
 The Designer logs proxy requests during development:
 ```
-[PROXY] GET /api/v1/projects/default/my-project -> http://localhost:8000/v1/projects/default/my-project
+[PROXY] GET /api/v1/projects/default/my-project -> http://localhost:14345/v1/projects/default/my-project
 ```
 
 ## Common Development Tasks
@@ -1481,7 +1481,7 @@ npm run dev -- --port 3000
 
 ### API Connection Errors
 
-- Verify server is running: `curl http://localhost:8000/health/liveness`
+- Verify server is running: `curl http://localhost:14345/health/liveness`
 - Check `VITE_APP_API_URL` in environment
 - Look at browser console for CORS errors
 
@@ -1547,7 +1547,7 @@ lf [command] [flags]
 | Flag | Description |
 | ---- | ----------- |
 | `--debug`, `-d` | Enable verbose logging. |
-| `--server-url` | Override the server endpoint (default `http://localhost:8000`). |
+| `--server-url` | Override the server endpoint (default `http://localhost:14345`). |
 | `--server-start-timeout` | How long to wait for local server startup (default 45s). |
 | `--cwd` | Treat another directory as the working project root. |
 | `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. |
@@ -1599,7 +1599,7 @@ lf rag stats --auto-start=false
   run: lf start &
 
 - name: Wait for health
-  run: timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+  run: timeout 60 bash -c 'until curl -f http://localhost:14345/health; do sleep 2; done'
 
 - name: Run tests
   run: |
@@ -1755,7 +1755,7 @@ Environment variables:
 - Starts a config watcher so edits to `llamafarm.yaml` refresh automatically.
 - Launches a text UI for chatting with the current project; use `Ctrl+C` to exit.
 - Shows health diagnostics for server, storage, Ollama/vLLM, Celery, rag-service, and project state.
-- Starts the Designer web UI at `http://localhost:8000` for visual project management.
+- Starts the Designer web UI at `http://localhost:14345` for visual project management.
 
 ## Example
 
@@ -2311,7 +2311,7 @@ LF_ORCHESTRATION_MODE=docker lf services stop
 
 1. Check if the port is already in use:
    ```bash
-   lsof -i :8000  # For server
+   lsof -i :14345  # For server
    lsof -i :11540 # For universal-runtime
    ```
 
@@ -2446,7 +2446,7 @@ The original flat runtime configuration is automatically converted internally:
 runtime:
   provider: openai
   model: qwen2.5:7b
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-local-placeholder
   instructor_mode: tools
   model_api_parameters:
@@ -3352,12 +3352,12 @@ LlamaFarm provides a comprehensive REST API for managing projects, datasets, cha
 
 ## Base URL
 
-The API is served at: `http://localhost:8000`
+The API is served at: `http://localhost:14345`
 
 All versioned endpoints use the `/v1` prefix:
 
 ```text
-http://localhost:8000/v1
+http://localhost:14345/v1
 ```
 
 ## Finding Your Namespace and Project Name
@@ -3404,7 +3404,7 @@ You can also list projects programmatically:
 
 ```bash
 # List all projects in a namespace
-curl http://localhost:8000/v1/projects/my-org
+curl http://localhost:14345/v1/projects/my-org
 ```
 
 ### Custom Data Directory
@@ -3648,7 +3648,7 @@ data: [DONE]
 **Example (Non-Streaming):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3660,7 +3660,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (Streaming):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3673,7 +3673,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (Stateless):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-No-Session: true" \
   -d '{
@@ -3686,7 +3686,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 **Example (With RAG):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3703,7 +3703,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 For models that support chain-of-thought reasoning (like Qwen3), enable thinking mode to see the model's reasoning process:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3753,7 +3753,7 @@ This ensures your answer isn't cut short by the thinking process.
 Override the default RAG query (which uses the user message) with a custom search query. This is useful when the user's question is conversational but you want specific technical retrieval:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3770,7 +3770,7 @@ curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
 Execute multiple search queries concurrently and merge the results. This is useful for comparative analysis or comprehensive retrieval:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
@@ -3820,7 +3820,7 @@ Retrieve conversation history for a session.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
+curl http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions/abc-123/history
 ```
 
 ### Delete Chat Session
@@ -3846,7 +3846,7 @@ Delete a specific chat session and its history.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions/abc-123
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions/abc-123
 ```
 
 ### Delete All Chat Sessions
@@ -3872,7 +3872,7 @@ Delete all chat sessions for a project.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/chat/sessions
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/chat/sessions
 ```
 
 ### List Available Models
@@ -3915,7 +3915,7 @@ List all configured models for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/models
+curl http://localhost:14345/v1/projects/my-org/chatbot/models
 ```
 
 ---
@@ -3965,7 +3965,7 @@ List all datasets in a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/datasets
+curl http://localhost:14345/v1/projects/my-org/chatbot/datasets
 ```
 
 ### Get Available Strategies
@@ -3991,7 +3991,7 @@ Get available data processing strategies and databases for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/datasets/strategies
+curl http://localhost:14345/v1/projects/my-org/chatbot/datasets/strategies
 ```
 
 ### Create Dataset
@@ -4031,7 +4031,7 @@ Create a new dataset.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets \
   -H "Content-Type: application/json" \
   -d '{
     "name": "research_papers",
@@ -4068,7 +4068,7 @@ Delete a dataset.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers
 ```
 
 ### Upload File to Dataset
@@ -4101,7 +4101,7 @@ Upload a file to a dataset (stores the file but does not process it).
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data \
   -F "file=@paper1.pdf"
 ```
 
@@ -4131,7 +4131,7 @@ Processing is now driven exclusively through the dataset actions endpoint, which
 ```json
 {
   "message": "Accepted",
-  "task_uri": "http://localhost:8000/v1/projects/my-org/chatbot/tasks/8f6f9c2a",
+  "task_uri": "http://localhost:14345/v1/projects/my-org/chatbot/tasks/8f6f9c2a",
   "task_id": "8f6f9c2a"
 }
 ```
@@ -4141,7 +4141,7 @@ Use `task_uri`/`task_id` with `GET /v1/projects/{namespace}/{project}/tasks/{tas
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/actions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/actions \
   -H "Content-Type: application/json" \
   -d '{"action_type":"process"}'
 ```
@@ -4171,13 +4171,13 @@ Remove a file from a dataset.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123
 ```
 
 **Example (Remove from disk):**
 
 ```bash
-curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
+curl -X DELETE "http://localhost:14345/v1/projects/my-org/chatbot/datasets/research_papers/data/abc123?remove_from_disk=true"
 ```
 
 ---
@@ -4252,7 +4252,7 @@ Perform a semantic search query against a RAG database.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/query \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/rag/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "What are the clinical trial requirements?",
@@ -4305,7 +4305,7 @@ List all configured RAG databases and their associated strategies for a project.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases
 ```
 
 ### Get Database Details
@@ -4358,7 +4358,7 @@ Get detailed information about a specific RAG database including its configurati
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db
 ```
 
 ### Create Database
@@ -4420,7 +4420,7 @@ Create a new RAG database in the project configuration.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/rag/databases \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/rag/databases \
   -H "Content-Type: application/json" \
   -d '{
     "name": "new_database",
@@ -4478,7 +4478,7 @@ Update a RAG database's mutable fields. Note: `name` and `type` are immutable.
 **Example - Add a reranking strategy:**
 
 ```bash
-curl -X PATCH http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db \
+curl -X PATCH http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db \
   -H "Content-Type: application/json" \
   -d '{
     "retrieval_strategies": [
@@ -4528,10 +4528,10 @@ Delete a RAG database from the project. Fails if any datasets depend on this dat
 
 ```bash
 # Delete database and its collection
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/old_db
 
 # Only remove from config, keep the vector store data
-curl -X DELETE "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/old_db?delete_collection=false"
+curl -X DELETE "http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/old_db?delete_collection=false"
 ```
 
 ### Check RAG Health
@@ -4589,13 +4589,13 @@ Get health status of the RAG system and databases.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/health
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/health
 ```
 
 **Example (Specific database):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/health?database=main_db"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/health?database=main_db"
 ```
 
 ### Get RAG Statistics
@@ -4627,13 +4627,13 @@ Get statistics for a RAG database including vector counts and storage usage.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/stats
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/stats
 ```
 
 **Example (Specific database):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/stats?database=research_db"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/stats?database=research_db"
 ```
 
 ### List Documents in Database
@@ -4680,13 +4680,13 @@ List all documents stored in a RAG database with their metadata.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents
+curl http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db/documents
 ```
 
 **Example (With limit):**
 
 ```bash
-curl "http://localhost:8000/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/rag/databases/main_db/documents?limit=100"
 ```
 
 ---
@@ -4735,7 +4735,7 @@ Get the status of an asynchronous task.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+curl http://localhost:14345/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
 
 ### Cancel Task
@@ -4831,7 +4831,7 @@ This endpoint is primarily used for cancelling dataset processing operations. Wh
 **Example:**
 ```bash
 # Cancel a running dataset processing task
-curl -X DELETE http://localhost:8000/v1/projects/my-org/chatbot/tasks/task-123-abc
+curl -X DELETE http://localhost:14345/v1/projects/my-org/chatbot/tasks/task-123-abc
 ```
 
 **HTTP Status Codes:**
@@ -4883,7 +4883,7 @@ List all available example projects.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/examples
+curl http://localhost:14345/v1/examples
 ```
 
 ### Import Example as Project
@@ -4920,7 +4920,7 @@ Import an example as a new project.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/examples/fda_rag/import-project \
+curl -X POST http://localhost:14345/v1/examples/fda_rag/import-project \
   -H "Content-Type: application/json" \
   -d '{
     "namespace": "my-org",
@@ -4964,7 +4964,7 @@ Import example data into an existing project.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/examples/fda_rag/import-data \
+curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
   -H "Content-Type: application/json" \
   -d '{
     "namespace": "my-org",
@@ -5000,7 +5000,7 @@ Check overall system health.
 **Example:**
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:14345/health
 ```
 
 ### Liveness Probe
@@ -5020,7 +5020,7 @@ Simple liveness check for container orchestration.
 **Example:**
 
 ```bash
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ---
@@ -5059,7 +5059,7 @@ Get system version and configuration info.
 **Example:**
 
 ```bash
-curl http://localhost:8000/info
+curl http://localhost:14345/info
 ```
 
 ### Check for CLI Updates
@@ -5089,7 +5089,7 @@ Check if a newer version of the CLI is available.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/system/version-check
+curl http://localhost:14345/v1/system/version-check
 ```
 
 ### Get Disk Space
@@ -5128,7 +5128,7 @@ Get disk space information for the HuggingFace cache and system disk.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/system/disk
+curl http://localhost:14345/v1/system/disk
 ```
 
 ---
@@ -5179,13 +5179,13 @@ List event logs for a project with optional filtering.
 
 ```bash
 # List recent events
-curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs
+curl http://localhost:14345/v1/projects/my-org/chatbot/event_logs
 
 # Filter by type with pagination
-curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?type=inference&limit=20"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/event_logs?type=inference&limit=20"
 
 # Filter by time range
-curl "http://localhost:8000/v1/projects/my-org/chatbot/event_logs?start_time=2024-01-15T00:00:00Z"
+curl "http://localhost:14345/v1/projects/my-org/chatbot/event_logs?start_time=2024-01-15T00:00:00Z"
 ```
 
 ### Get Event Details
@@ -5225,7 +5225,7 @@ Get full details of a specific event including all sub-events.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
+curl http://localhost:14345/v1/projects/my-org/chatbot/event_logs/evt_20240115_103000_inference_abc123
 ```
 
 ---
@@ -5263,7 +5263,7 @@ List all models cached on disk.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/models
+curl http://localhost:14345/v1/models
 ```
 
 ### Download/Cache Model
@@ -5292,7 +5292,7 @@ data: {"event": "complete", "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/models/download \
+curl -X POST http://localhost:14345/v1/models/download \
   -H "Content-Type: application/json" \
   -d '{"model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2"}'
 ```
@@ -5350,7 +5350,7 @@ Check if there's sufficient disk space for a model download before starting.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/models/validate-download \
+curl -X POST http://localhost:14345/v1/models/validate-download \
   -H "Content-Type: application/json" \
   -d '{"model_name": "unsloth/Qwen3-1.7B-GGUF"}'
 ```
@@ -5395,7 +5395,7 @@ List all available GGUF quantization options for a model with file sizes.
 **Example:**
 
 ```bash
-curl http://localhost:8000/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
+curl http://localhost:14345/v1/models/unsloth/Qwen3-1.7B-GGUF/quantizations
 ```
 
 ### Delete Cached Model
@@ -5423,7 +5423,7 @@ Delete a cached model from disk.
 **Example:**
 
 ```bash
-curl -X DELETE "http://localhost:8000/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
+curl -X DELETE "http://localhost:14345/v1/models/cross-encoder/ms-marco-MiniLM-L-6-v2"
 ```
 
 ---
@@ -5453,7 +5453,7 @@ runtime:
 The `model` field in chat completions requests is OpenAI-compatible and allows you to select which configured model to use:
 
 ```bash
-curl -X POST http://localhost:8000/v1/projects/my-org/chatbot/chat/completions \
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "smart-model",
@@ -5468,7 +5468,7 @@ If `model` is not specified, the `default_model` from your configuration is used
 ### Get Available Models
 
 ```bash
-curl http://localhost:8000/v1/projects/my-org/chatbot/models
+curl http://localhost:14345/v1/projects/my-org/chatbot/models
 ```
 
 ---
@@ -5566,7 +5566,7 @@ You can configure LlamaFarm projects to expose tools through MCP servers, giving
 Always check HTTP status codes and handle errors:
 
 ```bash
-response=$(curl -s -w "\n%{http_code}" http://localhost:8000/v1/projects/my-org/chatbot)
+response=$(curl -s -w "\n%{http_code}" http://localhost:14345/v1/projects/my-org/chatbot)
 http_code=$(echo "$response" | tail -n 1)
 body=$(echo "$response" | head -n -1)
 
@@ -5607,7 +5607,7 @@ fi
 ```python
 
 class LlamaFarmClient:
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://localhost:14345"):
         self.base_url = base_url
         self.session = requests.Session()
 
@@ -5662,7 +5662,7 @@ interface ChatRequest {
 }
 
 class LlamaFarmClient {
-  constructor(private baseUrl: string = "http://localhost:8000") {}
+  constructor(private baseUrl: string = "http://localhost:14345") {}
 
   async chat(
     namespace: string,
@@ -5770,7 +5770,7 @@ console.log(result.choices[0].message.content);
 
 The Vision API provides OCR and document extraction capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime, handling file uploads and base64 image conversion automatically.
 
-**Base URL:** `http://localhost:8000/v1/vision`
+**Base URL:** `http://localhost:14345/v1/vision`
 
 ### OCR Endpoint
 
@@ -5814,7 +5814,7 @@ Extract text from images and PDFs using multiple OCR backends.
 **Example (File Upload):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=easyocr" \
   -F "languages=en"
@@ -5823,7 +5823,7 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 **Example (Base64 Images):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=surya" \
   -F "languages=en"
@@ -5882,7 +5882,7 @@ Extract structured data from documents using vision-language models.
 **Example (Document VQA with File Upload):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@receipt.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
   -F "prompts=What is the store name?,What is the total amount?" \
@@ -5892,7 +5892,7 @@ curl -X POST http://localhost:8000/v1/vision/documents/extract \
 **Example (Extraction with Base64):**
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
@@ -5904,7 +5904,7 @@ curl -X POST http://localhost:8000/v1/vision/documents/extract \
 
 The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
 
-**Base URL:** `http://localhost:8000/v1/ml`
+**Base URL:** `http://localhost:14345/v1/ml`
 
 **TIP: Model Versioning**
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
@@ -5973,7 +5973,7 @@ Train a new text classifier.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/classifier/fit \
+curl -X POST http://localhost:14345/v1/ml/classifier/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "intent-classifier",
@@ -6050,7 +6050,7 @@ Classify texts using a trained model.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/ml/classifier/predict \
+curl -X POST http://localhost:14345/v1/ml/classifier/predict \
   -H "Content-Type: application/json" \
   -d '{
     "model": "intent-classifier-latest",
@@ -6215,7 +6215,7 @@ Train an anomaly detection model.
 
 ```bash
 # Train on normal temperature readings (20-25°C range)
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor_anomaly_detector",
@@ -6280,7 +6280,7 @@ Same request format as `/score`, but response only includes anomalous points.
 
 ```bash
 # Test with mix of normal and anomalous readings
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor_anomaly_detector-latest",
@@ -9462,7 +9462,7 @@ runtime:
     - name: vllm-model
       provider: openai
       model: mistral-small
-      base_url: http://localhost:8000/v1
+      base_url: http://localhost:14345/v1
       api_key: sk-local-placeholder
       instructor_mode: json
       default: true
@@ -9935,7 +9935,7 @@ The easiest way to use OCR is through the LlamaFarm API, which handles file uplo
 
 ```bash
 # Upload a PDF or image directly
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=easyocr" \
   -F "languages=en"
@@ -9944,7 +9944,7 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 Or with base64-encoded images:
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=surya" \
   -F "languages=en"
@@ -10031,7 +10031,7 @@ The easiest way to extract data from documents is through the LlamaFarm API:
 
 ```bash
 # Extract from a receipt (file upload)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@receipt.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
@@ -10078,7 +10078,7 @@ Ask questions about document content using the LlamaFarm API:
 
 ```bash
 # Document VQA with file upload (LlamaFarm API)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@invoice.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
   -F "prompts=What is the total amount?,What is the invoice date?" \
@@ -10179,7 +10179,7 @@ The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the
 
 ```bash
 # Via LlamaFarm API (port 8000)
-curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
+curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
@@ -10550,12 +10550,12 @@ The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Un
 
 ```bash
 # Via LlamaFarm API (port 8000) - with versioning
-curl -X POST http://localhost:8000/v1/ml/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
 
 # Use -latest suffix to auto-resolve
-curl -X POST http://localhost:8000/v1/ml/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor-latest", "backend": "isolation_forest", "data": [...]}'
 ```
@@ -11734,7 +11734,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "llamafarm": {
       "transport": "http",
-      "url": "http://localhost:8000/mcp"
+      "url": "http://localhost:14345/mcp"
     }
   }
 }
@@ -11747,7 +11747,7 @@ Or use the HTTP transport if your MCP client supports it:
   "mcpServers": {
     "llamafarm": {
       "transport": "http",
-      "url": "http://localhost:8000/mcp"
+      "url": "http://localhost:14345/mcp"
     }
   }
 }
@@ -11777,7 +11777,7 @@ mcp:
   servers:
     - name: llamafarm-server
       transport: http
-      base_url: http://localhost:8000/mcp
+      base_url: http://localhost:14345/mcp
 
 runtime:
   models:
@@ -12042,7 +12042,7 @@ mcp:
     # LlamaFarm's own API
     - name: llamafarm
       transport: http
-      base_url: http://localhost:8000/mcp
+      base_url: http://localhost:14345/mcp
 
 runtime:
   default_model: assistant
@@ -12287,7 +12287,7 @@ lf start
 This command:
 - Starts the server and Universal Runtime natively
 - Watches `llamafarm.yaml` for changes
-- Opens the Designer web UI at `http://localhost:8000`
+- Opens the Designer web UI at `http://localhost:14345`
 
 ### Option B: Manual control
 
@@ -12301,7 +12301,7 @@ nx start server
 nx start universal-runtime
 ```
 
-Then run CLI commands against the default server at `http://localhost:8000`.
+Then run CLI commands against the default server at `http://localhost:14345`.
 
 ## Desktop Application
 
@@ -12369,7 +12369,7 @@ pm2 save
 
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
-- **Firewall**: Restrict access to ports 8000 (API) and 11540 (Universal Runtime) as needed.
+- **Firewall**: Restrict access to ports 14345 (API) and 11540 (Universal Runtime) as needed.
 - **TLS termination**: Use a reverse proxy (nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
@@ -12377,7 +12377,7 @@ pm2 save
 
 ```nginx
 upstream llamafarm {
-    server 127.0.0.1:8000;
+    server 127.0.0.1:14345;
 }
 
 server {
@@ -12417,10 +12417,10 @@ LlamaFarm provides health endpoints for monitoring:
 
 ```bash
 # Full health check
-curl http://localhost:8000/health
+curl http://localhost:14345/health
 
 # Liveness probe (for orchestrators)
-curl http://localhost:8000/health/liveness
+curl http://localhost:14345/health/liveness
 ```
 
 ## Resources
@@ -13264,7 +13264,7 @@ Example (vLLM running with OpenAI-compatible API):
 runtime:
   provider: openai
   model: mistral-small
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-test
 ```
 
@@ -13389,17 +13389,17 @@ lf start
 
 This automatically launches:
 
-- The FastAPI server (port 8000)
+- The FastAPI server (port 14345)
 - The RAG worker
-- The Designer web UI (port **8000**)
+- The Designer web UI (port **14345**)
 
 Once started, open your browser to:
 
 ```
-http://localhost:8000
+http://localhost:14345
 ```
 
-The Designer is served by the same FastAPI server, so it shares port 8000 with the API.
+The Designer is served by the same FastAPI server, so it shares port 14345 with the API.
 
 ---
 
@@ -13415,25 +13415,25 @@ Please add the following screenshots to this directory:
 
    - Shows the Designer home page with project selection and creation
    - Should show the project cards and the "Create new project" button
-   - Capture: http://localhost:8000/
+   - Capture: http://localhost:14345/
 
 2. **dashboard.png** (referenced in `features.md`)
 
    - Shows the Dashboard view with project overview and key metrics
    - Should show project configuration summary, dataset stats, and quick actions
-   - Capture: http://localhost:8000/chat/dashboard
+   - Capture: http://localhost:14345/chat/dashboard
 
 3. **data-management.png** (referenced in `features.md`)
 
    - Shows the Data management interface
    - Should display processing strategies and datasets
    - Include both strategy cards and dataset cards if possible
-   - Capture: http://localhost:8000/chat/data
+   - Capture: http://localhost:14345/chat/data
 
 4. **rag-config.png** (referenced in `features.md`)
    - Shows the RAG configuration interface
    - Should display databases, embedding strategies, or retrieval methods
-   - Capture: http://localhost:8000/chat/databases
+   - Capture: http://localhost:14345/chat/databases
 
 ## Screenshot Guidelines
 
@@ -13447,7 +13447,7 @@ Please add the following screenshots to this directory:
 ## How to Add Screenshots
 
 1. Start the Designer: `lf start`
-2. Open http://localhost:8000 in your browser
+2. Open http://localhost:14345 in your browser
 3. Navigate to each section
 4. Take screenshots using your OS screenshot tool
 5. Name them according to the list above

@@ -7,13 +7,17 @@ Supports models like:
 - DocVQA models: Document Visual Question Answering
 """
 
+from __future__ import annotations
+
 import base64
 import io
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-import torch
+if TYPE_CHECKING:
+    import torch
+
 from PIL import Image
 
 from .base import BaseModel
@@ -287,6 +291,8 @@ class DocumentModel(BaseModel):
         decoder_input_ids = decoder_input_ids.to(self.device)
 
         # Generate
+        import torch
+
         with torch.no_grad():
             outputs = self.model.generate(
                 pixel_values,
@@ -365,6 +371,8 @@ class DocumentModel(BaseModel):
         encoding = self.processor(
             image, question, return_tensors="pt", truncation=True, max_length=512
         )
+        import torch
+
         encoding = {k: v.to(self.device) for k, v in encoding.items()}
 
         with torch.no_grad():
@@ -408,6 +416,8 @@ class DocumentModel(BaseModel):
 
     async def _layoutlm_classify(self, image: Image.Image) -> DocumentResult:
         """Classify document type."""
+        import torch
+
         encoding = self.processor(image, return_tensors="pt", truncation=True)
         encoding = {k: v.to(self.device) for k, v in encoding.items()}
 
@@ -433,6 +443,8 @@ class DocumentModel(BaseModel):
 
     async def _layoutlm_extract(self, image: Image.Image) -> DocumentResult:
         """Extract fields using token classification."""
+        import torch
+
         encoding = self.processor(image, return_tensors="pt", truncation=True)
 
         # Store original words and boxes for reconstruction

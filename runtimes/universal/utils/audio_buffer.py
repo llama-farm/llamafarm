@@ -24,6 +24,10 @@ SAMPLE_RATE = 16000  # Whisper expects 16kHz audio
 SAMPLE_WIDTH = 2  # 16-bit audio (2 bytes per sample)
 CHANNELS = 1  # Mono audio
 
+# Security limits - prevent DoS via memory exhaustion
+MAX_AUDIO_SIZE = 50 * 1024 * 1024  # 50MB max audio input (~26 minutes at 16kHz mono)
+MAX_AUDIO_DURATION = 600.0  # 10 minutes max duration for processing
+
 # WAV header signature
 WAV_HEADER_RIFF = b"RIFF"
 WAV_HEADER_WAVE = b"WAVE"
@@ -96,8 +100,9 @@ def calculate_audio_energy(
         max_val = 32767.0
     else:
         # Fallback: treat as 8-bit unsigned
-        samples = audio_data
-        max_val = 127.0
+        # 8-bit unsigned PCM has silence at 128, so center the samples
+        samples = [s - 128 for s in audio_data]
+        max_val = 128.0
 
     # Calculate RMS
     sum_squares = sum(s * s for s in samples)
@@ -369,7 +374,15 @@ def decode_audio_to_pcm(
 
     Raises:
         RuntimeError: If decoding fails
+        ValueError: If audio size exceeds MAX_AUDIO_SIZE
     """
+    # Validate audio size to prevent DoS via memory exhaustion
+    if len(audio_data) > MAX_AUDIO_SIZE:
+        raise ValueError(
+            f"Audio data exceeds maximum size: {len(audio_data)} bytes > {MAX_AUDIO_SIZE} bytes. "
+            f"Maximum supported audio is ~{MAX_AUDIO_SIZE // (SAMPLE_RATE * SAMPLE_WIDTH * 60):.0f} minutes."
+        )
+
     if PYAV_AVAILABLE:
         try:
             return _decode_with_pyav(audio_data, sample_rate, channels)
@@ -397,7 +410,16 @@ def decode_audio_bytes(
 
     Returns:
         Raw PCM audio bytes (16-bit mono)
+
+    Raises:
+        ValueError: If audio size exceeds MAX_AUDIO_SIZE
     """
+    # Validate audio size to prevent DoS via memory exhaustion
+    if len(audio_data) > MAX_AUDIO_SIZE:
+        raise ValueError(
+            f"Audio data exceeds maximum size: {len(audio_data)} bytes > {MAX_AUDIO_SIZE} bytes."
+        )
+
     format_name, is_compressed = detect_audio_format(audio_data)
 
     if is_compressed:

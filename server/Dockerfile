@@ -78,7 +78,7 @@ COPY --from=designer-builder /app/designer/dist ./designer/dist
 ENV DESIGNER_DIST_PATH=/app/designer/dist
 
 # Expose port
-EXPOSE 8000
+EXPOSE 14345
 
 # Change to /tmp so Celery control files are created in writable location
 WORKDIR /tmp

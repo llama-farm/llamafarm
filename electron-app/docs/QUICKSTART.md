@@ -173,7 +173,7 @@ electron-app/
 **Solutions**:
 
 - Ensure Docker Desktop is running
-- Check that port 8000 is free
+- Check that port 14345 is free
 - Try restarting Docker
 - View logs: Help → Show Logs
 

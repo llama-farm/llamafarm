@@ -3,7 +3,7 @@ name = "universal-runtime"
 version = "1.0.0"
 description = "OpenAI-compatible API for HuggingFace models"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.10,<3.14"
 dependencies = [
   "transformers>=4.35.0",
   "diffusers>=0.25.0",
@@ -25,13 +25,14 @@ dependencies = [
   "pymupdf>=1.26.6", # Required for PDF file uploads
   # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
-  "protobuf>=6.33.1",
+  "protobuf>=5.29.3",
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",  # TTL-based model caching
   "jinja2>=3.0.0",  # For tool-aware chat template rendering
   # Anomaly detection
   "scikit-learn>=1.3.0",
   "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
+  "numba>=0.60.0",  # Explicit pin for Python 3.12 compatibility (pyod -> numba -> llvmlite)
   # High-performance data processing for streaming ML
   "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
   # Time-series forecasting
@@ -112,15 +113,66 @@ speech = [
   "av>=12.0.0",  # PyAV for efficient compressed audio decoding (WebM/Opus)
 ]
 
+# Text-to-speech with Kokoro
+# Usage: uv pip install "universal-runtime[tts]"
+tts = [
+  "kokoro>=0.9.0",  # High-quality neural TTS (~82M params)
+  "misaki[en]>=0.9.0",  # G2P for English (kokoro dependency)
+  "spacy>=3.7.0",  # NLP for G2P
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
+  "pydub>=0.25.0",  # Audio format conversion (MP3, FLAC)
+  "av>=12.0.0",  # PyAV for Opus/AAC encoding
+]
+
+# Text-to-speech with Chatterbox Turbo (voice cloning)
+# Usage: uv pip install "universal-runtime[tts-chatterbox]"
+# Note: chatterbox-tts has strict pins but works with newer versions.
+# We override its constraints via [tool.uv.override-dependencies] below.
+tts-chatterbox = [
+  "chatterbox-tts>=0.1.6",
+  "pydub>=0.25.0",
+  "av>=12.0.0",
+]
+
+# Text-to-speech with Pocket TTS (Kyutai)
+# Lightweight CPU-only TTS, ~6x faster than real-time on Apple Silicon
+# Usage: uv pip install "universal-runtime[tts-pocket]"
+tts-pocket = [
+  "pocket-tts>=0.1.0",
+]
+
+# Text-to-speech with Kokoro MLX (Apple Silicon optimized)
+# Native MLX implementation for faster inference on M-series chips
+# Usage: uv pip install "universal-runtime[tts-mlx]"
+tts-mlx = [
+  "mlx-audio>=0.1.0",
+  "spacy>=3.7.0",  # NLP for G2P (required by mlx-audio's Kokoro)
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# Allow direct URL references for spaCy model in optional dependencies
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["models", "utils", "core"]
 py-modules = ["server", "download_model"]
 
 [tool.uv]
+# Ensure dependencies resolve correctly on all target platforms
+# This prevents lockfile from containing platform-specific packages that only work on one arch
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'",  # Intel Mac
+  "sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
+
 # PyTorch variant selection:
 # The LlamaFarm CLI automatically detects your hardware (CUDA, Metal, ROCm, or CPU)
 # and sets UV_EXTRA_INDEX_URL appropriately to install the optimal PyTorch build.
@@ -140,6 +192,17 @@ py-modules = ["server", "download_model"]
 #   3. ROCm (AMD GPUs) - uses ROCm index
 #   4. CPU (fallback) - uses CPU-only index (~100MB)
 index-url = "https://pypi.org/simple"
+
+# Override chatterbox-tts strict dependency pins - it works fine with newer versions
+override-dependencies = [
+  "numpy>=1.24.0,<2.4",   # numba (via librosa) requires numpy<2.4
+  # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
+  "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchaudio>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torchaudio>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "transformers>=4.35.0", # chatterbox pins ==4.46.3
+]
 
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }

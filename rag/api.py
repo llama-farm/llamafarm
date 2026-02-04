@@ -20,7 +20,12 @@ if str(repo_root) not in sys.path:
 
 try:
     from config import load_config
-    from config.datamodel import Database, LlamaFarmConfig, RetrievalStrategy
+    from config.datamodel import (
+        Database,
+        DatabaseEmbeddingStrategy,
+        DatabaseRetrievalStrategy,
+        LlamaFarmConfig,
+    )
 except ImportError as e:
     raise ImportError(
         f"Could not import config module. Make sure you're running from the repo root. Error: {e}"
@@ -160,7 +165,7 @@ class BaseAPI:
             ):
                 # Find the model in runtime.models
                 model_config = None
-                for model in self.config.runtime.models:
+                for model in self.config.runtime.models or []:
                     if model.name == model_name:
                         model_config = model
                         break
@@ -184,7 +189,7 @@ class BaseAPI:
                 ):
                     # Find the reranker model in runtime.models
                     reranker_model_config = None
-                    for model in self.config.runtime.models:
+                    for model in self.config.runtime.models or []:
                         if model.name == reranker_model_name:
                             reranker_model_config = model
                             break
@@ -282,7 +287,9 @@ class BaseAPI:
 
         return None
 
-    def _strategy_to_config(self, strategy: RetrievalStrategy) -> dict[str, Any]:
+    def _strategy_to_config(
+        self, strategy: DatabaseEmbeddingStrategy | DatabaseRetrievalStrategy
+    ) -> dict[str, Any]:
         """Convert strategy object to config dictionary."""
         return {
             "type": strategy.type.value,
@@ -306,7 +313,7 @@ class BaseAPI:
                 # Resolve model references
                 strategy_config = self._resolve_model_references(strategy_config)
                 return create_retrieval_strategy_from_config(
-                    strategy_config, self.project_dir
+                    strategy_config, Path(self.project_dir)
                 )
 
         # If not found, return the default strategy
@@ -337,7 +344,7 @@ class BaseAPI:
                 strategy_config = self._resolve_model_references(strategy_config)
 
                 self.retrieval_strategy = create_retrieval_strategy_from_config(
-                    strategy_config, project_dir=self.project_dir
+                    strategy_config, project_dir=Path(self.project_dir)
                 )
             else:
                 # Fallback to basic universal strategy
@@ -545,7 +552,7 @@ class SearchAPI(BaseAPI):
                 # Resolve model references for strategies that need them
                 strategy_config = self._resolve_model_references(strategy_config)
                 return create_retrieval_strategy_from_config(
-                    strategy_config, self.project_dir
+                    strategy_config, Path(self.project_dir)
                 )
 
         # If not found, return default strategy

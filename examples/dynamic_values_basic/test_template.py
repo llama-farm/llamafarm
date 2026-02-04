@@ -16,7 +16,7 @@ from pathlib import Path
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root / "server"))
 
-from services.template_service import TemplateError, TemplateService
+from services.template_service import TemplateError, TemplateService  # noqa: E402
 
 
 def demo_basic_substitution():
@@ -42,12 +42,12 @@ def demo_default_values():
     # With no variables - uses defaults
     result1 = TemplateService.resolve(template, {})
     print(f"Template: {template}")
-    print(f"Variables: {{}}")
+    print("Variables: {}")
     print(f"Result: {result1}")
 
     # With some variables - mix of provided and defaults
     result2 = TemplateService.resolve(template, {"user_name": "Alice"})
-    print(f"Variables: {{'user_name': 'Alice'}}")
+    print("Variables: {'user_name': 'Alice'}")
     print(f"Result: {result2}")
     print()
 
@@ -86,7 +86,7 @@ def demo_error_handling():
         TemplateService.resolve(template, {"name": "Alice"})
     except TemplateError as e:
         print(f"Template: {template}")
-        print(f"Variables: {{'name': 'Alice'}}")
+        print("Variables: {'name': 'Alice'}")
         print(f"Error (expected): {e}")
     print()
 

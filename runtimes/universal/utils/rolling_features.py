@@ -192,8 +192,8 @@ def compute_anomaly_features(
 
     Creates features that are useful for detecting anomalies:
     - Z-scores within rolling windows
-    - Deviation from rolling mean
-    - Percentile ranks
+    - Deviation from rolling mean (absolute)
+    - Min-max scaled position within rolling window
 
     Args:
         df: Input DataFrame

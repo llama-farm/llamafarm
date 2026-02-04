@@ -14,6 +14,7 @@ from .rag import router as rag_router
 from .system import disk_router, upgrades_router
 from .timeseries import router as timeseries_router
 from .vision import vision_router
+from .voice import voice_router
 
 __all__ = [
     "adtk_router",
@@ -33,4 +34,5 @@ __all__ = [
     "upgrades_router",
     "timeseries_router",
     "vision_router",
+    "voice_router",
 ]

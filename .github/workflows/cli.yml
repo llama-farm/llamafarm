@@ -15,6 +15,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-cli:
     name: Build CLI Binaries
@@ -28,9 +32,6 @@ jobs:
           - goos: linux
             goarch: arm64
             output: llamafarm-linux-arm64
-          - goos: darwin
-            goarch: amd64
-            output: llamafarm-darwin-amd64
           - goos: darwin
             goarch: arm64
             output: llamafarm-darwin-arm64
@@ -77,14 +78,24 @@ jobs:
         run: go mod download
 
       - name: Install go-jsonschema
-        run: go install github.com/atombender/go-jsonschema@latest
+        run: go install github.com/atombender/go-jsonschema@v0.21.0
 
       - name: Install Nx CLI
         run: |
           npx nx@${{ env.NX_VERSION }} init --useDotNxInstallation --interactive=false --verbose
 
       - name: Run generate-types (compiles schema and generates Go types)
-        run: npx nx@${{ env.NX_VERSION }} generate-types cli
+        run: npx nx@${{ env.NX_VERSION }} generate-types cli --skip-nx-cache
+
+      - name: Verify types.go was generated correctly
+        run: |
+          if ! grep -q "type PromptSet struct" cli/cmd/config/types.go; then
+            echo "ERROR: types.go is missing PromptSet type (--struct-name-from-title not working)"
+            echo "Contents of types.go:"
+            head -100 cli/cmd/config/types.go
+            exit 1
+          fi
+          echo "✓ types.go contains PromptSet type (go-jsonschema v0.21.0 working correctly)"
 
       - name: Create dist directory
         run: mkdir -p dist
@@ -194,7 +205,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install go-jsonschema
-        run: go install github.com/atombender/go-jsonschema@latest
+        run: go install github.com/atombender/go-jsonschema@v0.21.0
 
       - name: Generate types
         run: npx nx@${{ env.NX_VERSION }} generate-types cli

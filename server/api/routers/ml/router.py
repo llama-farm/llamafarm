@@ -33,6 +33,16 @@ from .types import (
     PolarsBufferStats,
 )
 
+
+def _validate_path_param(param: str, name: str = "id") -> None:
+    """Validate path parameter to prevent path injection attacks.
+
+    Raises:
+        HTTPException: If parameter contains invalid characters
+    """
+    if "/" in param or "\\" in param or ".." in param:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: {param}")
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ml", tags=["ml"])
@@ -88,6 +98,10 @@ async def fit_classifier(request: ClassifierFitRequest) -> dict[str, Any]:
         num_iterations=request.num_iterations,
         batch_size=request.batch_size,
     )
+
+    # Save description metadata if provided (model auto-saves during fit)
+    if request.description:
+        MLModelService.save_description("classifier", versioned_name, request.description)
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -284,6 +298,10 @@ async def fit_anomaly_detector(request: AnomalyFitRequest) -> dict[str, Any]:
         epochs=request.epochs,
         batch_size=request.batch_size,
     )
+
+    # Save description metadata if provided (model auto-saves during fit)
+    if request.description:
+        MLModelService.save_description("anomaly", versioned_name, request.description)
 
     # Add versioning info to response
     result["base_name"] = request.model
@@ -574,6 +592,7 @@ async def get_streaming_detector(model_id: str) -> dict[str, Any]:
     Returns:
         Detector statistics including status, model version, samples collected
     """
+    _validate_path_param(model_id, "model_id")
     return await UniversalRuntimeService.anomaly_stream_get_detector(model_id)
 
 
@@ -587,6 +606,7 @@ async def delete_streaming_detector(model_id: str) -> dict[str, Any]:
     Returns:
         Deletion confirmation
     """
+    _validate_path_param(model_id, "model_id")
     return await UniversalRuntimeService.anomaly_stream_delete_detector(model_id)
 
 
@@ -602,6 +622,7 @@ async def reset_streaming_detector(model_id: str) -> dict[str, Any]:
     Returns:
         Reset confirmation with new status
     """
+    _validate_path_param(model_id, "model_id")
     return await UniversalRuntimeService.anomaly_stream_reset_detector(model_id)
 
 
@@ -657,6 +678,7 @@ async def get_polars_buffer(buffer_id: str) -> PolarsBufferStats:
     Returns:
         Buffer statistics including size, columns, memory usage
     """
+    _validate_path_param(buffer_id, "buffer_id")
     result = await UniversalRuntimeService.polars_get_buffer(buffer_id)
     return PolarsBufferStats(**result)
 
@@ -671,6 +693,7 @@ async def delete_polars_buffer(buffer_id: str) -> dict[str, Any]:
     Returns:
         Deletion confirmation
     """
+    _validate_path_param(buffer_id, "buffer_id")
     return await UniversalRuntimeService.polars_delete_buffer(buffer_id)
 
 
@@ -684,6 +707,7 @@ async def clear_polars_buffer(buffer_id: str) -> dict[str, Any]:
     Returns:
         Clear confirmation with new size (0)
     """
+    _validate_path_param(buffer_id, "buffer_id")
     return await UniversalRuntimeService.polars_clear_buffer(buffer_id)
 
 

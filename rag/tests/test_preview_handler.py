@@ -3,9 +3,7 @@
 All tests written FIRST and will fail until implementation is complete.
 """
 
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -57,10 +55,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
-            b"Hello world.",
-            {"filename": "test.txt"}
-        )
+        result = handler.generate_preview(b"Hello world.", {"filename": "test.txt"})
 
         assert isinstance(result, PreviewResult)
         assert result.original_text is not None
@@ -156,7 +151,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        _result = handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_size_override=100,
@@ -178,7 +173,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        _result = handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_overlap_override=50,
@@ -199,7 +194,7 @@ class TestPreviewHandler:
 
         handler = PreviewHandler(blob_processor=mock_blob_processor)
 
-        result = handler.generate_preview(
+        _result = handler.generate_preview(
             b"Test content",
             {"filename": "test.txt"},
             chunk_strategy_override="sentences",
@@ -211,7 +206,6 @@ class TestPreviewHandler:
 
     def test_preview_result_statistics(self):
         """PreviewResult contains correct statistics."""
-        from core.base import PreviewResult
         from core.preview_handler import PreviewHandler
 
         mock_blob_processor = Mock()
@@ -288,7 +282,7 @@ class TestPreviewHandler:
         assert len(result.chunks) == 1
         chunk = result.chunks[0]
         assert chunk.char_count == 16  # "Hello world test" = 16 chars
-        assert chunk.word_count == 3   # 3 words
+        assert chunk.word_count == 3  # 3 words
 
     def test_get_full_text_extracts_text_from_bytes(self):
         """_get_full_text extracts readable text from file bytes."""
@@ -490,9 +484,15 @@ class TestPreviewResult:
         from core.base import PreviewChunk, PreviewResult
 
         chunks = [
-            PreviewChunk(chunk_index=0, content="A" * 100, start_position=0, end_position=100),
-            PreviewChunk(chunk_index=1, content="B" * 200, start_position=100, end_position=300),
-            PreviewChunk(chunk_index=2, content="C" * 300, start_position=300, end_position=600),
+            PreviewChunk(
+                chunk_index=0, content="A" * 100, start_position=0, end_position=100
+            ),
+            PreviewChunk(
+                chunk_index=1, content="B" * 200, start_position=100, end_position=300
+            ),
+            PreviewChunk(
+                chunk_index=2, content="C" * 300, start_position=300, end_position=600
+            ),
         ]
 
         result = PreviewResult(
@@ -515,9 +515,15 @@ class TestPreviewResult:
 
         # Three chunks of 100 chars each
         chunks = [
-            PreviewChunk(chunk_index=0, content="A" * 100, start_position=0, end_position=100),
-            PreviewChunk(chunk_index=1, content="B" * 100, start_position=80, end_position=180),
-            PreviewChunk(chunk_index=2, content="C" * 100, start_position=160, end_position=260),
+            PreviewChunk(
+                chunk_index=0, content="A" * 100, start_position=0, end_position=100
+            ),
+            PreviewChunk(
+                chunk_index=1, content="B" * 100, start_position=80, end_position=180
+            ),
+            PreviewChunk(
+                chunk_index=2, content="C" * 100, start_position=160, end_position=260
+            ),
         ]
 
         result = PreviewResult(

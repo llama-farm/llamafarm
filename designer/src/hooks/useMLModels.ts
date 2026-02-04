@@ -13,6 +13,7 @@ import type {
   AnomalyScoreRequest,
   AnomalySaveRequest,
   AnomalyLoadRequest,
+  StreamingAnomalyRequest,
   EmbeddingRequest,
   RerankRequest,
 } from '../types/ml'
@@ -30,6 +31,11 @@ export const mlModelKeys = {
   // Anomaly keys
   anomalies: () => [...mlModelKeys.all, 'anomalies'] as const,
   anomalyList: () => [...mlModelKeys.anomalies(), 'list'] as const,
+  // Streaming anomaly keys
+  streamingDetectors: () => [...mlModelKeys.all, 'streaming-detectors'] as const,
+  streamingDetectorList: () => [...mlModelKeys.streamingDetectors(), 'list'] as const,
+  streamingDetector: (modelId: string) =>
+    [...mlModelKeys.streamingDetectors(), 'detail', modelId] as const,
 }
 
 // =============================================================================
@@ -238,27 +244,125 @@ export function useDeleteAnomalyModel() {
 }
 
 // =============================================================================
+// Streaming Anomaly Detection Queries
+// =============================================================================
+
+/**
+ * List all active streaming detectors
+ * Polls every 5 seconds when enabled
+ */
+export function useListStreamingDetectors(options?: {
+  enabled?: boolean
+  refetchInterval?: number
+}) {
+  return useQuery({
+    queryKey: mlModelKeys.streamingDetectorList(),
+    queryFn: () => mlService.listStreamingDetectors(),
+    enabled: options?.enabled !== false,
+    refetchInterval: options?.refetchInterval ?? 5_000, // 5 seconds
+    staleTime: 2_000, // 2 seconds
+  })
+}
+
+/**
+ * Get stats for a specific streaming detector
+ * Polls every 2 seconds when enabled (faster for live status updates)
+ */
+export function useStreamingDetector(
+  modelId: string,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number
+  }
+) {
+  return useQuery({
+    queryKey: mlModelKeys.streamingDetector(modelId),
+    queryFn: () => mlService.getStreamingDetector(modelId),
+    enabled: options?.enabled !== false && !!modelId,
+    refetchInterval: options?.refetchInterval ?? 2_000, // 2 seconds
+    staleTime: 1_000, // 1 second
+    retry: false, // Don't retry if detector doesn't exist
+  })
+}
+
+// =============================================================================
+// Streaming Anomaly Detection Mutations
+// =============================================================================
+
+/**
+ * Stream data through an anomaly detector
+ * Auto-creates detector if it doesn't exist
+ */
+export function useStreamAnomaly() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (request: StreamingAnomalyRequest) =>
+      mlService.streamAnomaly(request),
+    onSuccess: (_data, variables) => {
+      // Invalidate detector list and specific detector stats
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.streamingDetectorList(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.streamingDetector(variables.model),
+      })
+    },
+  })
+}
+
+/**
+ * Delete a streaming detector
+ */
+export function useDeleteStreamingDetector() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (modelId: string) => mlService.deleteStreamingDetector(modelId),
+    onSuccess: (_data, modelId) => {
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.streamingDetectorList(),
+      })
+      queryClient.removeQueries({
+        queryKey: mlModelKeys.streamingDetector(modelId),
+      })
+    },
+  })
+}
+
+/**
+ * Reset a streaming detector (clears data, restarts cold start)
+ */
+export function useResetStreamingDetector() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (modelId: string) => mlService.resetStreamingDetector(modelId),
+    onSuccess: (_data, modelId) => {
+      queryClient.invalidateQueries({
+        queryKey: mlModelKeys.streamingDetector(modelId),
+      })
+    },
+  })
+}
+
+// =============================================================================
 // Combined Hooks
 // =============================================================================
 
 /**
- * Train and save a classifier in one operation
+ * Train a classifier (fit auto-saves the model)
  */
 export function useTrainAndSaveClassifier() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (request: ClassifierFitRequest) => {
-      // First fit the model
+      // Fit the model - this auto-saves to disk
       const fitResult = await mlService.fitClassifier(request)
 
-      // Then save it to disk (pass description to save endpoint)
-      const saveResult = await mlService.saveClassifier({
-        model: fitResult.versioned_name,
-        description: request.description,
-      })
-
-      return { fitResult, saveResult }
+      // No separate save call needed - fit endpoint auto-saves
+      return { fitResult }
     },
     onSuccess: () => {
       // Invalidate and force refetch to ensure models list is up to date
@@ -271,24 +375,18 @@ export function useTrainAndSaveClassifier() {
 }
 
 /**
- * Train and save an anomaly detector in one operation
+ * Train an anomaly detector (fit auto-saves the model)
  */
 export function useTrainAndSaveAnomaly() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (request: AnomalyFitRequest) => {
-      // First fit the model
+      // Fit the model - this auto-saves to disk
       const fitResult = await mlService.fitAnomaly(request)
 
-      // Then save it to disk (pass description to save endpoint)
-      const saveResult = await mlService.saveAnomaly({
-        model: fitResult.versioned_name,
-        backend: request.backend || 'isolation_forest',
-        description: request.description,
-      })
-
-      return { fitResult, saveResult }
+      // No separate save call needed - fit endpoint auto-saves
+      return { fitResult }
     },
     onSuccess: () => {
       // Invalidate and force refetch to ensure models list is up to date
@@ -380,6 +478,13 @@ export default {
   useLoadAnomaly,
   useDeleteAnomalyModel,
   useTrainAndSaveAnomaly,
+  // Streaming anomaly queries
+  useListStreamingDetectors,
+  useStreamingDetector,
+  // Streaming anomaly mutations
+  useStreamAnomaly,
+  useDeleteStreamingDetector,
+  useResetStreamingDetector,
   // Document Scanning mutations
   useScanDocument,
   // Encoder mutations

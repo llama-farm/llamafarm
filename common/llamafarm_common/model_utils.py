@@ -542,3 +542,125 @@ def get_gguf_file_path(
 
     logger.info(f"GGUF file ready: {gguf_path}")
     return gguf_path
+
+
+def get_mmproj_file_path(
+    model_id: str,
+    token: str | None = None,
+) -> str | None:
+    """
+    Get the full path to a multimodal projector (mmproj) GGUF file.
+
+    Multimodal projector files enable audio/vision input for models like Qwen2.5-Omni.
+    These files are typically named with patterns like:
+    - mmproj-{model}-f16.gguf
+    - mmproj-{model}-f32.gguf
+    - {model}-mmproj-f16.gguf
+
+    Args:
+        model_id: HuggingFace model identifier (e.g., "ggml-org/Qwen2.5-Omni-7B-GGUF")
+        token: Optional HuggingFace authentication token for gated models
+
+    Returns:
+        Full absolute path to the mmproj .gguf file, or None if not found
+
+    Examples:
+        >>> path = get_mmproj_file_path("ggml-org/Qwen2.5-Omni-7B-GGUF")
+        >>> path  # Could be None or a path like ".../mmproj-Qwen2.5-Omni-7B-f16.gguf"
+    """
+    # Parse model ID to extract base model
+    base_model_id, _ = parse_model_with_quantization(model_id)
+
+    logger.debug(f"Looking for mmproj file in: {base_model_id}")
+
+    # Step 1: Check local cache first
+    cached_gguf_files = _get_cached_gguf_files(base_model_id)
+    mmproj_files = [f for f in cached_gguf_files if _is_mmproj_file(f)]
+
+    if mmproj_files:
+        # Prefer f16 precision for mmproj
+        selected = _select_mmproj_file(mmproj_files)
+        cached_path = _get_cached_gguf_path(base_model_id, selected)
+        if cached_path:
+            logger.info(f"Using cached mmproj file: {selected}")
+            return cached_path
+
+    # Step 2: List all GGUF files in the repository (requires network)
+    try:
+        available_gguf_files = list_gguf_files(base_model_id, token)
+    except Exception as e:
+        logger.debug(f"Could not list files for mmproj detection: {e}")
+        return None
+
+    # Find mmproj files
+    mmproj_files = [f for f in available_gguf_files if _is_mmproj_file(f)]
+
+    if not mmproj_files:
+        logger.debug(f"No mmproj files found in {base_model_id}")
+        return None
+
+    # Select best mmproj file (prefer f16)
+    selected_filename = _select_mmproj_file(mmproj_files)
+    logger.info(f"Found mmproj file: {selected_filename}")
+
+    # Step 3: Download the mmproj file
+    local_path = snapshot_download(
+        repo_id=base_model_id,
+        token=token,
+        allow_patterns=[selected_filename],
+    )
+
+    mmproj_path = os.path.join(local_path, selected_filename)
+
+    if not os.path.exists(mmproj_path):
+        logger.warning(f"mmproj file not found after download: {mmproj_path}")
+        return None
+
+    logger.info(f"mmproj file ready: {mmproj_path}")
+    return mmproj_path
+
+
+def _is_mmproj_file(filename: str) -> bool:
+    """Check if a filename is a multimodal projector file."""
+    filename_lower = filename.lower()
+    # Common patterns for mmproj files
+    return (
+        filename_lower.endswith(".gguf")
+        and ("mmproj" in filename_lower or "multimodal" in filename_lower)
+        # Exclude main model files that might have "multimodal" in the name
+        and not any(q in filename_lower for q in ["q4_", "q5_", "q8_", "q2_", "q3_", "q6_"])
+    )
+
+
+def _select_mmproj_file(mmproj_files: list[str]) -> str:
+    """Select the best mmproj file, preferring f16 precision.
+
+    On Mac, F16 is the safest choice as BF16 has limited hardware support.
+    F32 always works but is 2x larger.
+
+    Preference order: F16 > BF16 > FP16 > F32 > FP32
+    """
+    if not mmproj_files:
+        raise ValueError("No mmproj files provided")
+
+    if len(mmproj_files) == 1:
+        return mmproj_files[0]
+
+    # Prefer f16 (best Mac compatibility), then bf16, then f32 (larger)
+    # Use precise matching with delimiters to avoid "f16" matching "bf16"
+    for precision in ["f16", "bf16", "fp16", "f32", "fp32"]:
+        for f in mmproj_files:
+            f_lower = f.lower()
+            # Match with common delimiters: -f16., _f16., -f16-, _f16_
+            if (
+                f"-{precision}." in f_lower
+                or f"_{precision}." in f_lower
+                or f"-{precision}-" in f_lower
+                or f"_{precision}_" in f_lower
+                or f_lower.endswith(f"-{precision}.gguf")
+                or f_lower.endswith(f"_{precision}.gguf")
+            ):
+                return f
+
+    # Fall back to first file
+    return mmproj_files[0]

@@ -279,7 +279,7 @@ function SampleProjects() {
               Could not load sample projects
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Make sure the API server is running on localhost:8000 and try
+              Make sure the API server is running on localhost:14345 and try
               again.
             </div>
             <div className="mt-4 flex items-center justify-center gap-2">

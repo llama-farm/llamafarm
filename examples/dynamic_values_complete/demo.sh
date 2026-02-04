@@ -9,7 +9,7 @@
 # 5. Mixing prompts and tools together
 #
 # Prerequisites:
-#   - LlamaFarm server running on port 8000
+#   - LlamaFarm server running on port 14345
 #   - Universal runtime with llama3.2:3b available
 #
 # Usage:
@@ -23,7 +23,7 @@ ENV_FILE="$SCRIPT_DIR/../../.env"
 if [ -f "$ENV_FILE" ]; then
   PORT=$(grep -E "^PORT=" "$ENV_FILE" | cut -d= -f2)
 fi
-PORT="${PORT:-8000}"
+PORT="${PORT:-14345}"
 
 API_BASE="${API_BASE:-http://localhost:$PORT}"
 NAMESPACE="${NAMESPACE:-test}"

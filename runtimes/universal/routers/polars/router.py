@@ -21,8 +21,8 @@ from api_types.anomaly import (
     PolarsBufferCreateRequest,
     PolarsBufferDataResponse,
     PolarsBufferFeaturesRequest,
-    PolarsBufferStats,
     PolarsBuffersListResponse,
+    PolarsBufferStats,
 )
 from utils.polars_buffer import PolarsBuffer
 
@@ -242,10 +242,7 @@ async def get_buffer_data(
             data=[],
         )
 
-    if with_features:
-        df = buffer.get_features()
-    else:
-        df = buffer.get_data()
+    df = buffer.get_features() if with_features else buffer.get_data()
 
     if tail is not None and tail > 0:
         df = df.tail(tail)

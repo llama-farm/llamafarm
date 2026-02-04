@@ -3,10 +3,8 @@
 All tests written FIRST and will fail until implementation is complete.
 """
 
-from datetime import UTC, datetime
 from unittest.mock import Mock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api

@@ -65,7 +65,7 @@ jobs:
       matrix:
         include:
           - platform: macos
-            arch: universal
+            arch: arm64
             os: macos-latest
 
           - platform: linux
@@ -379,13 +379,12 @@ jobs:
 
             ## Desktop App Downloads
 
-            ### macOS
-            Download for Apple Silicon (M1+) or Intel Macs:
+            ### macOS (Apple Silicon only)
+            Download for Apple Silicon (M1+) Macs:
             - **Apple Silicon (arm64)**: `LlamaFarm-desktop-app-mac-arm64.dmg` or `.zip`
-            - **Intel (x64)**: `LlamaFarm-desktop-app-mac-x64.dmg` or `.zip`
 
             **Installation:**
-            1. Download the DMG or ZIP file for your architecture
+            1. Download the DMG or ZIP file
             2. Open the DMG and drag LlamaFarm to Applications (or extract the ZIP)
             3. Launch the app (it's signed and notarized, so it will open normally)
             4. The app will auto-install the CLI and start services

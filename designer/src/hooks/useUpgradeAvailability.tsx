@@ -78,6 +78,8 @@ export function UpgradeAvailabilityProvider({
           setCache({ info: mapped, checkedAt: Date.now() })
         }
       } catch (error) {
+        // Ignore canceled requests (from React StrictMode cleanup)
+        if ((error as any)?.isCanceled) return
         console.error('Failed to fetch version info:', error)
       }
       setIsLoading(false)
@@ -130,6 +132,8 @@ export function UpgradeAvailabilityProvider({
         setCache({ info: mapped, checkedAt: Date.now() })
       }
     } catch (error) {
+      // Ignore canceled requests
+      if ((error as any)?.isCanceled) return
       console.error('Failed to fetch version info:', error)
     } finally {
       setIsLoading(false)

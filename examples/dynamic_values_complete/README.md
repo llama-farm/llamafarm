@@ -42,7 +42,7 @@ bash examples/dynamic_values_complete/demo.sh
 ## API Usage
 
 ```bash
-curl -X POST http://localhost:8000/v1/examples/dynamic_values_complete/chat/completions \
+curl -X POST http://localhost:14345/v1/examples/dynamic_values_complete/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Hello!"}],

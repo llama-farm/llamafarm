@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { SAMPLE_DATASETS } from './sampleData'
+import StreamingModeToggle from './StreamingModeToggle'
+import StreamingModePanel from './StreamingModePanel'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -49,12 +51,23 @@ import {
 type TrainingState = 'idle' | 'training' | 'success' | 'error'
 type InputMode = 'text' | 'table'
 
-// Map API backend to display name
-const BACKEND_OPTIONS: { value: string; label: string; apiValue: AnomalyBackend }[] = [
-  { value: 'isolation_forest', label: 'Isolation Forest', apiValue: 'isolation_forest' },
-  { value: 'one_class_svm', label: 'One-Class SVM', apiValue: 'one_class_svm' },
-  { value: 'local_outlier_factor', label: 'Local Outlier Factor', apiValue: 'local_outlier_factor' },
-  { value: 'autoencoder', label: 'Autoencoder', apiValue: 'autoencoder' },
+// All 12 PyOD backends organized by category
+const BACKEND_OPTIONS: { value: string; label: string; apiValue: AnomalyBackend; description: string; category: string }[] = [
+  // Fast (Parameter-Free) - Recommended
+  { value: 'ecod', label: 'ECOD (Recommended)', apiValue: 'ecod', description: 'Fast, parameter-free, general purpose', category: 'Fast' },
+  { value: 'hbos', label: 'HBOS', apiValue: 'hbos', description: 'Fastest algorithm, high dimensions', category: 'Fast' },
+  { value: 'copod', label: 'COPOD', apiValue: 'copod', description: 'Fast, interpretable results', category: 'Fast' },
+  // Legacy (Well-Tested)
+  { value: 'isolation_forest', label: 'Isolation Forest', apiValue: 'isolation_forest', description: 'Classic tree-based ensemble', category: 'Legacy' },
+  { value: 'local_outlier_factor', label: 'Local Outlier Factor', apiValue: 'local_outlier_factor', description: 'Good for clustered anomalies', category: 'Legacy' },
+  { value: 'one_class_svm', label: 'One-Class SVM', apiValue: 'one_class_svm', description: 'Good for small datasets', category: 'Legacy' },
+  // Advanced
+  { value: 'knn', label: 'KNN', apiValue: 'knn', description: 'Distance-based detection', category: 'Advanced' },
+  { value: 'mcd', label: 'MCD', apiValue: 'mcd', description: 'For Gaussian data', category: 'Advanced' },
+  { value: 'cblof', label: 'CBLOF', apiValue: 'cblof', description: 'Clustering-based detection', category: 'Advanced' },
+  { value: 'suod', label: 'SUOD', apiValue: 'suod', description: 'Ensemble - most robust', category: 'Advanced' },
+  { value: 'loda', label: 'LODA', apiValue: 'loda', description: 'Lightweight, streaming', category: 'Advanced' },
+  { value: 'autoencoder', label: 'AutoEncoder', apiValue: 'autoencoder', description: 'Neural network, complex patterns', category: 'Advanced' },
 ]
 
 interface ModelVersion {
@@ -261,6 +274,9 @@ function AnomalyModel() {
   const [description, setDescription] = useState('')
   const [nameExistsWarning, setNameExistsWarning] = useState(false)
 
+  // Streaming mode state
+  const [isStreamingMode, setIsStreamingMode] = useState(false)
+
   // Input mode: text (textarea) or table
   const [inputMode, setInputMode] = useState<InputMode>('text')
 
@@ -292,7 +308,7 @@ function AnomalyModel() {
   const [hasBlurredTrainingData, setHasBlurredTrainingData] = useState(false)
 
   // Settings state
-  const [backend, setBackend] = useState<AnomalyBackend>('isolation_forest')
+  const [backend, setBackend] = useState<AnomalyBackend>('ecod')
   const [normalization, setNormalization] = useState<NormalizationMethod>('standardization')
   const [threshold, setThreshold] = useState(0.6)
   const [contamination, setContamination] = useState(0.1)
@@ -1353,7 +1369,29 @@ function AnomalyModel() {
           </div>
         </div>
 
-        {/* Training Data & Settings Card */}
+        {/* Streaming Mode Toggle - only show for new models */}
+        {isNewModel && (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
+            <StreamingModeToggle
+              isStreamingMode={isStreamingMode}
+              onToggle={setIsStreamingMode}
+              disabled={trainingState === 'training'}
+            />
+            {isStreamingMode && (
+              <span className="text-xs text-muted-foreground">
+                Real-time anomaly detection with auto-rolling retraining
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Streaming Mode Panel - shown when streaming mode is active */}
+        {isStreamingMode ? (
+          <div className="rounded-lg border border-border bg-card p-4">
+            <StreamingModePanel modelName={modelName} />
+          </div>
+        ) : (
+        /* Training Data & Settings Card */
         <div className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 relative transition-all duration-300 ${trainingState === 'training' ? 'h-[400px] overflow-hidden' : ''}`}>
           {trainingState === 'training' && <TrainingLoadingOverlay message="Training your anomaly detector..." />}
           {/* Collapsed view - show when not a new model and not expanded */}
@@ -1381,10 +1419,11 @@ function AnomalyModel() {
                   options={BACKEND_OPTIONS.map(opt => ({
                     value: opt.apiValue,
                     label: opt.label,
+                    description: opt.description,
                   }))}
                   onChange={v => setBackend(v as AnomalyBackend)}
                   label="Algorithm"
-                  className="w-48"
+                  className="w-56"
                 />
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="contamination" className="text-xs text-muted-foreground">
@@ -1830,8 +1869,10 @@ MX`}
             </>
           )}
         </div>
+        )}
 
-        {/* Test Panel */}
+        {/* Test Panel - hidden in streaming mode */}
+        {!isStreamingMode && (
         <div
           className={`rounded-lg border border-border bg-card p-4 flex flex-col gap-4 ${
             !canTest ? 'opacity-50' : ''
@@ -1963,6 +2004,7 @@ MX`}
             </div>
           )}
         </div>
+        )}
 
         {/* Model Versions */}
         <div className="flex flex-col gap-3">

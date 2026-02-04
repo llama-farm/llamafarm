@@ -9,11 +9,11 @@
 # 5. Loading a saved model (simulating server restart)
 #
 # Usage: ./test_anomaly_api.sh [PORT]
-#   PORT defaults to 8000 (LlamaFarm API)
+#   PORT defaults to 14345 (LlamaFarm API)
 
 set -e
 
-PORT=${1:-8000}
+PORT=${1:-14345}
 BASE_URL="http://localhost:${PORT}/v1/ml"
 
 # Colors for output

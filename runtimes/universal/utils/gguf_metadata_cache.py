@@ -94,9 +94,19 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
     )
 
     try:
+        import gc
+
         from gguf import GGUFReader
 
-        reader = GGUFReader(gguf_path)
+        # Temporarily disable GC during GGUF parsing to avoid segfault
+        # on Python 3.13 aarch64 (GC during gguf_reader causes crash)
+        gc_was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            reader = GGUFReader(gguf_path)
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
         # Extract all needed metadata in a single pass through fields
         bos_id = None

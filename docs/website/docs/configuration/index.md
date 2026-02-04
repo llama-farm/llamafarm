@@ -17,6 +17,7 @@ runtime: { ... }
 prompts: [...]
 rag: { ... }
 datasets: [...]
+voice: { ... }
 ```
 
 ### Metadata
@@ -65,7 +66,7 @@ The original flat runtime configuration is automatically converted internally:
 runtime:
   provider: openai
   model: qwen2.5:7b
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-local-placeholder
   instructor_mode: tools
   model_api_parameters:
@@ -127,7 +128,7 @@ runtime:
 
 ### Prompts
 
-Prompts are named sets of messages that seed instructions for each session.
+Prompts are named sets of messages that seed instructions for each session. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax.
 
 ```yaml
 prompts:
@@ -143,25 +144,110 @@ prompts:
 - Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
 
+#### Dynamic Variable Substitution
+
+Use Jinja2-style `{{variable}}` syntax to inject values at request time:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          The customer's name is {{user_name | Valued Customer}}.
+          Account tier: {{account_tier | standard}}
+```
+
+**Syntax:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `{{variable}}` | Required variable | `Hello {{name}}` → Error if `name` not provided |
+| `{{variable \| default}}` | Variable with default | `Hello {{name \| Guest}}` → `Hello Guest` if missing |
+| `{{ variable }}` | Whitespace allowed | Same as above |
+
+**Passing variables via API:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/ns/project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi"}],
+    "variables": {
+      "company_name": "TechCorp",
+      "user_name": "Alice",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+Variables can be used in:
+- **Prompt message content** - Personalize system instructions
+- **Tool descriptions** - Customize tool behavior per request
+- **Tool parameter descriptions** - Dynamic parameter help text
+
+See the [Prompts Guide](../prompts/index.md) for detailed examples.
+
 ### RAG Configuration
 
 The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  parsers:
+    - name: pdf_parser
+      type: PDFParser_LlamaIndex
+      config:
+        chunk_size: 1500
+        chunk_overlap: 200
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+    parser: pdf_parser
+
 rag:
   databases:
     - name: main_db
       type: ChromaStore
+      # Reuse components by reference (defaults also apply when fields are omitted)
+      embedding_strategy: default_embeddings
+      retrieval_strategy: semantic_search
+  data_processing_strategies:
+    - name: pdf_ingest
+      parsers:
+        - pdf_parser         # reference to components.parsers
+      extractors:
+        - type: HeadingExtractor
+        - type: ContentStatisticsExtractor
+```
+
+Inline (legacy) configs are still supported:
+
+```yaml
+rag:
+  databases:
+    - name: inline_db
+      type: ChromaStore
       default_embedding_strategy: default_embeddings
-      default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
       retrieval_strategies:
         - name: semantic_search
-          type: VectorRetriever
+          type: BasicSimilarityStrategy
           config:
             top_k: 5
   data_processing_strategies:
@@ -181,7 +267,12 @@ Key points:
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
+- Inline parsers can omit `name` (only `type`/`config` are required); `name` is required only for reusable parsers declared under `components.parsers` so they can be referenced by string or set as defaults. This keeps older inline configs valid while allowing named, reusable components.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
+
+Defaults and persistence:
+- `components.defaults` are used when a database or processing strategy omits a field.
+- Server resolves references at load time and persists fully inlined configs; GET responses return the expanded strategies (no reference strings).
 
 ### Memory Configuration
 
@@ -284,6 +375,119 @@ datasets:
 
 - `files` are SHA256 hashes tracked by the server.
 - Not required, but useful for syncing dataset metadata across environments.
+
+### Voice
+
+The `voice` section configures real-time voice chat via WebSocket. This enables a full-duplex voice assistant pipeline: Speech In → STT → LLM → TTS → Speech Out.
+
+```yaml
+voice:
+  enabled: true
+  llm_model: chat-model      # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro            # TTS model ID
+    voice: af_heart          # Voice ID
+    speed: 1.0               # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base              # Whisper model size
+    language: en             # Language code
+```
+
+#### Voice Fields
+
+| Field       | Type    | Default | Description                                                              |
+| ----------- | ------- | ------- | ------------------------------------------------------------------------ |
+| `enabled`   | boolean | `true`  | Enable or disable the voice chat endpoint                                |
+| `llm_model` | string  | —       | Reference to a model name in `runtime.models[]` for voice conversations  |
+| `tts`       | object  | —       | Text-to-speech configuration                                             |
+| `stt`       | object  | —       | Speech-to-text configuration                                             |
+
+#### TTS (Text-to-Speech)
+
+| Field   | Type   | Default     | Description                                     |
+| ------- | ------ | ----------- | ----------------------------------------------- |
+| `model` | string | `kokoro`    | TTS model ID                                    |
+| `voice` | string | `af_heart`  | Voice ID (see available voices below)           |
+| `speed` | number | `1.0`       | Speech speed multiplier (0.5-2.0)               |
+
+**Available Voices:**
+
+| Voice ID      | Description               |
+| ------------- | ------------------------- |
+| `af_heart`    | Heart (American Female) - default |
+| `af_bella`    | Bella (American Female)   |
+| `af_nicole`   | Nicole (American Female)  |
+| `af_sarah`    | Sarah (American Female)   |
+| `af_sky`      | Sky (American Female)     |
+| `am_adam`     | Adam (American Male)      |
+| `am_michael`  | Michael (American Male)   |
+| `bf_emma`     | Emma (British Female)     |
+| `bf_isabella` | Isabella (British Female) |
+| `bm_george`   | George (British Male)     |
+| `bm_lewis`    | Lewis (British Male)      |
+
+#### STT (Speech-to-Text)
+
+| Field      | Type   | Default | Description                                         |
+| ---------- | ------ | ------- | --------------------------------------------------- |
+| `model`    | string | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
+| `language` | string | `en`    | Language code for transcription                     |
+
+**STT Model Comparison:**
+
+| Model      | Size   | Speed    | Accuracy |
+| ---------- | ------ | -------- | -------- |
+| `tiny`     | 39M    | Fastest  | Lower    |
+| `base`     | 74M    | Fast     | Good     |
+| `small`    | 244M   | Medium   | Better   |
+| `medium`   | 769M   | Slower   | High     |
+| `large-v3` | 1.5B   | Slowest  | Highest  |
+
+#### Example: Complete Voice Configuration
+
+```yaml
+version: v1
+name: voice-assistant
+namespace: default
+
+prompts:
+  - name: voice_system
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational. Avoid long lists or complex formatting
+          since your output will be spoken aloud.
+
+runtime:
+  default_model: voice-model
+  models:
+    - name: voice-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      base_url: http://localhost:11540/v1
+      prompts: [voice_system]
+      model_api_parameters:
+        temperature: 0.7
+        max_tokens: 256
+
+voice:
+  enabled: true
+  llm_model: voice-model
+  tts:
+    model: kokoro
+    voice: am_adam
+    speed: 1.1
+  stt:
+    model: small
+    language: en
+```
+
+The prompts attached to the referenced LLM model are automatically applied to voice conversations.
+
+---
 
 ## Validation & Errors
 
