@@ -60,11 +60,15 @@ jobs:
 
           COMPONENT="${{ github.event.inputs.component }}"
 
-          # On PR, release, or "all": build every component
-          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "release" || "$COMPONENT" == "all" ]]; then
+          # On PR, push, release, or "all": build every component
+          # For workflow_dispatch with a specific component: build only that component
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "release" || "$COMPONENT" == "all" ]]; then
             COMPONENTS='["server","rag","runtime"]'
-          else
+          elif [[ -n "$COMPONENT" ]]; then
             COMPONENTS="[\"$COMPONENT\"]"
+          else
+            # Fallback: build all if no component specified
+            COMPONENTS='["server","rag","runtime"]'
           fi
 
           # Build the matrix JSON: cross-product of platforms x components
