@@ -123,10 +123,9 @@ class TestContextSummarizer:
         result = await summarizer.summarize_messages(messages)
         assert result == messages  # Not enough to summarize
 
-        # With keep_recent=1, min_messages=2, so 4 messages will try to summarize
-        # (but will fail because model isn't loaded - that's fine for this test)
-        _ = await summarizer.summarize_messages(messages, keep_recent=1)
-        # This would need the model to actually summarize, but at least it tries
+        # Note: We don't test with keep_recent=1 because it would trigger model loading,
+        # which requires downloading a GGUF model and can cause segfaults in CI.
+        # The keep_recent logic is tested in the unit tests above.
 
     def test_format_for_summary(self, summarizer):
         """Test message formatting for summary prompt."""

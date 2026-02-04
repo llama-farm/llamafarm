@@ -560,9 +560,50 @@ class UniversalRuntimeService:
         return await cls._make_request("GET", "/v1/anomaly/models")
 
     @classmethod
+    async def anomaly_list_backends(cls) -> dict[str, Any]:
+        """List all available anomaly detection backends."""
+        return await cls._make_request("GET", "/v1/anomaly/backends")
+
+    @classmethod
     async def anomaly_delete_model(cls, filename: str) -> dict[str, Any]:
         """Delete a saved anomaly model."""
         return await cls._make_request("DELETE", f"/v1/anomaly/models/{filename}")
+
+    # =========================================================================
+    # Streaming Anomaly Detection
+    # =========================================================================
+
+    @classmethod
+    async def anomaly_stream(cls, request: dict) -> dict[str, Any]:
+        """Process streaming data for real-time anomaly detection.
+
+        Args:
+            request: Streaming request with model, data, and config
+
+        Returns:
+            Streaming result with scores and status
+        """
+        return await cls._make_request("POST", "/v1/anomaly/stream", json=request)
+
+    @classmethod
+    async def anomaly_stream_list_detectors(cls) -> dict[str, Any]:
+        """List all active streaming detectors."""
+        return await cls._make_request("GET", "/v1/anomaly/stream/detectors")
+
+    @classmethod
+    async def anomaly_stream_get_detector(cls, model_id: str) -> dict[str, Any]:
+        """Get statistics for a specific streaming detector."""
+        return await cls._make_request("GET", f"/v1/anomaly/stream/{model_id}")
+
+    @classmethod
+    async def anomaly_stream_delete_detector(cls, model_id: str) -> dict[str, Any]:
+        """Delete a streaming detector."""
+        return await cls._make_request("DELETE", f"/v1/anomaly/stream/{model_id}")
+
+    @classmethod
+    async def anomaly_stream_reset_detector(cls, model_id: str) -> dict[str, Any]:
+        """Reset a streaming detector to initial state."""
+        return await cls._make_request("POST", f"/v1/anomaly/stream/{model_id}/reset")
 
     # =========================================================================
     # Speech-to-Text
@@ -849,6 +890,58 @@ class UniversalRuntimeService:
                 status_code=500,
                 detail=f"Error translating audio: {str(e)}",
             ) from e
+
+    # =========================================================================
+    # Polars Buffer
+    # =========================================================================
+
+    @classmethod
+    async def polars_create_buffer(cls, request: dict) -> dict[str, Any]:
+        """Create a new Polars buffer."""
+        return await cls._make_request("POST", "/v1/polars/buffers", json=request)
+
+    @classmethod
+    async def polars_list_buffers(cls) -> dict[str, Any]:
+        """List all active Polars buffers."""
+        return await cls._make_request("GET", "/v1/polars/buffers")
+
+    @classmethod
+    async def polars_get_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Get stats for a specific buffer."""
+        return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}")
+
+    @classmethod
+    async def polars_delete_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Delete a buffer."""
+        return await cls._make_request("DELETE", f"/v1/polars/buffers/{buffer_id}")
+
+    @classmethod
+    async def polars_clear_buffer(cls, buffer_id: str) -> dict[str, Any]:
+        """Clear all data from a buffer."""
+        return await cls._make_request("POST", f"/v1/polars/buffers/{buffer_id}/clear")
+
+    @classmethod
+    async def polars_append(cls, request: dict) -> dict[str, Any]:
+        """Append data to a buffer."""
+        return await cls._make_request("POST", "/v1/polars/append", json=request)
+
+    @classmethod
+    async def polars_features(cls, request: dict) -> dict[str, Any]:
+        """Compute features from a buffer."""
+        return await cls._make_request("POST", "/v1/polars/features", json=request)
+
+    @classmethod
+    async def polars_get_data(
+        cls, buffer_id: str, tail: int | None = None, with_features: bool = False
+    ) -> dict[str, Any]:
+        """Get data from a buffer."""
+        params = []
+        if tail is not None:
+            params.append(f"tail={tail}")
+        if with_features:
+            params.append("with_features=true")
+        query = f"?{'&'.join(params)}" if params else ""
+        return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}/data{query}")
 
     # =========================================================================
     # Text-to-Speech

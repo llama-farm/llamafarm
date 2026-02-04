@@ -175,19 +175,40 @@ Common HTTP status codes:
 
 ### ML (Custom Classifiers & Anomaly Detection)
 
+**Text Classification (SetFit):**
 - `POST /v1/ml/classifier/fit` - Train custom text classifier (SetFit few-shot)
 - `POST /v1/ml/classifier/predict` - Classify texts using trained model
 - `POST /v1/ml/classifier/save` - Save trained classifier to disk
 - `POST /v1/ml/classifier/load` - Load classifier from disk
 - `GET /v1/ml/classifier/models` - List saved classifiers
 - `DELETE /v1/ml/classifier/models/{name}` - Delete saved classifier
+
+**Batch Anomaly Detection:**
 - `POST /v1/ml/anomaly/fit` - Train anomaly detector
 - `POST /v1/ml/anomaly/score` - Score data points for anomalies
 - `POST /v1/ml/anomaly/detect` - Detect anomalies (returns only anomalous points)
 - `POST /v1/ml/anomaly/save` - Save trained anomaly model
 - `POST /v1/ml/anomaly/load` - Load anomaly model from disk
 - `GET /v1/ml/anomaly/models` - List saved anomaly models
+- `GET /v1/ml/anomaly/backends` - List all 12 PyOD backends with metadata
 - `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
+
+**Streaming Anomaly Detection:**
+- `POST /v1/ml/anomaly/stream` - Process streaming data with auto-retraining
+- `GET /v1/ml/anomaly/stream/detectors` - List active streaming detectors
+- `GET /v1/ml/anomaly/stream/{model_id}` - Get detector statistics
+- `POST /v1/ml/anomaly/stream/{model_id}/reset` - Reset detector to cold start
+- `DELETE /v1/ml/anomaly/stream/{model_id}` - Delete streaming detector
+
+**Polars Data Buffers:**
+- `POST /v1/ml/polars/buffers` - Create named data buffer
+- `GET /v1/ml/polars/buffers` - List all buffers with statistics
+- `GET /v1/ml/polars/buffers/{buffer_id}` - Get buffer statistics
+- `DELETE /v1/ml/polars/buffers/{buffer_id}` - Delete buffer
+- `POST /v1/ml/polars/buffers/{buffer_id}/clear` - Clear buffer data
+- `POST /v1/ml/polars/append` - Append data to buffer
+- `POST /v1/ml/polars/features` - Compute rolling features
+- `GET /v1/ml/polars/buffers/{buffer_id}/data` - Get raw buffer data
 
 ### Voice Chat (Real-time Voice Assistant)
 

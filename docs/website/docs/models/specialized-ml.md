@@ -17,7 +17,7 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
 
 ## Starting the Universal Runtime
 
@@ -613,11 +613,11 @@ Detect outliers and anomalies in numeric and mixed data using multiple algorithm
 
 See the dedicated [Anomaly Detection Guide](./anomaly-detection.md) for complete documentation.
 
-### Quick Example
+### Quick Example (LlamaFarm API - Recommended)
 
 ```bash
 # 1. Train on normal data
-curl -X POST http://localhost:11540/v1/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
@@ -627,7 +627,7 @@ curl -X POST http://localhost:11540/v1/anomaly/fit \
   }'
 
 # 2. Detect anomalies in new data
-curl -X POST http://localhost:11540/v1/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
