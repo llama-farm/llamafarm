@@ -1347,12 +1347,11 @@ class GGUFLanguageModel(BaseModel):
         # Shutdown thread pool executor
         if hasattr(self, "_executor"):
             self._executor.shutdown(wait=True, cancel_futures=True)
-            # Create new executor for potential future use
-            self._executor = ThreadPoolExecutor(max_workers=1)
+            self._executor = None
 
         logger.info(f"GGUF language model unloaded: {self.model_id}")
 
     def __del__(self):
         """Cleanup thread pool executor on deletion."""
-        if hasattr(self, "_executor"):
+        if getattr(self, "_executor", None) is not None:
             self._executor.shutdown(wait=False)

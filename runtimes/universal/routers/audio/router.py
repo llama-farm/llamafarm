@@ -22,6 +22,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
     WebSocket,
+    WebSocketDisconnect,
 )
 
 logger = logging.getLogger(__name__)
@@ -683,11 +684,19 @@ async def websocket_transcription(
                         pass
 
                 # Signal completion
-                await websocket.send_json({"type": "done"})
+                try:
+                    await websocket.send_json({"type": "done"})
+                except Exception:
+                    pass  # Client already disconnected
                 break
 
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
+    except WebSocketDisconnect:
+        logger.debug("WebSocket transcription client disconnected")
     except Exception as e:
         logger.error(f"WebSocket transcription error: {e}", exc_info=True)
         try:

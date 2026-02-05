@@ -164,7 +164,7 @@ def _get_voice_config_defaults(
         "sentence_boundary_only": True,  # Natural speech by default
         # Turn detection defaults (enabled by default)
         "turn_detection_enabled": True,
-        "base_silence_duration": 0.4,
+        "base_silence_duration": 0.6,
         "thinking_silence_duration": 1.2,
         "max_silence_duration": 2.5,
     }
@@ -610,7 +610,9 @@ async def voice_chat_websocket(
                         await service.handle_interrupt(websocket)
 
                     elif msg_type == "end":
-                        # Process accumulated audio as background task
+                        # Flush any remaining encoded audio from decoder
+                        # before retrieving the buffer.
+                        session.flush_and_check_vad()
                         if session.has_audio():
                             audio_bytes = session.get_audio_buffer()
                             current_turn_task = asyncio.create_task(

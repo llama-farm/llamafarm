@@ -14,7 +14,7 @@ from typing import Any
 
 from .turn_detector import EndOfTurnDetector, TurnDetectorConfig
 from .types import VoiceSessionConfig, VoiceState
-from .vad import VoiceActivityDetector
+from .vad import VADConfig, VoiceActivityDetector
 
 logger = logging.getLogger(__name__)
 
@@ -444,6 +444,18 @@ class VoiceSession:
                 "content": self.config.system_prompt,
             })
 
+        # When smart turn detection is enabled, the turn detector (not the
+        # VAD) decides when to trigger processing based on linguistic
+        # analysis.  Set the VAD silence_duration to max_silence_duration so
+        # it stays in the SILENCE state long enough for the turn detector to
+        # operate, rather than auto-triggering at 0.4s and bypassing it.
+        if self.config.turn_detection_enabled:
+            self._vad = VoiceActivityDetector(
+                config=VADConfig(
+                    silence_duration=self.config.max_silence_duration,
+                )
+            )
+
         # Initialize turn detector with config
         self._turn_detector = EndOfTurnDetector(
             config=TurnDetectorConfig(
@@ -832,16 +844,25 @@ class VoiceSession:
             self.config.max_silence_duration = max_silence_duration
             turn_detector_updated = True
 
-        # Recreate turn detector if config changed
-        if turn_detector_updated and self._turn_detector is not None:
-            self._turn_detector = EndOfTurnDetector(
-                config=TurnDetectorConfig(
-                    base_silence_duration=self.config.base_silence_duration,
-                    thinking_silence_duration=self.config.thinking_silence_duration,
-                    max_silence_duration=self.config.max_silence_duration,
-                    enable_linguistic_analysis=self.config.turn_detection_enabled,
+        # Recreate turn detector and update VAD if config changed
+        if turn_detector_updated:
+            if self._turn_detector is not None:
+                self._turn_detector = EndOfTurnDetector(
+                    config=TurnDetectorConfig(
+                        base_silence_duration=self.config.base_silence_duration,
+                        thinking_silence_duration=self.config.thinking_silence_duration,
+                        max_silence_duration=self.config.max_silence_duration,
+                        enable_linguistic_analysis=self.config.turn_detection_enabled,
+                    )
                 )
-            )
+            # Keep VAD silence_duration aligned with turn detection config.
+            # When turn detection is enabled, VAD acts as a safety-net at
+            # max_silence; the turn detector decides the actual trigger point.
+            # When disabled, use the default 0.4s hard trigger.
+            if self.config.turn_detection_enabled:
+                self._vad.config.silence_duration = self.config.max_silence_duration
+            else:
+                self._vad.config.silence_duration = VADConfig().silence_duration
 
 
 class SessionManager:

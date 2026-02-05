@@ -973,15 +973,13 @@ class VoiceChatService:
     async def process_turn(
         self, websocket: WebSocket, audio_bytes: bytes
     ) -> None:
-        """Process a single conversational turn with parallel STT+LLM.
+        """Process a single conversational turn.
 
-        Optimized pipeline:
-        1. Start streaming STT
-        2. As soon as first segment arrives, start LLM (parallel with remaining STT)
+        Pipeline:
+        1. Stream STT to get full transcription
+        2. Start LLM with complete text
         3. Stream TTS for each LLM phrase
         4. Handle interrupts
-
-        This reduces time-to-first-audio by starting LLM before STT completes.
 
         Args:
             websocket: Client WebSocket connection.
@@ -1004,18 +1002,15 @@ class VoiceChatService:
         await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
 
         try:
-            # STT PATH: Transcribe audio first, then send text to LLM
-            # PARALLEL STT+LLM: Collect first segment(s) quickly, then start LLM
-            # while STT continues in background
+            # STT PATH: Collect the full transcription before starting LLM.
+            # Audio is already fully buffered (VAD collected the complete
+            # utterance), so STT completes quickly and breaking early would
+            # only lose segments.
             transcription_parts: list[str] = []
-            llm_started = False
-            # Start LLM very early - even 5 chars is enough (e.g., "Hello" or "Hi!")
-            min_chars_for_llm = 5
 
-            # Try streaming transcription with timeout, fall back to HTTP if needed
-            # Streaming allows parallel LLM start but HTTP is more reliable
+            # Try streaming transcription, fall back to HTTP if needed
             try:
-                async with asyncio.timeout(2.0):  # 2 second timeout for streaming
+                async with asyncio.timeout(10.0):
                     async for segment_text in self.transcribe_audio_stream(audio_bytes):
                         if t_first_stt_segment is None:
                             t_first_stt_segment = time.perf_counter()
@@ -1031,17 +1026,10 @@ class VoiceChatService:
                                 is_final=False
                             ).model_dump()
                         )
-
-                        # Start LLM as soon as we have enough text
-                        if not llm_started and len(current_text) >= min_chars_for_llm:
-                            llm_started = True
-                            # Break to start LLM - remaining STT will be appended to display
-                            break
             except TimeoutError:
                 logger.debug("STT streaming timeout, using collected segments")
             except websockets.exceptions.ConnectionClosed:
-                # Expected when breaking early from STT loop - generator cleanup closes WebSocket
-                logger.debug("STT WebSocket closed during early exit (expected when starting LLM early)")
+                logger.debug("STT WebSocket closed during streaming")
 
             # If no segments received, fall back to non-streaming HTTP endpoint
             # This is faster for short utterances where streaming overhead dominates
@@ -1062,7 +1050,7 @@ class VoiceChatService:
                 t_stt_complete = time.perf_counter()
                 logger.info(f"⏱️ TIMING: STT streaming complete: {(t_stt_complete - t_start)*1000:.1f}ms")
 
-            # Use what we have so far for LLM (first segment(s))
+            # Assemble complete transcription for LLM
             transcription_for_llm = " ".join(transcription_parts).strip()
 
             if not transcription_for_llm:
