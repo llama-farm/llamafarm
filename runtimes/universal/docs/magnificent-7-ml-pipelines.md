@@ -412,9 +412,12 @@ curl http://localhost:8005/v1/explain/explainers
 curl -X POST http://localhost:8005/v1/explain/shap \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "anomaly/my-detector",
+    "model_type": "anomaly",
+    "model_id": "my-detector",
     "data": [[5.0, 6.0, 7.0]],
-    "explainer": "tree"
+    "feature_names": ["feature_a", "feature_b", "feature_c"],
+    "top_k": 5,
+    "generate_narrative": true
   }'
 ```
 
@@ -422,15 +425,29 @@ curl -X POST http://localhost:8005/v1/explain/shap \
 
 ```json
 {
+  "model_type": "anomaly",
+  "model_id": "my-detector",
+  "explainer_type": "tree",
   "explanations": [
     {
-      "index": 0,
-      "shap_values": [0.15, 0.32, 0.08],
+      "sample_index": 0,
       "base_value": 0.5,
-      "features": ["feature_a", "feature_b", "feature_c"],
-      "narrative": "The prediction is primarily influenced by feature_b (contribution: +0.32)..."
+      "prediction": 0.85,
+      "contributions": [
+        {"feature": "feature_b", "value": 6.0, "shap_value": 0.32, "direction": "increases"},
+        {"feature": "feature_a", "value": 5.0, "shap_value": 0.15, "direction": "increases"},
+        {"feature": "feature_c", "value": 7.0, "shap_value": -0.12, "direction": "decreases"}
+      ]
     }
-  ]
+  ],
+  "narrative": {
+    "summary": "The prediction is significantly higher than average, primarily due to feature_b.",
+    "details": [
+      "feature_b (value=6.00) strongly increases the prediction (contribution: +0.320)",
+      "feature_a (value=5.00) moderately increases the prediction (contribution: +0.150)"
+    ]
+  },
+  "explain_time_ms": 12.5
 }
 ```
 
@@ -445,7 +462,7 @@ High-performance streaming data processing with Polars.
 - **O(1) append**: Constant-time data insertion
 - **Automatic truncation**: Rolling window maintains fixed size
 - **Lazy computation**: Rolling features computed on-demand
-- **Sub-millisecond**: < 1ms per append operation
+- **Sub-millisecond**: &lt;1ms per append operation
 
 ### Usage via Streaming Anomaly Detection
 
