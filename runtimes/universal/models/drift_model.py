@@ -381,13 +381,19 @@ class DriftModel:
                 p_values = [float(p) for p in p_val_raw]
                 threshold = float(threshold_raw) if np.isscalar(threshold_raw) else float(np.array(threshold_raw).flat[0])
             else:
-                # Scalar or single-element array
-                is_drift = bool(is_drift_raw)
+                # Scalar or single-element array - handle numpy arrays safely
+                if isinstance(is_drift_raw, np.ndarray):
+                    is_drift = bool(is_drift_raw.item())
+                else:
+                    is_drift = bool(is_drift_raw)
                 p_value = float(np.array(p_val_raw).flat[0]) if hasattr(p_val_raw, "__len__") else float(p_val_raw)
                 threshold = float(np.array(threshold_raw).flat[0]) if hasattr(threshold_raw, "__len__") else float(threshold_raw)
         except (TypeError, ValueError):
             # Fallback for scalar values
-            is_drift = bool(is_drift_raw)
+            if isinstance(is_drift_raw, np.ndarray):
+                is_drift = bool(is_drift_raw.item())
+            else:
+                is_drift = bool(is_drift_raw)
             p_value = float(p_val_raw)
             threshold = float(threshold_raw)
 

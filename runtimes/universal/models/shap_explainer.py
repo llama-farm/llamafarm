@@ -357,11 +357,11 @@ class SHAPExplainer:
             context_info = ""
             if context and contrib.feature in context:
                 feat_context = context[contrib.feature]
-                if "mean" in feat_context:
-                    ratio = contrib.value / feat_context["mean"] if feat_context["mean"] != 0 else 0
+                if "mean" in feat_context and feat_context["mean"] != 0:
+                    ratio = contrib.value / feat_context["mean"]
                     if ratio > 2:
                         context_info = f" ({ratio:.1f}x higher than average)"
-                    elif ratio < 0.5:
+                    elif ratio > 0 and ratio < 0.5:
                         context_info = f" ({1/ratio:.1f}x lower than average)"
 
             detail = (

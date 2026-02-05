@@ -592,8 +592,9 @@ class TimeseriesModel(BaseModel):
         # Generate timestamps for predictions
         last_timestamp = df.index[-1]
         freq = pd.infer_freq(df.index) or "D"
+        offset = pd.tseries.frequencies.to_offset(freq)
         future_dates = pd.date_range(
-            start=last_timestamp + pd.Timedelta(1, freq.lower()[0]),
+            start=last_timestamp + offset,
             periods=horizon,
             freq=freq,
         )

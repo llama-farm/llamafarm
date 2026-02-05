@@ -13,6 +13,7 @@ Backends:
 - Zero-shot (Chronos): chronos, chronos-bolt
 """
 
+import uuid
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -173,8 +174,8 @@ async def fit_timeseries(request: TimeseriesFitRequest) -> TimeseriesFitResponse
         for d in request.data
     ]
 
-    # Create and load model
-    model_id = request.model or f"timeseries-new-{backend}"
+    # Create and load model - use unique ID to avoid cache collisions
+    model_id = request.model or f"timeseries-{uuid.uuid4().hex[:8]}"
     model = await _get_timeseries_model(model_id=model_id, backend=backend)
 
     # Fit the model
