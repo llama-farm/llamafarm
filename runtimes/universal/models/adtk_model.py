@@ -374,10 +374,16 @@ class ADTKModel:
         # Convert to pandas Series with DatetimeIndex
         series = self._to_pandas_series(data)
 
-        # Detect anomalies using fit_detect (works for all ADTK detectors)
-        # ADTK detectors require fit() before detect(), but fit_detect() handles both
+        # Detect anomalies - use appropriate method based on detector type
+        # ThresholdAD only has detect(), not fit_detect()
+        # PersistAD and others use fit_detect()
         try:
-            anomaly_flags = self._detector.fit_detect(series)
+            if self.detector_type == "threshold":
+                # ThresholdAD only needs detect() - no fitting required
+                anomaly_flags = self._detector.detect(series)
+            else:
+                # Other detectors use fit_detect() which handles both
+                anomaly_flags = self._detector.fit_detect(series)
             self._is_fitted = True
         except Exception as e:
             logger.error(f"Detection failed: {e}")

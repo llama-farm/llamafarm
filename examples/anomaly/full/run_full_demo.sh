@@ -106,7 +106,7 @@ nx start server > /tmp/llamafarm-server.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for LlamaFarm Server to be ready
-wait_for_server "http://localhost:8005/health" "LlamaFarm Server"
+wait_for_server "http://localhost:14345/health" "LlamaFarm Server"
 
 print_step "Both servers are running!"
 echo ""

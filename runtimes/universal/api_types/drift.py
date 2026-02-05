@@ -75,11 +75,15 @@ class DriftResult(BaseModel):
     """Result from drift detection."""
 
     is_drift: bool = Field(..., description="Whether drift was detected")
-    p_value: float = Field(..., description="P-value from statistical test")
+    p_value: float = Field(..., description="P-value from statistical test (min across features for univariate)")
     threshold: float = Field(..., description="Threshold used for decision")
     distance: float | None = Field(
         default=None,
         description="Distance metric (for some detectors)",
+    )
+    p_values: list[float] | None = Field(
+        default=None,
+        description="Per-feature p-values (for univariate detectors like KS)",
     )
 
 

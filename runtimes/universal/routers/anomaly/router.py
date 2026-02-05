@@ -250,55 +250,52 @@ async def _generate_shap_explanation(
     try:
         from models.shap_explainer import SHAPExplainer
 
-        # Get the underlying PyOD model
-        pyod_model = getattr(model, "_model", None)
+        # Get the underlying PyOD model (AnomalyModel uses _detector)
+        pyod_model = getattr(model, "_detector", None)
         if pyod_model is None:
+            logger.warning("SHAP explanation failed: model has no _detector attribute")
             return None
 
         # Create explainer - use tree for IForest, kernel for others
         explainer_type = "tree" if hasattr(pyod_model, "estimators_") else "kernel"
 
-        explainer = SHAPExplainer(
-            model_id=f"anomaly-{id(model)}",
-            explainer_type=explainer_type,
-        )
-
-        # Load with background data from the model if available
+        # Get background data from the model if available
         background_data = getattr(model, "_training_data", None)
         if background_data is None:
             # Use a small sample if no training data
             background_data = np.array([data_point])
+        elif len(background_data) > 100:
+            background_data = background_data[:100]
 
-        await explainer.load(
+        explainer = SHAPExplainer(
             model=pyod_model,
-            background_data=background_data[:100] if len(background_data) > 100 else background_data,
+            explainer_type=explainer_type,
+            feature_names=feature_names,
+            background_data=background_data,
         )
 
-        # Compute SHAP values
-        data_array = np.array([data_point])
-        shap_values = await explainer.explain(data_array)
+        await explainer.load()
 
-        if shap_values is None or len(shap_values) == 0:
+        # Compute SHAP explanations
+        data_array = np.array([data_point])
+        explanations = await explainer.explain(data_array, top_k=10)
+
+        if explanations is None or len(explanations) == 0:
             return None
 
-        # Build feature names if not provided
-        n_features = len(data_point)
-        if feature_names is None or len(feature_names) != n_features:
-            feature_names = [f"feature_{i}" for i in range(n_features)]
+        # Get the first explanation (we only passed one data point)
+        explanation = explanations[0]
 
-        # Build contributions sorted by absolute SHAP value
-        contributions = []
-        shap_row = shap_values[0]
-        sorted_indices = np.argsort(np.abs(shap_row))[::-1]
-
-        for idx in sorted_indices:
-            shap_val = float(shap_row[idx])
-            contributions.append({
-                "feature": feature_names[idx],
-                "value": float(data_point[idx]),
-                "shap_value": shap_val,
-                "direction": "increases" if shap_val > 0 else "decreases",
-            })
+        # Convert contributions to dict format
+        contributions = [
+            {
+                "feature": c.feature,
+                "value": c.value,
+                "shap_value": c.shap_value,
+                "direction": c.direction,
+            }
+            for c in explanation.contributions
+        ]
 
         # Generate summary
         top_contributors = [c for c in contributions[:3] if abs(c["shap_value"]) > 0.01]
@@ -315,9 +312,8 @@ async def _generate_shap_explanation(
         details = []
         for c in contributions[:5]:
             if abs(c["shap_value"]) > 0.001:
-                direction = "increases" if c["shap_value"] > 0 else "decreases"
                 details.append(
-                    f"'{c['feature']}' (value={c['value']:.3f}) {direction} "
+                    f"'{c['feature']}' (value={c['value']:.3f}) {c['direction']} "
                     f"anomaly score by {abs(c['shap_value']):.3f}"
                 )
 
@@ -328,7 +324,99 @@ async def _generate_shap_explanation(
         }
 
     except Exception as e:
-        logger.debug(f"SHAP explanation failed: {e}")
+        logger.warning(f"SHAP explanation failed: {e}", exc_info=True)
+        return None
+
+
+async def _generate_streaming_shap_explanation(
+    pyod_model: Any,
+    data_point: list[float],
+    feature_names: list[str] | None,
+    score: float,
+) -> dict | None:
+    """Generate SHAP explanation for a streaming anomaly.
+
+    Similar to _generate_shap_explanation but works directly with PyOD model
+    (streaming detectors don't use the AnomalyModel wrapper).
+
+    Args:
+        pyod_model: The PyOD detector object
+        data_point: The data point to explain
+        feature_names: Optional feature names for readable explanations
+        score: The anomaly score for this data point
+
+    Returns:
+        Dictionary containing SHAP explanation or None if failed
+    """
+    import numpy as np
+
+    try:
+        from models.shap_explainer import SHAPExplainer
+
+        # Create explainer - use tree for IForest, kernel for others
+        explainer_type = "tree" if hasattr(pyod_model, "estimators_") else "kernel"
+
+        # Use the data point itself as minimal background data
+        background_data = np.array([data_point])
+
+        explainer = SHAPExplainer(
+            model=pyod_model,
+            explainer_type=explainer_type,
+            feature_names=feature_names,
+            background_data=background_data,
+        )
+
+        await explainer.load()
+
+        # Compute SHAP explanations
+        data_array = np.array([data_point])
+        explanations = await explainer.explain(data_array, top_k=10)
+
+        if explanations is None or len(explanations) == 0:
+            return None
+
+        # Get the first explanation (we only passed one data point)
+        explanation = explanations[0]
+
+        # Convert contributions to dict format
+        contributions = [
+            {
+                "feature": c.feature,
+                "value": c.value,
+                "shap_value": c.shap_value,
+                "direction": c.direction,
+            }
+            for c in explanation.contributions
+        ]
+
+        # Generate summary
+        top_contributors = [c for c in contributions[:3] if abs(c["shap_value"]) > 0.01]
+        if top_contributors:
+            summary_parts = [
+                f"'{c['feature']}' {c['direction']} anomaly score"
+                for c in top_contributors
+            ]
+            summary = f"This point is anomalous because: {', '.join(summary_parts)}."
+        else:
+            summary = f"This point is anomalous with score {score:.3f}."
+
+        # Generate details
+        details = []
+        for c in contributions[:5]:
+            if abs(c["shap_value"]) > 0.001:
+                details.append(
+                    f"'{c['feature']}' (value={c['value']:.3f}) {c['direction']} "
+                    f"anomaly score by {abs(c['shap_value']):.3f}"
+                )
+
+        return {
+            "contributions": contributions,
+            "summary": summary,
+            "details": details,
+        }
+
+    except Exception as e:
+        logger.warning(f"Streaming SHAP explanation failed: {e}", exc_info=True)
         return None
 
 
@@ -805,12 +893,14 @@ async def anomaly_stream(request: dict) -> dict:
         window_size: int = 1000 - Sliding window size
         threshold: float = 0.5 - Anomaly score threshold
         contamination: float = 0.1 - Expected outlier proportion
+        explain: bool = False - Generate SHAP explanations for anomalies
+        feature_names: list[str] | None - Optional feature names for SHAP
 
     Response:
         object: "streaming_result"
         model: str - Detector ID
         status: str - "collecting" | "ready" | "retraining"
-        results: list - Score results for each data point
+        results: list - Score results for each data point (with explanations if enabled)
         model_version: int - Current model version
         samples_collected: int - Total samples in buffer
     """
@@ -837,26 +927,62 @@ async def anomaly_stream(request: dict) -> dict:
         # Single data point
         result = await detector.process(parsed.data)
         results = [result]
+        data_list = [parsed.data]
     else:
         # Batch
         batch_result = await detector.process_batch(parsed.data)
         results = batch_result.results
+        data_list = parsed.data
+
+    # Format response with optional SHAP explanations
+    response_results = []
+    for i, r in enumerate(results):
+        result_item = {
+            "index": r.index,
+            "score": r.score,
+            "is_anomaly": r.is_anomaly,
+            "raw_score": r.raw_score,
+            "samples_until_ready": r.samples_until_ready,
+            "explanation": None,
+        }
+
+        # Generate SHAP explanation for anomalies when explain=True and model is ready
+        if parsed.explain and r.is_anomaly and r.score is not None:
+            try:
+                # Get the underlying PyOD detector directly (StreamingAnomalyDetector stores it in _detector)
+                pyod_model = detector._detector
+                if pyod_model is not None:
+                    # Convert dict data to numeric array for SHAP
+                    data_point = data_list[i]
+                    if isinstance(data_point, dict):
+                        # Convert dict to list of numeric values
+                        numeric_values = [
+                            float(v) for v in data_point.values()
+                            if isinstance(v, (int, float))
+                        ]
+                        feature_names = parsed.feature_names or list(data_point.keys())
+                    else:
+                        numeric_values = data_point
+                        feature_names = parsed.feature_names
+
+                    explanation = await _generate_streaming_shap_explanation(
+                        pyod_model=pyod_model,
+                        data_point=numeric_values,
+                        feature_names=feature_names,
+                        score=r.score,
+                    )
+                    result_item["explanation"] = explanation
+            except Exception as e:
+                logger.warning(f"Failed to generate SHAP explanation for streaming result {i}: {e}")
+
+        response_results.append(result_item)
 
     # Format response
     return AnomalyStreamResponse(
         object="streaming_result",
         model=parsed.model,
         status=detector.status.value,
-        results=[
-            {
-                "index": r.index,
-                "score": r.score,
-                "is_anomaly": r.is_anomaly,
-                "raw_score": r.raw_score,
-                "samples_until_ready": r.samples_until_ready,
-            }
-            for r in results
-        ],
+        results=response_results,
         model_version=detector.model_version,
         samples_collected=detector.samples_collected,
         samples_until_ready=max(0, detector.min_samples - detector.samples_collected),

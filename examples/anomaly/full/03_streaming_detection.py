@@ -19,7 +19,7 @@ import httpx
 from datetime import datetime
 
 # Configuration
-LLAMAFARM_URL = "http://localhost:8005/v1/ml"
+LLAMAFARM_URL = "http://localhost:14345/v1/ml"
 MODEL_ID = "factory-stream"
 
 DETECTOR_CONFIG = {

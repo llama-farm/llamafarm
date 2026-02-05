@@ -32,13 +32,13 @@ test_data = [
 # Step 1: Fit the model on normal data only
 client = httpx.Client(timeout=30)
 client.post(
-    "http://localhost:11545/v1/anomaly/fit",
+    "http://localhost:11540/v1/anomaly/fit",
     json={"data": train_data, "backend": "ecod", "model": "quickstart"},
 )
 
 # Step 2: Score test data (includes anomaly)
 response = client.post(
-    "http://localhost:11545/v1/anomaly/score",
+    "http://localhost:11540/v1/anomaly/score",
     json={"data": test_data, "backend": "ecod", "model": "quickstart"},
 )
 result = response.json()

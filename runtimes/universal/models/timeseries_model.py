@@ -570,14 +570,19 @@ class TimeseriesModel(BaseModel):
         # Generate predictions
         num_samples = 20  # For confidence intervals
         forecast = self._chronos_pipeline.predict(
-            context=values,
+            inputs=values,
             prediction_length=horizon,
             num_samples=num_samples,
         )
 
         # Calculate statistics
+        # Output shape is (batch=1, num_samples, horizon) - squeeze the batch dimension
         forecast_np = forecast.numpy()
-        median = np.median(forecast_np, axis=0)
+        if forecast_np.ndim == 3:
+            forecast_np = forecast_np[0]  # Remove batch dimension -> (num_samples, horizon)
+
+        # Now shape is (num_samples, horizon)
+        median = np.median(forecast_np, axis=0)  # -> (horizon,)
 
         # Confidence intervals
         alpha = 1 - confidence_level

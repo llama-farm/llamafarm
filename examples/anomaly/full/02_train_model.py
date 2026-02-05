@@ -19,7 +19,7 @@ import httpx
 from pathlib import Path
 
 # Configuration
-LLAMAFARM_URL = "http://localhost:8005/v1/ml"
+LLAMAFARM_URL = "http://localhost:14345/v1/ml"
 MODEL_NAME = "factory-sensors"
 BACKEND = "ecod"  # Try: isolation_forest, hbos, loda, autoencoder
 

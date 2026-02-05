@@ -334,6 +334,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
     - score: Anomaly score (0-1, higher = more anomalous)
     - is_anomaly: Boolean based on threshold
     - raw_score: Backend-specific raw score
+    - explanation: SHAP explanation (when explain=True)
     """
     # Resolve -latest to actual model name
     resolved_model = MLModelService.resolve_model_name("anomaly", request.model)
@@ -345,6 +346,8 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         schema=request.schema,
         normalization=request.normalization,
         threshold=request.threshold,
+        explain=request.explain,
+        feature_names=request.feature_names,
     )
 
 
@@ -377,6 +380,8 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         schema=request.schema,
         normalization=request.normalization,
         threshold=request.threshold,
+        explain=request.explain,
+        feature_names=request.feature_names,
     )
 
 
@@ -547,12 +552,14 @@ async def anomaly_stream(request: dict[str, Any]) -> dict[str, Any]:
         contamination: float = 0.1 - Expected outlier proportion
         rolling_windows: list[int] | None - Optional rolling feature windows
         include_lags: bool = False - Include lag features
+        explain: bool = False - Generate SHAP explanations for anomalies
+        feature_names: list[str] | None - Feature names for SHAP explanations
 
     Response:
         object: "streaming_result"
         model: str - Detector ID
         status: str - "collecting" | "ready" | "retraining"
-        results: list - Score results for each data point
+        results: list - Score results for each data point (with explanations if enabled)
         model_version: int - Current model version
         samples_collected: int - Total samples in buffer
 

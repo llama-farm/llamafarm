@@ -394,6 +394,14 @@ class AnomalyStreamRequest(BaseModel):
         default=None,
         description="Lag periods if include_lags is True (e.g., [1, 2, 3])",
     )
+    explain: bool = Field(
+        default=False,
+        description="If True, generate SHAP explanations for detected anomalies",
+    )
+    feature_names: list[str] | None = Field(
+        default=None,
+        description="Optional feature names for readable SHAP explanations",
+    )
 
 
 class AnomalyStreamResultItem(BaseModel):
@@ -404,6 +412,7 @@ class AnomalyStreamResultItem(BaseModel):
     is_anomaly: bool | None = None  # None during cold start
     raw_score: float | None = None
     samples_until_ready: int
+    explanation: AnomalyExplanation | None = None  # SHAP explanation (only for anomalies when explain=True)
 
 
 class AnomalyStreamResponse(BaseModel):

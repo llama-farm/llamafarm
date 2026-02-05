@@ -36,7 +36,7 @@ import random
 import time
 import httpx
 
-BASE_URL = "http://localhost:11545"
+BASE_URL = "http://localhost:11540"
 client = httpx.Client(timeout=120)
 
 

@@ -212,6 +212,7 @@ async def detect_drift(request: DriftDetectRequest) -> DriftDetectResponse:
             p_value=result.p_value,
             threshold=result.threshold,
             distance=result.distance,
+            p_values=result.p_values,
         ),
         detection_time_ms=detection_time_ms,
     )

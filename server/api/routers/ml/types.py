@@ -125,6 +125,11 @@ class AnomalyScoreRequest(BaseModel):
     - standardization (default): Sigmoid 0-1 range, threshold ~0.5
     - zscore: Standard deviations from mean, threshold ~2.0-3.0
     - raw: Backend-native scores (higher = more anomalous)
+
+    SHAP Explanations:
+    - Set explain=True to get SHAP feature contributions for detected anomalies
+    - Only anomalies are explained (for performance)
+    - feature_names helps generate readable explanations
     """
 
     model: str = "default"  # Model identifier
@@ -133,6 +138,8 @@ class AnomalyScoreRequest(BaseModel):
     schema: dict[str, str] | None = None  # Feature encoding schema
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     threshold: float | None = None  # Override default threshold
+    explain: bool = False  # Generate SHAP explanations for anomalies
+    feature_names: list[str] | None = None  # Feature names for SHAP explanations
 
 
 class AnomalySaveRequest(BaseModel):

@@ -470,6 +470,8 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
+        feature_names: list[str] | None = None,
     ) -> dict[str, Any]:
         """Score data points for anomalies.
 
@@ -480,6 +482,8 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Generate SHAP explanations for anomalies
+            feature_names: Feature names for SHAP explanations
         """
         payload = {
             "model": model,
@@ -491,6 +495,10 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = explain
+        if feature_names:
+            payload["feature_names"] = feature_names
 
         return await cls._make_request("POST", "/v1/anomaly/score", json=payload)
 
@@ -503,6 +511,8 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
+        feature_names: list[str] | None = None,
     ) -> dict[str, Any]:
         """Detect anomalies (returns only anomalous points).
 
@@ -513,6 +523,8 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Generate SHAP explanations for anomalies
+            feature_names: Feature names for SHAP explanations
         """
         payload = {
             "model": model,
@@ -524,6 +536,10 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = explain
+        if feature_names:
+            payload["feature_names"] = feature_names
 
         return await cls._make_request("POST", "/v1/anomaly/detect", json=payload)
 

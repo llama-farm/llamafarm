@@ -6,7 +6,7 @@ This demo showcases LlamaFarm's complete anomaly detection capabilities:
 2. **Model training** - Train with different backends
 3. **Streaming detection** - Real-time anomaly detection with auto-retraining
 4. **Polars feature engineering** - Rolling features and lags
-5. **Anomaly injection** - Demonstrate detection of injected anomalies
+5. **SHAP explanations** - Interpretable anomaly detection with feature contributions
 
 ## Prerequisites
 
@@ -48,6 +48,9 @@ python 03_streaming_detection.py
 
 # Step 4: (Optional) Use Polars buffers directly
 python 04_polars_features.py
+
+# Step 5: (Optional) SHAP explainability
+python 05_shap_explanations.py
 ```
 
 ## What Each Script Does
@@ -90,6 +93,14 @@ Demonstrates Polars buffer API:
 - Appending data
 - Computing rolling features
 - Getting buffer statistics
+
+### 05_shap_explanations.py
+
+Demonstrates SHAP explainability for anomaly detection:
+- Batch anomaly scoring with SHAP explanations
+- Streaming anomaly detection with real-time explanations
+- Feature contribution analysis
+- Understanding WHY data points are flagged as anomalous
 
 ## Backend Selection Guide
 
@@ -157,6 +168,7 @@ DETECTOR_CONFIG = {
 | `POST /v1/ml/polars/buffers` | Create data buffer |
 | `POST /v1/ml/polars/append` | Append to buffer |
 | `POST /v1/ml/polars/features` | Compute rolling features |
+| `POST /v1/ml/anomaly/score` | Score with `explain=True` for SHAP |
 
 ## Troubleshooting
 

@@ -126,16 +126,9 @@ async def explain_shap(request: SHAPExplainRequest) -> SHAPExplainResponse:
         # For kernel and linear explainers, we need at least 2 samples for background data
         background_data = data if len(data) > 1 else None
 
-        # If only one sample and explainer type requires background, provide clear error
-        if len(data) < 2 and request.explainer_type in ("kernel", "linear"):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"The '{request.explainer_type}' explainer requires at least 2 data points "
-                    "for background data. Either provide more samples or use 'tree' explainer "
-                    "if your model is tree-based (IForest, CatBoost, XGBoost)."
-                ),
-            )
+        # Note: SHAP explainer type is auto-detected based on model type
+        # Tree models (IForest, CatBoost, XGBoost) use TreeExplainer which doesn't need background data
+        # For non-tree models, we'll need background data if using Kernel/Linear explainers
 
         # Create explainer
         explainer = SHAPExplainer(

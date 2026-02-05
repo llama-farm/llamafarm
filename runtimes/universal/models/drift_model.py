@@ -71,6 +71,7 @@ class DriftResult:
     p_value: float
     threshold: float
     distance: float | None = None
+    p_values: list[float] | None = None  # Per-feature p-values for univariate tests
 
 
 @dataclass
@@ -370,12 +371,15 @@ class DriftModel:
 
         # Handle array vs scalar results
         # Check if it's array-like with len() > 1
+        p_values = None  # Per-feature p-values for univariate tests
         try:
             if hasattr(p_val_raw, "__len__") and len(p_val_raw) > 1:
                 # Univariate: drift if ANY feature shows drift
                 is_drift = bool(np.any(is_drift_raw))
                 # Use minimum p-value (most significant)
                 p_value = float(np.min(p_val_raw))
+                # Store per-feature p-values
+                p_values = [float(p) for p in p_val_raw]
                 threshold = float(threshold_raw) if np.isscalar(threshold_raw) else float(np.array(threshold_raw).flat[0])
             else:
                 # Scalar or single-element array
@@ -408,6 +412,7 @@ class DriftModel:
             p_value=p_value,
             threshold=threshold,
             distance=distance,
+            p_values=p_values,
         )
         self._last_result = drift_result
 
