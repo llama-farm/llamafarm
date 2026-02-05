@@ -13,7 +13,7 @@ ADTK specializes in temporal patterns that point anomaly detectors miss.
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,13 +25,12 @@ from adtk.detector import (
     LevelShiftAD,
     PersistAD,
     SeasonalAD,
+    ThresholdAD,
     VolatilityShiftAD,
 )
-from adtk.detector import ThresholdAD
 
 from services.path_validator import (
     ADTK_MODELS_DIR,
-    generate_model_name,
     get_model_path,
     sanitize_model_name,
     validate_model_path,

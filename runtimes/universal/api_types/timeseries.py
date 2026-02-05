@@ -5,7 +5,7 @@ Supports multiple backends:
 - Foundation Model (Chronos): Zero-shot forecasting
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 

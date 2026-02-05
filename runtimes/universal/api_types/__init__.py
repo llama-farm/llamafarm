@@ -28,6 +28,23 @@ from .audio import (
     TranslationRequest,
     TranslationResponse,
 )
+from .catboost import (
+    CatBoostDeleteResponse,
+    CatBoostFeatureImportance,
+    CatBoostFeatureImportanceResponse,
+    CatBoostFitRequest,
+    CatBoostFitResponse,
+    CatBoostInfoResponse,
+    CatBoostLoadRequest,
+    CatBoostLoadResponse,
+    CatBoostModelInfo,
+    CatBoostModelsResponse,
+    CatBoostPrediction,
+    CatBoostPredictRequest,
+    CatBoostPredictResponse,
+    CatBoostUpdateRequest,
+    CatBoostUpdateResponse,
+)
 from .classifier import (
     ClassifierDeleteResponse,
     ClassifierFitRequest,
@@ -43,6 +60,20 @@ from .classifier import (
     ClassifierSaveResponse,
 )
 from .common import ErrorDetail, ListResponse, UsageInfo
+from .explain import (
+    ExplainerInfo,
+    ExplainersResponse,
+    FeatureContext,
+    FeatureContribution,
+    FeatureImportance,
+    FeatureImportanceRequest,
+    FeatureImportanceResponse,
+    NarrativeContext,
+    NarrativeExplanation,
+    SHAPExplainRequest,
+    SHAPExplainResponse,
+    SHAPExplanation,
+)
 from .nlp import (
     ClassifyRequest,
     ClassifyResponse,
@@ -82,37 +113,6 @@ from .vision import (
     OCRRequest,
     OCRResponse,
     OCRResult,
-)
-from .explain import (
-    ExplainerInfo,
-    ExplainersResponse,
-    FeatureContribution,
-    FeatureContext,
-    FeatureImportance,
-    FeatureImportanceRequest,
-    FeatureImportanceResponse,
-    NarrativeContext,
-    NarrativeExplanation,
-    SHAPExplanation,
-    SHAPExplainRequest,
-    SHAPExplainResponse,
-)
-from .catboost import (
-    CatBoostDeleteResponse,
-    CatBoostFeatureImportance,
-    CatBoostFeatureImportanceResponse,
-    CatBoostFitRequest,
-    CatBoostFitResponse,
-    CatBoostInfoResponse,
-    CatBoostLoadRequest,
-    CatBoostLoadResponse,
-    CatBoostModelInfo,
-    CatBoostModelsResponse,
-    CatBoostPrediction,
-    CatBoostPredictRequest,
-    CatBoostPredictResponse,
-    CatBoostUpdateRequest,
-    CatBoostUpdateResponse,
 )
 
 __all__ = [

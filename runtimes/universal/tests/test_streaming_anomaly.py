@@ -100,7 +100,7 @@ class TestStreamingAnomalyColdStart:
 
         # Process exactly min_samples
         for i in range(10):
-            result = await detector.process({"value": float(i)})
+            await detector.process({"value": float(i)})
 
         assert detector.status == DetectorStatus.READY
         assert detector.is_ready

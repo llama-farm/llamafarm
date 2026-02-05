@@ -3,9 +3,9 @@
 from .router import (
     get_timeseries_loader,
     router,
-    set_timeseries_loader,
     set_models_dir,
     set_state,
+    set_timeseries_loader,
 )
 
 __all__ = [

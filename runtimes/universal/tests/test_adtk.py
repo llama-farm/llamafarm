@@ -1,21 +1,22 @@
 """Tests for ADTK time-series anomaly detection functionality."""
 
-import pytest
 from datetime import datetime, timedelta
 
+import pytest
+
+from api_types.adtk import (
+    ADTKDataPoint,
+    ADTKDetectRequest,
+    ADTKFitRequest,
+)
 from models.adtk_model import (
+    DETECTOR_TYPES,
     ADTKModel,
+    delete_model,
+    get_all_detectors,
     get_detectors_info,
     is_valid_detector,
-    get_all_detectors,
     list_saved_models,
-    delete_model,
-    DETECTOR_TYPES,
-)
-from api_types.adtk import (
-    ADTKFitRequest,
-    ADTKDetectRequest,
-    ADTKDataPoint,
 )
 
 
@@ -302,10 +303,7 @@ def generate_spike_data(
     for i in range(n_points):
         date = base_date + timedelta(days=i)
         # Normal values around 100, with a spike at spike_at
-        if i == spike_at:
-            value = spike_value
-        else:
-            value = 100 + random.gauss(0, 5)
+        value = spike_value if i == spike_at else 100 + random.gauss(0, 5)
         data.append({
             "timestamp": date.isoformat(),
             "value": value,

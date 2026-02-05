@@ -56,7 +56,6 @@ def get_catboost_info() -> dict[str, Any]:
     # Check for GPU support
     gpu_available = False
     try:
-        import catboost
         # Try to detect CUDA
         try:
             import torch
@@ -401,7 +400,7 @@ class CatBoostModel:
         feature_names = self._feature_names or [f"feature_{i}" for i in range(len(importance))]
 
         # Sort by importance
-        pairs = list(zip(feature_names, importance))
+        pairs = list(zip(feature_names, importance, strict=True))
         pairs.sort(key=lambda x: abs(x[1]), reverse=True)
 
         return pairs

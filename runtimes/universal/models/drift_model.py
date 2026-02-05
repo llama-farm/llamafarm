@@ -25,11 +25,10 @@ from typing import Any
 
 import joblib
 import numpy as np
-from alibi_detect.cd import KSDrift, MMDDrift, ChiSquareDrift
+from alibi_detect.cd import ChiSquareDrift, KSDrift, MMDDrift
 
 from services.path_validator import (
     DRIFT_MODELS_DIR,
-    generate_model_name,
     get_model_path,
     sanitize_model_name,
     validate_model_path,

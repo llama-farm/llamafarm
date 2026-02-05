@@ -8,7 +8,6 @@ Tests the high-performance data buffer for streaming ML:
 
 import time
 
-import numpy as np
 import polars as pl
 import pytest
 

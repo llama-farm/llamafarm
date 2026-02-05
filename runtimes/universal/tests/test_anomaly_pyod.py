@@ -165,7 +165,11 @@ class TestPyODFitAndScore:
     @pytest.mark.parametrize("backend", ["ecod", "hbos", "isolation_forest"])
     def test_fit_and_score_fast_backends(self, backend, normal_data, test_data_with_anomaly):
         """Test fit and score with fast backends."""
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         detector = create_detector(backend, contamination=0.1)
         fit_detector(detector, normal_data)
@@ -178,7 +182,11 @@ class TestPyODFitAndScore:
 
     def test_fit_and_score_lof(self, normal_data, test_data_with_anomaly):
         """Test Local Outlier Factor backend."""
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         detector = create_detector("local_outlier_factor", contamination=0.1)
         fit_detector(detector, normal_data)
@@ -188,7 +196,11 @@ class TestPyODFitAndScore:
 
     def test_fit_and_score_knn(self, normal_data, test_data_with_anomaly):
         """Test KNN backend."""
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         detector = create_detector("knn", contamination=0.1, n_neighbors=5)
         fit_detector(detector, normal_data)
@@ -198,7 +210,11 @@ class TestPyODFitAndScore:
 
     def test_fit_and_score_copod(self, normal_data, test_data_with_anomaly):
         """Test COPOD backend (parameter-free)."""
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         detector = create_detector("copod", contamination=0.1)
         fit_detector(detector, normal_data)
@@ -215,7 +231,11 @@ class TestPyODFitAndScore:
         satisfies CBLOF's strict requirements. The backend is still available
         and tested via detector creation.
         """
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         # CBLOF needs enough samples to form valid clusters
         # Generate more data with clear cluster structure
@@ -237,7 +257,11 @@ class TestPyODFitAndScore:
 
     def test_fit_and_score_loda(self, normal_data, test_data_with_anomaly):
         """Test LODA (streaming) backend."""
-        from models.pyod_backend import create_detector, fit_detector, get_decision_scores
+        from models.pyod_backend import (
+            create_detector,
+            fit_detector,
+            get_decision_scores,
+        )
 
         detector = create_detector("loda", contamination=0.1)
         fit_detector(detector, normal_data)
@@ -475,7 +499,13 @@ class TestBackendsEndpoint:
         import asyncio
 
         from fastapi import FastAPI
-        from routers.anomaly import router, set_anomaly_loader, set_models_dir, set_state
+
+        from routers.anomaly import (
+            router,
+            set_anomaly_loader,
+            set_models_dir,
+            set_state,
+        )
 
         app = FastAPI()
         app.include_router(router)

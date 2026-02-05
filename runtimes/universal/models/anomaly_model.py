@@ -62,6 +62,8 @@ from typing import Any, Literal
 
 import numpy as np
 
+from utils.safe_home import get_data_dir
+
 from .base import BaseModel
 from .pyod_backend import (
     AnomalyBackendType,
@@ -70,10 +72,8 @@ from .pyod_backend import (
     get_all_backends,
     get_backends_response,
     get_decision_scores,
-    get_threshold,
     is_valid_backend,
 )
-from utils.safe_home import get_data_dir
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ Consolidates path validation logic that was previously duplicated across:
 Security: This module provides path traversal protection for all file operations.
 """
 
-import os
 import re
 from pathlib import Path
 

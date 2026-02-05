@@ -21,19 +21,24 @@ from api_types.explain import (
     FeatureImportanceRequest,
     FeatureImportanceResponse,
     NarrativeExplanation,
-    SHAPExplanation,
     SHAPExplainRequest,
     SHAPExplainResponse,
+    SHAPExplanation,
 )
 from models.shap_explainer import (
     FeatureContribution as ExplainerFeatureContribution,
+)
+from models.shap_explainer import (
     NarrativeExplanation as ExplainerNarrativeExplanation,
-    SHAPExplanation as ExplainerSHAPExplanation,
+)
+from models.shap_explainer import (
     SHAPExplainer,
     auto_detect_explainer_type,
     get_explainer_types,
 )
-
+from models.shap_explainer import (
+    SHAPExplanation as ExplainerSHAPExplanation,
+)
 
 # =============================================================================
 # Fixtures

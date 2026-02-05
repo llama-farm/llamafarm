@@ -33,21 +33,19 @@ from api_types.timeseries import (
     TimeseriesPredictResponse,
 )
 from core.logging import UniversalRuntimeLogger
-from services.error_handler import handle_endpoint_errors
-from services.path_validator import (
-    TIMESERIES_MODELS_DIR,
-    PathValidationError,
-    sanitize_model_name,
-    validate_path_within_directory,
-)
 from models.timeseries_model import (
     TimeseriesModel,
     get_backends_info,
     is_valid_backend,
     list_saved_models,
+)
+from models.timeseries_model import (
     delete_model as delete_timeseries_model,
-    TRAINABLE_BACKENDS,
-    ZERO_SHOT_BACKENDS,
+)
+from services.error_handler import handle_endpoint_errors
+from services.path_validator import (
+    TIMESERIES_MODELS_DIR,
+    sanitize_model_name,
 )
 
 logger = UniversalRuntimeLogger("timeseries-router")
@@ -304,9 +302,9 @@ async def load_timeseries(request: TimeseriesLoadRequest) -> TimeseriesFitRespon
             )
         backend = matching[0]["backend"]
 
-    # Load the model
+    # Load the model to verify it exists
     model_path = _TIMESERIES_MODELS_DIR / matching[0]["filename"]
-    model = await _get_timeseries_model(
+    await _get_timeseries_model(
         model_id=str(model_path),
         backend=backend,
     )

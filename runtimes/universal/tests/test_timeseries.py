@@ -1,22 +1,23 @@
 """Tests for timeseries forecasting functionality."""
 
-import pytest
 from datetime import datetime, timedelta
 
-from models.timeseries_model import (
-    TimeseriesModel,
-    get_backends_info,
-    is_valid_backend,
-    get_all_backends,
-    list_saved_models,
-    delete_model,
-    TRAINABLE_BACKENDS,
-    ZERO_SHOT_BACKENDS,
-)
+import pytest
+
 from api_types.timeseries import (
+    TimeseriesDataPoint,
     TimeseriesFitRequest,
     TimeseriesPredictRequest,
-    TimeseriesDataPoint,
+)
+from models.timeseries_model import (
+    TRAINABLE_BACKENDS,
+    ZERO_SHOT_BACKENDS,
+    TimeseriesModel,
+    delete_model,
+    get_all_backends,
+    get_backends_info,
+    is_valid_backend,
+    list_saved_models,
 )
 
 

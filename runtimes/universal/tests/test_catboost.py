@@ -8,22 +8,18 @@ Tests CatBoost gradient boosting functionality including:
 - API types
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
-import tempfile
 
 from api_types.catboost import (
-    CatBoostDeleteResponse,
     CatBoostFeatureImportance,
     CatBoostFeatureImportanceResponse,
     CatBoostFitRequest,
     CatBoostFitResponse,
     CatBoostInfoResponse,
-    CatBoostLoadRequest,
-    CatBoostLoadResponse,
     CatBoostModelInfo,
-    CatBoostModelsResponse,
     CatBoostPrediction,
     CatBoostPredictRequest,
     CatBoostPredictResponse,
@@ -31,11 +27,10 @@ from api_types.catboost import (
     CatBoostUpdateResponse,
 )
 from models.catboost_model import (
+    CATBOOST_AVAILABLE,
     CatBoostModel,
     get_catboost_info,
-    CATBOOST_AVAILABLE,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -80,7 +75,6 @@ def feature_names():
 @pytest.fixture
 def catboost_models_dir():
     """Create a temporary directory for CatBoost models."""
-    import os
     models_dir = Path.home() / ".llamafarm" / "models" / "catboost"
     models_dir.mkdir(parents=True, exist_ok=True)
     return models_dir
@@ -517,7 +511,6 @@ class TestEdgeCases:
         """Test training with early stopping."""
         X, y = sample_classification_data
         n_train = 150
-        n_val = 50
 
         model = CatBoostModel(
             model_id="test-early-stop",

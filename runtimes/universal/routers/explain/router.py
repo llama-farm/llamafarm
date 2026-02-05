@@ -193,7 +193,7 @@ async def explain_shap(request: SHAPExplainRequest) -> SHAPExplainResponse:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate SHAP explanation: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/v1/explain/importance")
@@ -274,4 +274,4 @@ async def feature_importance(request: FeatureImportanceRequest) -> FeatureImport
         raise HTTPException(
             status_code=500,
             detail=f"Failed to compute feature importance: {str(e)}",
-        )
+        ) from e

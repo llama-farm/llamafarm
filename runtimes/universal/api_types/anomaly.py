@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from api_types.explain import FeatureContribution, NarrativeExplanation
+    pass
 
 # =============================================================================
 # Backend Type

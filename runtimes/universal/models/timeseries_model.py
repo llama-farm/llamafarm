@@ -23,7 +23,6 @@ Security Notes:
 """
 
 import logging
-import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -33,13 +32,13 @@ from typing import Any, Literal
 
 import numpy as np
 
-from .base import BaseModel
 from services.path_validator import (
     TIMESERIES_MODELS_DIR,
-    get_model_path,
     sanitize_model_name,
     validate_model_path,
 )
+
+from .base import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -257,8 +256,8 @@ class TimeseriesModel(BaseModel):
     async def _initialize_chronos(self) -> None:
         """Initialize Chronos pipeline for zero-shot forecasting."""
         try:
-            from chronos import ChronosPipeline
             import torch
+            from chronos import ChronosPipeline
 
             # Select model variant
             if self.backend == "chronos-bolt":
@@ -459,8 +458,9 @@ class TimeseriesModel(BaseModel):
         description: str | None,
     ) -> Path:
         """Save model to disk synchronously."""
-        import joblib
         from datetime import datetime
+
+        import joblib
 
         # Determine filename
         if overwrite:
@@ -607,7 +607,7 @@ class TimeseriesModel(BaseModel):
                 lower=float(lo),
                 upper=float(up),
             )
-            for ts, med, lo, up in zip(future_dates, median, lower, upper)
+            for ts, med, lo, up in zip(future_dates, median, lower, upper, strict=True)
         ]
 
         return PredictResult(
@@ -656,7 +656,7 @@ class TimeseriesModel(BaseModel):
         predict_time_ms = (time.perf_counter() - start_time) * 1000
 
         predictions = []
-        for i, (ts, val) in enumerate(zip(timestamps, values)):
+        for i, (ts, val) in enumerate(zip(timestamps, values, strict=True)):
             pred = Prediction(
                 timestamp=ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
                 value=float(val),
@@ -777,8 +777,11 @@ def delete_model(model_name: str, backend: str | None = None) -> bool:
 
     # Try exact filename match first
     for item in TIMESERIES_MODELS_DIR.iterdir():
-        if item.is_file() and item.suffix == ".joblib":
-            if item.stem == safe_name or item.stem.startswith(f"{safe_name}_"):
+        if (
+            item.is_file()
+            and item.suffix == ".joblib"
+            and (item.stem == safe_name or item.stem.startswith(f"{safe_name}_"))
+        ):
                 # Validate path
                 try:
                     validate_model_path(item, "timeseries")

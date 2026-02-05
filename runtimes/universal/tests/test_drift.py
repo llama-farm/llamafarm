@@ -11,19 +11,19 @@ These tests verify:
 import numpy as np
 import pytest
 
+from api_types.drift import (
+    DriftDetectRequest,
+    DriftFitRequest,
+    DriftResult,
+)
 from models.drift_model import (
+    DETECTOR_TYPES,
     DriftModel,
+    delete_model,
+    get_all_detectors,
     get_detectors_info,
     is_valid_detector,
-    get_all_detectors,
     list_saved_models,
-    delete_model,
-    DETECTOR_TYPES,
-)
-from api_types.drift import (
-    DriftFitRequest,
-    DriftDetectRequest,
-    DriftResult,
 )
 
 
@@ -158,7 +158,7 @@ class TestDriftModelFit:
 
         model = DriftModel(model_id="test-fit-list", detector="ks")
         await model.load()
-        result = await model.fit(reference_data, autosave=False)
+        await model.fit(reference_data, autosave=False)
 
         assert model.is_fitted is True
         assert model.reference_size == 50

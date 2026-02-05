@@ -27,7 +27,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
-from utils.safe_home import get_data_dir
 from models import (
     AnomalyModel,
     BaseModel,
@@ -47,10 +46,8 @@ from models.adtk_model import ADTKModel
 from models.catboost_model import CatBoostModel
 from models.drift_model import DriftModel
 from models.timeseries_model import TimeseriesModel
-from routers.adtk import router as adtk_router, set_adtk_loader, set_adtk_state
-from routers.catboost import router as catboost_router, set_catboost_state
-from routers.drift import router as drift_router, set_drift_loader, set_drift_state
-from routers.explain import router as explain_router, set_explain_state, set_model_getter
+from routers.adtk import router as adtk_router
+from routers.adtk import set_adtk_loader, set_adtk_state
 from routers.anomaly import (
     router as anomaly_router,
 )
@@ -64,6 +61,8 @@ from routers.audio import router as audio_router
 from routers.audio import set_speech_loader
 from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
+from routers.catboost import router as catboost_router
+from routers.catboost import set_catboost_state
 from routers.chat_completions import router as chat_completions_router
 from routers.classifier import (
     router as classifier_router,
@@ -77,6 +76,10 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
+from routers.drift import router as drift_router
+from routers.drift import set_drift_loader, set_drift_state
+from routers.explain import router as explain_router
+from routers.explain import set_explain_state, set_model_getter
 from routers.files import router as files_router
 from routers.health import (
     router as health_router,
@@ -92,10 +95,10 @@ from routers.timeseries import (
     router as timeseries_router,
 )
 from routers.timeseries import (
-    set_timeseries_loader,
+    set_state as set_timeseries_state,
 )
 from routers.timeseries import (
-    set_state as set_timeseries_state,
+    set_timeseries_loader,
 )
 from routers.vision import (
     router as vision_router,
@@ -110,6 +113,7 @@ from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
+from utils.safe_home import get_data_dir
 
 # Configure logging FIRST, before anything else
 log_file = os.getenv("LOG_FILE", "")
@@ -1050,8 +1054,6 @@ async def get_model_for_explain(model_type: str, model_id: str):
 
     Looks up models from the appropriate cache based on model_type.
     """
-    cache_key = f"{model_type}:{model_id}"
-
     # Look up in the appropriate cache based on model type
     if model_type == "anomaly":
         for key, model in _models.items():

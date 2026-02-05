@@ -8,7 +8,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # Detector types
 DriftDetectorType = Literal["ks", "mmd", "chi2"]
 
