@@ -228,16 +228,42 @@ async def _auto_save_model(
     return str(actual_path)
 
 
+@router.get("/v1/anomaly/backends")
+@handle_endpoint_errors("list_anomaly_backends")
+async def list_anomaly_backends():
+    """List all available anomaly detection backends.
+
+    Returns detailed information about each backend including:
+    - Name and description
+    - Category (legacy, fast, distance, clustering, ensemble, streaming, deep_learning)
+    - Speed and memory characteristics
+    - Configurable parameters
+    - Best use cases
+
+    All backends are powered by PyOD and share a consistent API.
+    Legacy backends (isolation_forest, one_class_svm, local_outlier_factor, autoencoder)
+    are mapped to their PyOD equivalents for backward compatibility.
+    """
+    from models.pyod_backend import get_backends_response
+
+    return get_backends_response()
+
+
 @router.post("/v1/anomaly/score")
 @handle_endpoint_errors("score_anomalies")
 async def score_anomalies(request: AnomalyScoreRequest):
     """Score data points for anomalies.
 
-    Detects anomalies in data using various algorithms:
-    - isolation_forest: Fast tree-based method, good general purpose
-    - one_class_svm: Support vector machine for outlier detection
-    - local_outlier_factor: Density-based, good for clustering anomalies
-    - autoencoder: Neural network, best for complex patterns
+    Detects anomalies using PyOD-powered algorithms. See GET /v1/anomaly/backends
+    for the full list of 12+ available backends including:
+
+    Legacy (backward compatible):
+    - isolation_forest, one_class_svm, local_outlier_factor, autoencoder
+
+    Fast (parameter-free):
+    - ecod, hbos, copod
+
+    And more: knn, mcd, cblof, suod, loda
 
     Note: Model must be fitted first via /v1/anomaly/fit or loaded from disk.
     """
@@ -310,10 +336,11 @@ async def fit_anomaly_detector(request: AnomalyFitRequest):
     **Overwrite Default**: By default, existing models with the same name
     are overwritten. Set overwrite=False to create versioned models.
 
-    Backends:
+    See GET /v1/anomaly/backends for all 12+ available backends.
+    Popular choices:
     - isolation_forest: Fast, works well out of the box (recommended)
-    - one_class_svm: Good for small datasets
-    - local_outlier_factor: Density-based, good for clustering anomalies
+    - ecod: Fast and parameter-free (recommended for new projects)
+    - hbos: Fastest algorithm, good for high dimensions
     - autoencoder: Best for complex patterns, requires more data
     """
     cache_key = _make_cache_key(
@@ -603,4 +630,200 @@ async def delete_anomaly_model(filename: str):
         "object": "delete_result",
         "filename": safe_filename,
         "deleted": True,
+    }
+
+
+# =============================================================================
+# Streaming Anomaly Detection Endpoints
+# =============================================================================
+
+
+@router.post("/v1/anomaly/stream")
+@handle_endpoint_errors("anomaly_stream")
+async def anomaly_stream(request: dict) -> dict:
+    """Process streaming data for real-time anomaly detection.
+
+    This endpoint implements the Tick-Tock pattern:
+    - Cold start: Collects min_samples before first model training
+    - Ready: Returns anomaly scores for each data point
+    - Retraining: Background retraining after retrain_interval samples
+
+    Request body:
+        model: str - Unique identifier for the streaming detector
+        data: list[dict] | dict - Single data point or batch
+        backend: str = "ecod" - PyOD backend for new detectors
+        min_samples: int = 50 - Samples before first training
+        retrain_interval: int = 100 - Samples between retraining
+        window_size: int = 1000 - Sliding window size
+        threshold: float = 0.5 - Anomaly score threshold
+        contamination: float = 0.1 - Expected outlier proportion
+
+    Response:
+        object: "streaming_result"
+        model: str - Detector ID
+        status: str - "collecting" | "ready" | "retraining"
+        results: list - Score results for each data point
+        model_version: int - Current model version
+        samples_collected: int - Total samples in buffer
+    """
+    from api_types.anomaly import AnomalyStreamRequest, AnomalyStreamResponse
+    from models.streaming_anomaly import get_streaming_manager
+
+    # Parse request
+    parsed = AnomalyStreamRequest(**request)
+
+    # Get or create detector
+    manager = get_streaming_manager()
+    detector = await manager.get_or_create(
+        model_id=parsed.model,
+        backend=parsed.backend,
+        min_samples=parsed.min_samples,
+        retrain_interval=parsed.retrain_interval,
+        window_size=parsed.window_size,
+        contamination=parsed.contamination,
+        threshold=parsed.threshold,
+    )
+
+    # Process data
+    if isinstance(parsed.data, dict):
+        # Single data point
+        result = await detector.process(parsed.data)
+        results = [result]
+    else:
+        # Batch
+        batch_result = await detector.process_batch(parsed.data)
+        results = batch_result.results
+
+    # Format response
+    return AnomalyStreamResponse(
+        object="streaming_result",
+        model=parsed.model,
+        status=detector.status.value,
+        results=[
+            {
+                "index": r.index,
+                "score": r.score,
+                "is_anomaly": r.is_anomaly,
+                "raw_score": r.raw_score,
+                "samples_until_ready": r.samples_until_ready,
+            }
+            for r in results
+        ],
+        model_version=detector.model_version,
+        samples_collected=detector.samples_collected,
+        samples_until_ready=max(0, detector.min_samples - detector.samples_collected),
+        threshold=detector.threshold,
+    ).model_dump()
+
+
+@router.get("/v1/anomaly/stream/detectors")
+@handle_endpoint_errors("list_streaming_detectors")
+async def list_streaming_detectors() -> dict:
+    """List all active streaming detectors.
+
+    Returns:
+        object: "list"
+        data: list of detector statistics
+        total: number of active detectors
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detectors = await manager.list_detectors()
+
+    return {
+        "object": "list",
+        "data": detectors,
+        "total": len(detectors),
+    }
+
+
+@router.get("/v1/anomaly/stream/{model_id}")
+@handle_endpoint_errors("get_streaming_detector")
+async def get_streaming_detector(model_id: str) -> dict:
+    """Get statistics for a specific streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Detector statistics including status, model version, samples collected
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detector = await manager.get(model_id)
+
+    if detector is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    return {
+        "object": "streaming_detector",
+        **detector.get_stats(),
+    }
+
+
+@router.delete("/v1/anomaly/stream/{model_id}")
+@handle_endpoint_errors("delete_streaming_detector")
+async def delete_streaming_detector(model_id: str) -> dict:
+    """Delete a streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    deleted = await manager.delete(model_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    return {
+        "object": "delete_result",
+        "model": model_id,
+        "deleted": True,
+    }
+
+
+@router.post("/v1/anomaly/stream/{model_id}/reset")
+@handle_endpoint_errors("reset_streaming_detector")
+async def reset_streaming_detector(model_id: str) -> dict:
+    """Reset a streaming detector to initial state.
+
+    Clears all data and resets to cold start phase.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Reset confirmation with new status
+    """
+    from models.streaming_anomaly import get_streaming_manager
+
+    manager = get_streaming_manager()
+    detector = await manager.get(model_id)
+
+    if detector is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Streaming detector not found: {model_id}",
+        )
+
+    detector.reset()
+
+    return {
+        "object": "reset_result",
+        "model": model_id,
+        "status": detector.status.value,
+        "reset": True,
     }

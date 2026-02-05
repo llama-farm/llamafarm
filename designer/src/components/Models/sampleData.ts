@@ -11,6 +11,148 @@ export interface SampleDataset {
   data: string
 }
 
+// Streaming dataset configuration
+export interface StreamingDatasetConfig {
+  schema: Record<string, 'numeric' | 'text'>
+  recommended_rolling_windows: number[]
+  recommended_lag_periods: number[]
+  anomaly_injection_interval: number // Inject anomaly every N samples
+  baseline: Record<string, { mean: number; std: number }>
+}
+
+export interface StreamingSampleDataset {
+  id: string
+  name: string
+  description: string
+  type: 'streaming'
+  columns: number
+  streamingConfig: StreamingDatasetConfig
+  // generateSample returns one data point
+  generateSample: (index: number, isAnomaly: boolean) => Record<string, number>
+}
+
+// Helper to generate sensor data with injected anomalies
+function generateSensorSample(
+  index: number,
+  isAnomaly: boolean
+): Record<string, number> {
+  // Baseline values with typical industrial sensor ranges
+  const baselines = {
+    temperature: { mean: 72, std: 2 }, // Fahrenheit
+    humidity: { mean: 45, std: 5 }, // Percent
+    pressure: { mean: 1013.25, std: 5 }, // hPa
+    motor_rpm: { mean: 3000, std: 50 }, // RPM
+  }
+
+  // Add time-based drift (simulates daily cycle)
+  const timeFactor = Math.sin((index / 50) * Math.PI) * 0.5
+
+  if (isAnomaly) {
+    // Generate anomaly: spike one or more values
+    const anomalyType = index % 4
+    switch (anomalyType) {
+      case 0: // Temperature spike (overheating)
+        return {
+          temperature: baselines.temperature.mean + 15 + Math.random() * 10,
+          humidity: baselines.humidity.mean + (Math.random() - 0.5) * baselines.humidity.std * 2,
+          pressure: baselines.pressure.mean + (Math.random() - 0.5) * baselines.pressure.std * 2,
+          motor_rpm: baselines.motor_rpm.mean + (Math.random() - 0.5) * baselines.motor_rpm.std * 2,
+        }
+      case 1: // Pressure drop (leak)
+        return {
+          temperature: baselines.temperature.mean + (Math.random() - 0.5) * baselines.temperature.std * 2,
+          humidity: baselines.humidity.mean + (Math.random() - 0.5) * baselines.humidity.std * 2,
+          pressure: baselines.pressure.mean - 30 - Math.random() * 20,
+          motor_rpm: baselines.motor_rpm.mean + (Math.random() - 0.5) * baselines.motor_rpm.std * 2,
+        }
+      case 2: // Motor RPM spike (mechanical issue)
+        return {
+          temperature: baselines.temperature.mean + (Math.random() - 0.5) * baselines.temperature.std * 2,
+          humidity: baselines.humidity.mean + (Math.random() - 0.5) * baselines.humidity.std * 2,
+          pressure: baselines.pressure.mean + (Math.random() - 0.5) * baselines.pressure.std * 2,
+          motor_rpm: baselines.motor_rpm.mean + 500 + Math.random() * 300,
+        }
+      default: // Multi-sensor anomaly (correlated failure)
+        return {
+          temperature: baselines.temperature.mean + 10 + Math.random() * 5,
+          humidity: baselines.humidity.mean + 15 + Math.random() * 10,
+          pressure: baselines.pressure.mean - 20 - Math.random() * 10,
+          motor_rpm: baselines.motor_rpm.mean + 200 + Math.random() * 100,
+        }
+    }
+  }
+
+  // Normal sample with natural variation
+  return {
+    temperature:
+      baselines.temperature.mean +
+      timeFactor * 2 +
+      (Math.random() - 0.5) * baselines.temperature.std * 2,
+    humidity:
+      baselines.humidity.mean +
+      timeFactor * 3 +
+      (Math.random() - 0.5) * baselines.humidity.std * 2,
+    pressure:
+      baselines.pressure.mean +
+      timeFactor * 2 +
+      (Math.random() - 0.5) * baselines.pressure.std * 2,
+    motor_rpm:
+      baselines.motor_rpm.mean +
+      timeFactor * 20 +
+      (Math.random() - 0.5) * baselines.motor_rpm.std * 2,
+  }
+}
+
+// Streaming datasets
+export const STREAMING_DATASETS: StreamingSampleDataset[] = [
+  {
+    id: 'sensor-stream',
+    name: 'Factory sensor stream',
+    description: 'Streaming demo with periodic anomalies (4 sensors)',
+    type: 'streaming',
+    columns: 4,
+    streamingConfig: {
+      schema: {
+        temperature: 'numeric',
+        humidity: 'numeric',
+        pressure: 'numeric',
+        motor_rpm: 'numeric',
+      },
+      recommended_rolling_windows: [5, 10, 20],
+      recommended_lag_periods: [1, 2, 5],
+      anomaly_injection_interval: 50, // Inject anomaly every 50 samples
+      baseline: {
+        temperature: { mean: 72, std: 2 },
+        humidity: { mean: 45, std: 5 },
+        pressure: { mean: 1013.25, std: 5 },
+        motor_rpm: { mean: 3000, std: 50 },
+      },
+    },
+    generateSample: generateSensorSample,
+  },
+]
+
+// Helper to generate a batch of streaming data
+export function generateStreamingBatch(
+  dataset: StreamingSampleDataset,
+  startIndex: number,
+  count: number
+): { data: Record<string, number>[]; anomalyIndices: number[] } {
+  const data: Record<string, number>[] = []
+  const anomalyIndices: number[] = []
+
+  for (let i = 0; i < count; i++) {
+    const index = startIndex + i
+    const isAnomaly = index > 0 && index % dataset.streamingConfig.anomaly_injection_interval === 0
+    if (isAnomaly) {
+      anomalyIndices.push(index)
+    }
+    data.push(dataset.generateSample(index, isAnomaly))
+  }
+
+  return { data, anomalyIndices }
+}
+
 export const SAMPLE_DATASETS: SampleDataset[] = [
   {
     id: 'fridge-temp',
