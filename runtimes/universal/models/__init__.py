@@ -38,6 +38,8 @@ from .vision_base import (
     EmbeddingModel,
     EmbeddingResult,
 )
+from .yolo_model import YOLOModel
+from .clip_model import CLIPClassifier, CLIPEmbedder
 
 __all__ = [
     # Base
@@ -66,7 +68,7 @@ __all__ = [
     "ChatterboxConfig",
     "check_builtin_voices",
     "download_builtin_voices",
-    # Vision (new)
+    # Vision base (new)
     "VisionModel",
     "VisionResult",
     "DetectionModel",
@@ -79,4 +81,8 @@ __all__ = [
     "SegmentationMask",
     "EmbeddingModel",
     "EmbeddingResult",
+    # Vision implementations (new)
+    "YOLOModel",
+    "CLIPClassifier",
+    "CLIPEmbedder",
 ]

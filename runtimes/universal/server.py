@@ -87,6 +87,9 @@ from routers.vision import (
     set_document_loader,
     set_file_image_getter,
     set_ocr_loader,
+    set_detection_loader,
+    set_classification_loader,
+    set_embedding_loader,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -628,6 +631,85 @@ async def load_ocr(backend: str = "surya", languages: list[str] | None = None):
 
 
 # ============================================================================
+# Vision Model Loading (Detection, Classification, Embedding)
+# ============================================================================
+
+
+def _make_vision_cache_key(model_id: str, task: str) -> str:
+    """Generate a cache key for a vision model."""
+    return f"vision:{task}:{model_id}"
+
+
+async def load_detection(model_id: str = "yolov8n"):
+    """Load a YOLO detection model."""
+    from models import YOLOModel
+
+    cache_key = _make_vision_cache_key(model_id, "detection")
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading detection model: {model_id}")
+                device = get_device()
+
+                model = YOLOModel(
+                    model_id=model_id,
+                    device=device,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+async def load_classification(model_id: str = "clip-vit-base"):
+    """Load a CLIP classification model."""
+    from models import CLIPClassifier
+
+    cache_key = _make_vision_cache_key(model_id, "classification")
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading classification model: {model_id}")
+                device = get_device()
+
+                model = CLIPClassifier(
+                    model_id=model_id,
+                    device=device,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+async def load_embedding(model_id: str = "clip-vit-base"):
+    """Load a CLIP embedding model."""
+    from models import CLIPEmbedder
+
+    cache_key = _make_vision_cache_key(model_id, "embedding")
+
+    if cache_key not in _models:
+        async with _model_load_lock:
+            if cache_key not in _models:
+                logger.info(f"Loading embedding model: {model_id}")
+                device = get_device()
+
+                model = CLIPEmbedder(
+                    model_id=model_id,
+                    device=device,
+                )
+
+                await model.load()
+                _models[cache_key] = model
+
+    return _models.get(cache_key)
+
+
+# ============================================================================
 # Anomaly Model Loading
 # ============================================================================
 
@@ -871,10 +953,15 @@ set_device_info_getter(get_device_info)
 # NLP router
 set_encoder_loader(load_encoder)
 
-# Vision router
+# Vision router (OCR & documents)
 set_ocr_loader(load_ocr)
 set_document_loader(load_document)
 set_file_image_getter(get_file_images)
+
+# Vision router (detection, classification, embedding)
+set_detection_loader(load_detection)
+set_classification_loader(load_classification)
+set_embedding_loader(load_embedding)
 
 # Anomaly router
 set_anomaly_loader(load_anomaly)
