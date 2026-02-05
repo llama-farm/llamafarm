@@ -146,7 +146,7 @@ A raw value like `$500` is meaningless without context. The model needs to know:
 
 | Feature Engineering | Pandas | Polars |
 |--------------------|--------|--------|
-| Rolling std (10K rows) | 10-50ms | <1ms |
+| Rolling std (10K rows) | 10-50ms | &lt;1ms |
 | Multi-column parallel | Sequential | Parallel (all CPU cores) |
 | Memory on append | Copy each time | Arrow (no-copy) |
 

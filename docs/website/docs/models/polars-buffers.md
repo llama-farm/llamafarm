@@ -15,7 +15,7 @@ In streaming anomaly detection, **Feature Engineering Latency** is the biggest b
 |-----------|----------------|
 | Isolation Forest inference | ~1ms |
 | Rolling std of 10,000 rows (Pandas) | 10-50ms |
-| Rolling std of 10,000 rows (Polars) | <1ms |
+| Rolling std of 10,000 rows (Polars) | &lt;1ms |
 
 **The Problem:** To detect if "$500" is anomalous, the model needs context—"Is $500 normal for this user?" This requires calculating rolling statistics over a history window. In Pandas, this creates a major latency bottleneck.
 

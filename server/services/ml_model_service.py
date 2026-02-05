@@ -311,8 +311,6 @@ class MLModelService:
                         versions.append((match.group(1), model_part))
                     elif model_part == base_name:
                         # Non-versioned (overwrite=True) version - use actual mtime
-                        from datetime import datetime
-
                         mtime = datetime.fromtimestamp(item.stat().st_mtime)
                         ts = mtime.strftime("%Y%m%d_%H%M%S")
                         versions.append((ts, model_part))
