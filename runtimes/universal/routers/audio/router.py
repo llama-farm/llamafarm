@@ -10,11 +10,11 @@ import json
 import logging
 import tempfile
 from collections.abc import Callable, Coroutine
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -615,7 +615,7 @@ async def websocket_transcription(
                             f"Transcription error (may be silence): {transcribe_err}"
                         )
                         # Try to send empty segment, but ignore if client disconnected
-                        try:
+                        with suppress(Exception):
                             await websocket.send_json(
                                 {
                                     "type": "segment",
@@ -625,9 +625,6 @@ async def websocket_transcription(
                                     "warning": "No speech detected",
                                 }
                             )
-                        except Exception:
-                            # Client disconnected, just continue
-                            pass
 
                     finally:
                         # Clear buffer
@@ -666,7 +663,7 @@ async def websocket_transcription(
                             f"Final transcription error (may be silence): {transcribe_err}"
                         )
                         # Try to send empty segment, but ignore if client disconnected
-                        try:
+                        with suppress(Exception):
                             await websocket.send_json(
                                 {
                                     "type": "segment",
@@ -676,24 +673,17 @@ async def websocket_transcription(
                                     "warning": "No speech detected",
                                 }
                             )
-                        except Exception:
-                            # Client disconnected, just continue
-                            pass
 
                     finally:
                         pass
 
                 # Signal completion
-                try:
+                with suppress(Exception):
                     await websocket.send_json({"type": "done"})
-                except Exception:
-                    pass  # Client already disconnected
                 break
 
-        try:
+        with suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcription client disconnected")
