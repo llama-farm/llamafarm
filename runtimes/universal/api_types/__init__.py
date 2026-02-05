@@ -59,6 +59,7 @@ from .nlp import (
     RerankResult,
 )
 from .vision import (
+    # OCR (existing)
     DocumentExtractRequest,
     DocumentField,
     DocumentResponse,
@@ -67,6 +68,58 @@ from .vision import (
     OCRRequest,
     OCRResponse,
     OCRResult,
+    # Common (new)
+    BoundingBox,
+    Point,
+    Mask,
+    # Detection (new)
+    Detection,
+    DetectRequest,
+    DetectResponse,
+    # Classification (new)
+    ImageClassifyRequest,
+    ImageClassifyResponse,
+    # Segmentation (new)
+    SegmentRequest,
+    SegmentResponse,
+    # Embedding (new)
+    ImageEmbedRequest,
+    ImageEmbedResponse,
+    # Streaming (new)
+    StreamingConfig,
+    StreamStartRequest,
+    StreamStartResponse,
+    StreamFrameRequest,
+    StreamFrameResponse,
+    StreamStopRequest,
+    StreamStopResponse,
+    # Training (new)
+    TrainingConfig,
+    TrainRequest,
+    TrainResponse,
+    TrainStatusRequest,
+    TrainStatusResponse,
+    # Model management (new)
+    VisionModelInfo,
+    ModelLoadRequest,
+    ModelLoadResponse,
+    ModelUnloadRequest,
+    ModelUnloadResponse,
+    ModelExportRequest,
+    ModelExportResponse,
+    ModelImportRequest,
+    ModelImportResponse,
+    VisionModelsListResponse,
+    VisionBackendInfo,
+    VisionBackendsResponse,
+    # Review queue (new)
+    ReviewItem,
+    ReviewDecision,
+    ReviewDecisionResponse,
+    ReviewListRequest,
+    ReviewListResponse,
+    ReviewBatchRequest,
+    ReviewBatchResponse,
 )
 
 __all__ = [
@@ -114,7 +167,7 @@ __all__ = [
     "ClassifierModelInfo",
     "ClassifierModelsResponse",
     "ClassifierDeleteResponse",
-    # Vision
+    # Vision - OCR (existing)
     "OCRRequest",
     "OCRBox",
     "OCRResult",
@@ -123,6 +176,58 @@ __all__ = [
     "DocumentField",
     "DocumentResult",
     "DocumentResponse",
+    # Vision - Common (new)
+    "BoundingBox",
+    "Point",
+    "Mask",
+    # Vision - Detection (new)
+    "Detection",
+    "DetectRequest",
+    "DetectResponse",
+    # Vision - Classification (new)
+    "ImageClassifyRequest",
+    "ImageClassifyResponse",
+    # Vision - Segmentation (new)
+    "SegmentRequest",
+    "SegmentResponse",
+    # Vision - Embedding (new)
+    "ImageEmbedRequest",
+    "ImageEmbedResponse",
+    # Vision - Streaming (new)
+    "StreamingConfig",
+    "StreamStartRequest",
+    "StreamStartResponse",
+    "StreamFrameRequest",
+    "StreamFrameResponse",
+    "StreamStopRequest",
+    "StreamStopResponse",
+    # Vision - Training (new)
+    "TrainingConfig",
+    "TrainRequest",
+    "TrainResponse",
+    "TrainStatusRequest",
+    "TrainStatusResponse",
+    # Vision - Model Management (new)
+    "VisionModelInfo",
+    "ModelLoadRequest",
+    "ModelLoadResponse",
+    "ModelUnloadRequest",
+    "ModelUnloadResponse",
+    "ModelExportRequest",
+    "ModelExportResponse",
+    "ModelImportRequest",
+    "ModelImportResponse",
+    "VisionModelsListResponse",
+    "VisionBackendInfo",
+    "VisionBackendsResponse",
+    # Vision - Review Queue (new)
+    "ReviewItem",
+    "ReviewDecision",
+    "ReviewDecisionResponse",
+    "ReviewListRequest",
+    "ReviewListResponse",
+    "ReviewBatchRequest",
+    "ReviewBatchResponse",
     # Audio
     "TranscriptionRequest",
     "TranscriptionSegment",

@@ -2,7 +2,8 @@
 Model wrappers for Universal Runtime.
 
 Supports HuggingFace Transformers, Diffusers, GGUF models, OCR, document understanding,
-anomaly detection, text classification, and speech-to-text.
+anomaly detection, text classification, speech-to-text, and vision (detection, classification,
+segmentation).
 """
 
 from .anomaly_model import AnomalyModel
@@ -23,23 +24,59 @@ from .tts_model import (
     check_builtin_voices,
     download_builtin_voices,
 )
+from .vision_base import (
+    VisionModel,
+    VisionResult,
+    DetectionModel,
+    DetectionResult,
+    DetectionBox,
+    ClassificationModel,
+    ClassificationResult,
+    SegmentationModel,
+    SegmentationResult,
+    SegmentationMask,
+    EmbeddingModel,
+    EmbeddingResult,
+)
 
 __all__ = [
+    # Base
     "BaseModel",
+    # Language
     "LanguageModel",
     "GGUFLanguageModel",
+    # Encoder
     "EncoderModel",
     "GGUFEncoderModel",
+    # OCR & Document
     "OCRModel",
     "DocumentModel",
+    # Anomaly
     "AnomalyModel",
+    # Classifier
     "ClassifierModel",
+    # Emotion
     "EmotionModel",
     "EmotionResult",
+    # Speech
     "SpeechModel",
+    # TTS
     "TTSModel",
     "VoiceProfile",
     "ChatterboxConfig",
     "check_builtin_voices",
     "download_builtin_voices",
+    # Vision (new)
+    "VisionModel",
+    "VisionResult",
+    "DetectionModel",
+    "DetectionResult",
+    "DetectionBox",
+    "ClassificationModel",
+    "ClassificationResult",
+    "SegmentationModel",
+    "SegmentationResult",
+    "SegmentationMask",
+    "EmbeddingModel",
+    "EmbeddingResult",
 ]
