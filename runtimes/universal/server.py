@@ -958,10 +958,14 @@ set_ocr_loader(load_ocr)
 set_document_loader(load_document)
 set_file_image_getter(get_file_images)
 
-# Vision router (detection, classification, embedding)
+# Vision router (detection, classification, embedding, streaming)
 set_detection_loader(load_detection)
 set_classification_loader(load_classification)
 set_embedding_loader(load_embedding)
+
+# Streaming vision uses same detection loader
+from models.streaming_vision import set_streaming_model_loader
+set_streaming_model_loader(load_detection)
 
 # Anomaly router
 set_anomaly_loader(load_anomaly)

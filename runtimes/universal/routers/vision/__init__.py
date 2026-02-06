@@ -31,6 +31,7 @@ from .embedding import (
     router as embedding_router,
     set_embedding_loader,
 )
+from .streaming import router as streaming_router
 
 # Create combined vision router
 vision_router = APIRouter(tags=["vision"])
@@ -38,10 +39,11 @@ vision_router = APIRouter(tags=["vision"])
 # Include all sub-routers
 # Note: OCR router has /v1/ocr and /v1/documents/extract prefixes in its routes
 vision_router.include_router(ocr_router)
-# Detection, classification, embedding have /v1/vision/* prefixes
+# Detection, classification, embedding, streaming have /v1/vision/* prefixes
 vision_router.include_router(detection_router)
 vision_router.include_router(classification_router)
 vision_router.include_router(embedding_router)
+vision_router.include_router(streaming_router)
 
 # For backward compatibility, also export 'router' as alias
 router = vision_router

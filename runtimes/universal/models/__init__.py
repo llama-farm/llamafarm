@@ -40,6 +40,14 @@ from .vision_base import (
 )
 from .yolo_model import YOLOModel
 from .clip_model import CLIPClassifier, CLIPEmbedder
+from .streaming_vision import (
+    StreamingVisionDetector,
+    StreamingConfig,
+    StreamSession,
+    FrameResult,
+    get_streaming_detector,
+    set_streaming_model_loader,
+)
 
 __all__ = [
     # Base
@@ -85,4 +93,11 @@ __all__ = [
     "YOLOModel",
     "CLIPClassifier",
     "CLIPEmbedder",
+    # Streaming vision
+    "StreamingVisionDetector",
+    "StreamingConfig",
+    "StreamSession",
+    "FrameResult",
+    "get_streaming_detector",
+    "set_streaming_model_loader",
 ]
