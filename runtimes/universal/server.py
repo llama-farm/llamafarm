@@ -79,6 +79,7 @@ from routers.health import (
 )
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
+from routers.polars import router as polars_router
 from routers.vision import (
     router as vision_router,
 )
@@ -301,6 +302,7 @@ app.include_router(classifier_router)
 app.include_router(files_router)
 app.include_router(health_router)
 app.include_router(nlp_router)
+app.include_router(polars_router)
 app.include_router(vision_router)
 
 # Model unload timeout configuration (in seconds)

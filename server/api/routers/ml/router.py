@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from server.services.ml_model_service import MLModelService
 from server.services.universal_runtime_service import UniversalRuntimeService
 
@@ -25,7 +25,23 @@ from .types import (
     ClassifierLoadRequest,
     ClassifierPredictRequest,
     ClassifierSaveRequest,
+    PolarsBufferAppendRequest,
+    PolarsBufferCreateRequest,
+    PolarsBufferDataResponse,
+    PolarsBufferFeaturesRequest,
+    PolarsBuffersListResponse,
+    PolarsBufferStats,
 )
+
+
+def _validate_path_param(param: str, name: str = "id") -> None:
+    """Validate path parameter to prevent path injection attacks.
+
+    Raises:
+        HTTPException: If parameter contains invalid characters
+    """
+    if "/" in param or "\\" in param or ".." in param:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: {param}")
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +474,38 @@ async def list_anomaly_models() -> dict[str, Any]:
     }
 
 
+@router.get("/anomaly/backends")
+async def list_anomaly_backends() -> dict[str, Any]:
+    """List all available anomaly detection backends.
+
+    Returns all supported backends with metadata including:
+    - backend: Backend identifier (e.g., "isolation_forest", "ecod")
+    - name: Human-readable name
+    - description: What the algorithm does
+    - category: Backend category (legacy, fast, distance, clustering, ensemble, streaming, deep_learning)
+    - speed: Performance indicator (very_fast, fast, medium, slow)
+    - memory: Memory usage indicator (low, medium, high)
+    - parameters: Configurable parameters
+    - best_for: Recommended use case
+    - is_legacy: Whether this is a legacy (backward-compatible) backend
+
+    Backends are powered by PyOD (Python Outlier Detection).
+    Legacy backend names (isolation_forest, one_class_svm, local_outlier_factor, autoencoder)
+    are mapped to their PyOD equivalents for backward compatibility.
+
+    New backends available:
+    - ecod: Fast, parameter-free (recommended for new projects)
+    - hbos: Fastest algorithm, good for high dimensions
+    - copod: Fast, parameter-free, interpretable
+    - knn: K-Nearest Neighbors outlier detection
+    - mcd: Minimum Covariance Determinant
+    - cblof: Clustering-Based Local Outlier Factor
+    - suod: Scalable ensemble (most robust)
+    - loda: Lightweight online detector (good for streaming)
+    """
+    return await UniversalRuntimeService.anomaly_list_backends()
+
+
 @router.delete("/anomaly/models/{filename}")
 async def delete_anomaly_model(filename: str) -> dict[str, Any]:
     """Delete a saved anomaly model.
@@ -471,3 +519,270 @@ async def delete_anomaly_model(filename: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
 
     return await UniversalRuntimeService.anomaly_delete_model(filename)
+
+
+# =============================================================================
+# Streaming Anomaly Detection Endpoints
+# =============================================================================
+
+
+@router.post("/anomaly/stream")
+async def anomaly_stream(request: dict[str, Any]) -> dict[str, Any]:
+    """Process streaming data for real-time anomaly detection.
+
+    This endpoint implements the Tick-Tock pattern:
+    - Cold start: Collects min_samples before first model training
+    - Ready: Returns anomaly scores for each data point
+    - Retraining: Background retraining after retrain_interval samples
+
+    Polars is used internally as the data substrate (automatic):
+    - Data is stored in a high-performance Polars DataFrame
+    - Rolling features are computed automatically if configured
+    - Sliding window maintains the most recent window_size samples
+
+    Request body:
+        model: str - Unique identifier for the streaming detector
+        data: dict | list[dict] - Single data point or batch
+        backend: str = "ecod" - PyOD backend for new detectors
+        min_samples: int = 50 - Samples before first training
+        retrain_interval: int = 100 - Samples between retraining
+        window_size: int = 1000 - Sliding window size
+        threshold: float = 0.5 - Anomaly score threshold
+        contamination: float = 0.1 - Expected outlier proportion
+        rolling_windows: list[int] | None - Optional rolling feature windows
+        include_lags: bool = False - Include lag features
+
+    Response:
+        object: "streaming_result"
+        model: str - Detector ID
+        status: str - "collecting" | "ready" | "retraining"
+        results: list - Score results for each data point
+        model_version: int - Current model version
+        samples_collected: int - Total samples in buffer
+
+    Example:
+    ```json
+    {
+        "model": "fraud-detector",
+        "data": {"amount": 100.0, "count": 5},
+        "backend": "ecod",
+        "min_samples": 50,
+        "retrain_interval": 100
+    }
+    ```
+    """
+    return await UniversalRuntimeService.anomaly_stream(request)
+
+
+@router.get("/anomaly/stream/detectors")
+async def list_streaming_detectors() -> dict[str, Any]:
+    """List all active streaming detectors.
+
+    Returns:
+        object: "list"
+        data: list of detector statistics
+        total: number of active detectors
+    """
+    return await UniversalRuntimeService.anomaly_stream_list_detectors()
+
+
+@router.get("/anomaly/stream/{model_id}")
+async def get_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Get statistics for a specific streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Detector statistics including status, model version, samples collected
+    """
+    _validate_path_param(model_id, "model_id")
+    return await UniversalRuntimeService.anomaly_stream_get_detector(model_id)
+
+
+@router.delete("/anomaly/stream/{model_id}")
+async def delete_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Delete a streaming detector.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    _validate_path_param(model_id, "model_id")
+    return await UniversalRuntimeService.anomaly_stream_delete_detector(model_id)
+
+
+@router.post("/anomaly/stream/{model_id}/reset")
+async def reset_streaming_detector(model_id: str) -> dict[str, Any]:
+    """Reset a streaming detector to initial state.
+
+    Clears all data and resets to cold start phase.
+
+    Args:
+        model_id: Detector identifier
+
+    Returns:
+        Reset confirmation with new status
+    """
+    _validate_path_param(model_id, "model_id")
+    return await UniversalRuntimeService.anomaly_stream_reset_detector(model_id)
+
+
+# =============================================================================
+# Polars Buffer Endpoints
+# =============================================================================
+
+
+@router.post("/polars/buffers")
+async def create_polars_buffer(request: PolarsBufferCreateRequest) -> dict[str, Any]:
+    """Create a new named Polars buffer.
+
+    Creates a sliding window buffer that maintains the most recent N records.
+    Use this for streaming data processing with automatic window truncation.
+
+    Polars buffers provide a high-performance data substrate for:
+    - Streaming anomaly detection
+    - Rolling feature computation
+    - Efficient columnar data storage
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "window_size": 1000
+    }
+    ```
+
+    Returns:
+        Buffer creation confirmation with settings
+    """
+    return await UniversalRuntimeService.polars_create_buffer(request.model_dump())
+
+
+@router.get("/polars/buffers")
+async def list_polars_buffers() -> PolarsBuffersListResponse:
+    """List all active Polars buffers with their statistics.
+
+    Returns:
+        List of buffers with size, columns, memory usage, and performance stats
+    """
+    result = await UniversalRuntimeService.polars_list_buffers()
+    return PolarsBuffersListResponse(**result)
+
+
+@router.get("/polars/buffers/{buffer_id}")
+async def get_polars_buffer(buffer_id: str) -> PolarsBufferStats:
+    """Get statistics for a specific buffer.
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Buffer statistics including size, columns, memory usage
+    """
+    _validate_path_param(buffer_id, "buffer_id")
+    result = await UniversalRuntimeService.polars_get_buffer(buffer_id)
+    return PolarsBufferStats(**result)
+
+
+@router.delete("/polars/buffers/{buffer_id}")
+async def delete_polars_buffer(buffer_id: str) -> dict[str, Any]:
+    """Delete a buffer and free its memory.
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Deletion confirmation
+    """
+    _validate_path_param(buffer_id, "buffer_id")
+    return await UniversalRuntimeService.polars_delete_buffer(buffer_id)
+
+
+@router.post("/polars/buffers/{buffer_id}/clear")
+async def clear_polars_buffer(buffer_id: str) -> dict[str, Any]:
+    """Clear all data from a buffer (keep the buffer itself).
+
+    Args:
+        buffer_id: Buffer identifier
+
+    Returns:
+        Clear confirmation with new size (0)
+    """
+    _validate_path_param(buffer_id, "buffer_id")
+    return await UniversalRuntimeService.polars_clear_buffer(buffer_id)
+
+
+@router.post("/polars/append")
+async def append_to_polars_buffer(request: PolarsBufferAppendRequest) -> dict[str, Any]:
+    """Append data to a buffer.
+
+    Supports single records or batches:
+    - Single: {"buffer_id": "my-buffer", "data": {"value": 1.0, "label": "A"}}
+    - Batch: {"buffer_id": "my-buffer", "data": [{"value": 1.0}, {"value": 2.0}]}
+
+    The buffer automatically truncates to window_size, keeping the most recent records.
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "data": [
+            {"temperature": 72.5, "humidity": 45.2},
+            {"temperature": 73.1, "humidity": 44.8}
+        ]
+    }
+    ```
+
+    Returns:
+        Append result with count and buffer size
+    """
+    return await UniversalRuntimeService.polars_append(request.model_dump())
+
+
+@router.post("/polars/features")
+async def compute_polars_features(request: PolarsBufferFeaturesRequest) -> PolarsBufferDataResponse:
+    """Compute rolling features from buffer data.
+
+    Computes rolling statistics (mean, std, min, max) and lag features
+    for all numeric columns in the buffer.
+
+    Example:
+    ```json
+    {
+        "buffer_id": "sensor-data",
+        "rolling_windows": [5, 10],
+        "include_rolling_stats": ["mean", "std"],
+        "include_lags": true,
+        "lag_periods": [1, 2],
+        "tail": 10
+    }
+    ```
+
+    Returns:
+        Data with computed features as new columns
+    """
+    result = await UniversalRuntimeService.polars_features(request.model_dump())
+    return PolarsBufferDataResponse(**result)
+
+
+@router.get("/polars/buffers/{buffer_id}/data")
+async def get_polars_buffer_data(
+    buffer_id: str,
+    tail: int | None = None,
+    with_features: bool = False,
+) -> PolarsBufferDataResponse:
+    """Get raw data from a buffer.
+
+    Args:
+        buffer_id: Buffer identifier
+        tail: Return only last N rows (optional)
+        with_features: Compute and include rolling features
+
+    Returns:
+        Buffer data as a list of dictionaries
+    """
+    result = await UniversalRuntimeService.polars_get_data(buffer_id, tail, with_features)
+    return PolarsBufferDataResponse(**result)
