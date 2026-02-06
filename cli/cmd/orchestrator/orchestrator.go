@@ -32,6 +32,7 @@ type NativeOrchestrator struct {
 	uvManager    *UVManager
 	pythonEnvMgr *PythonEnvManager
 	sourceMgr    *SourceManager
+	binaryMgr    *BinaryManager
 	processMgr   *ProcessManager
 	initialized  bool
 	initMu       sync.Mutex // protects initialized flag
@@ -116,8 +117,13 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 
 	// Always include core environment keys from the current environment
 	// Note: PATH is already set by GetEnvForProcess() with UV bin directory, so we don't override it
+	// Windows home directory vars are needed by Python's Path.home() and getpass.getuser()
 	extraEnv := []string{}
-	for _, key := range []string{"HOME", "USER", "TMPDIR", "LF_DATA_DIR"} {
+	for _, key := range []string{
+		"HOME", "USER", "USERNAME", "LOGNAME", "TMPDIR", "TEMP", "TMP",
+		"LF_DATA_DIR", "SYSTEMROOT",
+		"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+	} {
 		if val := os.Getenv(key); val != "" {
 			extraEnv = append(extraEnv, fmt.Sprintf("%s=%s", key, val))
 		}
@@ -128,9 +134,74 @@ func (no *NativeOrchestrator) getDefaultEnvWithKeys(envKeysWithDefaults map[stri
 			// Expand environment variable placeholders like ${LF_DATA_DIR}
 			expandedVal := os.ExpandEnv(val)
 			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
+		} else if envVal := os.Getenv(key); envVal != "" {
+			// Empty default means "inherit from parent environment if set"
+			env = append(env, fmt.Sprintf("%s=%s", key, envVal))
 		}
 	}
 	return append(env, extraEnv...)
+}
+
+// NewBinaryOrchestrator creates an orchestrator for binary deploy mode.
+// It only needs a ProcessManager and BinaryManager — no UV, Python, or source managers.
+func NewBinaryOrchestrator(serverURL string) (*NativeOrchestrator, error) {
+	procMgr, err := NewProcessManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create process manager: %w", err)
+	}
+
+	// Create binary manager with version from LF_VERSION env var or CLI version
+	version := os.Getenv("LF_VERSION")
+	binaryMgr, err := NewBinaryManager(version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create binary manager: %w", err)
+	}
+
+	orchestrator := &NativeOrchestrator{
+		processMgr:  procMgr,
+		binaryMgr:   binaryMgr,
+		serverURL:   serverURL,
+		initialized: false, // Will be set to true after EnsureBinaries
+	}
+
+	// Download binaries if needed
+	if err := binaryMgr.EnsureBinaries(); err != nil {
+		return nil, fmt.Errorf("failed to ensure binaries: %w", err)
+	}
+
+	orchestrator.initialized = true
+	return orchestrator, nil
+}
+
+// getBinaryEnv builds environment variables for a binary-mode service.
+// Unlike getDefaultEnvWithKeys, it does not depend on pythonEnvMgr.
+func (no *NativeOrchestrator) getBinaryEnv(envKeysWithDefaults map[string]string) []string {
+	var env []string
+
+	// Inherit core environment keys (including Windows home directory vars
+	// needed by Python's Path.home() and getpass.getuser() inside PyApp binaries)
+	for _, key := range []string{
+		"HOME", "USER", "USERNAME", "LOGNAME", "TMPDIR", "TEMP", "TMP",
+		"LF_DATA_DIR", "PATH", "SYSTEMROOT",
+		"USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+	} {
+		if val := os.Getenv(key); val != "" {
+			env = append(env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+
+	// Add service-specific environment variables
+	for key, val := range envKeysWithDefaults {
+		if val != "" {
+			expandedVal := os.ExpandEnv(val)
+			env = append(env, fmt.Sprintf("%s=%s", key, expandedVal))
+		} else if envVal := os.Getenv(key); envVal != "" {
+			// Empty default means "inherit from parent environment if set"
+			env = append(env, fmt.Sprintf("%s=%s", key, envVal))
+		}
+	}
+
+	return env
 }
 
 // StopAllProcesses stops all native processes

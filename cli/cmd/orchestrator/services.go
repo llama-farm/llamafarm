@@ -143,12 +143,12 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
-			"TRANSFORMERS_SKIP_MPS":  "", // Set to "1" to skip MPS on macOS
-			"TRANSFORMERS_FORCE_CPU": "", // Set to "1" to force CPU (useful in CI)
+			"TRANSFORMERS_SKIP_MPS": "", // Set to "1" to skip MPS on macOS
 			// Note: PYTORCH_MPS_HIGH_WATERMARK_RATIO removed - setting it to non-default
 			// values causes "invalid low watermark ratio" errors on some PyTorch versions.
 			// Let PyTorch use its default memory management.
-			"HF_TOKEN": "",
+			"LLAMAFARM_GGUF_FORCE_CPU": "", // Set to "1" to force CPU for GGUF inference (avoids Metal SIGSEGV in CI)
+			"HF_TOKEN":                 "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
 			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
 		},
@@ -201,7 +201,15 @@ type ServiceManager struct {
 
 // NewServiceManager returns a new ServiceManager.
 func NewServiceManager(serverURL string) (*ServiceManager, error) {
-	orchestrator, err := NewOrchestrator(serverURL)
+	var orchestrator *NativeOrchestrator
+	var err error
+
+	if IsBinaryMode() {
+		utils.LogDebug("Binary deploy mode enabled\n")
+		orchestrator, err = NewBinaryOrchestrator(serverURL)
+	} else {
+		orchestrator, err = NewOrchestrator(serverURL)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
@@ -382,8 +390,17 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 	return nil
 }
 
-// startService starts a service using its declarative configuration
+// startService starts a service using its declarative configuration.
+// In binary mode, it launches pre-built PyApp binaries instead of uv + source.
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
+	if IsBinaryMode() {
+		return sm.startServiceBinary(serviceDef)
+	}
+	return sm.startServiceSource(serviceDef)
+}
+
+// startServiceSource starts a service from source code via uv (original path).
+func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 
@@ -396,11 +413,39 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	cmdArgs := append([]string{command}, serviceDef.Args...)
 
 	// Get source directory
-	lfDir, _ := utils.GetLFDataDir()
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("source mode: could not resolve data directory: %w", err)
+	}
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
+}
+
+// startServiceBinary starts a service from a pre-built PyApp binary.
+func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) error {
+	binaryPath, err := ResolveBinaryPath(serviceDef.Name)
+	if err != nil {
+		return fmt.Errorf("binary mode: %w", err)
+	}
+
+	utils.LogDebug(fmt.Sprintf("Starting %s from binary: %s\n", serviceDef.Name, binaryPath))
+
+	env := sm.orchestrator.getBinaryEnv(serviceDef.Env)
+
+	// PyApp binaries are self-contained; use the LF data dir as working directory
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("binary mode: could not resolve data directory: %w", err)
+	}
+
+	// Always pass LF_DATA_DIR so the Python settings use the CLI-resolved value.
+	// This prevents path mismatches when Path.home() fails inside PyApp (e.g., on
+	// Windows where USERPROFILE may not be inherited).
+	env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDir))
+
+	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }
 
 // isServiceHealthy checks if a service is healthy by querying its health component

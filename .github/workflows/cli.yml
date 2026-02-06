@@ -33,9 +33,6 @@ jobs:
             goarch: arm64
             output: llamafarm-linux-arm64
           - goos: darwin
-            goarch: amd64
-            output: llamafarm-darwin-amd64
-          - goos: darwin
             goarch: arm64
             output: llamafarm-darwin-arm64
           - goos: windows

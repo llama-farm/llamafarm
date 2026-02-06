@@ -182,8 +182,8 @@ async def fit_classifier(request: ClassifierFitRequest):
     Models are automatically saved to disk after fitting.
     """
     # Extract texts and labels from training data
-    texts = [item["text"] for item in request.training_data]
-    labels = [item["label"] for item in request.training_data]
+    texts = [item.text for item in request.training_data]
+    labels = [item.label for item in request.training_data]
 
     if len(texts) < 2:
         raise HTTPException(

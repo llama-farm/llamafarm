@@ -7,6 +7,7 @@ focusing on the list_datasets_with_file_details method and file metadata handlin
 
 from unittest.mock import patch
 
+import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
@@ -29,6 +30,14 @@ from services.project_service import ProjectService
 
 class TestDatasetServiceExtraDetails:
     """Test cases for DatasetService extra details functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
@@ -528,6 +537,14 @@ class TestDatasetServiceExtraDetails:
 # Integration test for the full workflow
 class TestDatasetServiceExtraDetailsIntegration:
     """Integration tests for DatasetService extra details workflows."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")

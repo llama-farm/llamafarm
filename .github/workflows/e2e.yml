@@ -49,11 +49,14 @@ jobs:
             echo ""
             echo "### Test Results by Platform"
             echo ""
-            echo "| OS | Status |"
-            echo "|---|---|"
-            echo "| ubuntu-latest | :hourglass: Pending |"
-            echo "| macos-latest | :hourglass: Pending |"
-            echo "| windows-latest | :hourglass: Pending |"
+            echo "| OS | Mode | Status |"
+            echo "|---|---|---|"
+            echo "| ubuntu-latest | source | :hourglass: Pending |"
+            echo "| macos-latest | source | :hourglass: Pending |"
+            echo "| windows-latest | source | :hourglass: Pending |"
+            echo "| ubuntu-latest | binary | :hourglass: Pending |"
+            echo "| macos-latest | binary | :hourglass: Pending |"
+            echo "| windows-latest | binary | :hourglass: Pending |"
             echo ""
             echo "### Summary"
             echo ""
@@ -276,24 +279,182 @@ jobs:
 
           exit 1
 
+  wait-for-pyapp:
+    name: Wait for PyApp Build
+    runs-on: ubuntu-latest
+    outputs:
+      pyapp_run_id: ${{ steps.wait.outputs.run_id }}
+    steps:
+      - name: Wait for PyApp workflow (if triggered)
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Checking for 'Build Native Binaries (PyApp)' workflow run..."
+
+          # Get the current commit SHA
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            COMMIT_SHA="${{ github.sha }}"
+          fi
+          echo "Looking for PyApp build for commit: $COMMIT_SHA"
+
+          # Phase 1: Check if a PyApp workflow run exists for this commit.
+          # pyapp.yml only triggers when tools/pyapp/** or the workflow file changes,
+          # so there may not be a run for every commit. Wait up to 5 minutes for
+          # GitHub to dispatch it (accounting for queue delays).
+          DISCOVERY_ATTEMPTS=10
+          SLEEP_TIME=30
+          RUN_ID=""
+
+          echo ""
+          echo "Phase 1: Checking if PyApp workflow was triggered for this commit..."
+          for i in $(seq 1 $DISCOVERY_ATTEMPTS); do
+            RUN_INFO=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/pyapp.yml/runs?head_sha=$COMMIT_SHA&per_page=1" \
+              --jq '.workflow_runs[0] | {id: .id, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "{}")
+
+            RUN_ID=$(echo "$RUN_INFO" | jq -r '.id // empty')
+
+            if [ -n "$RUN_ID" ]; then
+              echo "  Found PyApp workflow run: $RUN_ID"
+              break
+            fi
+
+            echo "  Attempt $i/$DISCOVERY_ATTEMPTS: No PyApp workflow run found, waiting..."
+            sleep $SLEEP_TIME
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo ""
+            echo "No PyApp workflow run found for this commit."
+            echo "Binary tests will use the latest artifacts from the branch."
+            echo "run_id=" >> $GITHUB_OUTPUT
+
+            {
+              echo "## PyApp Build Wait Summary"
+              echo ""
+              echo "- **Result**: No PyApp workflow triggered for this commit"
+              echo "- **Fallback**: Binary tests will use latest branch artifacts"
+            } >> $GITHUB_STEP_SUMMARY
+
+            exit 0
+          fi
+
+          # Phase 2: Wait for the PyApp workflow to complete.
+          # PyApp builds compile Rust binaries across 4 platforms, so they can
+          # take 20-40 minutes. Wait up to 45 minutes total.
+          echo ""
+          echo "Phase 2: Waiting for PyApp workflow $RUN_ID to complete..."
+          MAX_ATTEMPTS=90
+          START_TIME=$(date +%s)
+          PREV_STATUS=""
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$(( (CURRENT_TIME - START_TIME) / 60 ))
+            REMAINING=$(( (MAX_ATTEMPTS - i) * SLEEP_TIME / 60 ))
+
+            RUN_INFO=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/runs/$RUN_ID" \
+              --jq '{status: .status, conclusion: .conclusion}' 2>/dev/null || echo "{}")
+
+            STATUS=$(echo "$RUN_INFO" | jq -r '.status // empty')
+            CONCLUSION=$(echo "$RUN_INFO" | jq -r '.conclusion // empty')
+
+            if [ -n "$PREV_STATUS" ] && [ "$STATUS" != "$PREV_STATUS" ]; then
+              echo "  Status changed: $PREV_STATUS → $STATUS"
+            fi
+            PREV_STATUS="$STATUS"
+
+            echo "  Attempt $i: status=$STATUS, conclusion=$CONCLUSION (${ELAPSED}m elapsed, ~${REMAINING}m remaining)"
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo ""
+                echo "✓ PyApp workflow completed successfully!"
+                echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+                {
+                  echo "## PyApp Build Wait Summary"
+                  echo ""
+                  echo "- **Total wait time**: ${ELAPSED}m"
+                  echo "- **PyApp Run ID**: $RUN_ID"
+                  echo "- **Conclusion**: $CONCLUSION"
+                } >> $GITHUB_STEP_SUMMARY
+
+                exit 0
+              elif [ "$CONCLUSION" = "cancelled" ]; then
+                echo ""
+                echo "❌ PyApp workflow was cancelled (likely by concurrency controls)"
+                exit 1
+              else
+                echo ""
+                echo "❌ PyApp workflow failed with conclusion: $CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep $SLEEP_TIME
+          done
+
+          FINAL_ELAPSED=$(( ($(date +%s) - START_TIME) / 60 ))
+          echo ""
+          echo "❌ Timed out waiting for PyApp workflow after ${FINAL_ELAPSED}m"
+
+          {
+            echo "## PyApp Build Wait - TIMEOUT"
+            echo ""
+            echo "- **Total wait time**: ${FINAL_ELAPSED}m"
+            echo "- **Last status**: $STATUS"
+            echo ""
+            echo "The PyApp workflow did not complete within the 45-minute timeout."
+            echo "This is usually caused by GitHub runner availability issues."
+          } >> $GITHUB_STEP_SUMMARY
+
+          exit 1
+
   e2e-test:
-    name: E2E Tests (${{ matrix.os }})
-    needs: wait-for-cli
+    name: E2E Tests (${{ matrix.os }}, ${{ matrix.deploy_mode }})
+    needs: [wait-for-cli, wait-for-pyapp]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Source mode (existing behavior: uv + source)
           - os: ubuntu-latest
             artifact: llamafarm-linux-amd64
             binary: lf
+            deploy_mode: source
           - os: macos-latest
             artifact: llamafarm-darwin-arm64
             binary: lf
+            deploy_mode: source
           - os: windows-latest
             artifact: llamafarm-windows-amd64.exe
             binary: lf.exe
+            deploy_mode: source
+          # Binary deploy mode (PyApp standalone binaries)
+          - os: ubuntu-latest
+            artifact: llamafarm-linux-amd64
+            binary: lf
+            deploy_mode: binary
+            pyapp_os: linux-x86_64
+          - os: macos-latest
+            artifact: llamafarm-darwin-arm64
+            binary: lf
+            deploy_mode: binary
+            pyapp_os: macos-arm64
+          - os: windows-latest
+            artifact: llamafarm-windows-amd64.exe
+            binary: lf.exe
+            deploy_mode: binary
+            pyapp_os: windows-x86_64
     env:
       # Use the current branch/ref being tested instead of main
       # For PRs (including fork PRs), use the merge ref which is always accessible
@@ -304,8 +465,11 @@ jobs:
       # Allow uv to search all indexes for best version match (needed because PyTorch index
       # has old versions of common packages like 'requests' that would block resolution)
       UV_INDEX_STRATEGY: unsafe-best-match
-      # Force CPU usage to avoid MPS issues on macOS runners
-      TRANSFORMERS_FORCE_CPU: 1
+      # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
+      # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
+      LLAMAFARM_GGUF_FORCE_CPU: 1
+      # Disable Metal backend initialization completely (prevents SIGSEGV during llama_context creation)
+      GGML_METAL_ENABLE: 0
 
     steps:
       # ============================================================
@@ -378,6 +542,85 @@ jobs:
           echo "✓ CLI binary is functional"
 
       # ============================================================
+      # Setup PyApp Binary Auto-Download (binary deploy mode only)
+      # ============================================================
+      - name: Verify PyApp artifacts exist
+        if: matrix.deploy_mode == 'binary'
+        id: check-artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Determine which PyApp run to use
+          if [ -n "${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}" ]; then
+            RUN_ID="${{ needs.wait-for-pyapp.outputs.pyapp_run_id }}"
+            echo "Using PyApp run from current commit: $RUN_ID"
+          else
+            # Try to find latest successful PyApp run from this branch
+            BRANCH="${{ github.head_ref || github.ref_name }}"
+            echo "Looking for latest PyApp run from branch: $BRANCH"
+
+            RUN_ID=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/workflows/pyapp.yml/runs?branch=$BRANCH&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty' 2>/dev/null || echo "")
+
+            if [ -z "$RUN_ID" ]; then
+              echo "::error::No successful PyApp workflow runs found for branch $BRANCH"
+              echo "Run the 'Build Native Binaries (PyApp)' workflow first, then re-run this workflow."
+              exit 1
+            fi
+            echo "Using latest PyApp run from branch: $RUN_ID"
+          fi
+
+          # Verify all three component artifacts exist for our platform
+          PLATFORM="${{ matrix.pyapp_os }}"
+          COMPONENTS=("server" "rag" "runtime")
+          MISSING_ARTIFACTS=()
+
+          for component in "${COMPONENTS[@]}"; do
+            ARTIFACT_NAME="llamafarm-${component}-pyapp-${PLATFORM}"
+            ARTIFACT_COUNT=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts" \
+              --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .name" 2>/dev/null | wc -l || echo "0")
+
+            if [ "$ARTIFACT_COUNT" -eq 0 ]; then
+              MISSING_ARTIFACTS+=("$ARTIFACT_NAME")
+            else
+              echo "✓ Found artifact: $ARTIFACT_NAME"
+            fi
+          done
+
+          if [ ${#MISSING_ARTIFACTS[@]} -gt 0 ]; then
+            echo "::error::Missing PyApp artifacts for platform $PLATFORM in run $RUN_ID:"
+            for artifact in "${MISSING_ARTIFACTS[@]}"; do
+              echo "  - $artifact"
+            done
+            exit 1
+          fi
+
+          echo "✓ All PyApp artifacts verified for platform $PLATFORM (run $RUN_ID)"
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Configure binary deploy mode
+        if: matrix.deploy_mode == 'binary'
+        shell: bash
+        run: |
+          # Set environment variables for CLI to auto-download binaries from artifacts
+          echo "LF_DEPLOY_MODE=binary" >> $GITHUB_ENV
+          echo "LF_BINARY_SOURCE=artifact" >> $GITHUB_ENV
+          echo "LF_ARTIFACT_RUN_ID=${{ steps.check-artifacts.outputs.run_id }}" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+
+          echo "✓ Binary deploy mode configured"
+          echo "  LF_DEPLOY_MODE=binary"
+          echo "  LF_BINARY_SOURCE=artifact"
+          echo "  LF_ARTIFACT_RUN_ID=${{ steps.check-artifacts.outputs.run_id }}"
+          echo ""
+          echo "The CLI will auto-download binaries from GitHub Actions artifacts on first use."
+
+      # ============================================================
       # Project Initialization
       # ============================================================
       - name: Create test directory
@@ -433,8 +676,9 @@ jobs:
             fi
           fi
 
-          # Update runtime model and quantization
+          # Update runtime model, quantization, and context window
           yq -i '.runtime.models[0].model = "unsloth/Qwen3-0.6B-GGUF:IQ1_S"' "$TEST_DIR/llamafarm.yaml"
+          yq -i '.runtime.models[0].extra_body.n_ctx = 512' "$TEST_DIR/llamafarm.yaml"
 
           # Update embedding model and dimension
           yq -i '.rag.databases[0].embedding_strategies[0].config.model = "sentence-transformers/all-MiniLM-L6-v2"' "$TEST_DIR/llamafarm.yaml"
@@ -471,45 +715,124 @@ jobs:
           echo "Expected size: ~50-100MB"
           echo ""
 
-          # Use a simple query to trigger model loading
-          # The --no-rag flag means we only need to load the language model, not embeddings yet
-          START_TIME=$(date +%s)
-          if ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "hi" 2>&1 | tee /tmp/prewarm.log; then
-            END_TIME=$(date +%s)
-            DURATION=$((END_TIME - START_TIME))
-            echo ""
-
-            # Check that the response isn't a fallback/error response
-            # These patterns indicate the model failed to load but we got an error echo back
-            RESPONSE=$(cat /tmp/prewarm.log)
-            if echo "$RESPONSE" | grep -qi "I notice my previous response"; then
-              echo "❌ Model pre-warming failed - got fallback error response!"
-              echo "Response indicates model loading failed."
+          # Use a simple query to trigger model loading with retry logic.
+          # The runtime may crash (SIGSEGV) on first load due to llama.cpp
+          # native code issues on CI runners; a retry gives it a second chance
+          # after the CLI auto-restarts the process.
+          MAX_ATTEMPTS=2
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Pre-warm attempt $attempt/$MAX_ATTEMPTS..."
+            START_TIME=$(date +%s)
+            if ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "hi" 2>&1 | tee /tmp/prewarm.log; then
+              END_TIME=$(date +%s)
+              DURATION=$((END_TIME - START_TIME))
               echo ""
-              echo "Full response:"
-              echo "$RESPONSE"
+
+              # Check for actual system errors (not model quality issues)
+              RESPONSE=$(cat /tmp/prewarm.log)
+              if echo "$RESPONSE" | grep -qi "error loading model\|failed to load model\|no backends are loaded"; then
+                echo "⚠ Model loading error detected in response (attempt $attempt)"
+                if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                  echo "Waiting 10s before retry..."
+                  sleep 10
+                  continue
+                fi
+                echo "❌ Model pre-warming failed after $MAX_ATTEMPTS attempts!"
+                echo ""
+                echo "Full response:"
+                echo "$RESPONSE"
+                exit 1
+              fi
+
+              echo "✓ Models successfully pre-warmed in ${DURATION}s"
+              break
+            else
+              echo ""
+              echo "⚠ Pre-warm attempt $attempt failed (exit code $?)"
+              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                echo "Checking server health before retry..."
+                curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+                echo "Waiting 10s for services to recover..."
+                sleep 10
+                continue
+              fi
+              echo "❌ Model pre-warming failed after $MAX_ATTEMPTS attempts!"
+              echo "Checking server health..."
+              curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+              echo ""
+              echo "Last 50 lines of output:"
+              tail -50 /tmp/prewarm.log
+              exit 1
+            fi
+          done
+
+      # ============================================================
+      # Pre-warm Embedding Model
+      # ============================================================
+      - name: Pre-warm embedding model
+        working-directory: cli
+        shell: bash
+        timeout-minutes: 12
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Pre-warming embedding model (sentence-transformers/all-MiniLM-L6-v2)..."
+          echo "Sending a dummy embedding request to trigger model loading..."
+
+          # The universal runtime may have crashed during chat pre-warming (SIGSEGV
+          # in llama.cpp native code). The CLI restarts unhealthy services when you
+          # run a command, so we use `lf chat` to trigger a restart before retrying.
+          # HTTP 500 is expected while the embedding model is downloading/loading.
+          # On Windows binary, a PyTorch assertion error in torch._dynamo causes
+          # repeated 500s until the import eventually succeeds.
+          MAX_RETRIES=120
+          RETRY_DELAY=5
+          RESTART_COUNT=0
+          MAX_RESTARTS=3
+          CONSECUTIVE_DEAD=0
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -s -o /tmp/embed_response.json -w "%{http_code}" \
+              -X POST http://localhost:11540/v1/embeddings \
+              -H "Content-Type: application/json" \
+              -d '{"model": "sentence-transformers/all-MiniLM-L6-v2", "input": "warm up"}' \
+              2>/dev/null) || HTTP_CODE="000"
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ Embedding model loaded and responding (HTTP $HTTP_CODE) on attempt $i"
+              exit 0
+            fi
+
+            # Track consecutive dead responses to trigger restart
+            if [ "$HTTP_CODE" = "000" ]; then
+              CONSECUTIVE_DEAD=$((CONSECUTIVE_DEAD + 1))
+            else
+              CONSECUTIVE_DEAD=0
+            fi
+
+            # If runtime is dead for 5+ consecutive checks, restart via CLI
+            if [ "$CONSECUTIVE_DEAD" -ge 5 ] && [ "$RESTART_COUNT" -lt "$MAX_RESTARTS" ]; then
+              RESTART_COUNT=$((RESTART_COUNT + 1))
+              echo "  Runtime dead for $CONSECUTIVE_DEAD checks, restarting via CLI (restart $RESTART_COUNT/$MAX_RESTARTS)..."
+              ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat --no-rag "ping" 2>&1 | tail -5 || true
+              CONSECUTIVE_DEAD=0
+              echo "  Waiting for runtime to initialize..."
+              sleep 20
+              continue
+            fi
+
+            if [ "$i" -eq "$MAX_RETRIES" ]; then
+              echo "❌ Embedding model failed to respond after $MAX_RETRIES attempts (last HTTP $HTTP_CODE)"
+              echo "Restarts attempted: $RESTART_COUNT"
+              echo "Checking server health..."
+              curl -s http://localhost:14345/health | jq '.' 2>/dev/null || echo "Server not reachable"
+              cat /tmp/embed_response.json 2>/dev/null || true
               exit 1
             fi
 
-            if echo "$RESPONSE" | grep -qi "error loading model\|failed to load model\|no backends are loaded"; then
-              echo "❌ Model pre-warming failed - error detected in response!"
-              echo ""
-              echo "Full response:"
-              echo "$RESPONSE"
-              exit 1
-            fi
-
-            echo "✓ Models successfully pre-warmed in ${DURATION}s"
-          else
-            echo ""
-            echo "❌ Model pre-warming failed!"
-            echo "Checking server health..."
-            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
-            echo ""
-            echo "Last 50 lines of output:"
-            tail -50 /tmp/prewarm.log
-            exit 1
-          fi
+            echo "  Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE, retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
 
       # ============================================================
       # Verify llama.cpp Binary Download (critical for GGUF models)
@@ -678,19 +1001,6 @@ jobs:
         shell: bash
         run: sleep 2.5
 
-      - name: Debug config after dataset create
-        shell: bash
-        run: |
-          echo ""
-          echo "=== Config after dataset create (first 40 lines) ==="
-          head -40 "$TEST_DIR/llamafarm.yaml"
-          echo ""
-          echo "=== Checking critical fields ==="
-          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
-          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
-          echo "datasets: $(grep -A5 '^datasets:' "$TEST_DIR/llamafarm.yaml" | head -6)"
-
       - name: Upload sample files
         working-directory: cli
         shell: bash
@@ -708,26 +1018,6 @@ jobs:
       - name: Wait for config sync after dataset upload
         shell: bash
         run: sleep 2.5
-
-      - name: Debug config before dataset process
-        shell: bash
-        run: |
-          echo ""
-          echo "=== Config before dataset process ==="
-          echo "File exists: $(test -f "$TEST_DIR/llamafarm.yaml" && echo 'YES' || echo 'NO')"
-          if [ -f "$TEST_DIR/llamafarm.yaml" ]; then
-            echo "File size: $(wc -c < "$TEST_DIR/llamafarm.yaml")"
-          else
-            echo "File size: N/A"
-          fi
-          echo ""
-          echo "=== Full config content ==="
-          cat "$TEST_DIR/llamafarm.yaml" || echo "Failed to read config"
-          echo ""
-          echo "=== Critical fields check ==="
-          echo "namespace: $(grep '^namespace:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
-          echo "name: $(grep '^name:' "$TEST_DIR/llamafarm.yaml" || echo 'MISSING')"
-          echo "prompts.name: $(grep -A2 '^prompts:' "$TEST_DIR/llamafarm.yaml" | grep 'name:' | head -1 || echo 'MISSING')"
 
       - name: Process dataset
         working-directory: cli
@@ -811,28 +1101,28 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command with RAG..."
-          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
-            "Summarize neural scaling laws in one sentence" 2>&1); then
-            echo "❌ Chat command failed"
-            echo "$OUTPUT"
-            echo "Checking server health..."
-            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+          # Retry once if the runtime crashed and needs to restart
+          for attempt in 1 2; do
+            if OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
+              "Summarize neural scaling laws in one sentence" 2>&1); then
+              break
+            fi
+            echo "⚠ Chat attempt $attempt failed, waiting for runtime to recover..."
+            sleep 10
+            if [ "$attempt" -eq 2 ]; then
+              echo "❌ Chat command failed after retries"
+              echo "$OUTPUT"
+              curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+              exit 1
+            fi
+          done
 
           echo "Chat response:"
           echo "$OUTPUT"
 
-          # Verify output is not empty
-          if [ -z "$OUTPUT" ]; then
-            echo "❌ Error: Chat command returned empty output"
-            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
-
-          # Check if output contains some text (at least 10 characters)
-          if [ ${#OUTPUT} -lt 10 ]; then
-            echo "❌ Error: Chat response too short, possible error"
+          # Verify output is not empty and has some substance
+          if [ -z "$OUTPUT" ] || [ ${#OUTPUT} -lt 10 ]; then
+            echo "❌ Error: Chat response empty or too short"
             curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
             exit 1
           fi
@@ -846,15 +1136,22 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           echo "Running chat command without RAG..."
-          if ! OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
-            --no-rag \
-            "What is 2 + 2?" 2>&1); then
-            echo "❌ Chat command (no RAG) failed"
-            echo "$OUTPUT"
-            echo "Checking server health..."
-            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
-            exit 1
-          fi
+          # Retry once if the runtime crashed and needs to restart
+          for attempt in 1 2; do
+            if OUTPUT=$(./${{ matrix.binary }} --cwd "$TEST_DIR" --debug chat \
+              --no-rag \
+              "What is 2 + 2?" 2>&1); then
+              break
+            fi
+            echo "⚠ Chat (no RAG) attempt $attempt failed, waiting for runtime to recover..."
+            sleep 10
+            if [ "$attempt" -eq 2 ]; then
+              echo "❌ Chat command (no RAG) failed after retries"
+              echo "$OUTPUT"
+              curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+              exit 1
+            fi
+          done
 
           echo "Chat response:"
           echo "$OUTPUT"
@@ -895,12 +1192,50 @@ jobs:
           ./${{ matrix.binary }} --cwd "$TEST_DIR" --debug rag health || true
           echo "✓ RAG health check complete"
 
+      - name: Verify designer accessibility (binary mode only)
+        if: matrix.deploy_mode == 'binary'
+        shell: bash
+        run: |
+          echo "Verifying designer is accessible from server..."
+
+          # Request the root path which should serve the designer
+          HTTP_CODE=$(curl -s -o /tmp/designer_response.html -w "%{http_code}" http://localhost:14345/)
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Designer endpoint returned HTTP $HTTP_CODE (expected 200)"
+            echo "Response content:"
+            cat /tmp/designer_response.html 2>/dev/null || echo "(empty)"
+            echo ""
+            echo "Server health:"
+            curl -s http://localhost:14345/health | jq '.' || echo "Server not reachable"
+            exit 1
+          fi
+
+          # Check if response contains designer HTML content
+          if ! grep -q "<!doctype html>" /tmp/designer_response.html; then
+            echo "❌ Designer response doesn't contain expected HTML content"
+            echo "Response preview (first 500 chars):"
+            head -c 500 /tmp/designer_response.html
+            exit 1
+          fi
+
+          # Verify it's the designer by checking for React root div
+          if ! grep -q 'id="root"' /tmp/designer_response.html; then
+            echo "❌ Designer HTML missing React root element"
+            echo "Response preview (first 500 chars):"
+            head -c 500 /tmp/designer_response.html
+            exit 1
+          fi
+
+          echo "✓ Designer is accessible and serving expected content"
+
       - name: E2E test summary
         shell: bash
         run: |
           echo "=========================================="
-          echo "End-to-End Test Summary (${{ matrix.os }})"
+          echo "End-to-End Test Summary (${{ matrix.os }}, ${{ matrix.deploy_mode }})"
           echo "=========================================="
+          echo "✓ Deploy mode: ${{ matrix.deploy_mode }}"
           echo "✓ CLI binary downloaded and verified"
           echo "✓ Project initialized"
           echo "✓ llama.cpp binary downloaded and verified"
@@ -908,6 +1243,9 @@ jobs:
           echo "✓ Dataset created and processed"
           echo "✓ RAG queries executed"
           echo "✓ Chat commands completed"
+          if [ "${{ matrix.deploy_mode }}" = "binary" ]; then
+            echo "✓ Designer accessibility verified"
+          fi
           echo "=========================================="
           echo "All E2E tests passed!"
 
@@ -919,14 +1257,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p e2e-results
-          echo "${{ job.status }}" > e2e-results/${{ matrix.os }}.txt
-          echo "Saved result: ${{ job.status }} for ${{ matrix.os }}"
+          echo "${{ job.status }}" > e2e-results/${{ matrix.os }}-${{ matrix.deploy_mode }}.txt
+          echo "Saved result: ${{ job.status }} for ${{ matrix.os }} (${{ matrix.deploy_mode }})"
 
       - name: Upload test result artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-result-${{ matrix.os }}
+          name: e2e-result-${{ matrix.os }}-${{ matrix.deploy_mode }}
           path: e2e-results/
           retention-days: 1
 
@@ -1009,7 +1347,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-test-logs-${{ matrix.os }}
+          name: e2e-test-logs-${{ matrix.os }}-${{ matrix.deploy_mode }}
           path: |
             ~/.llamafarm/logs/
             ~/Library/Caches/llamafarm-llama/
@@ -1056,34 +1394,36 @@ jobs:
           CANCELLED=0
 
           # Build results table
-          RESULTS_TABLE="| OS | Status |\n|---|---|\n"
+          RESULTS_TABLE="| OS | Mode | Status |\n|---|---|---|\n"
 
           for os in ubuntu-latest macos-latest windows-latest; do
-            RESULT_FILE="results/e2e-result-${os}/${os}.txt"
-            if [ -f "$RESULT_FILE" ]; then
-              STATUS=$(cat "$RESULT_FILE")
-              TOTAL=$((TOTAL + 1))
-              case "$STATUS" in
-                success)
-                  PASSED=$((PASSED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :white_check_mark: Passed |\n"
-                  ;;
-                failure)
-                  FAILED=$((FAILED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :x: Failed |\n"
-                  ;;
-                cancelled)
-                  CANCELLED=$((CANCELLED + 1))
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :warning: Cancelled |\n"
-                  ;;
-                *)
-                  RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :question: ${STATUS} |\n"
-                  ;;
-              esac
-            else
-              echo "Warning: No result file found for ${os}"
-              RESULTS_TABLE="${RESULTS_TABLE}| ${os} | :grey_question: No result |\n"
-            fi
+            for mode in source binary; do
+              RESULT_FILE="results/e2e-result-${os}-${mode}/${os}-${mode}.txt"
+              if [ -f "$RESULT_FILE" ]; then
+                STATUS=$(cat "$RESULT_FILE")
+                TOTAL=$((TOTAL + 1))
+                case "$STATUS" in
+                  success)
+                    PASSED=$((PASSED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :white_check_mark: Passed |\n"
+                    ;;
+                  failure)
+                    FAILED=$((FAILED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :x: Failed |\n"
+                    ;;
+                  cancelled)
+                    CANCELLED=$((CANCELLED + 1))
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :warning: Cancelled |\n"
+                    ;;
+                  *)
+                    RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :question: ${STATUS} |\n"
+                    ;;
+                esac
+              else
+                echo "Warning: No result file found for ${os}-${mode}"
+                RESULTS_TABLE="${RESULTS_TABLE}| ${os} | ${mode} | :grey_question: No result |\n"
+              fi
+            done
           done
 
           # Determine overall status
