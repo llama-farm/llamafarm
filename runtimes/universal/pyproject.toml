@@ -113,6 +113,21 @@ tts = [
   "av>=12.0.0",  # PyAV for Opus/AAC encoding
 ]
 
+# Vision: Object detection, classification, segmentation
+# Usage: uv pip install "universal-runtime[vision]"
+vision = [
+  "ultralytics>=8.0.0",  # YOLO v8/v11 for detection
+  "opencv-python-headless>=4.8.0",  # Image processing
+]
+
+# Vision with CLIP for classification/embedding (larger download)
+# Usage: uv pip install "universal-runtime[vision-clip]"
+vision-clip = [
+  "ultralytics>=8.0.0",
+  "opencv-python-headless>=4.8.0",
+  # CLIP is already available via transformers in main deps
+]
+
 # Text-to-speech with Chatterbox Turbo (voice cloning)
 # Usage: uv pip install "universal-runtime[tts-chatterbox]"
 # Note: chatterbox-tts has strict pins but works with newer versions.
