@@ -320,3 +320,253 @@ async def extract_from_documents(
         prompts=prompt_list,
         task=task,  # type: ignore
     )
+
+
+# =============================================================================
+# Object Detection Endpoint
+# =============================================================================
+
+
+@router.post("/detect")
+async def detect_objects(
+    file: OptionalFileUpload = None,
+    image: str | None = Form(
+        default=None,
+        description="Base64-encoded image (data:image/jpeg;base64,...)",
+    ),
+    model: str = Form(
+        default="yolov8n",
+        description="YOLO model: yolov8n, yolov8s, yolov8m, yolov11n",
+    ),
+    confidence_threshold: float = Form(
+        default=0.5,
+        description="Minimum confidence threshold (0-1)",
+    ),
+    classes: str = Form(
+        default="",
+        description="Comma-separated class names to filter (e.g., 'person,car')",
+    ),
+) -> dict[str, Any]:
+    """Detect objects in an image using YOLO.
+
+    Accepts either a file upload OR base64-encoded image.
+
+    Supported models:
+    - yolov8n, yolov8s, yolov8m, yolov8l, yolov8x (YOLOv8 variants)
+    - yolov11n, yolov11s, yolov11m (YOLOv11 variants)
+
+    Example with file upload:
+    ```bash
+    curl -X POST http://localhost:14345/v1/vision/detect \\
+      -F "file=@photo.jpg" \\
+      -F "model=yolov8n" \\
+      -F "confidence_threshold=0.5"
+    ```
+
+    Example with base64:
+    ```bash
+    curl -X POST http://localhost:14345/v1/vision/detect \\
+      -F "image=data:image/jpeg;base64,..." \\
+      -F "model=yolov8n"
+    ```
+
+    Response:
+    ```json
+    {
+        "detections": [
+            {
+                "box": {"x1": 100, "y1": 200, "x2": 300, "y2": 400},
+                "class_name": "person",
+                "class_id": 0,
+                "confidence": 0.92
+            }
+        ],
+        "model": "yolov8n",
+        "inference_time_ms": 45.2
+    }
+    ```
+    """
+    from services.vision import VisionDetectionService
+
+    # Get image from file or base64
+    if file is not None and file.filename:
+        import base64
+        content = await file.read()
+        from pathlib import Path
+        ext = Path(file.filename).suffix.lower()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+        mime = mime_map.get(ext, "image/jpeg")
+        image_b64 = f"data:{mime};base64,{base64.b64encode(content).decode()}"
+    elif image:
+        image_b64 = image
+    else:
+        raise HTTPException(status_code=400, detail="Either 'file' or 'image' must be provided")
+
+    # Parse classes filter
+    class_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+
+    return await VisionDetectionService.detect(
+        image=image_b64,
+        model=model,
+        confidence_threshold=confidence_threshold,
+        classes=class_list,
+    )
+
+
+# =============================================================================
+# Image Classification Endpoint
+# =============================================================================
+
+
+@router.post("/classify")
+async def classify_image(
+    file: OptionalFileUpload = None,
+    image: str | None = Form(
+        default=None,
+        description="Base64-encoded image",
+    ),
+    model: str = Form(
+        default="clip-vit-base",
+        description="CLIP model: clip-vit-base, clip-vit-large, siglip-base",
+    ),
+    classes: str = Form(
+        ...,
+        description="Comma-separated class names for zero-shot classification",
+    ),
+    top_k: int = Form(
+        default=5,
+        description="Number of top predictions to return",
+    ),
+) -> dict[str, Any]:
+    """Classify an image using CLIP zero-shot classification.
+
+    Provide a list of class names and the model will predict which
+    class best matches the image.
+
+    Example:
+    ```bash
+    curl -X POST http://localhost:14345/v1/vision/classify \\
+      -F "file=@photo.jpg" \\
+      -F "classes=cat,dog,bird,fish" \\
+      -F "model=clip-vit-base"
+    ```
+
+    Response:
+    ```json
+    {
+        "class_name": "cat",
+        "class_id": 0,
+        "confidence": 0.87,
+        "all_scores": {"cat": 0.87, "dog": 0.08, "bird": 0.05}
+    }
+    ```
+    """
+    from services.vision import VisionClassificationService
+
+    # Get image
+    if file is not None and file.filename:
+        import base64
+        content = await file.read()
+        from pathlib import Path
+        ext = Path(file.filename).suffix.lower()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+        mime = mime_map.get(ext, "image/jpeg")
+        image_b64 = f"data:{mime};base64,{base64.b64encode(content).decode()}"
+    elif image:
+        image_b64 = image
+    else:
+        raise HTTPException(status_code=400, detail="Either 'file' or 'image' must be provided")
+
+    # Parse classes
+    class_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not class_list:
+        raise HTTPException(status_code=400, detail="At least one class must be provided")
+
+    return await VisionClassificationService.classify(
+        image=image_b64,
+        model=model,
+        classes=class_list,
+        top_k=top_k,
+    )
+
+
+# =============================================================================
+# Image Embedding Endpoint
+# =============================================================================
+
+
+@router.post("/embed")
+async def embed_images(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(
+        default=None,
+        description="JSON array of base64-encoded images",
+    ),
+    texts: str | None = Form(
+        default=None,
+        description="Comma-separated text strings to embed",
+    ),
+    model: str = Form(
+        default="clip-vit-base",
+        description="CLIP model for embeddings",
+    ),
+) -> dict[str, Any]:
+    """Generate CLIP embeddings for images and/or texts.
+
+    CLIP embeddings exist in a shared vector space, enabling:
+    - Image-to-image similarity search
+    - Text-to-image search
+    - Image RAG
+
+    Example:
+    ```bash
+    curl -X POST http://localhost:14345/v1/vision/embed \\
+      -F "file=@photo.jpg" \\
+      -F "texts=a photo of a cat,a photo of a dog"
+    ```
+
+    Response:
+    ```json
+    {
+        "embeddings": [[0.123, -0.456, ...]],
+        "dimensions": 512,
+        "model": "clip-vit-base"
+    }
+    ```
+    """
+    from services.vision import VisionEmbeddingService
+
+    image_list = []
+    text_list = []
+
+    # Get image from file
+    if file is not None and file.filename:
+        import base64
+        content = await file.read()
+        from pathlib import Path
+        ext = Path(file.filename).suffix.lower()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+        mime = mime_map.get(ext, "image/jpeg")
+        image_list.append(f"data:{mime};base64,{base64.b64encode(content).decode()}")
+
+    # Parse images JSON array
+    if images:
+        try:
+            parsed = json.loads(images)
+            if isinstance(parsed, list):
+                image_list.extend(parsed)
+        except json.JSONDecodeError:
+            image_list.append(images)
+
+    # Parse texts
+    if texts:
+        text_list = [t.strip() for t in texts.split(",") if t.strip()]
+
+    if not image_list and not text_list:
+        raise HTTPException(status_code=400, detail="Either images or texts must be provided")
+
+    return await VisionEmbeddingService.embed(
+        model=model,
+        images=image_list if image_list else None,
+        texts=text_list if text_list else None,
+    )
