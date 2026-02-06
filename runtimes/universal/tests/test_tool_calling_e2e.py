@@ -102,7 +102,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify response structure
@@ -140,7 +141,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What's the weather in NY and LA?"}]
         request = self.create_request(messages, tools=[GET_WEATHER_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify multiple tool calls
@@ -167,7 +169,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify normal response (no tool calls)
@@ -188,7 +191,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "Hello"}]
         request = self.create_request(messages, tools=None)  # No tools
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Tool call should be ignored and returned as regular content
@@ -228,7 +232,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL], stream=True)
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Response should be a StreamingResponse
@@ -298,7 +303,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "Schedule a team meeting"}]
         request = self.create_request(messages, tools=[complex_tool])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify complex arguments are preserved
@@ -324,7 +330,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What time is it?"}]
         request = self.create_request(messages, tools=[no_args_tool])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         tool_calls = response["choices"][0]["message"]["tool_calls"]
@@ -370,7 +377,8 @@ class TestToolCallingOpenAICompatibility:
             max_tokens=100,
         )
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # This should not raise - validates OpenAI SDK compatibility
