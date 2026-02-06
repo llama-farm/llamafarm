@@ -10,9 +10,11 @@ NOTE: Vision methods are kept separate from universal_runtime_service.py
 from .detection_service import VisionDetectionService
 from .classification_service import VisionClassificationService
 from .embedding_service import VisionEmbeddingService
+from .review_service import VisionReviewService
 
 __all__ = [
     "VisionDetectionService",
     "VisionClassificationService",
     "VisionEmbeddingService",
+    "VisionReviewService",
 ]
