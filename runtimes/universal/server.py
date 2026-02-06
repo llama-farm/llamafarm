@@ -967,6 +967,10 @@ set_embedding_loader(load_embedding)
 from models.streaming_vision import set_streaming_model_loader
 set_streaming_model_loader(load_detection)
 
+# Training uses detection loader
+from vision_training.trainer import set_trainer_model_loader
+set_trainer_model_loader(load_detection)
+
 # Anomaly router
 set_anomaly_loader(load_anomaly)
 set_anomaly_state(_models, _encoders, _model_load_lock)

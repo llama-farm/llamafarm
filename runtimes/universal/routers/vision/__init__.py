@@ -32,6 +32,7 @@ from .embedding import (
     set_embedding_loader,
 )
 from .streaming import router as streaming_router
+from .training import router as training_router
 
 # Create combined vision router
 vision_router = APIRouter(tags=["vision"])
@@ -44,6 +45,7 @@ vision_router.include_router(detection_router)
 vision_router.include_router(classification_router)
 vision_router.include_router(embedding_router)
 vision_router.include_router(streaming_router)
+vision_router.include_router(training_router)
 
 # For backward compatibility, also export 'router' as alias
 router = vision_router
