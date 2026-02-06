@@ -464,7 +464,7 @@ jobs:
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
       # Allow uv to search all indexes for best version match (needed because PyTorch index
       # has old versions of common packages like 'requests' that would block resolution)
-      UV_INDEX_STRATEGY: unsafe-best-match
+      UV_INDEX_STRATEGY: unsafe-first-match
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1
