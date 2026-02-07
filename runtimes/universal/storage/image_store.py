@@ -434,3 +434,317 @@ class ImageMetadataStore:
 def compute_image_hash(image_bytes: bytes) -> str:
     """Compute a hash for image content (for deduplication)."""
     return hashlib.sha256(image_bytes).hexdigest()[:16]
+
+
+class ImageStore:
+    """Async wrapper for ImageMetadataStore with file storage.
+    
+    Provides async methods for storing images and their metadata,
+    with support for thumbnails and review queue.
+    
+    Example:
+        ```python
+        store = ImageStore()
+        
+        # Save image for review
+        await store.save_for_review(
+            image_id="img_001",
+            image_bytes=frame_bytes,
+            detections=[...],
+            confidence=0.45,
+            model_id="yolov8n",
+            source="stream:camera1",
+        )
+        
+        # List pending reviews
+        pending = await store.list_for_review(status="pending", limit=50)
+        
+        # Mark as reviewed
+        await store.mark_reviewed(
+            image_id="img_001",
+            decision="corrected",
+            corrected_class="truck",
+        )
+        ```
+    """
+    
+    def __init__(self, data_dir: Path | str | None = None):
+        """Initialize the store.
+        
+        Args:
+            data_dir: Directory for storing images. Defaults to ~/.llamafarm/vision/
+        """
+        if data_dir is None:
+            data_dir = _get_vision_data_dir()
+        
+        self.data_dir = Path(data_dir)
+        self.images_dir = self.data_dir / "images"
+        self.thumbnails_dir = self.data_dir / "thumbnails"
+        
+        self.images_dir.mkdir(parents=True, exist_ok=True)
+        self.thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._metadata_store = ImageMetadataStore(self.data_dir / "images.db")
+    
+    async def save_image(
+        self,
+        image_id: str,
+        image_bytes: bytes,
+        source: str = "unknown",
+        create_thumbnail: bool = True,
+    ) -> str:
+        """Save an image and return its file path.
+        
+        Args:
+            image_id: Unique image identifier
+            image_bytes: Image data
+            source: Source identifier
+            create_thumbnail: Whether to create a thumbnail
+            
+        Returns:
+            Path to saved image
+        """
+        import asyncio
+        
+        # Determine format from magic bytes
+        fmt = self._detect_format(image_bytes)
+        
+        # Save image file
+        image_path = self.images_dir / f"{image_id}.{fmt}"
+        await asyncio.to_thread(image_path.write_bytes, image_bytes)
+        
+        # Create thumbnail
+        thumbnail_path = None
+        if create_thumbnail:
+            try:
+                thumbnail_path = await self._create_thumbnail(
+                    image_id, image_bytes, fmt
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create thumbnail: {e}")
+        
+        # Get image dimensions
+        width, height = await self._get_dimensions(image_bytes)
+        
+        # Save metadata
+        record = ImageRecord(
+            id=image_id,
+            file_path=str(image_path),
+            thumbnail_path=str(thumbnail_path) if thumbnail_path else None,
+            created_at=datetime.utcnow(),
+            source=source,
+            width=width,
+            height=height,
+            format=fmt,
+            size_bytes=len(image_bytes),
+            content_hash=compute_image_hash(image_bytes),
+        )
+        
+        await asyncio.to_thread(self._metadata_store.add_image, record)
+        
+        return str(image_path)
+    
+    async def save_for_review(
+        self,
+        image_id: str,
+        image_bytes: bytes,
+        detections: list,
+        confidence: float,
+        model_id: str,
+        source: str = "unknown",
+    ) -> str:
+        """Save an image for human review.
+        
+        Args:
+            image_id: Unique image identifier
+            image_bytes: Image data
+            detections: List of DetectionBox objects
+            confidence: Best confidence score
+            model_id: Model that produced the detections
+            source: Source identifier
+            
+        Returns:
+            Path to saved image
+        """
+        import asyncio
+        
+        # Save the image
+        image_path = await self.save_image(
+            image_id=image_id,
+            image_bytes=image_bytes,
+            source=source,
+        )
+        
+        # Save detection metadata
+        for det in detections:
+            await asyncio.to_thread(
+                self._metadata_store.add_detection,
+                image_id=image_id,
+                class_name=det.class_name,
+                confidence=det.confidence,
+                box=(det.x1, det.y1, det.x2, det.y2),
+                model=model_id,
+            )
+        
+        return image_path
+    
+    async def get_image(self, image_id: str) -> ImageRecord | None:
+        """Get image metadata by ID."""
+        import asyncio
+        return await asyncio.to_thread(self._metadata_store.get_image, image_id)
+    
+    async def list_for_review(
+        self,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        source: str | None = None,
+    ) -> list[ImageRecord]:
+        """List images for review.
+        
+        Args:
+            status: Filter by review status (pending, approved, rejected, corrected)
+            limit: Max items to return
+            offset: Pagination offset
+            source: Filter by source
+            
+        Returns:
+            List of ImageRecord objects
+        """
+        import asyncio
+        
+        # For now, use the pending review method
+        # TODO: Add full status filtering to metadata store
+        if status is None or status == "pending":
+            return await asyncio.to_thread(
+                self._metadata_store.get_pending_review,
+                limit=limit,
+                source=source,
+            )
+        
+        # For other statuses, we need to query differently
+        return await asyncio.to_thread(
+            self._metadata_store.get_pending_review,
+            limit=limit,
+            source=source,
+        )
+    
+    async def count_reviews(self, status: str | None = None) -> int:
+        """Count reviews by status."""
+        import asyncio
+        
+        def _count():
+            with sqlite3.connect(self._metadata_store.db_path) as conn:
+                if status == "pending":
+                    return conn.execute(
+                        "SELECT COUNT(*) FROM images WHERE reviewed = FALSE"
+                    ).fetchone()[0]
+                elif status is None:
+                    return conn.execute(
+                        "SELECT COUNT(*) FROM images"
+                    ).fetchone()[0]
+                else:
+                    return conn.execute(
+                        "SELECT COUNT(*) FROM images WHERE reviewed_by LIKE ?",
+                        (f"%:{status}",)
+                    ).fetchone()[0]
+        
+        return await asyncio.to_thread(_count)
+    
+    async def count_reviews_today(self) -> int:
+        """Count images reviewed today."""
+        import asyncio
+        
+        def _count():
+            with sqlite3.connect(self._metadata_store.db_path) as conn:
+                return conn.execute("""
+                    SELECT COUNT(*) FROM images 
+                    WHERE reviewed = TRUE 
+                    AND date(reviewed_at) = date('now')
+                """).fetchone()[0]
+        
+        return await asyncio.to_thread(_count)
+    
+    async def mark_reviewed(
+        self,
+        image_id: str,
+        decision: str,
+        reviewed_by: str = "anonymous",
+        corrected_class: str | None = None,
+    ) -> None:
+        """Mark an image as reviewed.
+        
+        Args:
+            image_id: Image to mark
+            decision: Review decision (approved, rejected, corrected)
+            reviewed_by: Reviewer identifier
+            corrected_class: If corrected, the correct class name
+        """
+        import asyncio
+        
+        await asyncio.to_thread(
+            self._metadata_store.mark_reviewed,
+            image_id=image_id,
+            reviewed_by=reviewed_by,
+            decision=decision,
+        )
+        
+        # If corrected, add a human label
+        if decision == "corrected" and corrected_class:
+            await asyncio.to_thread(
+                self._metadata_store.add_label,
+                image_id=image_id,
+                label=corrected_class,
+                confidence=1.0,
+                source="human",
+            )
+    
+    async def _create_thumbnail(
+        self,
+        image_id: str,
+        image_bytes: bytes,
+        fmt: str,
+        size: int = 256,
+    ) -> Path:
+        """Create a thumbnail for an image."""
+        import asyncio
+        from PIL import Image
+        import io
+        
+        def _create():
+            img = Image.open(io.BytesIO(image_bytes))
+            img.thumbnail((size, size))
+            
+            thumb_path = self.thumbnails_dir / f"{image_id}_thumb.jpg"
+            img.save(thumb_path, "JPEG", quality=85)
+            return thumb_path
+        
+        return await asyncio.to_thread(_create)
+    
+    async def _get_dimensions(self, image_bytes: bytes) -> tuple[int, int]:
+        """Get image dimensions."""
+        import asyncio
+        
+        def _get():
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(image_bytes))
+                return img.size
+            except Exception:
+                return (0, 0)
+        
+        return await asyncio.to_thread(_get)
+    
+    def _detect_format(self, image_bytes: bytes) -> str:
+        """Detect image format from magic bytes."""
+        if image_bytes[:3] == b'\xff\xd8\xff':
+            return "jpg"
+        elif image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+            return "png"
+        elif image_bytes[:6] in (b'GIF87a', b'GIF89a'):
+            return "gif"
+        elif image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+            return "webp"
+        else:
+            return "jpg"  # Default

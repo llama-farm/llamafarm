@@ -50,6 +50,7 @@ class DetectionBox:
     class_name: str
     class_id: int
     confidence: float
+    mask: list[list[float]] | None = None  # Polygon points [[x,y], ...]
 
 
 @dataclass

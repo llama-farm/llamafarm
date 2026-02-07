@@ -33,6 +33,9 @@ from .embedding import (
 )
 from .streaming import router as streaming_router
 from .training import router as training_router
+from .models import router as models_router, set_vision_models_dir
+from .segmentation import router as segmentation_router
+from .ocr import router as ocr_router, set_ocr_loader
 
 # Create combined vision router
 vision_router = APIRouter(tags=["vision"])
@@ -46,6 +49,9 @@ vision_router.include_router(classification_router)
 vision_router.include_router(embedding_router)
 vision_router.include_router(streaming_router)
 vision_router.include_router(training_router)
+vision_router.include_router(models_router)
+vision_router.include_router(segmentation_router)
+vision_router.include_router(ocr_router)
 
 # For backward compatibility, also export 'router' as alias
 router = vision_router
@@ -62,4 +68,6 @@ __all__ = [
     "set_detection_loader",
     "set_classification_loader",
     "set_embedding_loader",
+    # Vision models
+    "set_vision_models_dir",
 ]

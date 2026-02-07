@@ -269,20 +269,41 @@ class ImageEmbedResponse(BaseModel):
 # =============================================================================
 
 
+class CascadeConfig(BaseModel):
+    """Configuration for model cascade behavior."""
+
+    secondary_model_id: str | None = Field(
+        default=None,
+        description="Fallback model for uncertain detections (e.g., yolov8m, yolov8l)",
+    )
+    feedback_to_primary: bool = Field(
+        default=True,
+        description="Auto-add successful secondary results to replay buffer for training",
+    )
+    save_uncertain_images: bool = Field(
+        default=True,
+        description="Save images that fail both models to review queue",
+    )
+
+
 class StreamingConfig(BaseModel):
-    """Configuration for streaming vision detection."""
+    """Configuration for streaming vision detection with cascade."""
 
     target_fps: float = Field(default=1.0, ge=0.1, le=30.0)
     confidence_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     escalation_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     action_classes: list[str] | None = None
     cooldown_seconds: float = Field(default=5.0, ge=0.0)
+    cascade: CascadeConfig | None = Field(
+        default=None,
+        description="Cascade configuration for automatic escalation to fallback model",
+    )
 
 
 class StreamStartRequest(BaseModel):
     """Start streaming session request."""
 
-    model: str = Field(default="yolov8n")
+    model: str = Field(default="yolov8n", description="Primary (fast) model")
     config: StreamingConfig = Field(default_factory=StreamingConfig)
 
 
@@ -303,11 +324,13 @@ class StreamFrameRequest(BaseModel):
 class StreamFrameResponse(BaseModel):
     """Process single frame response."""
 
-    status: Literal["ok", "action", "review"]
+    status: Literal["ok", "action", "review", "escalated"]
     detections: list[Detection] | None = None
     confidence: float | None = None
     image_id: str | None = None  # For review queue
     suppressed: bool = False  # True if action was suppressed due to cooldown
+    escalated_to: str | None = None  # Model that handled escalation (if any)
+    added_to_replay: bool = False  # True if result was added to replay buffer
 
 
 class StreamStopRequest(BaseModel):
@@ -555,3 +578,77 @@ class ReviewBatchResponse(BaseModel):
     processed: int
     failed: int
     errors: list[str] | None = None
+
+
+# =============================================================================
+# Correction Feedback Types (for auto-learning)
+# =============================================================================
+
+
+class CorrectionRequest(BaseModel):
+    """Submit a correction for a detection."""
+
+    image_id: str = Field(..., description="Image ID from review queue or detection")
+    corrected_class: str = Field(..., description="Correct class name")
+    box: BoundingBox | None = Field(default=None, description="Corrected bounding box")
+    original_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    session_id: str | None = Field(default=None, description="Session that produced the detection")
+
+
+class CorrectionResponse(BaseModel):
+    """Correction submission response."""
+
+    image_id: str
+    added_to_replay: bool
+    replay_buffer_size: int
+    training_triggered: bool = False
+
+
+# =============================================================================
+# Replay Buffer Types
+# =============================================================================
+
+
+class ReplayBufferStats(BaseModel):
+    """Replay buffer statistics."""
+
+    size: int
+    max_size: int
+    by_source: dict[str, int]
+    avg_priority: float
+
+
+class ReplayBufferResponse(BaseModel):
+    """Replay buffer status response."""
+
+    stats: ReplayBufferStats
+    auto_train_threshold: int
+    training_eligible: bool
+
+
+# =============================================================================
+# Auto-Training Types
+# =============================================================================
+
+
+class AutoTrainConfig(BaseModel):
+    """Auto-training configuration."""
+
+    enabled: bool = True
+    threshold: int = Field(default=50, description="Samples before auto-training")
+    min_interval_hours: float = Field(default=6.0, description="Min hours between training")
+    epochs: int = Field(default=5, ge=1, le=100)
+    use_ewc: bool = True
+    use_replay: bool = True
+
+
+class AutoTrainStatus(BaseModel):
+    """Auto-training status."""
+
+    enabled: bool
+    last_training_at: datetime | None
+    next_eligible_at: datetime | None
+    buffer_size: int
+    threshold: int
+    training_in_progress: bool
+    current_job_id: str | None = None

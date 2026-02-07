@@ -1,0 +1,4 @@
+Vision fixes 3:
+- Fixed Pydantic validation error in segmentation.py (mask: list[list[int]] -> list[list[float]]).
+- Restarted Universal Runtime to apply fix.
+- Verified /v1/vision/classify and /v1/vision/segment return 200 OK with test script.

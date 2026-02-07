@@ -40,6 +40,7 @@ import RetrievalMethod from './components/Rag/RetrievalMethod'
 // @ts-ignore - component is TSX local file
 import AddRetrievalStrategy from './components/Rag/AddRetrievalStrategy'
 import EditRetrievalStrategy from './components/Rag/EditRetrievalStrategy'
+import Vision from './components/Vision/Vision'
 // Projects standalone page removed; Home now hosts projects section
 import { HomeUpgradeBanner } from './components/common/UpgradeBanners'
 import {
@@ -258,6 +259,7 @@ function AppContent() {
                         />
                         <Route path="prompt" element={<Prompt />} />
                         <Route path="test" element={<Test />} />
+                        <Route path="vision" element={<Vision />} />
                         {/* Catch-all for unknown /chat routes */}
                         <Route path="*" element={<NotFound />} />
                       </Route>

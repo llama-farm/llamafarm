@@ -206,7 +206,17 @@ class YOLOModel(DetectionModel):
             result = results[0]  # First image result
 
             if result.boxes is not None:
-                for box in result.boxes:
+                # Prepare masks if available
+                masks_xy = []
+                if result.masks is not None:
+                    # masks.xy is a list of np.ndarray or a single np.ndarray depending on version/content
+                    # In recent ultralytics, result.masks.xy is a list of arrays, one per box
+                    try:
+                        masks_xy = result.masks.xy
+                    except AttributeError:
+                        masks_xy = []
+
+                for i, box in enumerate(result.boxes):
                     # Get box coordinates (xyxy format)
                     xyxy = box.xyxy[0].cpu().numpy()
                     conf = float(box.conf[0].cpu().numpy())
@@ -214,6 +224,16 @@ class YOLOModel(DetectionModel):
 
                     # Get class name
                     cls_name = self.class_names[cls_id] if cls_id < len(self.class_names) else f"class_{cls_id}"
+                    
+                    # Get mask if available
+                    mask = None
+                    if i < len(masks_xy):
+                        # Convert numpy array to list of lists for JSON serialization
+                        mask_np = masks_xy[i]
+                        if isinstance(mask_np, np.ndarray):
+                            mask = mask_np.tolist()
+                        elif isinstance(mask_np, list):
+                            mask = mask_np
 
                     boxes.append(DetectionBox(
                         x1=float(xyxy[0]),
@@ -223,6 +243,7 @@ class YOLOModel(DetectionModel):
                         class_name=cls_name,
                         class_id=cls_id,
                         confidence=conf,
+                        mask=mask,
                     ))
 
         return DetectionResult(

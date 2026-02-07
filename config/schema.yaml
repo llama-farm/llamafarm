@@ -539,6 +539,215 @@ properties:
               Lower values increase sensitivity but may produce false positives.
             default: 0.4
 
+  vision:
+    type: object
+    description: |
+      Vision pipeline configuration for object detection, classification, OCR,
+      and automated learning with model cascade and human-in-the-loop review.
+    properties:
+      enabled:
+        type: boolean
+        description: Enable or disable vision endpoints
+        default: true
+      detection:
+        type: object
+        description: Object detection configuration with model cascade
+        properties:
+          primary_model:
+            type: string
+            description: |
+              Primary (fast/small) model for initial detection.
+              Handles ~80% of cases. Examples: yolov8n, yolov8s, yolov11n
+            default: yolov8n
+          fallback_model:
+            type: string
+            description: |
+              Fallback (larger/more accurate) model for uncertain detections.
+              Used when primary model confidence is below escalation_threshold.
+              Examples: yolov8m, yolov8l, yolov8x
+            default: yolov8m
+          confidence_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Minimum confidence to accept detection as valid.
+              Detections above this threshold are returned immediately.
+            default: 0.7
+          escalation_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Threshold below which to escalate to fallback model.
+              Detections between escalation_threshold and confidence_threshold
+              are sent to the fallback model for verification.
+            default: 0.5
+          action_classes:
+            type: array
+            description: |
+              Optional list of classes to trigger actions on.
+              If specified, only these classes trigger alerts/callbacks.
+            items:
+              type: string
+          cooldown_seconds:
+            type: number
+            minimum: 0.0
+            description: |
+              Minimum seconds between action triggers for same class.
+              Prevents alert spam from continuous detections.
+            default: 5.0
+      classification:
+        type: object
+        description: Image classification configuration
+        properties:
+          primary_model:
+            type: string
+            description: Primary CLIP model for classification
+            default: clip-vit-base
+          fallback_model:
+            type: string
+            description: Larger CLIP model for uncertain classifications
+            default: clip-vit-large
+          confidence_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            default: 0.7
+          escalation_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            default: 0.5
+      ocr:
+        type: object
+        description: OCR configuration
+        properties:
+          model:
+            type: string
+            enum: [surya, easyocr, paddleocr, tesseract]
+            description: |
+              OCR backend to use:
+              - surya: Best accuracy, transformer-based (recommended)
+              - easyocr: Good multilingual support (80+ languages)
+              - paddleocr: Fast, optimized for production
+              - tesseract: Classic OCR, CPU-only
+            default: surya
+          languages:
+            type: array
+            description: Language codes for OCR (e.g., ["en", "es"])
+            items:
+              type: string
+            default: ["en"]
+      review_queue:
+        type: object
+        description: |
+          Human-in-the-loop review queue for uncertain detections.
+          Images that both primary and fallback models can't confidently
+          classify are sent here for human/AI review.
+        properties:
+          enabled:
+            type: boolean
+            description: Enable review queue for uncertain detections
+            default: true
+          retention_days:
+            type: integer
+            minimum: 1
+            description: Days to retain images in review queue
+            default: 30
+          max_queue_size:
+            type: integer
+            minimum: 100
+            description: Maximum images in review queue before oldest are dropped
+            default: 10000
+          thumbnail_size:
+            type: integer
+            minimum: 64
+            maximum: 512
+            description: Thumbnail size for review UI
+            default: 256
+      training:
+        type: object
+        description: |
+          Incremental training configuration for continuous learning.
+          Corrections and successful fallback results are used to improve
+          the primary model over time.
+        properties:
+          enabled:
+            type: boolean
+            description: Enable automatic incremental training
+            default: true
+          auto_train_threshold:
+            type: integer
+            minimum: 1
+            description: |
+              Number of corrections/samples in replay buffer before
+              triggering automatic training job.
+            default: 50
+          auto_train_interval_hours:
+            type: number
+            minimum: 0.5
+            description: |
+              Minimum hours between auto-training jobs.
+              Prevents training too frequently.
+            default: 6
+          replay_buffer_size:
+            type: integer
+            minimum: 100
+            description: Maximum samples in replay buffer
+            default: 1000
+          epochs:
+            type: integer
+            minimum: 1
+            maximum: 100
+            description: Epochs for incremental training
+            default: 5
+          batch_size:
+            type: integer
+            minimum: 1
+            maximum: 256
+            description: Batch size for training
+            default: 16
+          use_ewc:
+            type: boolean
+            description: |
+              Use Elastic Weight Consolidation to prevent catastrophic
+              forgetting during incremental learning.
+            default: true
+          ewc_lambda:
+            type: number
+            minimum: 0.0
+            maximum: 10.0
+            description: EWC regularization strength
+            default: 0.4
+          use_replay:
+            type: boolean
+            description: Use experience replay during training
+            default: true
+          replay_ratio:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Ratio of replay samples to new samples in training batches.
+              0.3 means 30% replay, 70% new data.
+            default: 0.3
+      storage:
+        type: object
+        description: Image storage configuration
+        properties:
+          path:
+            type: string
+            description: |
+              Path for storing images and metadata.
+              Relative to project directory or absolute path.
+            default: .vision_data
+          max_storage_gb:
+            type: number
+            minimum: 1
+            description: Maximum storage size in GB before cleanup
+            default: 10
+
 definitions:
   Tool:
     type: object
