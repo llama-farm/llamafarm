@@ -24,9 +24,9 @@ if str(repo_root) not in sys.path:
 
 try:
     from config.datamodel import (
-        DataProcessingStrategyDefinition,
+        DataProcessingStrategy,
         Extractor,
-        Parser,
+        Parsers,
     )
 except ImportError as e:
     raise ImportError(
@@ -48,7 +48,7 @@ class BlobProcessor:
     Implements centralized pattern matching using fnmatch for glob-style patterns.
     """
 
-    def __init__(self, strategy_config: DataProcessingStrategyDefinition):
+    def __init__(self, strategy_config: DataProcessingStrategy):
         """
         Initialize the blob processor with a strategy configuration.
 
@@ -60,8 +60,8 @@ class BlobProcessor:
         self.extractors = self._initialize_extractors(strategy_config.extractors or [])
 
     def _initialize_parsers(
-        self, parser_configs: list[Parser]
-    ) -> list[tuple[Parser, BaseParser]]:
+        self, parser_configs: list[Parsers]
+    ) -> list[tuple[Parsers, BaseParser]]:
         """
         Initialize parsers from configuration and sort by priority.
 
@@ -71,7 +71,7 @@ class BlobProcessor:
         Returns:
             List of tuples containing (config, parser_instance) sorted by priority
         """
-        parsers: list[tuple[Parser, BaseParser]] = []
+        parsers: list[tuple[Parsers, BaseParser]] = []
         for config in parser_configs:
             if not config.type:
                 continue
@@ -375,7 +375,7 @@ class BlobProcessor:
             errors=parser_errors,
         )
 
-    def _find_matching_parsers(self, filename: str) -> list[tuple[Parser, BaseParser]]:
+    def _find_matching_parsers(self, filename: str) -> list[tuple[Parsers, BaseParser]]:
         """
         Find all parsers that match the given filename based on patterns.
 
@@ -385,7 +385,7 @@ class BlobProcessor:
         Returns:
             List of matching (config, parser) tuples sorted by priority
         """
-        matching: list[tuple[Parser, BaseParser]] = []
+        matching: list[tuple[Parsers, BaseParser]] = []
 
         for config, parser in self.parsers:
             include_patterns = config.file_include_patterns or []

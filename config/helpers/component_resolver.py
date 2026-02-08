@@ -22,12 +22,12 @@ from config.datamodel import (
     Database,
     DatabaseEmbeddingStrategy,
     DatabaseRetrievalStrategy,
-    DataProcessingStrategyDefinition,
+    DataProcessingStrategy,
     LlamaFarmConfig,
     NamedEmbeddingStrategy,
     NamedParserDefinition,
     NamedRetrievalStrategy,
-    Parser,
+    Parsers,
 )
 
 
@@ -110,7 +110,7 @@ class ComponentResolver:
 
             # Resolve parsers in data processing strategies
             strategies = getattr(rag_cfg, "data_processing_strategies", None) or []
-            resolved_strategies: list[DataProcessingStrategyDefinition] = []
+            resolved_strategies: list[DataProcessingStrategy] = []
             for strategy in strategies:
                 resolved_strategies.append(self._resolve_parsers(strategy))
             rag_cfg.data_processing_strategies = resolved_strategies
@@ -200,12 +200,12 @@ class ComponentResolver:
         return db_copy
 
     def _resolve_parsers(
-        self, strategy: DataProcessingStrategyDefinition
-    ) -> DataProcessingStrategyDefinition:
+        self, strategy: DataProcessingStrategy
+    ) -> DataProcessingStrategy:
         """Expand parser references within a data processing strategy."""
-        strat_copy: DataProcessingStrategyDefinition = strategy.model_copy(deep=True)
+        strat_copy: DataProcessingStrategy = strategy.model_copy(deep=True)
         parsers: list[Any] = getattr(strategy, "parsers", None) or []
-        resolved_parsers: list[Parser] = []
+        resolved_parsers: list[Parsers] = []
 
         for parser in parsers:
             if isinstance(parser, str):
@@ -282,8 +282,8 @@ class ComponentResolver:
             raise ValueError(f"Invalid retrieval strategy definition: {e}") from e
 
     @staticmethod
-    def _to_parser(defn: Any) -> Parser:
-        if isinstance(defn, Parser):
+    def _to_parser(defn: Any) -> Parsers:
+        if isinstance(defn, Parsers):
             return defn.model_copy(deep=True)
         try:
             payload = (
@@ -293,6 +293,6 @@ class ComponentResolver:
             )
             if isinstance(payload, dict):
                 payload.pop("name", None)
-            return Parser(**payload)
+            return Parsers(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid parser definition: {e}") from e

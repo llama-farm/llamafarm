@@ -84,12 +84,12 @@ unlabeled datasets.
     ):
         """Preview chunks MUST match what ingestion produces."""
         # Create a minimal strategy config for testing
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_strategy",
             description="",
             parsers=[
@@ -141,12 +141,12 @@ unlabeled datasets.
         sample_markdown_file: Path,
     ):
         """Preview matches ingestion for markdown files."""
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_markdown_strategy",
             description="",
             parsers=[
@@ -194,12 +194,12 @@ unlabeled datasets.
         sample_text_file: Path,
     ):
         """Extractors are applied same way in preview and ingestion."""
-        from config.datamodel import DataProcessingStrategyDefinition, Extractor, Parser
+        from config.datamodel import DataProcessingStrategy, Extractor, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_extractor_strategy",
             description="",
             parsers=[
@@ -243,12 +243,12 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_with_different_chunk_sizes(self, sample_text_file: Path):
         """Preview correctly records chunk size override in result."""
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_small_chunks_strategy",
             description="",
             parsers=[
@@ -292,12 +292,12 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_positions_are_accurate(self, sample_text_content: str):
         """Preview chunk positions accurately map to original text."""
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_position_strategy",
             description="",
             parsers=[
@@ -337,7 +337,7 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_overlap_detection(self):
         """Preview correctly identifies overlapping regions."""
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -345,7 +345,7 @@ unlabeled datasets.
         # Use a known text with predictable chunking
         text = "AAAA BBBB CCCC DDDD EEEE FFFF GGGG HHHH"
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_overlap_strategy",
             parsers=[
                 Parser(
@@ -381,12 +381,12 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_idempotent(self, sample_text_file: Path):
         """Calling preview multiple times produces same result."""
-        from config.datamodel import DataProcessingStrategyDefinition, Parser
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
 
-        strategy = DataProcessingStrategyDefinition(
+        strategy = DataProcessingStrategy(
             name="test_strategy",
             description="",
             parsers=[

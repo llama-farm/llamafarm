@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from config.datamodel import DataProcessingStrategyDefinition, Parser
+from config.datamodel import DataProcessingStrategy, Parser
 
 from core.blob_processor import BlobProcessor
 from core.ingest_handler import IngestHandler
@@ -16,7 +16,7 @@ class TestCoreModules:
     def test_blob_processor_initialization(self):
         """Test BlobProcessor initialization."""
         # Create a minimal LlamaFarmConfig instance with a data_processing_strategy
-        strategy_config = DataProcessingStrategyDefinition(
+        strategy_config = DataProcessingStrategy(
             name="test_strategy",
             description="Test strategy for unit test",
             parsers=[Parser(type="TextParser_Python", config={})],
@@ -29,7 +29,7 @@ class TestCoreModules:
 
     def test_blob_processor_text_file(self):
         """Test processing a text blob."""
-        strategy_config = DataProcessingStrategyDefinition(
+        strategy_config = DataProcessingStrategy(
             name="test_strategy",
             description="Test strategy for unit test",
             parsers=[Parser(type="TextParser_Python", config={})],
