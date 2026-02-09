@@ -28,15 +28,15 @@ Run sophisticated AI workloads on your own hardware:
 
 LlamaFarm isn't just a wrapper—it's a complete AI development platform:
 
-| Capability                               | What It Does                                                                                |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Capability | What It Does |
+|-----------|--------------|
 | **RAG (Retrieval-Augmented Generation)** | Ingest PDFs, docs, CSVs and query them with AI. Your documents become searchable knowledge. |
-| **Multi-Model Runtime**                  | Switch between Ollama, OpenAI, vLLM, or local GGUF models in one config file.               |
-| **Custom Classifiers**                   | Train text classifiers with 8-16 examples using SetFit. No ML expertise required.           |
-| **Anomaly Detection**                    | Detect outliers in logs, metrics, or transactions with one API call.                        |
-| **OCR & Document Extraction**            | Extract text and structured data from images and PDFs.                                      |
-| **Named Entity Recognition**             | Find people, organizations, and locations in your text.                                     |
-| **Agentic Tools (MCP)**                  | Give AI models access to filesystems, databases, and APIs.                                  |
+| **Multi-Model Runtime** | Switch between Ollama, OpenAI, vLLM, or local GGUF models in one config file. |
+| **Custom Classifiers** | Train text classifiers with 8-16 examples using SetFit. No ML expertise required. |
+| **Anomaly Detection** | Detect outliers in logs, metrics, or transactions with one API call. |
+| **OCR & Document Extraction** | Extract text and structured data from images and PDFs. |
+| **Named Entity Recognition** | Find people, organizations, and locations in your text. |
+| **Agentic Tools (MCP)** | Give AI models access to filesystems, databases, and APIs. |
 
 ### ⚡ Developer Experience
 
@@ -60,23 +60,19 @@ The desktop app bundles everything: server, Universal Runtime, and the Designer 
 Install the `lf` command-line tool:
 
 **macOS / Linux:**
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
-
 ```powershell
 irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
 ```
 
 **Or download directly:**
-
 - [Latest Release](https://github.com/llama-farm/llamafarm/releases/latest) — Download `lf` binary for your platform
 
 Verify installation:
-
 ```bash
 lf --help
 ```
@@ -94,9 +90,7 @@ lf --help
 ## What Can You Build?
 
 ### Document Q&A
-
 Upload your company's documents and ask questions in natural language:
-
 ```bash
 lf datasets upload knowledge-base ./contracts/*.pdf
 lf datasets process knowledge-base
@@ -104,9 +98,7 @@ lf chat "What are our standard payment terms?"
 ```
 
 ### Custom Intent Classification
-
 Train a classifier to route support tickets:
-
 ```python
 # Train with just 8 examples per category
 POST /v1/ml/classifier/fit
@@ -121,9 +113,7 @@ POST /v1/ml/classifier/fit
 ```
 
 ### Real-Time Anomaly Detection
-
 Monitor API logs for suspicious activity:
-
 ```python
 # Train on normal traffic
 POST /v1/ml/anomaly/fit
@@ -135,9 +125,7 @@ POST /v1/ml/anomaly/detect
 ```
 
 ### Document Processing Pipeline
-
 Extract structured data from invoices and forms:
-
 ```bash
 curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@invoice.pdf" \
@@ -148,11 +136,11 @@ curl -X POST http://localhost:14345/v1/vision/ocr \
 
 ## Choose Your Path
 
-| Get Started                                                                          | Go Deeper                                                                        | Build Your Own                                                              |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Quickstart](./quickstart/index.md) — Install, init, chat, ingest your first dataset | [Core Concepts](./concepts/index.md) — Architecture, sessions, and components    | [Extending LlamaFarm](./extending/index.md) — Add runtimes, stores, parsers |
-| [Designer Web UI](./designer/index.md) — Visual interface for project management     | [Configuration Guide](./configuration/index.md) — Schema-driven project settings | [RAG Guide](./rag/index.md) — Strategies, processing pipelines              |
-| [CLI Reference](./cli/index.md) — Command matrix and examples                        | [Models & Runtime](./models/index.md) — Configure AI models and providers        | [API Reference](./api/index.md) — Full REST API documentation               |
+| Get Started | Go Deeper | Build Your Own |
+|-------------|-----------|----------------|
+| [Quickstart](./quickstart/index.md) — Install, init, chat, ingest your first dataset | [Core Concepts](./concepts/index.md) — Architecture, sessions, and components | [Extending LlamaFarm](./extending/index.md) — Add runtimes, stores, parsers |
+| [Designer Web UI](./designer/index.md) — Visual interface for project management | [Configuration Guide](./configuration/index.md) — Schema-driven project settings | [RAG Guide](./rag/index.md) — Strategies, processing pipelines |
+| [CLI Reference](./cli/index.md) — Command matrix and examples | [Models & Runtime](./models/index.md) — Configure AI models and providers | [API Reference](./api/index.md) — Full REST API documentation |
 
 ---
 
@@ -176,7 +164,7 @@ mcp:
     - name: filesystem
       transport: stdio
       command: npx
-      args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir']
 
 runtime:
   models:
@@ -208,25 +196,23 @@ Get LlamaFarm installed, ingest a dataset, and run your first RAG-powered chat i
 
 Download the all-in-one desktop application:
 
-| Platform            | Download                                                                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Mac (Universal)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg)     |
-| **Windows**         | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe)           |
-| **Linux (x86_64)**  | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
-| **Linux (arm64)**   | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)  |
+| Platform | Download |
+|----------|----------|
+| **Mac (Universal)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
+| **Windows (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe) |
+| **Linux (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
+| **Linux (arm64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage) |
 
 The desktop app bundles everything you need—no additional installation required.
 
 ### Option B: CLI Installation
 
 **macOS / Linux:**
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
-
 ```powershell
 irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
 ```
@@ -235,28 +221,26 @@ irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | ie
 
 Download the `lf` binary directly from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest):
 
-| Platform              | Binary                 |
-| --------------------- | ---------------------- |
-| macOS (Apple Silicon) | `lf-darwin-arm64`      |
-| macOS (Intel)         | `lf-darwin-amd64`      |
-| Linux (x64)           | `lf-linux-amd64`       |
-| Linux (arm64)         | `lf-linux-arm64`       |
-| Windows (x86_64)      | `lf-windows-amd64.exe` |
+| Platform | Binary |
+|----------|--------|
+| macOS (Apple Silicon) | `lf-darwin-arm64` |
+| macOS (Intel) | `lf-darwin-amd64` |
+| Linux (x86_64) | `lf-linux-amd64` |
+| Linux (arm64) | `lf-linux-arm64` |
+| Windows (x86_64) | `lf-windows-amd64.exe` |
 
 After downloading, make it executable and add to your PATH:
-
 ```bash
 chmod +x lf-darwin-arm64
 sudo mv lf-darwin-arm64 /usr/local/bin/lf
 ```
 
 Verify installation:
-
 ```bash
 lf --help
 ```
 
-## 3. Configure Your Runtime (Ollama)
+## 3. Configure Your Runtime (only if you plan to use Ollama)
 
 For best RAG results with longer documents, increase the Ollama context window:
 
@@ -265,7 +249,6 @@ For best RAG results with longer documents, increase the Ollama context window:
 3. Adjust the context window size (recommended: 32K+ for documents)
 
 Pull a model if you haven't already:
-
 ```bash
 ollama pull llama3.2
 ollama pull nomic-embed-text  # For embeddings
@@ -287,7 +270,6 @@ lf start
 ```
 
 This command:
-
 - Starts the API server and Universal Runtime natively
 - Opens the interactive chat TUI
 - Launches the Designer web UI at `http://localhost:14345`
@@ -329,7 +311,6 @@ lf chat "What can you do?"
 ```
 
 Useful options:
-
 - `--no-rag` — Bypass retrieval, hit the model directly
 - `--database`, `--retrieval-strategy` — Override RAG behavior
 - `--curl` — Print the equivalent curl command
@@ -340,16 +321,14 @@ Useful options:
 # Create a dataset
 lf datasets create -s pdf_ingest -b main_db research-notes
 
-# Upload documents (supports globs/directories); auto-processes by default
+# Upload documents (supports globs/directories)
 lf datasets upload research-notes ./examples/fda_rag/files/*.pdf
-# For batching without processing:
-# lf datasets upload research-notes ./examples/fda_rag/files/*.pdf --no-process
 ```
 
 ## 8. Process Documents
 
 ```bash
-lf datasets process research-notes    # Only needed if you skipped auto-processing
+lf datasets process research-notes
 ```
 
 This sends documents through the RAG pipeline—parsing, chunking, embedding, and indexing.
@@ -363,7 +342,6 @@ lf rag query --database main_db "What are the key findings?"
 ```
 
 Useful flags:
-
 - `--top-k 10` — Number of results
 - `--filter "file_type:pdf"` — Metadata filtering
 - `--include-metadata` — Show document sources
@@ -512,37 +490,6 @@ Common symptoms, their causes, and how to resolve them when working with LlamaFa
 | `lf` command not found after installation | Binary not in system PATH | Ensure `/usr/local/bin` (or custom install directory) is in your PATH. Run `echo $PATH` to verify. |
 | Installation script fails | Permissions issue or unsupported platform | Try with `sudo` or check platform compatibility (macOS/Linux supported). Windows users should download `lf.exe` manually. |
 
-## GPU & CUDA Issues
-
-| Issue | Cause | Fix |
-| ----- | ----- | --- |
-| CUDA 11 falls back to CPU | Upstream llama.cpp (b7694+) no longer provides CUDA 11 binaries | Upgrade to CUDA 12+, or build llama.cpp from source with CUDA 11 support (see below). |
-| GPU not detected | CUDA/Vulkan drivers not installed or not in PATH | Install appropriate GPU drivers. For CUDA, ensure `nvidia-smi` works. |
-| Metal not used on macOS | Running on Intel Mac | Metal acceleration is only available on Apple Silicon (M1/M2/M3). Intel Macs use CPU. |
-
-### Building llama.cpp with CUDA 11
-
-If you need CUDA 11 support, you must build llama.cpp from source:
-
-```bash
-# Clone llama.cpp
-git clone https://github.com/ggml-org/llama.cpp
-cd llama.cpp
-git checkout b7694
-
-# Build with CUDA 11
-mkdir build && cd build
-cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="native"
-cmake --build . --config Release
-
-# Copy the library to LlamaFarm cache
-mkdir -p ~/.cache/llamafarm-llama/b7694
-cp bin/libllama.so ~/.cache/llamafarm-llama/b7694/  # Linux
-# or: cp bin/llama.dll ~/.cache/llamafarm-llama/b7694/  # Windows
-```
-
-Set `LLAMAFARM_BACKEND=cpu` to force CPU mode if GPU detection causes issues.
-
 ## Sessions & State
 
 - Delete `.llamafarm/projects/<namespace>/<project>/dev/context` to reset dev chat history.
@@ -554,7 +501,7 @@ Set `LLAMAFARM_BACKEND=cpu` to force CPU mode if GPU detection causes issues.
 | Issue | Cause | Fix |
 | ----- | ----- | --- |
 | `nx build docs` sqlite I/O error | Nx cache database lock or permission issue | Remove `.nx/` cache directory or run with `NX_SKIP_NX_CACHE=1`. |
-| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 14345/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
+| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 8000/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
 | Python module import errors | Virtual environment not activated or dependencies not installed | Run `cd server && uv sync` or `cd rag && uv sync` to install dependencies. |
 
 ## Extensibility Pitfalls
@@ -584,7 +531,7 @@ The LlamaFarm Desktop App provides a complete local AI environment with visual p
 
 To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
-| Component | Mac (M1+) | Windows | Linux |
+| Component | Mac | Windows | Linux |
 |-----------|-----------|---------|-------|
 | **CPU** | Apple M1 or newer | Intel i5 / AMD Ryzen 5 (8th gen+) | Intel i5 / AMD Ryzen 5 (8th gen+) |
 | **RAM** | 8 GB | 8 GB | 8 GB |
@@ -596,13 +543,13 @@ To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
 For larger models (7-8B parameters) and better performance:
 
-| Component | Mac (M1+) | Windows | Linux |
+| Component | Mac | Windows | Linux |
 |-----------|-----------|---------|-------|
-| **CPU** | Apple M1 Pro/Max or M2+ | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
-| **RAM** | 16 GB+ | 16 GB+ | 16 GB+ |
+| **CPU** | Apple M2 Pro or better | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
+| **RAM** | 32 GB+ | 32 GB+ | 32 GB+ |
 | **Storage** | 50 GB+ SSD | 50 GB+ SSD | 50 GB+ SSD |
 | **OS** | macOS 13+ (Ventura) | Windows 11 | Ubuntu 22.04+ |
-| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3060+ (8GB+ VRAM) | NVIDIA RTX 3060+ (8GB+ VRAM) |
+| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3090+ (24GB+ VRAM) | NVIDIA RTX 3090+ (24GB+ VRAM) |
 
 ---
 
@@ -1212,7 +1159,7 @@ lf start
 # Option 2: Manual server start
 cd ../server
 uv sync
-uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 14345
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Verify the server is running:
@@ -1650,10 +1597,10 @@ lf rag stats --auto-start=false
 ```yaml
 - name: Start services
   run: lf start &
-  
+
 - name: Wait for health
   run: timeout 60 bash -c 'until curl -f http://localhost:14345/health; do sleep 2; done'
-  
+
 - name: Run tests
   run: |
     lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
@@ -1725,7 +1672,7 @@ lf services stop server        # Stop specific service
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 14345 |
+| `server` | Main FastAPI server | 8000 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server | 11540 |
 
@@ -2193,7 +2140,7 @@ lf services <subcommand> [service-name] [flags]
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 14345 |
+| `server` | Main FastAPI server | 8000 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server for HuggingFace models | 11540 |
 
@@ -2451,7 +2398,6 @@ runtime: { ... }
 prompts: [...]
 rag: { ... }
 datasets: [...]
-voice: { ... }
 ```
 
 ### Metadata
@@ -2562,7 +2508,7 @@ runtime:
 
 ### Prompts
 
-Prompts are named sets of messages that seed instructions for each session. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax.
+Prompts are named sets of messages that seed instructions for each session.
 
 ```yaml
 prompts:
@@ -2578,110 +2524,25 @@ prompts:
 - Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
 
-#### Dynamic Variable Substitution
-
-Use Jinja2-style `{{variable}}` syntax to inject values at request time:
-
-```yaml
-prompts:
-  - name: personalized
-    messages:
-      - role: system
-        content: |
-          You are a customer service assistant for {{company_name | Acme Corp}}.
-          The customer's name is {{user_name | Valued Customer}}.
-          Account tier: {{account_tier | standard}}
-```
-
-**Syntax:**
-
-| Pattern | Description | Example |
-|---------|-------------|---------|
-| `{{variable}}` | Required variable | `Hello {{name}}` → Error if `name` not provided |
-| `{{variable \| default}}` | Variable with default | `Hello {{name \| Guest}}` → `Hello Guest` if missing |
-| `{{ variable }}` | Whitespace allowed | Same as above |
-
-**Passing variables via API:**
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/ns/project/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Hi"}],
-    "variables": {
-      "company_name": "TechCorp",
-      "user_name": "Alice",
-      "account_tier": "premium"
-    }
-  }'
-```
-
-Variables can be used in:
-- **Prompt message content** - Personalize system instructions
-- **Tool descriptions** - Customize tool behavior per request
-- **Tool parameter descriptions** - Dynamic parameter help text
-
-See the [Prompts Guide](../prompts/index.md) for detailed examples.
-
 ### RAG Configuration
 
 The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
-components:
-  embedding_strategies:
-    - name: default_embeddings
-      type: UniversalEmbedder
-      config:
-        model: sentence-transformers/all-MiniLM-L6-v2
-  retrieval_strategies:
-    - name: semantic_search
-      type: BasicSimilarityStrategy
-      config:
-        top_k: 5
-  parsers:
-    - name: pdf_parser
-      type: PDFParser_LlamaIndex
-      config:
-        chunk_size: 1500
-        chunk_overlap: 200
-  defaults:
-    embedding_strategy: default_embeddings
-    retrieval_strategy: semantic_search
-    parser: pdf_parser
-
 rag:
   databases:
     - name: main_db
       type: ChromaStore
-      # Reuse components by reference (defaults also apply when fields are omitted)
-      embedding_strategy: default_embeddings
-      retrieval_strategy: semantic_search
-  data_processing_strategies:
-    - name: pdf_ingest
-      parsers:
-        - pdf_parser         # reference to components.parsers
-      extractors:
-        - type: HeadingExtractor
-        - type: ContentStatisticsExtractor
-```
-
-Inline (legacy) configs are still supported:
-
-```yaml
-rag:
-  databases:
-    - name: inline_db
-      type: ChromaStore
       default_embedding_strategy: default_embeddings
+      default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: UniversalEmbedder
+          type: OllamaEmbedder
           config:
-            model: sentence-transformers/all-MiniLM-L6-v2
+            model: nomic-embed-text:latest
       retrieval_strategies:
         - name: semantic_search
-          type: BasicSimilarityStrategy
+          type: VectorRetriever
           config:
             top_k: 5
   data_processing_strategies:
@@ -2701,12 +2562,7 @@ Key points:
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
-- Inline parsers can omit `name` (only `type`/`config` are required); `name` is required only for reusable parsers declared under `components.parsers` so they can be referenced by string or set as defaults. This keeps older inline configs valid while allowing named, reusable components.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
-
-Defaults and persistence:
-- `components.defaults` are used when a database or processing strategy omits a field.
-- Server resolves references at load time and persists fully inlined configs; GET responses return the expanded strategies (no reference strings).
 
 ### Memory Configuration
 
@@ -2809,119 +2665,6 @@ datasets:
 
 - `files` are SHA256 hashes tracked by the server.
 - Not required, but useful for syncing dataset metadata across environments.
-
-### Voice
-
-The `voice` section configures real-time voice chat via WebSocket. This enables a full-duplex voice assistant pipeline: Speech In → STT → LLM → TTS → Speech Out.
-
-```yaml
-voice:
-  enabled: true
-  llm_model: chat-model      # Reference to runtime.models[].name
-
-  tts:
-    model: kokoro            # TTS model ID
-    voice: af_heart          # Voice ID
-    speed: 1.0               # Speed multiplier (0.5-2.0)
-
-  stt:
-    model: base              # Whisper model size
-    language: en             # Language code
-```
-
-#### Voice Fields
-
-| Field       | Type    | Default | Description                                                              |
-| ----------- | ------- | ------- | ------------------------------------------------------------------------ |
-| `enabled`   | boolean | `true`  | Enable or disable the voice chat endpoint                                |
-| `llm_model` | string  | —       | Reference to a model name in `runtime.models[]` for voice conversations  |
-| `tts`       | object  | —       | Text-to-speech configuration                                             |
-| `stt`       | object  | —       | Speech-to-text configuration                                             |
-
-#### TTS (Text-to-Speech)
-
-| Field   | Type   | Default     | Description                                     |
-| ------- | ------ | ----------- | ----------------------------------------------- |
-| `model` | string | `kokoro`    | TTS model ID                                    |
-| `voice` | string | `af_heart`  | Voice ID (see available voices below)           |
-| `speed` | number | `1.0`       | Speech speed multiplier (0.5-2.0)               |
-
-**Available Voices:**
-
-| Voice ID      | Description               |
-| ------------- | ------------------------- |
-| `af_heart`    | Heart (American Female) - default |
-| `af_bella`    | Bella (American Female)   |
-| `af_nicole`   | Nicole (American Female)  |
-| `af_sarah`    | Sarah (American Female)   |
-| `af_sky`      | Sky (American Female)     |
-| `am_adam`     | Adam (American Male)      |
-| `am_michael`  | Michael (American Male)   |
-| `bf_emma`     | Emma (British Female)     |
-| `bf_isabella` | Isabella (British Female) |
-| `bm_george`   | George (British Male)     |
-| `bm_lewis`    | Lewis (British Male)      |
-
-#### STT (Speech-to-Text)
-
-| Field      | Type   | Default | Description                                         |
-| ---------- | ------ | ------- | --------------------------------------------------- |
-| `model`    | string | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
-| `language` | string | `en`    | Language code for transcription                     |
-
-**STT Model Comparison:**
-
-| Model      | Size   | Speed    | Accuracy |
-| ---------- | ------ | -------- | -------- |
-| `tiny`     | 39M    | Fastest  | Lower    |
-| `base`     | 74M    | Fast     | Good     |
-| `small`    | 244M   | Medium   | Better   |
-| `medium`   | 769M   | Slower   | High     |
-| `large-v3` | 1.5B   | Slowest  | Highest  |
-
-#### Example: Complete Voice Configuration
-
-```yaml
-version: v1
-name: voice-assistant
-namespace: default
-
-prompts:
-  - name: voice_system
-    messages:
-      - role: system
-        content: |
-          You are a friendly voice assistant. Keep responses concise
-          and conversational. Avoid long lists or complex formatting
-          since your output will be spoken aloud.
-
-runtime:
-  default_model: voice-model
-  models:
-    - name: voice-model
-      provider: universal
-      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
-      base_url: http://localhost:11540/v1
-      prompts: [voice_system]
-      model_api_parameters:
-        temperature: 0.7
-        max_tokens: 256
-
-voice:
-  enabled: true
-  llm_model: voice-model
-  tts:
-    model: kokoro
-    voice: am_adam
-    speed: 1.1
-  stt:
-    model: small
-    language: en
-```
-
-The prompts attached to the referenced LLM model are automatically applied to voice conversations.
-
----
 
 ## Validation & Errors
 
@@ -3532,116 +3275,6 @@ datasets:
     data_processing_strategy: universal_processor
 ```
 
-## Dynamic Variables in Prompts and Tools
-
-Use Jinja2-style `{{variable | default}}` syntax to customize prompts and tools at request time:
-
-```yaml
-version: v1
-name: dynamic-demo
-namespace: default
-
-runtime:
-  default_model: assistant
-  models:
-    - name: assistant
-      provider: universal
-      model: llama3.2:3b
-      default: true
-      tool_call_strategy: native_api
-      prompts:
-        - system
-        - context
-      tools:
-        - type: function
-          name: search_knowledge_base
-          description: "Search the {{company_name | Company}} knowledge base"
-          parameters:
-            type: object
-            properties:
-              query:
-                type: string
-                description: "Search query for {{department | General}} topics"
-            required:
-              - query
-        - type: function
-          name: create_ticket
-          description: "Create a support ticket for {{user_name | a customer}}"
-          parameters:
-            type: object
-            properties:
-              title:
-                type: string
-              priority:
-                type: string
-                enum: ["low", "medium", "high"]
-            required:
-              - title
-
-prompts:
-  - name: system
-    messages:
-      - role: system
-        content: |
-          You are a helpful assistant for {{company_name | Acme Corp}}.
-          You work in the {{department | General}} department.
-          Current date: {{current_date | today}}
-
-  - name: context
-    messages:
-      - role: system
-        content: |
-          ## Customer Information
-          - Name: {{user_name | Valued Customer}}
-          - Account Tier: {{account_tier | standard}}
-          - Language: {{language | English}}
-
-          Adjust responses based on tier:
-          - basic: Focus on self-service
-          - standard: Provide helpful guidance
-          - premium: Offer personalized assistance
-```
-
-**Usage with full variables:**
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Hi, what can you help me with?"}],
-    "variables": {
-      "company_name": "TechCorp Solutions",
-      "department": "Technical Support",
-      "user_name": "Alice Johnson",
-      "account_tier": "premium",
-      "current_date": "2024-01-15"
-    }
-  }'
-```
-
-**Usage with defaults (minimal variables):**
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "variables": {
-      "user_name": "Bob"
-    }
-  }'
-```
-
-Unprovided variables use their defaults (e.g., `company_name` becomes "Acme Corp").
-
-**Variable syntax:**
-
-| Pattern | Description |
-|---------|-------------|
-| `{{variable}}` | Required - error if not provided |
-| `{{variable \| default}}` | Uses default if not provided |
-| `{{ variable }}` | Whitespace is allowed |
-
 ## Qdrant Production Setup
 
 Production-ready configuration with Qdrant vector database:
@@ -3888,88 +3521,21 @@ Common HTTP status codes:
 - `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
 - `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
 
-### Vision (Detection, Classification & Streaming)
-
-**Single-Frame Inference:**
-- `POST /v1/vision/detect` - Object detection (YOLO)
-- `POST /v1/vision/classify` - Image classification (CLIP zero-shot)
-- `POST /v1/vision/segment` - Instance/semantic segmentation
-- `POST /v1/vision/embed` - Image/text CLIP embeddings
-
-**Streaming Pipeline:**
-- `POST /v1/vision/stream/start` - Start streaming session with cascade
-- `POST /v1/vision/stream/frame` - Process a video frame
-- `POST /v1/vision/stream/stop` - Stop streaming session
-- `GET /v1/vision/stream/sessions` - List active sessions
-- `GET /v1/vision/stream/sessions/{session_id}/stats` - Session statistics
-- `POST /v1/vision/corrections` - Submit human correction
-- `GET /v1/vision/replay-buffer` - Replay buffer status
-- `POST /v1/vision/replay-buffer/clear` - Clear replay buffer
-
-**Training:**
-- `POST /v1/vision/train` - Start training job
-- `GET /v1/vision/train/{job_id}` - Training job status
-- `GET /v1/vision/train` - List training jobs
-- `DELETE /v1/vision/train/{job_id}` - Cancel training job
-- `GET /v1/vision/auto-train/status` - Auto-training status
-- `POST /v1/vision/auto-train/trigger` - Trigger auto-training
-
-**Model Management:**
-- `GET /v1/vision/models` - List vision models
-- `POST /v1/vision/models/save` - Save model to disk
-- `POST /v1/vision/models/load` - Load saved model
-- `DELETE /v1/vision/models/{task}/{name}` - Delete saved model
-
-**Federation:**
-- `GET /v1/vision/federation/peers` - List federation peers
-- `POST /v1/vision/federation/peers` - Register peer
-- `DELETE /v1/vision/federation/peers/{name}` - Remove peer
-- `GET /v1/vision/federation/status` - Federation health
-- `POST /v1/vision/federation/escalate` - Inbound escalation from peer
-- `GET /v1/vision/federation/packages` - List model packages
-- `POST /v1/vision/federation/packages` - Create model package
-- `POST /v1/vision/federation/packages/import` - Import model package
-
 ### ML (Custom Classifiers & Anomaly Detection)
 
-**Text Classification (SetFit):**
 - `POST /v1/ml/classifier/fit` - Train custom text classifier (SetFit few-shot)
 - `POST /v1/ml/classifier/predict` - Classify texts using trained model
 - `POST /v1/ml/classifier/save` - Save trained classifier to disk
 - `POST /v1/ml/classifier/load` - Load classifier from disk
 - `GET /v1/ml/classifier/models` - List saved classifiers
 - `DELETE /v1/ml/classifier/models/{name}` - Delete saved classifier
-
-**Batch Anomaly Detection:**
 - `POST /v1/ml/anomaly/fit` - Train anomaly detector
 - `POST /v1/ml/anomaly/score` - Score data points for anomalies
 - `POST /v1/ml/anomaly/detect` - Detect anomalies (returns only anomalous points)
 - `POST /v1/ml/anomaly/save` - Save trained anomaly model
 - `POST /v1/ml/anomaly/load` - Load anomaly model from disk
 - `GET /v1/ml/anomaly/models` - List saved anomaly models
-- `GET /v1/ml/anomaly/backends` - List all 12 PyOD backends with metadata
 - `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
-
-**Streaming Anomaly Detection:**
-- `POST /v1/ml/anomaly/stream` - Process streaming data with auto-retraining
-- `GET /v1/ml/anomaly/stream/detectors` - List active streaming detectors
-- `GET /v1/ml/anomaly/stream/{model_id}` - Get detector statistics
-- `POST /v1/ml/anomaly/stream/{model_id}/reset` - Reset detector to cold start
-- `DELETE /v1/ml/anomaly/stream/{model_id}` - Delete streaming detector
-
-**Polars Data Buffers:**
-- `POST /v1/ml/polars/buffers` - Create named data buffer
-- `GET /v1/ml/polars/buffers` - List all buffers with statistics
-- `GET /v1/ml/polars/buffers/{buffer_id}` - Get buffer statistics
-- `DELETE /v1/ml/polars/buffers/{buffer_id}` - Delete buffer
-- `POST /v1/ml/polars/buffers/{buffer_id}/clear` - Clear buffer data
-- `POST /v1/ml/polars/append` - Append data to buffer
-- `POST /v1/ml/polars/features` - Compute rolling features
-- `GET /v1/ml/polars/buffers/{buffer_id}/data` - Get raw buffer data
-
-### Voice Chat (Real-time Voice Assistant)
-
-- `WebSocket /v1/{namespace}/{project}/voice/chat` - Full-duplex voice chat (Speech → STT → LLM → TTS → Speech)
 
 ### Health
 
@@ -4036,8 +3602,6 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
 - `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
 - `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
-- `variables` (optional): Object of key-value pairs for dynamic template substitution in prompts and tools. See [Dynamic Variables](#dynamic-variables) below
-- `tools` (optional): Array of tool definitions (OpenAI format). Tools can also contain `{{variable}}` placeholders
 
 **Response (Non-Streaming):**
 
@@ -4223,143 +3787,6 @@ curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions 
 ```
 
 Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
-
-### Dynamic Variables
-
-LlamaFarm supports dynamic variable substitution in prompts and tools using Jinja2-style `{{variable}}` syntax. Pass variable values in the `variables` field of your request, and they are resolved before the request is processed.
-
-**Example (Basic Variables):**
-
-If your `llamafarm.yaml` contains prompts with variables:
-
-```yaml
-prompts:
-  - name: personalized
-    messages:
-      - role: system
-        content: |
-          You are a customer service assistant for {{company_name | Acme Corp}}.
-          Customer name: {{user_name | Valued Customer}}
-          Account tier: {{account_tier | standard}}
-```
-
-Pass the values at request time:
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "What can you help me with?"}
-    ],
-    "variables": {
-      "company_name": "TechCorp Solutions",
-      "user_name": "Alice Johnson",
-      "account_tier": "premium"
-    }
-  }'
-```
-
-The system prompt becomes: "You are a customer service assistant for TechCorp Solutions. Customer name: Alice Johnson. Account tier: premium."
-
-**Example (Variables in Tools):**
-
-Tool definitions in your config can also use variables:
-
-```yaml
-runtime:
-  models:
-    - name: assistant
-      tools:
-        - type: function
-          name: search_kb
-          description: "Search the {{company_name | Company}} knowledge base"
-          parameters:
-            type: object
-            properties:
-              query:
-                type: string
-                description: "Search query for {{department | General}} topics"
-```
-
-Pass values to customize the tool:
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Search for shipping policies"}],
-    "variables": {
-      "company_name": "Acme Corp",
-      "department": "Customer Support"
-    }
-  }'
-```
-
-**Example (Request-Level Tools with Variables):**
-
-You can also pass tools directly in the request with variables:
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "What tools do you have?"}],
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "lookup",
-          "description": "Look up data in {{data_source | the database}}",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "id": {"type": "string", "description": "ID to look up"}
-            },
-            "required": ["id"]
-          }
-        }
-      }
-    ],
-    "variables": {
-      "data_source": "the CRM system"
-    }
-  }'
-```
-
-**Variable Syntax:**
-
-| Pattern | Behavior |
-|---------|----------|
-| `{{variable}}` | Required - returns error 400 if not provided |
-| `{{variable \| default}}` | Optional - uses default if not provided |
-| `{{ variable }}` | Whitespace is allowed |
-
-**Supported Value Types:**
-
-- `string` - Inserted as-is
-- `int`, `float` - Converted to string
-- `boolean` - Converted to `True` or `False` (Python-style)
-- `null` - Converted to empty string
-
-Complex types (arrays, objects) are not supported and will return an error.
-
-**Error Handling:**
-
-If a required variable (no default) is missing, the API returns:
-
-```json
-{
-  "detail": "Template resolution failed: Template variable '{{ user_id }}' not found in provided variables. Available variables: ['company_name']. Add a default with '{{ user_id | default_value }}'."
-}
-```
-
-**Use Cases:**
-
-- **Multi-tenant apps** - Customize branding per customer
-- **Personalization** - Inject user names, roles, preferences
-- **A/B testing** - Swap prompt variants without config changes
-- **Dynamic context** - Pass dates, session IDs, account info
 
 ### Get Chat History
 
@@ -5549,199 +4976,6 @@ curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
 
 ---
 
-## Voice Chat API
-
-The Voice Chat API provides a full-duplex WebSocket endpoint for real-time voice assistant functionality. It orchestrates Speech-to-Text (STT), LLM inference, and Text-to-Speech (TTS) into a seamless voice conversation pipeline.
-
-### Configuration (llamafarm.yaml)
-
-Voice settings can be configured in your project's `llamafarm.yaml` file. Query parameters override config defaults.
-
-```yaml
-# Voice chat configuration
-voice:
-  enabled: true                    # Enable/disable voice chat (default: true)
-  llm_model: chat-model            # Reference to runtime.models[].name
-
-  tts:
-    model: kokoro                  # TTS model ID
-    voice: af_heart                # Voice ID (see available voices below)
-    speed: 1.0                     # Speed multiplier (0.5-2.0)
-
-  stt:
-    model: base                    # Whisper model (tiny/base/small/medium/large-v3)
-    language: en                   # Language code
-
-# The llm_model references a model in runtime.models[]
-# Prompts attached to that model apply to voice conversations
-runtime:
-  models:
-    - name: chat-model
-      provider: universal
-      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
-      prompts: [voice_assistant]   # System prompts apply to voice chat
-
-prompts:
-  - name: voice_assistant
-    messages:
-      - role: system
-        content: |
-          You are a friendly voice assistant. Keep responses concise
-          and conversational for spoken output.
-```
-
-**Available TTS Voices:**
-
-| Voice ID | Description |
-|----------|-------------|
-| `af_heart` | Heart (American Female) - default |
-| `af_bella`, `af_nicole`, `af_sarah`, `af_sky` | American Female voices |
-| `am_adam`, `am_michael` | American Male voices |
-| `bf_emma`, `bf_isabella` | British Female voices |
-| `bm_george`, `bm_lewis` | British Male voices |
-
-**STT Model Sizes:**
-
-| Model | Size | Speed | Accuracy |
-|-------|------|-------|----------|
-| `tiny` | 39M | Fastest | Lower |
-| `base` | 74M | Fast | Good (default) |
-| `small` | 244M | Medium | Better |
-| `medium` | 769M | Slower | High |
-| `large-v3` | 1.5B | Slowest | Highest |
-
-### Voice Chat WebSocket
-
-Real-time voice chat with stateful conversation sessions.
-
-**Endpoint:** `WebSocket /v1/{namespace}/{project}/voice/chat`
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `namespace` | string | Project namespace |
-| `project` | string | Project name |
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `session_id` | string | auto | Resume existing session (optional) |
-| `stt_model` | string | `"base"` | Whisper model size (overrides config) |
-| `tts_model` | string | `"kokoro"` | TTS model ID (overrides config) |
-| `tts_voice` | string | `"af_heart"` | TTS voice ID (overrides config) |
-| `llm_model` | string | from config | LLM model ID (required if not in config) |
-| `language` | string | `"en"` | STT language code (overrides config) |
-| `speed` | float | `1.0` | TTS speed multiplier (overrides config) |
-| `system_prompt` | string | none | System prompt for LLM (optional) |
-
-**Client → Server Messages:**
-
-| Type | Format | Description |
-|------|--------|-------------|
-| Audio | Binary | PCM 16kHz 16-bit mono, or WebM/Opus |
-| Interrupt | `{"type": "interrupt"}` | Stop current TTS playback (barge-in) |
-| End | `{"type": "end"}` | Process accumulated audio |
-| Config | `{"type": "config", ...}` | Update session settings |
-
-**Server → Client Messages:**
-
-| Type | Format | Description |
-|------|--------|-------------|
-| Session Info | `{"type": "session_info", "session_id": "..."}` | Session created/resumed |
-| Transcription | `{"type": "transcription", "text": "...", "is_final": bool}` | STT result |
-| LLM Text | `{"type": "llm_text", "text": "...", "is_final": bool}` | LLM response phrase (for display) |
-| TTS Audio | Binary | PCM 24kHz 16-bit mono audio chunks |
-| TTS Start | `{"type": "tts_start", "phrase_index": N}` | Phrase synthesis starting |
-| TTS Done | `{"type": "tts_done", "phrase_index": N, "duration": N}` | Phrase synthesis complete |
-| Status | `{"type": "status", "state": "..."}` | Pipeline state change |
-| Error | `{"type": "error", "message": "..."}` | Error occurred |
-| Closed | `{"type": "closed"}` | Session ended |
-
-**Pipeline States:**
-
-- `idle` - Waiting for input
-- `listening` - Receiving audio input
-- `processing` - STT + LLM in progress
-- `speaking` - TTS output playing
-- `interrupted` - Barge-in occurred
-
-**Example (JavaScript):**
-
-```javascript
-// Connect using project config (voice settings from llamafarm.yaml)
-const ws = new WebSocket(
-  'ws://localhost:14345/v1/default/my-voice-app/voice/chat'
-);
-
-// Override specific settings via query params
-const ws2 = new WebSocket(
-  'ws://localhost:14345/v1/default/my-voice-app/voice/chat?' +
-  'tts_voice=am_adam&' +  // Override voice from config
-  'speed=1.2'             // Override speed from config
-);
-
-// Handle session info
-ws.onopen = () => console.log('Connected');
-
-// Handle messages
-ws.onmessage = (event) => {
-  if (event.data instanceof Blob) {
-    // Binary TTS audio chunk - play it
-    playAudioChunk(event.data);
-  } else {
-    const msg = JSON.parse(event.data);
-    switch (msg.type) {
-      case 'session_info':
-        console.log('Session:', msg.session_id);
-        break;
-      case 'transcription':
-        console.log('You said:', msg.text);
-        break;
-      case 'llm_text':
-        console.log('Assistant:', msg.text);
-        break;
-      case 'status':
-        console.log('State:', msg.state);
-        break;
-      case 'error':
-        console.error('Error:', msg.message);
-        break;
-    }
-  }
-};
-
-// Send audio from microphone
-navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
-  const mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
-  mediaRecorder.ondataavailable = (e) => ws.send(e.data);
-  mediaRecorder.start(100); // Send chunks every 100ms
-});
-
-// Signal end of speech (triggers processing)
-function endSpeech() {
-  ws.send(JSON.stringify({type: 'end'}));
-}
-
-// Barge-in: interrupt current TTS
-function interrupt() {
-  ws.send(JSON.stringify({type: 'interrupt'}));
-}
-```
-
-**Features:**
-
-- **Config-Driven**: Define voice settings in `llamafarm.yaml` for reproducible deployments
-- **Stateful Sessions**: Conversation history is maintained across turns
-- **Barge-in Support**: User can interrupt TTS playback to speak
-- **Low-Latency Streaming**: TTS starts as soon as LLM generates complete phrases
-- **Phrase Boundary Detection**: Natural speech pacing with intelligent text segmentation
-- **Session Resume**: Reconnect with `session_id` to continue conversations
-- **Prompt Inheritance**: System prompts from the LLM model config apply to voice chat
-
----
-
 ## Health API
 
 ### Overall Health Check
@@ -6666,141 +5900,6 @@ curl -X POST http://localhost:14345/v1/vision/documents/extract \
 
 ---
 
-## Vision API (Detection, Classification & Streaming)
-
-The Vision Pipeline provides object detection, classification, segmentation, CLIP embeddings, and real-time streaming with automatic model improvement. These endpoints are available through the LlamaFarm server (port 14345).
-
-**Base URL:** `http://localhost:14345/v1/vision`
-
-**TIP: Full Documentation**
-For architecture details, cascade configuration, and the learning loop, see the [Vision Pipeline guide](../vision/index.md).
-
-### Object Detection
-
-**Endpoint:** `POST /v1/vision/detect`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/detect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "images": ["data:image/png;base64,..."],
-    "confidence_threshold": 0.5,
-    "classes": ["person", "car"]
-  }'
-```
-
-### Image Classification (CLIP)
-
-**Endpoint:** `POST /v1/vision/classify`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/classify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/clip-vit-base-patch32",
-    "images": ["data:image/png;base64,..."],
-    "labels": ["cat", "dog", "bird"]
-  }'
-```
-
-### Segmentation
-
-**Endpoint:** `POST /v1/vision/segment`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/segment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n-seg",
-    "images": ["data:image/png;base64,..."],
-    "confidence_threshold": 0.5
-  }'
-```
-
-### CLIP Embeddings
-
-**Endpoint:** `POST /v1/vision/embed`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/embed \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/clip-vit-base-patch32",
-    "images": ["data:image/png;base64,..."],
-    "texts": ["a photo of a bird"]
-  }'
-```
-
-### Streaming Session Management
-
-```bash
-# Start session with cascade
-curl -X POST http://localhost:14345/v1/vision/stream/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "cascade": {
-      "enabled": true,
-      "cascade_chain": ["yolov8n", "yolov8m"],
-      "confidence_threshold": 0.7
-    }
-  }'
-
-# Process frame
-curl -X POST http://localhost:14345/v1/vision/stream/frame \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "abc123", "image": "data:image/png;base64,..."}'
-
-# Stop session
-curl -X POST http://localhost:14345/v1/vision/stream/stop \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "abc123"}'
-```
-
-### Training
-
-```bash
-# Start training
-curl -X POST http://localhost:14345/v1/vision/train \
-  -H "Content-Type: application/json" \
-  -d '{"model": "yolov8n", "dataset_path": "/path/to/dataset", "epochs": 10}'
-
-# Check status
-curl http://localhost:14345/v1/vision/train/job_abc123
-
-# Auto-train status and trigger
-curl http://localhost:14345/v1/vision/auto-train/status
-curl -X POST http://localhost:14345/v1/vision/auto-train/trigger
-```
-
-### Federation
-
-```bash
-# Register peer
-curl -X POST http://localhost:14345/v1/vision/federation/peers \
-  -H "Content-Type: application/json" \
-  -d '{"name": "gpu-server", "url": "http://192.168.1.100:14345", "models": ["yolov8x"]}'
-
-# Create model package
-curl -X POST http://localhost:14345/v1/vision/federation/packages \
-  -H "Content-Type: application/json" \
-  -d '{"model_id": "my-detector", "model_path": "/path/to/best.pt"}'
-
-# Import model package
-curl -X POST http://localhost:14345/v1/vision/federation/packages/import \
-  -H "Content-Type: application/json" \
-  -d '{"source": "/path/to/package.tar.gz"}'
-```
-
-For the complete API with request/response schemas, see:
-- [Detection & Classification](../vision/detection.md)
-- [Streaming & Cascade](../vision/streaming.md)
-- [Training & Validation](../vision/training.md)
-- [Federation & Distribution](../vision/federation.md)
-
----
-
 ## ML API (Custom Classifiers & Anomaly Detection)
 
 The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
@@ -6809,12 +5908,6 @@ The ML API provides custom text classification and anomaly detection capabilitie
 
 **TIP: Model Versioning**
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
-
-**Endpoints supporting `-latest` resolution:**
-- `/v1/ml/classifier/predict`, `/v1/ml/classifier/load`
-- `/v1/ml/anomaly/score`, `/v1/ml/anomaly/detect`, `/v1/ml/anomaly/load`
-
-Note: The `fit` endpoints do NOT support `-latest` since they create new models.
 
 ### Custom Text Classification (SetFit)
 
@@ -6856,9 +5949,6 @@ Train a new text classifier.
 | `num_iterations` | int | No | 20 | Contrastive learning iterations |
 | `batch_size` | int | No | 16 | Training batch size |
 | `overwrite` | bool | No | false | If false, version with timestamp |
-
-**NOTE: Description Field**
-To add a description to a model, use the `/v1/ml/classifier/save` endpoint after fitting. The `description` parameter in fit requests is not persisted.
 
 **Response:**
 
@@ -7041,8 +6131,6 @@ Load a previously saved classifier.
 
 **Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
 
-The `model_name` is the directory name (e.g., `intent-classifier_20251215_155054`). SetFit classifiers are stored as directories under `~/.llamafarm/models/classifier/`.
-
 ---
 
 ### Anomaly Detection
@@ -7098,7 +6186,7 @@ Train an anomaly detection model.
 | `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
 | `data` | array | Yes | - | Training data (numeric arrays or dicts) |
 | `schema` | object | No | - | Feature encoding schema (required for dict data) |
-| `contamination` | float | No | 0.1 | Expected proportion of anomalies (must be >0 and ≤0.5) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
 | `overwrite` | bool | No | false | If false, version with timestamp |
 
 **Response:**
@@ -7263,8 +6351,6 @@ The anomalies detected are:
 
 **Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
 
-The `filename` includes the file extension (e.g., `sensor-detector_isolation_forest.pkl`). Anomaly models are stored as `.pkl` files under `~/.llamafarm/models/anomaly/`.
-
 ---
 
 ## Universal Runtime API
@@ -7315,23 +6401,6 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
-| **Vision: Detection** | `POST /v1/vision/detect` | Detect objects (YOLO) |
-| **Vision: Classification** | `POST /v1/vision/classify` | Classify images (CLIP) |
-| **Vision: Segmentation** | `POST /v1/vision/segment` | Instance/semantic segmentation |
-| **Vision: Embeddings** | `POST /v1/vision/embed` | CLIP image/text embeddings |
-| **Vision: Streaming** | `POST /v1/vision/stream/start` | Start streaming session |
-| **Vision: Streaming** | `POST /v1/vision/stream/frame` | Process video frame |
-| **Vision: Streaming** | `POST /v1/vision/stream/stop` | Stop streaming session |
-| **Vision: Training** | `POST /v1/vision/train` | Start training job |
-| **Vision: Training** | `GET /v1/vision/train/{job_id}` | Training job status |
-| **Vision: Models** | `GET /v1/vision/models` | List vision models |
-| **Vision: Federation** | `GET /v1/vision/federation/peers` | List federation peers |
-| **Vision: Federation** | `POST /v1/vision/federation/escalate` | Inbound escalation |
-| **Vision: Federation** | `GET /v1/vision/federation/packages` | List model packages |
-
-**INFO: Classification Endpoints**
-- **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
-- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:14345`.
 
 ### Quick Examples
 
@@ -7390,7 +6459,6 @@ For complete documentation, see:
 
 ## Next Steps
 
-- Explore the [Vision Pipeline](../vision/index.md) for detection, streaming, and auto-training
 - Learn about [Configuration](../configuration/index.md)
 - Explore [RAG concepts](../rag/index.md)
 - Review [Examples](../examples/index.md)
@@ -7430,36 +6498,17 @@ For detailed configuration options, see these reference guides:
 Each database entry declares a store type (default `ChromaStore` or `QdrantStore`) and the embedding/retrieval strategies available.
 
 ```yaml
-components:
-  embedding_strategies:
-    - name: default_embeddings
-      type: UniversalEmbedder
-      config:
-        model: sentence-transformers/all-MiniLM-L6-v2
-  retrieval_strategies:
-    - name: semantic_search
-      type: BasicSimilarityStrategy
-      config:
-        top_k: 5
-  defaults:
-    embedding_strategy: default_embeddings
-    retrieval_strategy: semantic_search
-
 rag:
   databases:
     - name: main_db
-      type: ChromaStore
-      embedding_strategy: default_embeddings   # reference to components
-      retrieval_strategy: semantic_search      # reference to components
-    - name: hybrid_db
       type: ChromaStore
       default_embedding_strategy: default_embeddings
       default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: UniversalEmbedder
+          type: OllamaEmbedder
           config:
-            model: sentence-transformers/all-MiniLM-L6-v2
+            model: nomic-embed-text:latest
       retrieval_strategies:
         - name: semantic_search
           type: VectorRetriever
@@ -7475,10 +6524,6 @@ rag:
 - Add multiple strategies for different workloads (semantic, keyword, reranked).
 - Set `default_*` fields to control CLI defaults.
 - Extend store/types by editing `rag/schema.yaml` and following the [Extending guide](../extending/index.md#extend-rag-components).
-- References vs inline:
-  - Use references (`embedding_strategy`, `retrieval_strategy`) to DRY configs; defaults apply when fields are omitted.
-  - Inline arrays (`embedding_strategies`, `retrieval_strategies`) still work for one-off configs.
-  - The server resolves references at load time and returns fully inlined configs on GET.
 
 ## Define Processing Strategies
 
@@ -7512,8 +6557,8 @@ rag:
    ```bash
    lf datasets create -s pdf_ingest -b main_db research-notes
    ```
-2. **Upload** files via `lf datasets upload` (supports globs and directories). Auto-processing runs by default; use `--no-process` or `--bulk` for batch uploads.
-3. **Process** documents with `lf datasets process research-notes` only when you skipped auto-processing. The server schedules a Celery job; monitor progress in the CLI output and server logs.
+2. **Upload** files via `lf datasets upload` (supports globs and directories). The CLI stores file hashes for dedupe.
+3. **Process** documents with `lf datasets process research-notes`. The server schedules a Celery job; monitor progress in the CLI output and server logs.
 4. **Query** with `lf rag query` to validate retrieval quality.
 
 ## Querying & Retrieval Strategies
@@ -10432,43 +9477,7 @@ LlamaFarm selects an agent handler based on configuration:
 - **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
 - **Classifier / Custom** – future handlers for specialized workflows.
 
-Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
-
-## Inline Tools with Dynamic Variables
-
-Models can define tools inline in the config, and these tools support dynamic variable substitution:
-
-```yaml
-runtime:
-  models:
-    - name: assistant
-      provider: universal
-      model: llama3.2:3b
-      tool_call_strategy: native_api
-      tools:
-        - type: function
-          name: search_docs
-          description: "Search {{company_name | the company}} documentation"
-          parameters:
-            type: object
-            properties:
-              query:
-                type: string
-                description: "Search query for {{department | general}} topics"
-            required:
-              - query
-```
-
-Pass values at request time via the `variables` field:
-
-```bash
-curl -X POST .../chat/completions -d '{
-  "messages": [{"role": "user", "content": "Find shipping info"}],
-  "variables": {"company_name": "Acme Corp", "department": "logistics"}
-}'
-```
-
-See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
+Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don’t handle tools, so stick with simple chat.
 
 ## Lemonade Runtime
 
@@ -10518,7 +9527,7 @@ runtime:
 - **Hardware acceleration**: Automatically detects and uses Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
 - **Multiple backends**: llamacpp (GGUF models), ONNX, or Transformers (PyTorch)
 - **OpenAI-compatible API**: Drop-in replacement for OpenAI-compatible endpoints
-- **Port 11534**: Default port (different from LlamaFarm's 14345 and Ollama's 11434)
+- **Port 11534**: Default port (different from LlamaFarm's 8000 and Ollama's 11434)
 
 ### Multi-Model with Lemonade
 
@@ -10568,90 +9577,11 @@ The Universal Runtime is LlamaFarm's most versatile runtime provider, supporting
 **Current Support (Production):**
 - **HuggingFace Transformers** – All PyTorch text models (GPT-2, Llama, Mistral, Qwen, Phi, BERT, etc.)
 - **HuggingFace Diffusers** – All PyTorch diffusion models (Stable Diffusion, SDXL, FLUX)
-- **GGUF Models** – Quantized models via llama.cpp (supports offline loading from HuggingFace cache)
 - **Model Types**: Text Generation, Embeddings, Image Generation, Vision Classification, Audio Processing, Multimodal
 
 **Coming Soon:**
 - **ONNX Runtime** – 2-5x faster inference with automatic model conversion
 - **TensorRT** – GPU-optimized inference for NVIDIA hardware
-
-### GGUF Model Configuration
-
-Universal Runtime supports GGUF models via llama.cpp with full parameter control. This is especially useful for **memory-constrained devices** like Jetson Orin Nano (8GB shared memory).
-
-**Key Features:**
-- **Offline Loading**: Models cached locally are used without network calls
-- **Memory Guard**: Automatic batch size reduction when available memory is low
-- **Full Parameter Passthrough**: Configure all llama.cpp parameters via `extra_body`
-
-#### GGUF Parameters Reference
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `n_ctx` | int | Context window size. Lower = less memory. Auto-detected if not set. |
-| `n_batch` | int | Batch size for prompt processing. Lower values (512) reduce memory. |
-| `n_gpu_layers` | int | GPU layer count. `-1` = all layers on GPU. |
-| `n_threads` | int | CPU thread count. Auto-detected if not set. |
-| `flash_attn` | bool | Enable flash attention for faster inference. |
-| `use_mmap` | bool | Memory-map model file. Recommended for large models. |
-| `use_mlock` | bool | Lock model in RAM. Set `false` on constrained devices. |
-| `cache_type_k` | string | KV cache key quantization: `f32`, `f16`, `q8_0`, `q4_0`, etc. |
-| `cache_type_v` | string | KV cache value quantization. `q4_0` reduces cache by ~4x. |
-
-#### Example: Jetson Orin Nano Configuration
-
-```yaml
-runtime:
-  models:
-    - name: qwen3-8b
-      provider: universal
-      model: unsloth/Qwen3-8B-GGUF:Q4_K_M
-      base_url: http://127.0.0.1:11540
-      extra_body:
-        n_ctx: 2048          # Small context to save KV cache memory
-        n_batch: 512         # Reduced batch for smaller compute buffer
-        n_gpu_layers: -1     # Full GPU offload
-        flash_attn: true     # Enable flash attention
-        use_mmap: true       # Memory-map for efficient swapping
-        use_mlock: false     # Allow OS memory management
-        cache_type_k: q4_0   # Quantize KV cache keys
-        cache_type_v: q4_0   # Quantize KV cache values
-```
-
-#### Memory Estimation
-
-| Parameter | Memory Impact |
-|-----------|--------------|
-| `n_ctx: 2048` | ~256MB KV cache |
-| `n_ctx: 8192` | ~1GB KV cache |
-| `n_batch: 2048` | ~1.2GB compute buffer |
-| `n_batch: 512` | ~300MB compute buffer |
-| `cache_type: q4_0` | ~4x reduction vs f16 |
-
-#### Memory Guard (Automatic)
-
-When available memory drops below 3GB, Universal Runtime automatically:
-1. Reduces `n_batch` from 2048 to 512
-2. Logs a warning with the adjustment
-
-This prevents out-of-memory crashes on constrained devices.
-
-#### Offline Operation
-
-GGUF models support fully offline operation:
-1. Download model once (requires network)
-2. Model is cached in `~/.cache/huggingface/hub/`
-3. Subsequent loads use cache without network
-4. Works on air-gapped systems
-
-```bash
-# First run downloads the model
-curl -X POST http://localhost:11540/v1/chat/completions \
-  -d '{"model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M", "messages": [...]}'
-
-# Subsequent runs work offline
-# (disconnect network and it still works)
-```
 
 ### Quick Setup
 
@@ -10940,20 +9870,16 @@ Beyond text generation, the Universal Runtime provides specialized ML capabiliti
 | **Text Classification** | `POST /v1/classify` | Sentiment analysis, routing |
 | **Named Entity Recognition** | `POST /v1/ner` | Extract people, places, organizations |
 | **Reranking** | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| **Anomaly Detection** | `POST /v1/ml/anomaly/*` | Detect outliers in data |
+| **Anomaly Detection** | `POST /v1/anomaly/*` | Detect outliers in data |
 
 See the detailed guides:
 - [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
-- [Anomaly Detection Guide](./anomaly-detection.md) - Batch anomaly detection for training and scoring
-- [Streaming Anomaly Detection](./streaming-anomaly-detection.md) - Real-time streaming with auto-retraining
-- [Polars Buffer API](./polars-buffers.md) - High-performance data buffers for feature engineering
+- [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
 
 ## Next Steps
 
 - [Specialized ML Models](./specialized-ml.md) – OCR, document extraction, and more.
 - [Anomaly Detection](./anomaly-detection.md) – detect outliers in your data.
-- [Streaming Anomaly Detection](./streaming-anomaly-detection.md) – real-time streaming detection.
-- [Polars Buffer API](./polars-buffers.md) – direct access to Polars data buffers.
 - [Configuration Guide](../configuration/index.md) – runtime schema details.
 - [Extending runtimes](../extending/index.md#extend-runtimes) – step-by-step provider integration.
 - [Prompts](../prompts/index.md) – control how system prompts interact with runtime capabilities.
@@ -10974,11 +9900,7 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
-| [Object Detection](../vision/detection) | `POST /v1/vision/detect` | Detect objects with YOLO models |
-| [Image Classification](../vision/detection#image-classification) | `POST /v1/vision/classify` | CLIP zero-shot classification |
-| [Segmentation](../vision/detection#segmentation) | `POST /v1/vision/segment` | Instance/semantic segmentation |
-| [CLIP Embeddings](../vision/detection#clip-embeddings) | `POST /v1/vision/embed` | Multimodal image/text embeddings |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
 
 ## Starting the Universal Runtime
 
@@ -10991,19 +9913,6 @@ LF_RUNTIME_PORT=8080 nx start universal-runtime
 ```
 
 The server runs on `http://localhost:11540` by default.
-
-### Model Caching
-
-The Universal Runtime caches loaded models in memory for faster inference on repeated requests:
-
-- **Default TTL:** 5 minutes (300 seconds) of inactivity before unloading
-- **Environment variable:** Set `MODEL_UNLOAD_TIMEOUT` to customize (in seconds)
-- **Flash Attention 2:** Automatically enabled on CUDA devices for compatible models
-
-```bash
-# Keep models loaded for 30 minutes
-MODEL_UNLOAD_TIMEOUT=1800 nx start universal-runtime
-```
 
 ---
 
@@ -11207,9 +10116,6 @@ Use **pre-trained HuggingFace models** for common classification tasks like sent
 | `facebook/bart-large-mnli` | Zero-shot classification |
 | `cardiffnlp/twitter-roberta-base-sentiment-latest` | Social media sentiment |
 
-**TIP: Model Quantization**
-You can use quantized models for faster inference by appending a quantization suffix: `model:Q4_K_M`. For example: `distilbert-base-uncased-finetuned-sst-2-english:Q4_K_M`
-
 ### Basic Classification
 
 ```bash
@@ -11221,18 +10127,9 @@ curl -X POST http://localhost:11540/v1/classify \
       "I love this product!",
       "This is terrible and broken.",
       "It works okay I guess."
-    ],
-    "max_length": 512
+    ]
   }'
 ```
-
-**Request Fields:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `model` | string | Yes | - | HuggingFace model ID |
-| `texts` | array | Yes | - | Texts to classify |
-| `max_length` | int | No | auto | Max sequence length (auto-detects: 8192 for ModernBERT, 512 for classic BERT) |
 
 ### Response Format
 
@@ -11278,18 +10175,15 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
 The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the Universal Runtime with added features:
 - **Model Versioning**: Automatic timestamped versions when `overwrite: false`
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
+- **File Upload Support**: Direct file handling without base64 encoding
 
 ```bash
-# Via LlamaFarm API (port 14345)
+# Via LlamaFarm API (port 8000)
 curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
 ```
-
-**WARNING: Server vs Universal Runtime**
-- **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
-- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 14345) and proxies to Universal Runtime.
 
 ### Step 1: Train Your Classifier
 
@@ -11376,13 +10270,6 @@ curl -X POST http://localhost:11540/v1/classifier/save \
   "status": "saved"
 }
 ```
-
-**NOTE: Storage Structure**
-SetFit classifiers are stored as **directories** (not files) under `~/.llamafarm/models/classifier/`. Each directory contains:
-- Model weights and config
-- `labels.txt` - Class labels for the classifier
-
-**Note:** Models are auto-saved immediately after fitting, so explicit save is optional but recommended for adding descriptions.
 
 ### Loading Saved Models
 
@@ -11568,11 +10455,11 @@ Detect outliers and anomalies in numeric and mixed data using multiple algorithm
 
 See the dedicated [Anomaly Detection Guide](./anomaly-detection.md) for complete documentation.
 
-### Quick Example (LlamaFarm API - Recommended)
+### Quick Example
 
 ```bash
 # 1. Train on normal data
-curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
+curl -X POST http://localhost:11540/v1/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
@@ -11582,7 +10469,7 @@ curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   }'
 
 # 2. Detect anomalies in new data
-curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
+curl -X POST http://localhost:11540/v1/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
@@ -11635,7 +10522,6 @@ Files are stored temporarily (5-minute TTL by default).
 
 ## Next Steps
 
-- [Vision Pipeline](../vision/index.md) - Object detection, streaming cascade, auto-training, and federation
 - [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
 - [Universal Runtime Overview](./index.md#universal-runtime) - General runtime configuration
 - [API Reference](../api/index.md) - Full API documentation
@@ -11663,7 +10549,7 @@ The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Un
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 14345) - with versioning
+# Via LlamaFarm API (port 8000) - with versioning
 curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
@@ -11679,7 +10565,7 @@ curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
 ### 1. Train on Normal Data
 
 ```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
+curl -X POST http://localhost:11540/v1/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-monitor",
@@ -11696,7 +10582,7 @@ curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
 ### 2. Detect Anomalies
 
 ```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
+curl -X POST http://localhost:11540/v1/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sensor-monitor",
@@ -12021,33 +10907,6 @@ Neural network learns to compress (encode) and reconstruct (decode) normal data.
 | Complex patterns | Medium | Medium | Medium | Excellent |
 | GPU support | No | No | No | Yes |
 
-### All Available Backends (PyOD)
-
-LlamaFarm supports 12 anomaly detection backends powered by PyOD. Use `GET /v1/ml/anomaly/backends` to list all with metadata.
-
-| Backend | Category | Speed | Memory | Best For |
-|---------|----------|-------|--------|----------|
-| `isolation_forest` | Legacy | Fast | Low | General purpose (recommended default) |
-| `one_class_svm` | Legacy | Slow | Medium | Small datasets, tight boundaries |
-| `local_outlier_factor` | Legacy | Medium | Medium | Local/density-based anomalies |
-| `autoencoder` | Deep Learning | Slow | High | Complex patterns, large datasets |
-| `ecod` | Fast | Very Fast | Low | **Recommended for new projects** - parameter-free |
-| `hbos` | Fast | Very Fast | Low | Fastest algorithm, high dimensions |
-| `copod` | Fast | Very Fast | Low | Parameter-free, interpretable |
-| `knn` | Distance | Medium | Medium | When density matters |
-| `mcd` | Distance | Medium | Medium | Gaussian-distributed data |
-| `cblof` | Clustering | Medium | Medium | Clustered data |
-| `suod` | Ensemble | Medium | Medium | Most robust, combines multiple algorithms |
-| `loda` | Streaming | Fast | Low | Online/streaming scenarios |
-
-**Backend Categories:**
-- **Legacy**: Original 4 backends with backward compatibility
-- **Fast**: Parameter-free or minimal tuning, good for quick experiments
-- **Distance**: Use distance metrics for anomaly scoring
-- **Clustering**: Leverage cluster structure in data
-- **Ensemble**: Combine multiple algorithms
-- **Deep Learning**: Neural network approaches
-
 ---
 
 ## Understanding Contamination
@@ -12109,11 +10968,11 @@ Training data: [normal, normal, normal, anomaly, normal, ...]
 
 ```bash
 # Start conservative (assume clean training data)
-curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
+curl -X POST http://localhost:11540/v1/anomaly/fit \
   -d '{"model": "test", "data": [...], "contamination": 0.05}'
 
 # Test on data with known anomalies
-curl -X POST http://localhost:14345/v1/ml/anomaly/score \
+curl -X POST http://localhost:11540/v1/anomaly/score \
   -d '{"model": "test", "data": [known_normal, known_anomaly, ...]}'
 
 # If too many false positives → increase contamination
@@ -12141,7 +11000,7 @@ Real-world data often includes both numeric and categorical features. Use the `s
 
 ```bash
 # Train with mixed data
-curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
+curl -X POST http://localhost:11540/v1/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -12165,7 +11024,7 @@ curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
 
 ```bash
 # Detect anomalies (schema already learned)
-curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
+curl -X POST http://localhost:11540/v1/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -12189,7 +11048,7 @@ The encoder is automatically cached with the model - no need to pass the schema 
 After training, save the model for production use:
 
 ```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/save \
+curl -X POST http://localhost:11540/v1/anomaly/save \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -12217,7 +11076,7 @@ Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames
 Load a pre-trained model (e.g., after server restart):
 
 ```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/load \
+curl -X POST http://localhost:11540/v1/anomaly/load \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-log-detector",
@@ -12230,7 +11089,7 @@ The model is loaded from the standard location based on its name. The encoder an
 ### List Saved Models
 
 ```bash
-curl http://localhost:14345/v1/ml/anomaly/models
+curl http://localhost:11540/v1/anomaly/models
 ```
 
 Response:
@@ -12249,213 +11108,14 @@ Response:
 ### Delete Model
 
 ```bash
-curl -X DELETE http://localhost:14345/v1/ml/anomaly/models/api_detector_v1.joblib
-```
-
----
-
-## Streaming Anomaly Detection
-
-For real-time data streams, LlamaFarm provides a streaming API that handles:
-- **Cold start**: Collects samples before first training
-- **Auto-retraining**: Periodically retrains on new data
-- **Sliding window**: Maintains recent history for context
-- **Tick-Tock pattern**: Seamless model updates without downtime
-
-### Quick Start
-
-```bash
-# Send streaming data points
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "live-sensor",
-    "data": {"temperature": 72.5, "humidity": 45.2},
-    "backend": "ecod",
-    "min_samples": 50,
-    "retrain_interval": 100,
-    "window_size": 1000,
-    "threshold": 0.5
-  }'
-```
-
-### Streaming Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `model` | "default-stream" | Unique detector identifier |
-| `data` | required | Single dict or batch of dicts |
-| `backend` | "ecod" | PyOD backend (ecod recommended for streaming) |
-| `min_samples` | 50 | Samples before first training (cold start) |
-| `retrain_interval` | 100 | Retrain after this many new samples |
-| `window_size` | 1000 | Sliding window size (keeps recent N samples) |
-| `threshold` | 0.5 | Anomaly score threshold |
-| `contamination` | 0.1 | Expected outlier proportion |
-| `rolling_windows` | null | Optional: [5, 10, 20] for rolling features |
-| `include_lags` | false | Include lag features |
-
-### Response Statuses
-
-- **collecting**: Cold start phase, building initial dataset
-- **ready**: Model trained, returning anomaly scores
-- **retraining**: Background retrain in progress (still scoring)
-
-```json
-{
-  "object": "streaming_result",
-  "model": "live-sensor",
-  "status": "ready",
-  "results": [
-    {
-      "index": 0,
-      "score": 0.42,
-      "is_anomaly": false,
-      "raw_score": 0.38,
-      "samples_until_ready": 0
-    }
-  ],
-  "model_version": 3,
-  "samples_collected": 350,
-  "samples_until_ready": 0,
-  "threshold": 0.5
-}
-```
-
-### Managing Streaming Detectors
-
-```bash
-# List all active detectors
-curl http://localhost:14345/v1/ml/anomaly/stream/detectors
-
-# Get specific detector stats
-curl http://localhost:14345/v1/ml/anomaly/stream/live-sensor
-
-# Reset detector (clears data, restarts cold start)
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream/live-sensor/reset
-
-# Delete detector
-curl -X DELETE http://localhost:14345/v1/ml/anomaly/stream/live-sensor
-```
-
-### Recommended Backends for Streaming
-
-| Backend | Why |
-|---------|-----|
-| `ecod` | **Recommended** - Fast, parameter-free, handles drift |
-| `hbos` | Fastest, good for high-throughput streams |
-| `loda` | Designed for streaming, lightweight |
-| `isolation_forest` | Reliable, good baseline |
-
----
-
-## Polars Buffer API
-
-For advanced use cases, LlamaFarm exposes direct access to Polars-based data buffers. These provide:
-- **High-performance columnar storage** using Polars DataFrames
-- **Automatic sliding window** truncation
-- **Rolling feature computation** (mean, std, min, max)
-- **Lag features** for temporal patterns
-
-**TIP: When to Use Polars Buffers**
-Most users should use the streaming anomaly detection API, which manages Polars buffers automatically. Use the direct Polars API when you need:
-- Custom feature engineering pipelines
-- Integration with other ML systems
-- Manual control over data lifecycle
-
-### Create a Buffer
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/polars/buffers \
-  -H "Content-Type: application/json" \
-  -d '{"buffer_id": "sensor-data", "window_size": 1000}'
-```
-
-### Append Data
-
-```bash
-# Single record
-curl -X POST http://localhost:14345/v1/ml/polars/append \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "data": {"temperature": 72.5, "humidity": 45.2}
-  }'
-
-# Batch append
-curl -X POST http://localhost:14345/v1/ml/polars/append \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "data": [
-      {"temperature": 72.5, "humidity": 45.2},
-      {"temperature": 73.1, "humidity": 44.8},
-      {"temperature": 71.9, "humidity": 46.0}
-    ]
-  }'
-```
-
-### Compute Rolling Features
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/polars/features \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "rolling_windows": [5, 10, 20],
-    "include_rolling_stats": ["mean", "std", "min", "max"],
-    "include_lags": true,
-    "lag_periods": [1, 2, 3],
-    "tail": 10
-  }'
-```
-
-Response includes computed columns like:
-- `temperature_rolling_mean_5`, `temperature_rolling_std_10`
-- `humidity_rolling_min_20`, `humidity_rolling_max_5`
-- `temperature_lag_1`, `humidity_lag_2`
-
-### Buffer Management
-
-```bash
-# List all buffers
-curl http://localhost:14345/v1/ml/polars/buffers
-
-# Get buffer stats
-curl http://localhost:14345/v1/ml/polars/buffers/sensor-data
-
-# Get raw data
-curl "http://localhost:14345/v1/ml/polars/buffers/sensor-data/data?tail=10"
-
-# Get data with features
-curl "http://localhost:14345/v1/ml/polars/buffers/sensor-data/data?with_features=true&tail=10"
-
-# Clear buffer (keep structure)
-curl -X POST http://localhost:14345/v1/ml/polars/buffers/sensor-data/clear
-
-# Delete buffer
-curl -X DELETE http://localhost:14345/v1/ml/polars/buffers/sensor-data
-```
-
-### Buffer Statistics
-
-```json
-{
-  "buffer_id": "sensor-data",
-  "size": 500,
-  "window_size": 1000,
-  "columns": ["temperature", "humidity"],
-  "numeric_columns": ["temperature", "humidity"],
-  "memory_bytes": 8000,
-  "append_count": 500,
-  "avg_append_ms": 0.15
-}
+curl -X DELETE http://localhost:11540/v1/anomaly/models/api_detector_v1.joblib
 ```
 
 ---
 
 ## API Reference
 
-### POST /v1/ml/anomaly/fit
+### POST /v1/anomaly/fit
 
 Train an anomaly detector on data assumed to be mostly normal.
 
@@ -12492,7 +11152,7 @@ Train an anomaly detector on data assumed to be mostly normal.
 }
 ```
 
-### POST /v1/ml/anomaly/score
+### POST /v1/anomaly/score
 
 Score data points for anomalies. Returns all points with scores.
 
@@ -12525,11 +11185,11 @@ Score data points for anomalies. Returns all points with scores.
 }
 ```
 
-### POST /v1/ml/anomaly/detect
+### POST /v1/anomaly/detect
 
 Detect anomalies (returns only anomalous points).
 
-Same request format as `/v1/ml/anomaly/score`, but response only includes points classified as anomalies.
+Same request format as `/score`, but response only includes points classified as anomalies.
 The response does not include an `is_anomaly` field since all returned points are anomalies.
 
 **Response:**
@@ -12547,7 +11207,7 @@ The response does not include an `is_anomaly` field since all returned points ar
 }
 ```
 
-### POST /v1/ml/anomaly/save
+### POST /v1/anomaly/save
 
 Save a fitted model to disk. Models are saved to `~/.llamafarm/models/anomaly/` with auto-generated filenames.
 
@@ -12559,7 +11219,7 @@ Save a fitted model to disk. Models are saved to `~/.llamafarm/models/anomaly/` 
 }
 ```
 
-### POST /v1/ml/anomaly/load
+### POST /v1/anomaly/load
 
 Load a pre-trained model from disk. The file is automatically located based on model name and backend.
 
@@ -12571,11 +11231,11 @@ Load a pre-trained model from disk. The file is automatically located based on m
 }
 ```
 
-### GET /v1/ml/anomaly/models
+### GET /v1/anomaly/models
 
 List all saved models.
 
-### DELETE /v1/ml/anomaly/models/\{filename\}
+### DELETE /v1/anomaly/models/\{filename\}
 
 Delete a saved model.
 
@@ -12724,7 +11384,7 @@ Detect malicious network activity:
 ### Threshold Tuning
 
 1. **Use the learned threshold**: The runtime automatically computes a threshold during training based on the `contamination` parameter (percentile of normalized scores). This learned threshold is returned in the fit response and used by default.
-2. **Override when needed**: You can pass a custom `threshold` parameter to `/v1/ml/anomaly/score` or `/v1/ml/anomaly/detect` endpoints.
+2. **Override when needed**: You can pass a custom `threshold` parameter to `/v1/anomaly/score` or `/v1/anomaly/detect` endpoints.
 3. **Match normalization to threshold**:
    - `standardization`: threshold 0.5-0.9
    - `zscore`: threshold 2.0-4.0
@@ -12805,7 +11465,7 @@ LF_DATA_DIR=/path/to/llamafarm/data
 
 # Prompts
 
-Prompts in LlamaFarm are simple but powerful: you define instructions in `llamafarm.yaml`, and the runtime merges them with chat history and (optionally) RAG context. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax, allowing you to customize behavior per-request.
+Prompts in LlamaFarm are simple but powerful: you define static instructions in `llamafarm.yaml`, and the runtime merges them with chat history and (optionally) RAG context. This section outlines current capabilities and roadmap plans.
 
 ## Prompt Configuration
 
@@ -12826,114 +11486,22 @@ prompts:
 - Models can specify which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Combine with RAG by including instructions explaining how to use context snippets (the server injects them automatically).
 
-## Dynamic Variables
-
-Use Jinja2-style template syntax to inject values at request time. This is ideal for personalizing prompts per user, session, or context.
-
-### Syntax
-
-```yaml
-# Required variable (error if not provided)
-content: "Hello {{user_name}}"
-
-# Variable with default (uses default if not provided)
-content: "Welcome to {{company | Our Service}}"
-
-# Whitespace is allowed
-content: "Hello {{ user_name }}"
-```
-
-### Example: Personalized Customer Service
-
-```yaml
-prompts:
-  - name: system
-    messages:
-      - role: system
-        content: |
-          You are a helpful customer service assistant for {{company_name | Acme Corp}}.
-          You work in the {{department | General}} department.
-          Current date: {{current_date | today}}
-          Be professional, helpful, and concise in your responses.
-
-  - name: context
-    messages:
-      - role: system
-        content: |
-          ## Customer Information
-          - Name: {{user_name | Valued Customer}}
-          - Account Tier: {{account_tier | standard}}
-          - Preferred Language: {{language | English}}
-
-          Adjust your responses based on the customer's tier:
-          - basic: Focus on self-service options
-          - standard: Provide helpful guidance
-          - premium: Offer personalized, detailed assistance
-```
-
-### Passing Variables via API
-
-Variables are passed in the `variables` field of the chat request:
-
-```bash
-curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "variables": {
-      "company_name": "TechCorp Solutions",
-      "user_name": "Alice Johnson",
-      "account_tier": "premium",
-      "current_date": "2024-01-15"
-    }
-  }'
-```
-
-### Variable Behavior
-
-| Scenario | Syntax | Result |
-|----------|--------|--------|
-| Variable provided | `{{name}}` with `{"name": "Alice"}` | `Alice` |
-| Variable with default, not provided | `{{name \| Guest}}` with `{}` | `Guest` |
-| Required variable missing | `{{name}}` with `{}` | **Error 400** |
-| Null value | `{{name}}` with `{"name": null}` | Empty string |
-| Non-string types | `{{count}}` with `{"count": 42}` | `42` (converted) |
-
-### Supported Types
-
-Variable values can be:
-- **String** - Inserted as-is
-- **Integer** - Converted to string (e.g., `42` → `"42"`)
-- **Float** - Converted to string (e.g., `3.14` → `"3.14"`)
-- **Boolean** - Converted to `True` or `False` (Python-style)
-- **None/null** - Converted to empty string
-
-Complex types (lists, dicts) are **not supported** and will raise an error.
-
 ## Best Practices
 
-- **Use defaults for optional context**: Always provide defaults for variables that might not be passed in every request.
-- **Keep required variables minimal**: Only mark variables as required (no default) when they're truly essential.
-- **Explain context usage**: Remind the model that context chunks contain citations or metadata.
-- **Handle non-RAG scenarios**: Mention what to do when no documents are retrieved.
-- **Keep prompts concise**: Long system instructions can reduce available tokens on smaller models.
-- **Avoid conflicting instructions**: Align prompts with agent handler expectations (structured vs. simple chat).
+- **Explain context usage**: remind the model that context chunks contain citations or metadata.
+- **Handle non-RAG scenarios**: mention what to do when no documents are retrieved (“answer from general knowledge” or “state that no information was found”).
+- **Keep prompts concise**: long system instructions can reduce available tokens on smaller models.
+- **Avoid conflicting instructions**: align prompts with agent handler expectations (structured vs. simple chat).
 
-## Use Cases
+## Roadmap & Limitations
 
-Dynamic variables are ideal for:
-
-- **Multi-tenant applications** - Customize branding per customer (`{{company_name}}`)
-- **Personalization** - Inject user names, preferences, or roles
-- **A/B testing** - Swap prompt variants without config changes
-- **Context injection** - Pass session-specific data (dates, account tiers)
-- **Internationalization** - Set language preferences per request
+- Prompt templates, versioning, and evaluation tooling are in development. Track progress in the roadmap.
+- For now, dynamic templating (Jinja, variables) is not built-in—generate prompts upstream if needed.
 
 ## Related Guides
 
-- [Configuration Guide](../configuration/index.md) - Full variable syntax reference
-- [API Reference](../api/index.md#send-chat-message-openai-compatible) - Using `variables` in requests
-- [RAG Guide](../rag/index.md) - Context injection tips
+- [Configuration Guide](../configuration/index.md)
+- [RAG Guide](../rag/index.md) (for context injection tips)
 - [Extending agent handlers](../extending/index.md#extend-runtimes)
 
 ---
@@ -13706,14 +12274,53 @@ mcp:
 
 LlamaFarm is designed for native deployment without containers. The application runs directly on your system using native binaries and the UV package manager for Python dependencies.
 
+## Local Development
+
+### Option A: `lf start` (Recommended)
+
+The easiest path is the integrated dev stack:
+
+```bash
+lf start
+```
+
+This command:
+- Starts the server and Universal Runtime natively
+- Watches `llamafarm.yaml` for changes
+- Opens the Designer web UI at `http://localhost:14345`
+
+### Option B: Manual control
+
+Open separate terminals for each service:
+
+```bash
+# Terminal 1 – API Server
+nx start server
+
+# Terminal 2 – Universal Runtime (for ML, OCR, embeddings)
+nx start universal-runtime
+```
+
+Then run CLI commands against the default server at `http://localhost:14345`.
+
+## Desktop Application
+
+The easiest way to run LlamaFarm is with the **Desktop App**, which bundles everything you need:
+
+- **Mac (Universal)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg)
+- **Windows**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe)
+- **Linux (x86_64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage)
+- **Linux (arm64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)
+
+The desktop app includes the server, Universal Runtime, and Designer UI in a single package.
+
 ## Production Deployment
 
 ### Native Process Management
 
-For production, use process supervisors to start services
+For production, use process supervisors to keep services running:
 
 **systemd (Linux)**:
-
 ```ini
 [Unit]
 Description=LlamaFarm Server
@@ -13723,7 +12330,7 @@ After=network.target
 Type=simple
 User=llamafarm
 WorkingDirectory=/opt/llamafarm
-ExecStart=/opt/llamafarm/lf services start
+ExecStart=/opt/llamafarm/lf start
 Restart=always
 Environment=LF_DATA_DIR=/var/lib/llamafarm
 
@@ -13732,14 +12339,12 @@ WantedBy=multi-user.target
 ```
 
 **PM2 (Node.js)**:
-
 ```bash
-pm2 start "lf services start" --name llamafarm
+pm2 start "lf start" --name llamafarm
 pm2 save
 ```
 
 **launchd (macOS)**:
-
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -13750,7 +12355,6 @@ pm2 save
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/lf</string>
-        <string>services</string>
         <string>start</string>
     </array>
     <key>RunAtLoad</key>
@@ -13766,7 +12370,7 @@ pm2 save
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
 - **Firewall**: Restrict access to ports 14345 (API) and 11540 (Universal Runtime) as needed.
-- **TLS termination**: Use a reverse proxy (Traefik, nginx, Caddy) for HTTPS in production.
+- **TLS termination**: Use a reverse proxy (nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
 ### Reverse Proxy Example (nginx)
@@ -13819,10 +12423,6 @@ curl http://localhost:14345/health
 curl http://localhost:14345/health/liveness
 ```
 
-## Platform-Specific Guides
-
-- [NVIDIA Jetson](./jetson.md) – Deploy on Jetson Orin, Xavier, TX2, Nano with CUDA acceleration
-
 ## Resources
 
 - [Quickstart](../quickstart/index.md) – Local installation steps
@@ -13834,7 +12434,7 @@ curl http://localhost:14345/health/liveness
 
 # Industry Use Cases
 
-LlamaFarm is designed to solve real-world problems across various industries. This section showcases how organizations are using LlamaFarm to streamline workflows, analyze complex documents, detect anomalies, and extract actionable insights from their data.
+LlamaFarm is designed to solve real-world problems across various industries. This section showcases how organizations are using LlamaFarm to streamline workflows, analyze complex documents, and extract actionable insights from their data.
 
 ## Featured Use Cases
 
@@ -13847,26 +12447,6 @@ Learn how pharmaceutical and therapeutics companies use LlamaFarm to analyze FDA
 - Cross-reference answers against existing correspondence databases
 - Confidence scoring for answer validation
 - Significant time savings in regulatory compliance workflows
-
-### [IoT Sensor Monitoring](./iot-sensor-monitoring.md)
-
-Build a real-time IoT monitoring system that detects equipment malfunctions, handles concept drift, and alerts operators within seconds.
-
-**Key Benefits:**
-- Real-time streaming anomaly detection with automatic retraining
-- Rolling features for trend and volatility detection
-- Edge-device optimized with minimal resource usage
-- Automatic handling of seasonal drift and calibration changes
-
-### [Financial Fraud Detection](./financial-fraud-detection.md)
-
-Implement a production-ready fraud detection pipeline that processes thousands of transactions per second with multi-stage analysis.
-
-**Key Benefits:**
-- Real-time pre-screening with sub-10ms latency
-- Rich feature engineering with Polars buffers
-- Ensemble models for high-accuracy fraud detection
-- Velocity, geographic, and behavioral pattern detection
 
 ---
 
@@ -14601,7 +13181,7 @@ eventSource.onmessage = (event) => {
 **Solutions:**
 - Verify LlamaFarm is running: `lf start`
 - Check API endpoint in `.env.local`
-- Ensure correct port (default: 14345)
+- Ensure correct port (default: 8000)
 - Check firewall settings
 - Review LlamaFarm logs for errors
 
@@ -14784,317 +13364,6 @@ Re-run relevant tests to ensure generated code compiles and integrations still w
 - Weekly sync details are pinned in Discord.
 
 Thanks for helping grow LlamaFarm!
-
----
-
-# NVIDIA Jetson
-
-LlamaFarm runs natively on NVIDIA Jetson devices (Orin, Xavier, TX2, Nano) with CUDA acceleration. This guide covers setup, optimization, and troubleshooting for Jetson deployments.
-
-## Supported Devices
-
-| Device | Compute Capability | Memory | Performance |
-|--------|-------------------|--------|-------------|
-| Jetson Orin Nano | 8.7 | 8GB shared | 35+ tok/s |
-| Jetson Orin NX | 8.7 | 8-16GB shared | 35+ tok/s |
-| Jetson AGX Orin | 8.7 | 32-64GB shared | 40+ tok/s |
-| Jetson Xavier NX | 7.2 | 8-16GB shared | 25+ tok/s |
-| Jetson AGX Xavier | 7.2 | 16-32GB shared | 30+ tok/s |
-
-## Quick Start (Automated)
-
-LlamaFarm includes setup scripts that automate the Jetson configuration:
-
-```bash
-# 1. Start the Jetson container
-docker run -it --rm --runtime=nvidia --network host \
-  -v $HOME/.cache:/root/.cache \
-  -v /path/to/llamafarm:/data/llamafarm \
-  dustynv/l4t-pytorch:r36.2.0 \
-  bash
-
-# 2. Install UV package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.cargo/env
-
-# 3. Run the automated setup
-cd /data/llamafarm
-./deployment/jetson/setup.sh
-
-# 4. Start the server
-./deployment/jetson/start.sh
-```
-
-The setup script automatically:
-- Detects Jetson hardware
-- Finds system Python with CUDA PyTorch
-- Creates venv with `--system-site-packages` to inherit CUDA torch
-- Installs dependencies and removes conflicting PyPI packages
-- Creates `.env.jetson` with optimized environment variables
-
-For custom model or context size:
-
-```bash
-./deployment/jetson/start.sh 'unsloth/Qwen3-0.6B-GGUF:Q4_K_M' 4096
-```
-
-## Prerequisites
-
-1. **JetPack SDK** installed (includes CUDA, cuDNN, TensorRT)
-2. **Python 3.10+** with UV package manager
-3. **Custom llama.cpp build** (see below)
-
-## Building llama.cpp for Jetson
-
-Pre-built llama.cpp binaries don't include ARM64 CUDA. You must build from source:
-
-```bash
-git clone https://github.com/ggml-org/llama.cpp.git
-cd llama.cpp
-
-# CRITICAL: Disable CUDA graphs for Tegra stability
-cmake -B build \
-    -DGGML_CUDA=ON \
-    -DGGML_CUDA_GRAPHS=OFF \
-    -DCMAKE_CUDA_ARCHITECTURES="87" \
-    -DCMAKE_BUILD_TYPE=Release
-
-cmake --build build --config Release -j$(nproc)
-```
-
-### Why GGML_CUDA_GRAPHS=OFF?
-
-CUDA graphs provide performance benefits on discrete GPUs but cause stability issues on Jetson's unified memory architecture:
-- Graph compilation overhead exceeds benefits for small batch sizes
-- Memory pressure from graph captures
-- Unpredictable behavior on unified memory systems
-
-### Architecture Flags
-
-| Device | Flag |
-|--------|------|
-| Orin (Nano/NX/AGX) | `-DCMAKE_CUDA_ARCHITECTURES="87"` |
-| Xavier (NX/AGX) | `-DCMAKE_CUDA_ARCHITECTURES="72"` |
-| TX2 | `-DCMAKE_CUDA_ARCHITECTURES="62"` |
-| Nano | `-DCMAKE_CUDA_ARCHITECTURES="53"` |
-
-## Docker Container Setup (Recommended)
-
-The easiest way to run LlamaFarm on Jetson is using NVIDIA's PyTorch container which includes CUDA-enabled PyTorch:
-
-```bash
-docker run -it --rm --runtime=nvidia --network host \
-  -v /home/$USER/.cache:/root/.cache \
-  -v /path/to/llamafarm:/data/llamafarm \
-  dustynv/l4t-pytorch:r36.2.0 \
-  bash
-```
-
-### Install UV Package Manager
-
-Inside the container:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.cargo/env
-```
-
-### Setup Universal Runtime with CUDA PyTorch
-
-The container has CUDA-enabled PyTorch (Python 3.10), but the venv must be configured to use it:
-
-```bash
-cd /data/llamafarm/runtimes/universal
-
-# Create venv with system site packages (inherits CUDA torch)
-uv venv .venv --python /usr/local/bin/python3 --system-site-packages
-
-# Install dependencies (this pulls CPU torch from PyPI)
-uv pip install -r pyproject.toml --python .venv/bin/python
-
-# Remove CPU torch, fall back to system CUDA torch
-uv pip uninstall torch torchvision --python .venv/bin/python
-
-# Downgrade numpy (system torch needs numpy 1.x)
-uv pip install "numpy<2" --python .venv/bin/python
-```
-
-### Verify CUDA PyTorch
-
-```bash
-.venv/bin/python -c "import torch; print('CUDA:', torch.cuda.is_available())"
-# Should print: CUDA: True
-```
-
-This enables GPU acceleration for:
-- **llama.cpp inference** (GGUF models) - 35+ tok/s
-- **Transformers models** (classifiers, embeddings) - GPU accelerated
-- **Anomaly detection** (sklearn) - CPU only
-
-## Installing Built Libraries
-
-Copy the built libraries to LlamaFarm's cache:
-
-```bash
-CACHE_DIR="$HOME/.cache/llamafarm-llama/jetson"
-mkdir -p "$CACHE_DIR"
-
-cp build/src/libllama.so "$CACHE_DIR/"
-cp build/ggml/src/libggml*.so* "$CACHE_DIR/"
-
-# Point LlamaFarm to the custom build
-export LLAMAFARM_LLAMA_LIB_DIR="$CACHE_DIR"
-```
-
-## Running the Server
-
-```bash
-cd /path/to/llamafarm/runtimes/universal
-
-# Start with conservative settings for 8GB memory
-uv run python server.py \
-    --model 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' \
-    --ctx-len 2048
-```
-
-### Test the API
-
-```bash
-curl -s -X POST http://localhost:11540/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100,
-    "n_ctx": 2048
-  }'
-```
-
-**Important**: Always pass `n_ctx` in requests to avoid defaulting to the model's full context (40960 for Qwen3), which causes OOM.
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLAMAFARM_SYNC_INFERENCE` | Force sync (`1`) or async (`0`) inference | Auto-detect |
-| `LLAMAFARM_LLAMA_LIB_DIR` | Path to custom llama.cpp libraries | Auto |
-| `CUDA_CACHE_DISABLE` | Disable CUDA cache (reduces fragmentation) | 0 |
-
-## Memory Optimization
-
-Jetson uses unified memory shared between CPU and GPU. Optimize with:
-
-### 1. Use Quantized Models
-
-Q4_K_M provides the best balance of quality and memory:
-
-```
-Model Size (Qwen3-1.7B):
-- Q4_K_M: ~1.0 GB
-- Q8_0: ~1.8 GB
-- FP16: ~3.4 GB
-```
-
-### 2. Reduce Context Size
-
-Start with `n_ctx=2048` and increase only if needed:
-
-```
-KV Cache Memory (Qwen3-1.7B):
-- n_ctx=2048: ~224 MB
-- n_ctx=4096: ~448 MB
-- n_ctx=8192: ~896 MB
-```
-
-### 3. Enable KV Cache Quantization
-
-For even lower memory, use quantized KV cache:
-
-```python
-# In your model configuration
-cache_type_k="q4_0"  # 4-bit keys
-cache_type_v="q4_0"  # 4-bit values
-```
-
-This reduces KV cache memory by ~4x.
-
-## Troubleshooting
-
-### "double free or corruption" crash
-
-**Cause**: CUDA backend initialization from worker thread.
-
-**Solution**: LlamaFarm automatically initializes the backend from the main thread. If you see this error, ensure you're using the latest version.
-
-### Slow performance (< 25 tok/s)
-
-**Check**:
-1. Rebuild llama.cpp with `GGML_CUDA_GRAPHS=OFF`
-2. Verify all layers on GPU: look for "offloaded 29/29 layers" in logs
-3. Check `n_ctx` isn't too large (causes memory pressure)
-
-### Out of memory
-
-**Solutions**:
-1. Reduce `n_ctx` (e.g., 2048 instead of 4096)
-2. Use smaller quantization (Q4_K_M instead of Q8_0)
-3. Enable KV cache quantization
-4. Monitor with `tegrastats`
-
-### Model loads on CPU
-
-**Check**:
-1. Verify CUDA: `nvcc --version`
-2. Ensure libggml-cuda.so exists in library directory
-3. Check logs for "CUDA0" device detection
-
-## Performance Benchmarks
-
-Tested on Jetson Orin Nano 8GB with Qwen3-1.7B Q4_K_M:
-
-| Metric | Value |
-|--------|-------|
-| Tokens/second | 35-36 tok/s |
-| Time to first token | ~70-100ms |
-| Memory usage | ~2.5 GB |
-| Power consumption | ~15W |
-
-## systemd Service
-
-Create `/etc/systemd/system/llamafarm.service`:
-
-```ini
-[Unit]
-Description=LlamaFarm Universal Runtime
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/data/llamafarm/runtimes/universal
-Environment=LLAMAFARM_LLAMA_LIB_DIR=/root/.cache/llamafarm-llama/jetson
-Environment=LLAMAFARM_SYNC_INFERENCE=1
-ExecStart=/root/.local/bin/uv run python server.py --model unsloth/Qwen3-1.7B-GGUF:Q4_K_M --ctx-len 2048
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable llamafarm
-sudo systemctl start llamafarm
-```
-
-## See Also
-
-- [Deployment Overview](./index.md)
-- [Configuration Guide](../configuration/index.md)
-- [Troubleshooting](../troubleshooting/index.md)
 
 ---
 
@@ -15375,2633 +13644,5 @@ npm run build
 ## Source Code
 
 See `docs/website/mcp/` for the full implementation.
-
----
-
-# Polars Buffer API
-
-LlamaFarm provides direct access to high-performance Polars-based data buffers for advanced streaming and feature engineering use cases.
-
-## Why Polars Matters for Anomaly Detection
-
-In streaming anomaly detection, **Feature Engineering Latency** is the biggest bottleneck—not model inference:
-
-| Operation | Typical Latency |
-|-----------|----------------|
-| Isolation Forest inference | ~1ms |
-| Rolling std of 10,000 rows (Pandas) | 10-50ms |
-| Rolling std of 10,000 rows (Polars) | \<1ms |
-
-**The Problem:** To detect if "$500" is anomalous, the model needs context—"Is $500 normal for this user?" This requires calculating rolling statistics over a history window. In Pandas, this creates a major latency bottleneck.
-
-**The Solution:** Polars is a columnar data store written in Rust with:
-
-1. **Apache Arrow Memory Format** - No copy-on-append, efficient memory allocation
-2. **SIMD Vectorization** - Calculate mean of 2,000 numbers in the same CPU cycles as 2 numbers
-3. **Parallel Execution** - Compute rolling stats for ALL columns simultaneously across CPU cores
-4. **Cold Start Handling** - `fill_null(0.0)` ensures valid feature vectors from the very first transaction
-
-## Overview
-
-Polars buffers are the "data substrate" underlying LlamaFarm's streaming anomaly detection. While most users should use the [Streaming Anomaly Detection API](./streaming-anomaly-detection.md) directly, the Polars Buffer API is available for:
-
-- **Custom feature engineering** pipelines
-- **Integration with external ML systems**
-- **Manual control** over data lifecycle
-- **Building custom streaming analytics**
-
-**Key Features:**
-- **High-performance columnar storage** using Polars DataFrames
-- **Automatic sliding window** truncation (memory never grows indefinitely)
-- **Rolling feature computation** (mean, std, min, max) with SIMD + parallel execution
-- **Lag features** for temporal patterns
-- **Sub-millisecond append performance**
-- **Cold start handling** with null filling
-
----
-
-## How the Data Flows
-
-Understanding the internal data flow helps you optimize your pipeline:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DATA FLOW VISUALIZATION                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  Step 1: INIT          →  []                                                │
-│                                                                              │
-│  Step 2: INGEST        →  {"amount": 100}                                   │
-│          (Tick 1)          ↓                                                │
-│                         [100]    ← Polars converts dict to 1-row DataFrame  │
-│                                                                              │
-│  Step 3: STACK         →  {"amount": 150}                                   │
-│          (Tick 2)          ↓                                                │
-│                         [100, 150]  ← pl.concat (Arrow memory - no copy)    │
-│                                                                              │
-│  ...                                                                         │
-│                                                                              │
-│  Step 101: TRUNCATE    →  {"amount": 200}                                   │
-│            (Tick 101)      ↓                                                │
-│                         [150, ..., 200]  ← tail(window_size) drops $100     │
-│                                                                              │
-│  Step 102: COMPUTE     →  rolling_mean = 175.0                              │
-│            (SIMD)          (Calculated instantly with vectorization)        │
-│                                                                              │
-│  Step 103: EXPORT      →  [200.0, 175.0, ...]                               │
-│            (to NumPy)      (Raw value + Context features for model)         │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Cold Start Behavior
-
-During the first few ticks, rolling features have insufficient history:
-
-| Tick | Buffer | rolling_mean_5 | rolling_std_5 | What Happens |
-|------|--------|----------------|---------------|--------------|
-| 1 | [100] | 100.0 | **0.0** | std is null → filled with 0.0 |
-| 2 | [100, 150] | 125.0 | 35.36 | 2 values, real std |
-| 5 | [100, 150, 120, 80, 200] | 130.0 | 45.83 | Full 5-value window |
-
-The `fill_null(0.0)` ensures your model always receives valid numeric vectors, even from the very first transaction. No crashes, no NaN errors.
-
----
-
-## When to Use Polars Buffers
-
-| Use Case | Recommended API |
-|----------|-----------------|
-| Real-time anomaly detection | [Streaming Anomaly Detection](./streaming-anomaly-detection.md) |
-| Custom feature engineering | **Polars Buffers** |
-| Feeding features to external ML | **Polars Buffers** |
-| Simple anomaly detection | [Batch Anomaly Detection](./anomaly-detection.md) |
-| Rolling statistics only | **Polars Buffers** |
-
----
-
-## Quick Start
-
-### Create a Buffer
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/polars/buffers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "window_size": 1000
-  }'
-```
-
-Response:
-```json
-{
-  "object": "buffer_created",
-  "buffer_id": "sensor-data",
-  "window_size": 1000,
-  "status": "created"
-}
-```
-
-### Append Data
-
-```bash
-# Single record
-curl -X POST http://localhost:14345/v1/ml/polars/append \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "data": {"temperature": 72.5, "humidity": 45.2, "pressure": 1013.25}
-  }'
-
-# Batch append (more efficient)
-curl -X POST http://localhost:14345/v1/ml/polars/append \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "data": [
-      {"temperature": 72.5, "humidity": 45.2, "pressure": 1013.25},
-      {"temperature": 73.1, "humidity": 44.8, "pressure": 1013.10},
-      {"temperature": 71.9, "humidity": 46.0, "pressure": 1013.50}
-    ]
-  }'
-```
-
-Response:
-```json
-{
-  "object": "append_result",
-  "buffer_id": "sensor-data",
-  "appended": 3,
-  "buffer_size": 3,
-  "avg_append_ms": 0.15
-}
-```
-
-### Compute Rolling Features
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/polars/features \
-  -H "Content-Type: application/json" \
-  -d '{
-    "buffer_id": "sensor-data",
-    "rolling_windows": [5, 10, 20],
-    "include_rolling_stats": ["mean", "std", "min", "max"],
-    "include_lags": true,
-    "lag_periods": [1, 2, 3],
-    "tail": 5
-  }'
-```
-
-Response:
-```json
-{
-  "object": "polars_data",
-  "buffer_id": "sensor-data",
-  "rows": 5,
-  "columns": [
-    "temperature", "humidity", "pressure",
-    "temperature_rolling_mean_5", "temperature_rolling_std_5",
-    "temperature_rolling_min_5", "temperature_rolling_max_5",
-    "temperature_rolling_mean_10", "temperature_rolling_std_10",
-    "humidity_rolling_mean_5", "humidity_rolling_std_5",
-    "temperature_lag_1", "temperature_lag_2", "temperature_lag_3",
-    "humidity_lag_1", "humidity_lag_2", "humidity_lag_3"
-  ],
-  "data": [
-    {
-      "temperature": 72.5,
-      "humidity": 45.2,
-      "temperature_rolling_mean_5": 72.8,
-      "temperature_rolling_std_5": 0.45,
-      "temperature_lag_1": 73.1,
-      "temperature_lag_2": 71.9
-    }
-  ]
-}
-```
-
----
-
-## API Reference
-
-### Create Buffer
-
-`POST /v1/ml/polars/buffers`
-
-Creates a new named buffer with automatic sliding window.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `buffer_id` | string | Yes | Unique identifier |
-| `window_size` | int | No | Max records to keep (default: 1000) |
-
-### List Buffers
-
-`GET /v1/ml/polars/buffers`
-
-Returns all active buffers with statistics.
-
-Response:
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "buffer_id": "sensor-data",
-      "size": 500,
-      "window_size": 1000,
-      "columns": ["temperature", "humidity", "pressure"],
-      "numeric_columns": ["temperature", "humidity", "pressure"],
-      "memory_bytes": 12000,
-      "append_count": 500,
-      "avg_append_ms": 0.12
-    }
-  ],
-  "total": 1
-}
-```
-
-### Get Buffer Stats
-
-`GET /v1/ml/polars/buffers/{buffer_id}`
-
-Returns detailed statistics for a specific buffer.
-
-### Delete Buffer
-
-`DELETE /v1/ml/polars/buffers/{buffer_id}`
-
-Removes buffer and frees memory.
-
-### Clear Buffer
-
-`POST /v1/ml/polars/buffers/{buffer_id}/clear`
-
-Clears data but keeps buffer structure.
-
-### Append Data
-
-`POST /v1/ml/polars/append`
-
-Appends single record or batch.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `buffer_id` | string | Yes | Target buffer |
-| `data` | dict or list | Yes | Single record or batch |
-
-### Compute Features
-
-`POST /v1/ml/polars/features`
-
-Computes rolling statistics and lag features.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `buffer_id` | string | Required | Source buffer |
-| `rolling_windows` | list[int] | [5, 10, 20] | Window sizes |
-| `include_rolling_stats` | list[str] | ["mean", "std", "min", "max"] | Stats to compute |
-| `include_lags` | bool | true | Include lag features |
-| `lag_periods` | list[int] | [1, 2, 3] | Lag periods |
-| `tail` | int | null | Return only last N rows |
-
-### Get Buffer Data
-
-`GET /v1/ml/polars/buffers/{buffer_id}/data`
-
-Returns raw buffer contents.
-
-Query parameters:
-- `tail`: Return only last N rows
-- `with_features`: Compute and include rolling features (bool)
-
----
-
-## Rolling Features Explained
-
-### Rolling Statistics
-
-For each numeric column and window size:
-
-| Feature | Formula | Use Case |
-|---------|---------|----------|
-| `{col}_rolling_mean_{w}` | Mean of last w values | Smoothing, trend |
-| `{col}_rolling_std_{w}` | Std dev of last w values | Volatility, noise |
-| `{col}_rolling_min_{w}` | Min of last w values | Lower bound |
-| `{col}_rolling_max_{w}` | Max of last w values | Upper bound |
-
-**Example:** With `rolling_windows: [5, 10]` and column `temperature`:
-- `temperature_rolling_mean_5` - 5-point moving average
-- `temperature_rolling_mean_10` - 10-point moving average
-- `temperature_rolling_std_5` - 5-point volatility
-- `temperature_rolling_std_10` - 10-point volatility
-
-### Lag Features
-
-| Feature | Description |
-|---------|-------------|
-| `{col}_lag_1` | Previous value |
-| `{col}_lag_2` | Value 2 steps ago |
-| `{col}_lag_n` | Value n steps ago |
-
-**Use cases:**
-- Detecting sudden changes (current vs lag_1)
-- Identifying trends (compare lag_1, lag_2, lag_3)
-- Cyclic patterns (compare to periodic lags)
-
----
-
-## Performance Characteristics
-
-### Append Performance
-
-| Operation | Typical Latency |
-|-----------|-----------------|
-| Single append | 0.1-0.3 ms |
-| Batch append (100 records) | 0.5-1.0 ms |
-| Batch append (1000 records) | 2-5 ms |
-
-### Memory Usage
-
-Approximate memory per 1000 records:
-- 5 columns: ~40 KB
-- 10 columns: ~80 KB
-- 20 columns: ~160 KB
-
-Plus overhead for rolling features during computation.
-
-### Window Truncation
-
-The buffer automatically truncates to `window_size`:
-- Oldest records are dropped first
-- No manual cleanup needed
-- Bounded memory usage
-
----
-
-## Python Example: Custom Feature Pipeline
-
-```python
-
-class CustomFeaturePipeline:
-    """Build custom features from streaming data."""
-
-    def __init__(self, buffer_id: str = "custom-features"):
-        self.buffer_id = buffer_id
-        self.base_url = "http://localhost:14345/v1/ml/polars"
-        self.client = httpx.AsyncClient()
-
-    async def initialize(self, window_size: int = 500):
-        """Create the buffer."""
-        await self.client.post(f"{self.base_url}/buffers", json={
-            "buffer_id": self.buffer_id,
-            "window_size": window_size
-        })
-
-    async def add_data(self, data: dict | list):
-        """Append data to buffer."""
-        return await self.client.post(f"{self.base_url}/append", json={
-            "buffer_id": self.buffer_id,
-            "data": data
-        })
-
-    async def get_features(self, windows: list[int] = None) -> dict:
-        """Get latest features."""
-        resp = await self.client.post(f"{self.base_url}/features", json={
-            "buffer_id": self.buffer_id,
-            "rolling_windows": windows or [5, 10, 20],
-            "include_lags": True,
-            "lag_periods": [1, 2, 5],
-            "tail": 1  # Just the latest row
-        })
-        result = resp.json()
-        return result["data"][0] if result["rows"] > 0 else None
-
-    async def get_raw_data(self, tail: int = 10) -> list:
-        """Get recent raw data."""
-        resp = await self.client.get(
-            f"{self.base_url}/buffers/{self.buffer_id}/data",
-            params={"tail": tail}
-        )
-        return resp.json()["data"]
-
-    async def cleanup(self):
-        """Delete buffer."""
-        await self.client.delete(f"{self.base_url}/buffers/{self.buffer_id}")
-        await self.client.aclose()
-
-async def main():
-    pipeline = CustomFeaturePipeline()
-    await pipeline.initialize(window_size=1000)
-
-    try:
-        # Simulate streaming data
-        import random
-        for i in range(100):
-            data = {
-                "sensor_id": "temp-001",
-                "value": 72 + random.gauss(0, 2),
-                "timestamp": i
-            }
-            await pipeline.add_data(data)
-
-            if i >= 20:  # Need enough data for features
-                features = await pipeline.get_features()
-                if features:
-                    # Use features for your ML model
-                    print(f"Sample {i}: rolling_mean_5={features.get('value_rolling_mean_5', 'N/A'):.2f}")
-
-            await asyncio.sleep(0.1)
-
-    finally:
-        await pipeline.cleanup()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
----
-
-## Integration Patterns
-
-### Pattern 1: Polars + External ML
-
-Use Polars for feature engineering, feed to your own model:
-
-```python
-# 1. Collect data in Polars buffer
-await append_to_buffer(raw_data)
-
-# 2. Get engineered features
-features = await get_features(rolling_windows=[5, 10, 30])
-
-# 3. Feed to your scikit-learn/XGBoost/etc model
-prediction = your_model.predict([list(features.values())])
-```
-
-### Pattern 2: Polars + Streaming Anomaly
-
-Combine custom features with LlamaFarm anomaly detection:
-
-```python
-# 1. Build custom features
-features = await polars_get_features(buffer_id="custom")
-
-# 2. Stream to anomaly detector
-result = await anomaly_stream(
-    model="my-detector",
-    data=features,
-    backend="ecod"
-)
-```
-
-### Pattern 3: Multiple Feature Sets
-
-Use multiple buffers for different purposes:
-
-```python
-# Fast-moving features (short windows)
-await append(buffer_id="fast-features", data=raw)
-fast = await get_features("fast-features", rolling_windows=[3, 5, 10])
-
-# Slow-moving features (long windows)
-await append(buffer_id="slow-features", data=raw)
-slow = await get_features("slow-features", rolling_windows=[50, 100, 200])
-
-# Combine for multi-scale analysis
-combined = {**fast, **slow}
-```
-
----
-
-## Best Practices
-
-### Buffer Sizing
-
-| Data Rate | Recommended window_size |
-|-----------|------------------------|
-| 1 sample/sec | 3600 (1 hour) |
-| 10 samples/sec | 6000 (10 min) |
-| 100 samples/sec | 10000 (100 sec) |
-| 1000 samples/sec | 10000-50000 |
-
-### Rolling Window Selection
-
-- **Short windows (3-10)**: Detect sudden changes, noise
-- **Medium windows (20-50)**: Trend detection
-- **Long windows (100+)**: Baseline comparison
-
-### Memory Management
-
-1. Set appropriate `window_size`
-2. Delete unused buffers
-3. Use `clear` instead of delete/recreate
-4. Monitor with `GET /v1/ml/polars/buffers`
-
----
-
-## Next Steps
-
-- [Streaming Anomaly Detection](./streaming-anomaly-detection.md) - High-level streaming API
-- [Anomaly Detection Guide](./anomaly-detection.md) - Batch detection
-- [Use Cases: Financial Fraud Detection](../use-cases/financial-fraud-detection.md) - Complete example
-
----
-
-# Streaming Anomaly Detection
-
-For real-time data streams, LlamaFarm provides a streaming anomaly detection API that handles the complexities of online learning: cold start, automatic retraining, sliding windows, and seamless model updates.
-
-## Overview
-
-The streaming API is designed for scenarios where:
-- Data arrives continuously (sensors, logs, metrics)
-- You need immediate anomaly scores
-- The underlying data distribution may drift over time
-- You can't wait to collect a large batch before training.
-
-**Key Features:**
-- **Cold Start Handling**: Collects initial samples before first training
-- **Tick-Tock Retraining**: Seamlessly swaps models during retrain
-- **Sliding Window**: Maintains recent history, discards old data
-- **Automatic Feature Engineering**: Optional Polars-based rolling features
-- **12 PyOD Backends**: Choose the right algorithm for your data
-
-## Quick Start
-
-```bash
-# Send streaming data point
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sensor-stream",
-    "data": {"temperature": 72.5, "humidity": 45.2, "pressure": 1013.25},
-    "backend": "ecod",
-    "min_samples": 50,
-    "retrain_interval": 100,
-    "window_size": 1000,
-    "threshold": 0.5
-  }'
-```
-
-**During cold start (collecting samples):**
-```json
-{
-  "object": "streaming_result",
-  "model": "sensor-stream",
-  "status": "collecting",
-  "results": [
-    {"index": 0, "score": null, "is_anomaly": null, "samples_until_ready": 49}
-  ],
-  "model_version": 0,
-  "samples_collected": 1,
-  "samples_until_ready": 49
-}
-```
-
-**After model is trained:**
-```json
-{
-  "object": "streaming_result",
-  "model": "sensor-stream",
-  "status": "ready",
-  "results": [
-    {"index": 0, "score": 0.32, "is_anomaly": false, "raw_score": 0.28, "samples_until_ready": 0}
-  ],
-  "model_version": 1,
-  "samples_collected": 150,
-  "samples_until_ready": 0
-}
-```
-
----
-
-## How Streaming Works
-
-### The Tick-Tock Pattern
-
-LlamaFarm uses a tick-tock pattern for seamless model updates:
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  Time ──────────────────────────────────────────────────>│
-│                                                          │
-│  Model A: [ACTIVE]────────────────[ACTIVE]──────────    │
-│                    \                     \               │
-│  Model B:          [TRAINING]──[ACTIVE]   [TRAINING]──  │
-│                                                          │
-│  Data:    ●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●    │
-│           ↑                    ↑                         │
-│           Retrain triggered    Retrain triggered         │
-└──────────────────────────────────────────────────────────┘
-```
-
-1. **Active Model**: Scores incoming data immediately
-2. **Background Training**: New model trains on updated window
-3. **Atomic Swap**: Once trained, new model becomes active
-4. **Zero Downtime**: Scoring continues throughout
-
-### Lifecycle States
-
-| Status | Description | Scoring |
-|--------|-------------|---------|
-| `collecting` | Cold start - gathering initial samples | Returns `null` scores |
-| `ready` | Model trained and scoring | Returns anomaly scores |
-| `retraining` | Background retrain in progress | Returns scores (using current model) |
-
----
-
-## Parameters
-
-### Request Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model` | string | "default-stream" | Unique identifier for this detector |
-| `data` | dict or list | **required** | Single data point or batch of points |
-| `backend` | string | "ecod" | PyOD algorithm (see Backend Selection) |
-| `min_samples` | int | 50 | Samples needed before first training |
-| `retrain_interval` | int | 100 | Retrain after this many new samples |
-| `window_size` | int | 1000 | Sliding window size (keeps most recent N) |
-| `threshold` | float | 0.5 | Anomaly score threshold (0-1) |
-| `contamination` | float | 0.1 | Expected proportion of anomalies (0-0.5) |
-
-### Rolling Feature Parameters (Polars-Powered)
-
-Enable automatic feature engineering using high-performance Polars:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `rolling_windows` | list[int] | null | Window sizes, e.g., [5, 10, 20] |
-| `include_lags` | bool | false | Include lag features |
-| `lag_periods` | list[int] | null | Lag periods, e.g., [1, 2, 3] |
-
-When `rolling_windows` is provided, the detector computes:
-- `{col}_rolling_mean_{window}` - Rolling mean
-- `{col}_rolling_std_{window}` - Rolling standard deviation
-- `{col}_rolling_min_{window}` - Rolling minimum
-- `{col}_rolling_max_{window}` - Rolling maximum
-- `{col}_lag_{period}` - Lagged values (if `include_lags=true`)
-
-**Why Rolling Features Matter:**
-
-A raw value like `$500` is meaningless without context. The model needs to know: "Is $500 normal for this user?" Rolling features provide this context automatically.
-
-**Polars Performance Advantage:**
-
-| Feature Engineering | Pandas | Polars |
-|--------------------|--------|--------|
-| Rolling std (10K rows) | 10-50ms | \<1ms |
-| Multi-column parallel | Sequential | Parallel (all CPU cores) |
-| Memory on append | Copy each time | Arrow (no-copy) |
-
-**Cold Start Handling:**
-
-During the first few samples, rolling statistics have insufficient history. Polars automatically fills null values with `0.0`, ensuring your model always receives valid numeric vectors—no crashes from NaN values.
-
-**Example with Rolling Features:**
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "fraud-detector",
-    "data": {"amount": 500, "merchant_category": 5},
-    "backend": "ecod",
-    "min_samples": 50,
-    "window_size": 1000,
-    "rolling_windows": [5, 10, 20],
-    "include_lags": true,
-    "lag_periods": [1, 2, 5],
-    "schema": {"amount": "numeric", "merchant_category": "numeric"}
-  }'
-```
-
-This transforms each transaction from 2 features to **26 features**:
-- 2 original: `amount`, `merchant_category`
-- 24 rolling: 4 stats × 3 windows × 2 columns
-- Plus lag features if enabled
-
-See [Polars Buffer API](./polars-buffers.md) for detailed information about the underlying Polars mechanics.
-
----
-
-## Backend Selection
-
-Choose the right algorithm for your use case:
-
-### Recommended for Streaming
-
-| Backend | Speed | Why Use It |
-|---------|-------|------------|
-| `ecod` | ⚡⚡⚡ | **Recommended default** - Fast, parameter-free, handles drift |
-| `hbos` | ⚡⚡⚡⚡ | Fastest algorithm, great for high-throughput |
-| `loda` | ⚡⚡⚡ | Designed for streaming, lightweight |
-| `copod` | ⚡⚡⚡ | Parameter-free, interpretable |
-
-### When to Use Other Backends
-
-| Backend | Use Case |
-|---------|----------|
-| `isolation_forest` | General purpose, reliable baseline |
-| `knn` | When local density matters |
-| `cblof` | Data has natural clusters |
-| `suod` | Maximum robustness (ensemble of multiple algorithms) |
-| `autoencoder` | Complex non-linear patterns (slower) |
-
-### All 12 Backends
-
-```bash
-# Get full backend information
-curl http://localhost:14345/v1/ml/anomaly/backends
-```
-
-| Backend | Category | Speed | Memory | Best For |
-|---------|----------|-------|--------|----------|
-| `isolation_forest` | Legacy | Fast | Low | General purpose |
-| `one_class_svm` | Legacy | Slow | Medium | Tight boundaries |
-| `local_outlier_factor` | Legacy | Medium | Medium | Density anomalies |
-| `autoencoder` | Deep Learning | Slow | High | Complex patterns |
-| `ecod` | Fast | Very Fast | Low | Streaming (recommended) |
-| `hbos` | Fast | Very Fast | Low | High throughput |
-| `copod` | Fast | Very Fast | Low | Interpretability |
-| `knn` | Distance | Medium | Medium | Density-based |
-| `mcd` | Distance | Medium | Medium | Gaussian data |
-| `cblof` | Clustering | Medium | Medium | Clustered data |
-| `suod` | Ensemble | Medium | Medium | Maximum robustness |
-| `loda` | Streaming | Fast | Low | Online scenarios |
-
----
-
-## Managing Streaming Detectors
-
-### List All Active Detectors
-
-```bash
-curl http://localhost:14345/v1/ml/anomaly/stream/detectors
-```
-
-Response:
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "model_id": "sensor-stream",
-      "backend": "ecod",
-      "status": "ready",
-      "model_version": 3,
-      "samples_collected": 450,
-      "total_processed": 450,
-      "samples_since_retrain": 50,
-      "is_ready": true
-    }
-  ],
-  "total": 1
-}
-```
-
-### Get Specific Detector Stats
-
-```bash
-curl http://localhost:14345/v1/ml/anomaly/stream/sensor-stream
-```
-
-### Reset Detector
-
-Clear all data and restart cold start:
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream/sensor-stream/reset
-```
-
-### Delete Detector
-
-Remove detector and free memory:
-
-```bash
-curl -X DELETE http://localhost:14345/v1/ml/anomaly/stream/sensor-stream
-```
-
----
-
-## Batch Processing
-
-Send multiple data points in one request:
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "sensor-stream",
-    "data": [
-      {"temperature": 72.5, "humidity": 45.2},
-      {"temperature": 73.1, "humidity": 44.8},
-      {"temperature": 71.9, "humidity": 46.0},
-      {"temperature": 150.0, "humidity": 10.0}
-    ],
-    "backend": "ecod"
-  }'
-```
-
-Response includes results for each point:
-```json
-{
-  "object": "streaming_result",
-  "model": "sensor-stream",
-  "status": "ready",
-  "results": [
-    {"index": 0, "score": 0.28, "is_anomaly": false, "raw_score": 0.22},
-    {"index": 1, "score": 0.31, "is_anomaly": false, "raw_score": 0.25},
-    {"index": 2, "score": 0.26, "is_anomaly": false, "raw_score": 0.21},
-    {"index": 3, "score": 0.89, "is_anomaly": true, "raw_score": 0.85}
-  ],
-  "model_version": 2,
-  "threshold": 0.5
-}
-```
-
----
-
-## With Rolling Features
-
-Enable automatic feature engineering for time-series patterns:
-
-```bash
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "enhanced-sensor",
-    "data": {"temperature": 72.5, "humidity": 45.2},
-    "backend": "ecod",
-    "rolling_windows": [5, 10, 20],
-    "include_lags": true,
-    "lag_periods": [1, 2, 3],
-    "min_samples": 30
-  }'
-```
-
-This automatically computes and includes:
-- `temperature_rolling_mean_5`, `temperature_rolling_mean_10`, `temperature_rolling_mean_20`
-- `temperature_rolling_std_5`, `temperature_rolling_std_10`, `temperature_rolling_std_20`
-- `temperature_lag_1`, `temperature_lag_2`, `temperature_lag_3`
-- Same for humidity
-
-The detector learns patterns like "temperature suddenly diverging from recent mean" or "humidity spiking compared to 5 minutes ago".
-
----
-
-## Python Client Example
-
-```python
-
-async def stream_sensor_data():
-    """Simulate streaming sensor data with occasional anomalies."""
-    async with httpx.AsyncClient() as client:
-        base_url = "http://localhost:14345/v1/ml/anomaly/stream"
-
-        for i in range(200):
-            # Normal data
-            temp = 72 + random.gauss(0, 2)
-            humidity = 45 + random.gauss(0, 3)
-
-            # Inject anomaly every 50 samples
-            if i > 0 and i % 50 == 0:
-                temp = 150  # Anomalous spike
-                print(f"Injecting anomaly at sample {i}")
-
-            response = await client.post(base_url, json={
-                "model": "python-sensor",
-                "data": {"temperature": temp, "humidity": humidity},
-                "backend": "ecod",
-                "min_samples": 30,
-                "retrain_interval": 50,
-                "threshold": 0.5
-            })
-
-            result = response.json()
-
-            if result["status"] == "ready":
-                for r in result["results"]:
-                    if r["is_anomaly"]:
-                        print(f"⚠️  ANOMALY at sample {i}: score={r['score']:.3f}")
-            else:
-                print(f"Collecting... {result['samples_until_ready']} samples until ready")
-
-            await asyncio.sleep(0.1)  # 10 samples/second
-
-if __name__ == "__main__":
-    asyncio.run(stream_sensor_data())
-```
-
----
-
-## Integration with Polars Buffers
-
-For advanced use cases, you can use Polars buffers directly alongside streaming detection:
-
-```python
-
-async def advanced_streaming():
-    async with httpx.AsyncClient() as client:
-        base_url = "http://localhost:14345/v1/ml"
-
-        # Create a Polars buffer for custom feature engineering
-        await client.post(f"{base_url}/polars/buffers", json={
-            "buffer_id": "custom-features",
-            "window_size": 500
-        })
-
-        for data_point in data_stream:
-            # Append to Polars buffer
-            await client.post(f"{base_url}/polars/append", json={
-                "buffer_id": "custom-features",
-                "data": data_point
-            })
-
-            # Get custom features
-            features_resp = await client.post(f"{base_url}/polars/features", json={
-                "buffer_id": "custom-features",
-                "rolling_windows": [5, 10],
-                "include_lags": True,
-                "tail": 1  # Just the latest row
-            })
-
-            if features_resp.json()["rows"] > 0:
-                enhanced_data = features_resp.json()["data"][0]
-
-                # Stream to anomaly detector with enhanced features
-                await client.post(f"{base_url}/anomaly/stream", json={
-                    "model": "custom-enhanced",
-                    "data": enhanced_data,
-                    "backend": "ecod"
-                })
-```
-
-See [Polars Buffer API](./polars-buffers.md) for more details on direct buffer access.
-
----
-
-## Best Practices
-
-### Choosing Parameters
-
-1. **min_samples**: Set high enough for meaningful training
-   - Simple univariate: 30-50
-   - Multivariate (5-10 features): 100-200
-   - Complex patterns: 500+
-
-2. **retrain_interval**: Balance freshness vs. stability
-   - Fast-changing data: 50-100
-   - Stable distributions: 500-1000
-   - Very stable: 5000+
-
-3. **window_size**: Balance memory vs. history
-   - Typical: 1000-10000
-   - Memory constrained: 500
-   - Long patterns: 50000+
-
-4. **threshold**: Start with 0.5 and adjust
-   - More sensitive: 0.3-0.4
-   - Fewer false positives: 0.6-0.7
-
-### Performance Tips
-
-1. **Use batch requests** when possible (fewer HTTP calls)
-2. **Choose fast backends** (ecod, hbos) for high-throughput
-3. **Limit rolling windows** to what you need
-4. **Set appropriate window_size** to bound memory
-
-### Handling Concept Drift
-
-The sliding window and periodic retraining naturally handle drift:
-- Old data falls out of the window
-- New data influences the model
-- Retraining incorporates new patterns
-
-For sudden distribution shifts:
-```bash
-# Reset and restart cold start
-curl -X POST http://localhost:14345/v1/ml/anomaly/stream/my-detector/reset
-```
-
----
-
-## Next Steps
-
-- [Polars Buffer API](./polars-buffers.md) - Direct access to data buffers
-- [Anomaly Detection Guide](./anomaly-detection.md) - Batch anomaly detection
-- [Use Cases: IoT Sensor Monitoring](../use-cases/iot-sensor-monitoring.md) - Complete example
-
----
-
-# Financial Fraud Detection
-
-This use case demonstrates how to build a real-time fraud detection system for financial transactions using LlamaFarm's anomaly detection APIs.
-
-## Scenario
-
-You're building a fraud detection system for a payment processor that handles:
-- Thousands of transactions per second
-- Multiple data types (amounts, locations, device fingerprints)
-- Evolving fraud patterns
-- Real-time alerting requirements
-
-## Architecture
-
-```
-┌──────────────┐    ┌─────────────┐    ┌──────────────┐
-│ Transaction  │───▶│  LlamaFarm  │───▶│   Fraud      │
-│   Stream     │    │  Streaming  │    │   Review     │
-└──────────────┘    │  + Batch    │    │   Queue      │
-                    └─────────────┘    └──────────────┘
-                          │
-                    ┌─────┴─────┐
-                    │  Trained  │
-                    │  Models   │
-                    │  (daily)  │
-                    └───────────┘
-```
-
-## Backend Selection for Fraud Detection
-
-| Backend | Use Case | Strengths |
-|---------|----------|-----------|
-| `isolation_forest` | **Primary choice** - complex transaction patterns | Handles high-dimensional data, robust |
-| `suod` | Maximum accuracy (ensemble) | Combines multiple algorithms |
-| `autoencoder` | Deep pattern learning | Best for complex non-linear fraud patterns |
-| `ecod` | Real-time streaming | Fastest, good for pre-screening |
-
-**For this use case, we'll use a hybrid approach:**
-1. **Streaming with `ecod`** for real-time pre-screening
-2. **Batch with `isolation_forest`** for daily model training
-3. **`suod` ensemble** for high-risk transaction review
-
-## Step 1: Feature Engineering with Polars
-
-Fraud detection requires rich features. Use Polars buffers for per-user behavioral features:
-
-```python
-
-LLAMAFARM_URL = "http://localhost:14345/v1/ml"
-
-async def setup_user_buffer(user_id: str):
-    """Create a per-user behavior buffer."""
-    async with httpx.AsyncClient() as client:
-        await client.post(f"{LLAMAFARM_URL}/polars/buffers", json={
-            "buffer_id": f"user-{user_id}",
-            "window_size": 1000  # Keep last 1000 transactions
-        })
-
-async def add_transaction_features(user_id: str, transaction: dict):
-    """Add transaction and compute behavioral features."""
-    async with httpx.AsyncClient() as client:
-        # Append transaction
-        await client.post(f"{LLAMAFARM_URL}/polars/append", json={
-            "buffer_id": f"user-{user_id}",
-            "data": transaction
-        })
-
-        # Get behavioral features
-        response = await client.post(f"{LLAMAFARM_URL}/polars/features", json={
-            "buffer_id": f"user-{user_id}",
-            "rolling_windows": [5, 10, 50],  # Last 5, 10, 50 transactions
-            "include_rolling_stats": ["mean", "std", "min", "max"],
-            "include_lags": True,
-            "lag_periods": [1, 5, 10],
-            "tail": 1  # Just the latest with features
-        })
-
-        if response.json()["rows"] > 0:
-            return response.json()["data"][0]
-        return transaction  # Not enough history yet
-```
-
-## Step 2: Real-Time Streaming Detection
-
-For immediate fraud screening:
-
-```python
-async def screen_transaction(enhanced_transaction: dict):
-    """Fast pre-screening with streaming detector."""
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{LLAMAFARM_URL}/anomaly/stream",
-            json={
-                "model": "fraud-realtime",
-                "data": enhanced_transaction,
-                "backend": "ecod",  # Fast pre-screening
-                "min_samples": 100,
-                "retrain_interval": 1000,
-                "window_size": 10000,
-                "threshold": 0.4,  # Lower threshold = catch more
-                "contamination": 0.01  # Expect 1% fraud
-            }
-        )
-        result = response.json()
-
-        if result["status"] != "collecting":
-            for r in result["results"]:
-                if r["is_anomaly"]:
-                    return {
-                        "action": "review",
-                        "score": r["score"],
-                        "reason": "realtime_anomaly"
-                    }
-            # Use last result's score if available
-            if result["results"]:
-                return {"action": "approve", "score": result["results"][-1].get("score", 0)}
-
-        return {"action": "approve", "score": 0}
-```
-
-## Step 3: Batch Model Training (Daily)
-
-Train more accurate models on historical data:
-
-```python
-async def train_daily_model(training_data: list[dict]):
-    """Train daily fraud detection model on historical data."""
-    async with httpx.AsyncClient() as client:
-        # Define schema for mixed data types
-        schema = {
-            "amount": "numeric",
-            "amount_rolling_mean_10": "numeric",
-            "amount_rolling_std_10": "numeric",
-            "merchant_id": "hash",      # High cardinality
-            "device_type": "label",     # Low cardinality
-            "country": "label",
-            "hour_of_day": "numeric",
-            "is_weekend": "binary",
-            "days_since_last_tx": "numeric"
-        }
-
-        # Train with isolation_forest for complex patterns
-        response = await client.post(
-            f"{LLAMAFARM_URL}/anomaly/fit",
-            json={
-                "model": "fraud-daily",
-                "backend": "isolation_forest",
-                "data": training_data,
-                "schema": schema,
-                "contamination": 0.01,  # 1% expected fraud rate
-                "normalization": "standardization",
-                "overwrite": False  # Version models
-            }
-        )
-
-        result = response.json()
-        print(f"Trained model: {result['model']}")
-        print(f"Samples: {result['samples_fitted']}")
-
-        # Save for production use
-        await client.post(f"{LLAMAFARM_URL}/anomaly/save", json={
-            "model": result['model'],
-            "backend": "isolation_forest"
-        })
-
-        return result['model']
-```
-
-## Step 4: Ensemble Scoring for High-Risk
-
-For transactions flagged by real-time screening:
-
-```python
-async def deep_fraud_analysis(transaction: dict) -> dict:
-    """Run transaction through ensemble model for high accuracy."""
-    async with httpx.AsyncClient() as client:
-        # Score with ensemble backend
-        response = await client.post(
-            f"{LLAMAFARM_URL}/anomaly/score",
-            json={
-                "model": "fraud-ensemble",
-                "backend": "suod",  # Ensemble of multiple algorithms
-                "data": [transaction],
-                "normalization": "standardization"
-            }
-        )
-        result = response.json()
-
-        if result["data"]:
-            score = result["data"][0]
-            return {
-                "is_fraud": score["is_anomaly"],
-                "confidence": score["score"],
-                "raw_score": score["raw_score"],
-                "recommendation": (
-                    "block" if score["score"] > 0.8 else
-                    "review" if score["score"] > 0.5 else
-                    "approve"
-                )
-            }
-
-        return {"is_fraud": False, "confidence": 0}
-```
-
-## Complete Pipeline
-
-```python
-async def process_transaction(transaction: dict):
-    """Complete fraud detection pipeline."""
-
-    user_id = transaction["user_id"]
-
-    # 1. Add to user's behavior buffer
-    enhanced = await add_transaction_features(user_id, {
-        "amount": transaction["amount"],
-        "merchant_id": transaction["merchant_id"],
-        "device_type": transaction["device_type"],
-        "country": transaction["country"],
-        "timestamp": transaction["timestamp"]
-    })
-
-    # 2. Real-time screening (sub-10ms)
-    screening = await screen_transaction(enhanced)
-
-    if screening["action"] == "approve":
-        return {"decision": "approve", "latency_ms": 10}
-
-    # 3. Deep analysis for flagged transactions
-    deep = await deep_fraud_analysis(enhanced)
-
-    if deep["recommendation"] == "block":
-        return {
-            "decision": "block",
-            "reason": "high_fraud_confidence",
-            "score": deep["confidence"]
-        }
-
-    return {
-        "decision": "review",
-        "reason": "flagged_for_review",
-        "score": deep["confidence"]
-    }
-```
-
-## Feature Engineering Patterns
-
-### Velocity Features
-
-Detect rapid transaction sequences:
-
-```python
-# With Polars rolling features
-{
-    "rolling_windows": [3, 5, 10],  # Last 3, 5, 10 transactions
-    "include_rolling_stats": ["mean", "std", "max"],
-}
-
-# Produces:
-# - amount_rolling_mean_3 (avg of last 3)
-# - amount_rolling_std_5 (volatility of last 5)
-# - amount_rolling_max_10 (max in last 10)
-```
-
-### Time-Based Features
-
-Detect unusual timing:
-
-```python
-def extract_time_features(timestamp):
-    """Extract time-based features."""
-    dt = datetime.fromisoformat(timestamp)
-    return {
-        "hour_of_day": dt.hour,
-        "day_of_week": dt.weekday(),
-        "is_weekend": 1 if dt.weekday() >= 5 else 0,
-        "is_night": 1 if dt.hour < 6 or dt.hour > 22 else 0
-    }
-```
-
-### Geographic Features
-
-Detect impossible travel:
-
-```python
-def geographic_features(current_country, last_country, minutes_between):
-    """Detect geographic impossibilities."""
-    return {
-        "country_changed": 1 if current_country != last_country else 0,
-        "minutes_since_last": minutes_between,
-        # If country changed in < 120 minutes, suspicious
-        "impossible_travel": 1 if (
-            current_country != last_country and
-            minutes_between < 120
-        ) else 0
-    }
-```
-
-## Schema Design
-
-```python
-# Complete fraud detection schema
-FRAUD_SCHEMA = {
-    # Transaction attributes
-    "amount": "numeric",
-    "merchant_id": "hash",         # Millions of merchants
-    "merchant_category": "label",  # ~50 categories
-    "device_type": "label",        # mobile, desktop, tablet
-    "device_fingerprint": "hash",  # High cardinality
-
-    # Geographic
-    "country": "label",
-    "city": "hash",
-    "ip_prefix": "hash",
-
-    # Time
-    "hour_of_day": "numeric",
-    "is_weekend": "binary",
-    "is_night": "binary",
-
-    # Velocity (from Polars)
-    "amount_rolling_mean_5": "numeric",
-    "amount_rolling_std_5": "numeric",
-    "amount_rolling_max_10": "numeric",
-    "tx_count_rolling_mean_5": "numeric",
-
-    # Lags
-    "amount_lag_1": "numeric",
-    "minutes_since_last": "numeric",
-
-    # Derived
-    "amount_vs_avg": "numeric",  # Current / user's average
-    "impossible_travel": "binary"
-}
-```
-
-## Performance Optimization
-
-### Batch Processing
-
-For bulk scoring (end-of-day review):
-
-```python
-async def batch_score(transactions: list[dict]):
-    """Score many transactions at once."""
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            f"{LLAMAFARM_URL}/anomaly/score",
-            json={
-                "model": "fraud-daily-latest",
-                "backend": "isolation_forest",
-                "data": transactions,
-                "normalization": "standardization"
-            }
-        )
-        return response.json()["data"]
-
-# Score 10,000 transactions at once
-results = await batch_score(pending_transactions)
-```
-
-### Caching User Buffers
-
-```python
-# Instead of creating buffer on every transaction
-# Pre-create buffers for active users
-
-async def warmup_user_buffers(active_user_ids: list[str]):
-    """Pre-create buffers for expected active users."""
-    async with httpx.AsyncClient() as client:
-        for user_id in active_user_ids:
-            await client.post(f"{LLAMAFARM_URL}/polars/buffers", json={
-                "buffer_id": f"user-{user_id}",
-                "window_size": 500
-            })
-```
-
-## Monitoring and Tuning
-
-### Track Model Performance
-
-```python
-async def log_decision(transaction_id: str, decision: dict, actual_fraud: bool = None):
-    """Log decisions for model tuning."""
-    log = {
-        "transaction_id": transaction_id,
-        "decision": decision["decision"],
-        "score": decision.get("score"),
-        "timestamp": datetime.now().isoformat()
-    }
-
-    if actual_fraud is not None:
-        # After manual review or chargeback
-        log["actual_fraud"] = actual_fraud
-        log["correct"] = (
-            (decision["decision"] == "block" and actual_fraud) or
-            (decision["decision"] == "approve" and not actual_fraud)
-        )
-
-    # Store for analysis
-    await store_decision_log(log)
-```
-
-### Tune Thresholds
-
-```python
-# Based on your business requirements:
-
-# High security (catch more fraud, more false positives)
-threshold = 0.3
-contamination = 0.02
-
-# Balanced
-threshold = 0.5
-contamination = 0.01
-
-# Customer-friendly (fewer false positives, might miss some fraud)
-threshold = 0.7
-contamination = 0.005
-```
-
-## Complete Example
-
-```python
-#!/usr/bin/env python3
-"""Complete fraud detection example."""
-
-from datetime import datetime, timedelta
-
-LLAMAFARM_URL = "http://localhost:14345/v1/ml"
-
-async def simulate_transaction() -> dict:
-    """Generate realistic transaction data."""
-    # Normal transaction
-    tx = {
-        "amount": random.lognormvariate(3, 1),  # Log-normal amounts
-        "merchant_category": random.choice([
-            "grocery", "gas", "restaurant", "retail", "online"
-        ]),
-        "device_type": random.choice(["mobile", "desktop", "tablet"]),
-        "hour": datetime.now().hour,
-        "is_weekend": 1 if datetime.now().weekday() >= 5 else 0
-    }
-
-    # Occasionally simulate fraud patterns
-    if random.random() < 0.02:  # 2% fraud rate
-        tx["amount"] = random.uniform(1000, 5000)  # Unusually large
-        tx["merchant_category"] = "electronics"  # High-risk category
-        tx["_is_fraud"] = True
-    else:
-        tx["_is_fraud"] = False
-
-    return tx
-
-async def main():
-    """Run fraud detection demo."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        print("💳 Starting Fraud Detection Demo")
-        print("-" * 50)
-
-        tx_count = 0
-        flagged_count = 0
-        fraud_count = 0
-
-        while tx_count < 200:
-            tx = await simulate_transaction()
-            is_actual_fraud = tx.pop("_is_fraud")
-
-            # Stream to detector
-            response = await client.post(
-                f"{LLAMAFARM_URL}/anomaly/stream",
-                json={
-                    "model": "fraud-demo",
-                    "data": tx,
-                    "backend": "ecod",
-                    "min_samples": 50,
-                    "retrain_interval": 100,
-                    "window_size": 500,
-                    "threshold": 0.5,
-                    "contamination": 0.02
-                }
-            )
-            result = response.json()
-            tx_count += 1
-
-            if is_actual_fraud:
-                fraud_count += 1
-
-            if result["status"] == "collecting":
-                if tx_count % 10 == 0:
-                    print(f"⏳ Collecting: {result['samples_until_ready']} to go")
-            else:
-                for r in result["results"]:
-                    if r["is_anomaly"]:
-                        flagged_count += 1
-                        status = "✅ TRUE POSITIVE" if is_actual_fraud else "⚠️  FALSE POSITIVE"
-                        print(f"🚨 Flagged tx #{tx_count}: ${tx['amount']:.2f} "
-                              f"@ {tx['merchant_category']} | score={r['score']:.3f} | {status}")
-                    elif is_actual_fraud:
-                        print(f"❌ MISSED FRAUD: ${tx['amount']:.2f} @ {tx['merchant_category']}")
-
-            await asyncio.sleep(0.05)  # 20 TPS
-
-        print("-" * 50)
-        print(f"Summary: {tx_count} transactions, "
-              f"{fraud_count} actual fraud, "
-              f"{flagged_count} flagged")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-## Next Steps
-
-- [Streaming Anomaly Detection](../models/streaming-anomaly-detection.md) - API reference
-- [Polars Buffer API](../models/polars-buffers.md) - Feature engineering
-- [IoT Sensor Monitoring](./iot-sensor-monitoring.md) - Another use case
-
----
-
-# IoT Sensor Monitoring
-
-This use case demonstrates how to build a production-ready IoT sensor monitoring system using LlamaFarm's streaming anomaly detection and Polars buffer APIs.
-
-## Scenario
-
-You're monitoring a fleet of industrial sensors (temperature, humidity, pressure) that produce data every second. You need to:
-
-1. Detect equipment malfunctions in real-time
-2. Handle concept drift as seasons change
-3. Alert operators to anomalies within seconds
-4. Run on edge devices with limited resources
-
-## Architecture
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Sensors    │───▶│  LlamaFarm  │───▶│   Alerts    │
-│ (1000/sec)  │    │  Streaming  │    │  Dashboard  │
-└─────────────┘    └─────────────┘    └─────────────┘
-                          │
-                   ┌──────┴──────┐
-                   │  Polars     │
-                   │  Buffer     │
-                   │  (rolling)  │
-                   └─────────────┘
-```
-
-## Why These Components?
-
-| Component | Why |
-|-----------|-----|
-| **Streaming API** | Handles cold start, auto-retraining, sliding window |
-| **ECOD Backend** | Fast (5000+ samples/sec), parameter-free, handles drift |
-| **Polars Buffers** | Sub-millisecond append, efficient rolling features |
-| **Rolling Features** | Detect gradual trends and sudden spikes |
-
-## Backend Selection Guide
-
-For IoT sensor monitoring:
-
-| Backend | When to Use | Speed | Accuracy |
-|---------|-------------|-------|----------|
-| `ecod` | **Default choice** - works great for most sensors | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ |
-| `hbos` | Ultra-high throughput (>10k samples/sec) | ⚡⚡⚡⚡⚡ | ⭐⭐⭐ |
-| `isolation_forest` | Complex multi-sensor correlations | ⚡⚡⚡ | ⭐⭐⭐⭐ |
-| `loda` | Memory-constrained edge devices | ⚡⚡⚡⚡ | ⭐⭐⭐ |
-
-**For this use case, we'll use `ecod`** because:
-- Parameter-free (no tuning needed)
-- Fast enough for 1000 samples/second
-- Handles seasonal drift naturally
-
-## Step 1: Configure the Detector
-
-```python
-# sensor_monitor.py
-
-from datetime import datetime
-
-# Configuration
-LLAMAFARM_URL = "http://localhost:14345/v1/ml"
-MODEL_ID = "factory-sensors"
-BACKEND = "ecod"
-
-# Streaming parameters tuned for IoT
-DETECTOR_CONFIG = {
-    "model": MODEL_ID,
-    "backend": BACKEND,
-    "min_samples": 100,        # Enough for initial pattern learning
-    "retrain_interval": 500,   # Retrain every 500 samples (~8 minutes)
-    "window_size": 3600,       # Keep 1 hour of history
-    "threshold": 0.5,          # Balanced sensitivity
-    "contamination": 0.05,     # Expect ~5% anomalies
-    # Enable rolling features for trend detection
-    "rolling_windows": [10, 60, 300],  # 10s, 1min, 5min windows
-    "include_lags": True,
-    "lag_periods": [1, 5, 10]  # Compare to recent values
-}
-```
-
-## Step 2: Create the Streaming Loop
-
-```python
-async def stream_sensor_data():
-    """Main streaming loop for sensor monitoring."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        sample_count = 0
-        anomaly_count = 0
-
-        while True:
-            # Simulate sensor reading
-            sensor_data = read_sensors()
-
-            # Send to streaming detector
-            response = await client.post(
-                f"{LLAMAFARM_URL}/anomaly/stream",
-                json={**DETECTOR_CONFIG, "data": sensor_data}
-            )
-            result = response.json()
-
-            sample_count += 1
-
-            # Check status
-            if result["status"] == "collecting":
-                print(f"Cold start: {result['samples_until_ready']} samples until ready")
-            else:
-                # Process results
-                for r in result["results"]:
-                    if r["is_anomaly"]:
-                        anomaly_count += 1
-                        await send_alert(sensor_data, r["score"])
-
-            # Log progress every 100 samples
-            if sample_count % 100 == 0:
-                print(f"Processed: {sample_count}, Anomalies: {anomaly_count}, "
-                      f"Model version: {result['model_version']}")
-
-            await asyncio.sleep(1)  # 1 sample per second
-
-def read_sensors() -> dict:
-    """Simulate sensor readings (replace with real sensor code)."""
-    # Normal operating ranges
-    temp = 72 + random.gauss(0, 2)      # 72°F ± 2
-    humidity = 45 + random.gauss(0, 3)  # 45% ± 3
-    pressure = 1013 + random.gauss(0, 5)  # 1013 hPa ± 5
-
-    # Simulate occasional real anomalies
-    if random.random() < 0.02:  # 2% chance
-        temp = random.choice([50, 95])  # Equipment malfunction
-
-    return {
-        "temperature": round(temp, 2),
-        "humidity": round(humidity, 2),
-        "pressure": round(pressure, 2),
-        "timestamp": datetime.now().isoformat()
-    }
-
-async def send_alert(data: dict, score: float):
-    """Send alert to monitoring system."""
-    print(f"🚨 ANOMALY DETECTED! Score: {score:.3f}")
-    print(f"   Data: temp={data['temperature']}, humidity={data['humidity']}")
-    # In production: send to PagerDuty, Slack, email, etc.
-```
-
-## Step 3: Understanding the Rolling Features
-
-When `rolling_windows` is enabled, the detector automatically computes:
-
-| Feature | Window | What It Detects |
-|---------|--------|-----------------|
-| `temperature_rolling_mean_10` | 10 samples | Short-term average |
-| `temperature_rolling_std_10` | 10 samples | Short-term volatility |
-| `temperature_rolling_mean_60` | 60 samples | 1-minute trend |
-| `temperature_rolling_mean_300` | 5 minutes | Longer baseline |
-| `temperature_lag_1` | Previous | Sudden jumps |
-| `temperature_lag_10` | 10 ago | Compare to recent |
-
-**Why this matters:**
-- A sensor reading of 80°F might be normal if it's been trending up
-- The same 80°F is anomalous if it jumped from 72°F suddenly
-- Rolling features capture this context automatically
-
-## Step 4: Handling Concept Drift
-
-Sensors naturally drift with:
-- Seasonal temperature changes
-- Equipment aging
-- Calibration shifts
-
-The streaming API handles this automatically:
-
-```python
-# The sliding window naturally adapts
-window_size = 3600  # Keep 1 hour
-
-# Periodic retraining incorporates new patterns
-retrain_interval = 500  # Every ~8 minutes
-
-# Result: the model continuously adapts to gradual changes
-# while still detecting sudden anomalies
-```
-
-**For sudden operational changes** (e.g., switching to night shift):
-
-```python
-# Reset the detector to restart learning
-await client.post(f"{LLAMAFARM_URL}/anomaly/stream/{MODEL_ID}/reset")
-print("Detector reset - starting fresh learning phase")
-```
-
-## Step 5: Monitoring Detector Health
-
-```python
-async def monitor_detector_health():
-    """Periodically check detector status."""
-    async with httpx.AsyncClient() as client:
-        while True:
-            response = await client.get(
-                f"{LLAMAFARM_URL}/anomaly/stream/{MODEL_ID}"
-            )
-            stats = response.json()
-
-            print(f"""
-            Detector Health:
-            - Status: {stats['status']}
-            - Model Version: {stats['model_version']}
-            - Samples Collected: {stats['samples_collected']}
-            - Total Processed: {stats['total_processed']}
-            - Samples Since Retrain: {stats['samples_since_retrain']}
-            - Is Ready: {stats['is_ready']}
-            """)
-
-            await asyncio.sleep(60)  # Check every minute
-```
-
-## Step 6: Using Polars Buffers for Custom Analysis
-
-For advanced analysis beyond anomaly detection:
-
-```python
-async def analyze_with_polars(sensor_data: dict):
-    """Use Polars buffers for custom feature engineering.
-
-    Args:
-        sensor_data: Sensor reading dict with values like temperature, humidity, etc.
-    """
-    async with httpx.AsyncClient() as client:
-        # Create dedicated analysis buffer
-        await client.post(f"{LLAMAFARM_URL}/polars/buffers", json={
-            "buffer_id": "sensor-analysis",
-            "window_size": 3600  # 1 hour
-        })
-
-        # In your streaming loop, also append to analysis buffer
-        await client.post(f"{LLAMAFARM_URL}/polars/append", json={
-            "buffer_id": "sensor-analysis",
-            "data": sensor_data
-        })
-
-        # Get custom features for dashboard/reporting
-        features = await client.post(f"{LLAMAFARM_URL}/polars/features", json={
-            "buffer_id": "sensor-analysis",
-            "rolling_windows": [60, 300, 900],  # 1min, 5min, 15min
-            "include_rolling_stats": ["mean", "std", "min", "max"],
-            "include_lags": True,
-            "tail": 100  # Last 100 readings with features
-        })
-
-        return features.json()["data"]
-```
-
-## Complete Example
-
-```python
-#!/usr/bin/env python3
-"""Complete IoT sensor monitoring example."""
-
-from datetime import datetime
-
-LLAMAFARM_URL = "http://localhost:14345/v1/ml"
-MODEL_ID = "factory-sensors"
-
-async def main():
-    """Run the sensor monitoring system."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        print("🏭 Starting IoT Sensor Monitor")
-        print(f"   Model: {MODEL_ID}")
-        print(f"   Backend: ecod")
-        print("-" * 50)
-
-        sample_count = 0
-        anomaly_count = 0
-
-        while True:
-            # Generate sensor reading
-            temp = 72 + random.gauss(0, 2)
-            humidity = 45 + random.gauss(0, 3)
-            pressure = 1013 + random.gauss(0, 5)
-
-            # Inject anomaly every ~50 samples
-            if sample_count > 100 and random.random() < 0.02:
-                temp = random.choice([50, 95])
-                print(f"💉 Injecting anomaly: temp={temp}")
-
-            sensor_data = {
-                "temperature": round(temp, 2),
-                "humidity": round(humidity, 2),
-                "pressure": round(pressure, 2)
-            }
-
-            # Stream to detector
-            response = await client.post(
-                f"{LLAMAFARM_URL}/anomaly/stream",
-                json={
-                    "model": MODEL_ID,
-                    "data": sensor_data,
-                    "backend": "ecod",
-                    "min_samples": 50,
-                    "retrain_interval": 100,
-                    "window_size": 1000,
-                    "threshold": 0.5,
-                    "rolling_windows": [5, 10, 20],
-                    "include_lags": True
-                }
-            )
-            result = response.json()
-            sample_count += 1
-
-            # Handle response
-            if result["status"] == "collecting":
-                if sample_count % 10 == 0:
-                    print(f"⏳ Collecting... {result['samples_until_ready']} until ready")
-            else:
-                for r in result["results"]:
-                    if r["is_anomaly"]:
-                        anomaly_count += 1
-                        print(f"🚨 ANOMALY #{anomaly_count}: score={r['score']:.3f}, "
-                              f"data={sensor_data}")
-
-                if sample_count % 50 == 0:
-                    print(f"✅ Sample {sample_count}: "
-                          f"anomalies={anomaly_count}, "
-                          f"version={result['model_version']}")
-
-            await asyncio.sleep(0.1)  # 10 samples/second for demo
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-## Performance Considerations
-
-### Edge Device Optimization
-
-For resource-constrained edge devices:
-
-```python
-# Use lighter backend
-"backend": "loda",  # Lower memory than ecod
-
-# Smaller windows
-"window_size": 500,  # 8 minutes instead of 1 hour
-"min_samples": 30,   # Faster cold start
-
-# Disable rolling features to save memory
-# (let the backend handle pattern detection)
-"rolling_windows": None,
-"include_lags": False
-```
-
-### High-Throughput Optimization
-
-For >1000 samples/second:
-
-```python
-# Batch multiple readings
-batch = [read_sensors() for _ in range(100)]
-await client.post(url, json={**config, "data": batch})
-
-# Use fastest backend
-"backend": "hbos",  # Histogram-based, extremely fast
-
-# Increase retrain interval
-"retrain_interval": 5000,  # Retrain less frequently
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Too many false positives | Increase `threshold` (0.6-0.7) or `contamination` (0.1-0.2) |
-| Missing real anomalies | Decrease `threshold` (0.3-0.4) |
-| Slow cold start | Decrease `min_samples` (30-50) |
-| Memory growing | Decrease `window_size` |
-| Model not adapting | Decrease `retrain_interval` |
-
-## Next Steps
-
-- [Streaming Anomaly Detection](../models/streaming-anomaly-detection.md) - API reference
-- [Polars Buffer API](../models/polars-buffers.md) - Custom feature engineering
-- [Financial Fraud Detection](./financial-fraud-detection.md) - Another use case
-
----
-
-# Detection, Classification & Embeddings
-
-Single-frame inference endpoints for object detection, image classification, segmentation, and CLIP embeddings. All endpoints are available through the LlamaFarm server (port 14345).
-
-## Object Detection
-
-Detect objects in images using YOLO models.
-
-**Endpoint:** `POST /v1/vision/detect`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/detect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "images": ["data:image/png;base64,..."],
-    "confidence_threshold": 0.5,
-    "classes": ["person", "car"]
-  }'
-```
-
-**Parameters:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `model` | string | Yes | - | YOLO model ID (e.g., `yolov8n`, `yolov8m`, `yolov8x`) |
-| `images` | list[string] | Yes | - | Base64-encoded images |
-| `confidence_threshold` | float | No | `0.5` | Minimum detection confidence |
-| `classes` | list[string] | No | all | Filter to specific class names |
-
-**Response:**
-
-```json
-{
-  "detections": [
-    {
-      "class_name": "person",
-      "confidence": 0.92,
-      "bbox": [120.5, 80.3, 340.2, 410.7]
-    }
-  ],
-  "model": "yolov8n",
-  "inference_time_ms": 12.4
-}
-```
-
-### Supported Models
-
-Any YOLO-compatible model works. Common choices:
-
-| Model | Size | Speed | Accuracy | Use Case |
-|-------|------|-------|----------|----------|
-| `yolov8n` | 6 MB | ~5ms | Good | Real-time, edge devices |
-| `yolov8s` | 22 MB | ~10ms | Better | Balanced |
-| `yolov8m` | 50 MB | ~25ms | High | General purpose |
-| `yolov8l` | 83 MB | ~50ms | Higher | When accuracy matters |
-| `yolov8x` | 131 MB | ~80ms | Highest | Audit, validation |
-
-## Image Classification
-
-Zero-shot image classification using CLIP models. Classify images into arbitrary categories without training.
-
-**Endpoint:** `POST /v1/vision/classify`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/classify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/clip-vit-base-patch32",
-    "images": ["data:image/png;base64,..."],
-    "labels": ["cat", "dog", "bird", "fish"]
-  }'
-```
-
-**Parameters:**
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `model` | string | Yes | - | CLIP model ID from HuggingFace |
-| `images` | list[string] | Yes | - | Base64-encoded images |
-| `labels` | list[string] | Yes | - | Candidate class labels |
-
-## Segmentation
-
-Instance and semantic segmentation to get pixel-level object boundaries.
-
-**Endpoint:** `POST /v1/vision/segment`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/segment \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n-seg",
-    "images": ["data:image/png;base64,..."],
-    "confidence_threshold": 0.5
-  }'
-```
-
-Segmentation masks are returned as polygon coordinates or run-length encoded (RLE) format. In the streaming pipeline, segmentation masks automatically attach to detections when `enrich_on_escalation` is enabled.
-
-## CLIP Embeddings
-
-Generate embeddings for images and/or text using CLIP models. Useful for multimodal RAG, image search, and similarity matching.
-
-**Endpoint:** `POST /v1/vision/embed`
-
-```bash
-# Embed images
-curl -X POST http://localhost:14345/v1/vision/embed \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/clip-vit-base-patch32",
-    "images": ["data:image/png;base64,..."]
-  }'
-
-# Embed text
-curl -X POST http://localhost:14345/v1/vision/embed \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/clip-vit-base-patch32",
-    "texts": ["a photo of a cat", "a painting of a dog"]
-  }'
-```
-
-Image and text embeddings live in the same vector space, so you can search images by text description and vice versa.
-
-## Model Management
-
-List, load, save, and delete vision models.
-
-```bash
-# List available models
-curl http://localhost:14345/v1/vision/models
-
-# Save a model to disk
-curl -X POST http://localhost:14345/v1/vision/models/save \
-  -H "Content-Type: application/json" \
-  -d '{"model": "yolov8n", "task": "detection", "name": "my-detector"}'
-
-# Load a saved model
-curl -X POST http://localhost:14345/v1/vision/models/load \
-  -H "Content-Type: application/json" \
-  -d '{"task": "detection", "name": "my-detector"}'
-
-# Delete a saved model
-curl -X DELETE http://localhost:14345/v1/vision/models/detection/my-detector
-```
-
----
-
-# Federation & Distribution
-
-Federation connects multiple LlamaFarm instances so they can share model inference, distribute trained models, and route vision work to the best available GPU.
-
-## Concepts
-
-**Peers** -- Other LlamaFarm instances that can run vision models. On standalone, you configure peers manually. On mesh (Atmosphere), peers are discovered automatically.
-
-**Remote Model Proxy** -- A `DetectionModel` that calls `/v1/vision/federation/escalate` on a remote LlamaFarm instance. The cascade chain doesn't know or care whether a model is local or remote.
-
-**Model Packages** -- Portable `.tar.gz` bundles containing model weights, metadata, class maps, and validation metrics. Used to distribute trained models across nodes.
-
-## Peer Management
-
-```bash
-# List federation peers
-curl http://localhost:14345/v1/vision/federation/peers
-
-# Register a peer
-curl -X POST http://localhost:14345/v1/vision/federation/peers \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "gpu-server",
-    "url": "http://192.168.1.100:14345",
-    "models": ["yolov8x"],
-    "gpu_vram_gb": 24,
-    "priority": 0,
-    "timeout": 30.0
-  }'
-
-# Remove a peer
-curl -X DELETE http://localhost:14345/v1/vision/federation/peers/gpu-server
-
-# Check federation health
-curl http://localhost:14345/v1/vision/federation/status
-```
-
-## Inbound Escalation
-
-When another LlamaFarm instance is uncertain about a detection, it sends the full escalation envelope to this endpoint. The local node runs its model and returns its opinion.
-
-**Endpoint:** `POST /v1/vision/federation/escalate`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/federation/escalate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "image": "<base64-encoded>",
-    "model": "yolov8x",
-    "confidence_threshold": 0.5,
-    "opinions": [
-      {
-        "model_id": "yolov8n",
-        "node_id": "edge-device-1",
-        "class_name": "bird",
-        "confidence": 0.45
-      }
-    ]
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "model": "yolov8x",
-  "detections": [
-    {
-      "class_name": "eagle",
-      "confidence": 0.91,
-      "bbox": [100, 50, 300, 250]
-    }
-  ],
-  "inference_time_ms": 82.3,
-  "node_id": "gpu-server"
-}
-```
-
-## Using Remote Models in the Cascade
-
-Add remote models to a streaming session's cascade chain by prefixing with `remote:`:
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/stream/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "cascade": {
-      "enabled": true,
-      "cascade_chain": [
-        "yolov8n",
-        "remote:gpu-server/yolov8x"
-      ],
-      "confidence_threshold": 0.7
-    }
-  }'
-```
-
-The `RemoteModelProxy` implements the same `DetectionModel` interface as local models. The cascade loop calls `.detect()` on each -- it doesn't distinguish local from remote.
-
-## Model Packages
-
-Package trained models for distribution to other nodes.
-
-### List Packages
-
-```bash
-curl http://localhost:14345/v1/vision/federation/packages
-```
-
-### Create a Package
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/federation/packages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_id": "bird-detector-v3",
-    "model_path": "/path/to/best.pt",
-    "description": "Fine-tuned bird detector"
-  }'
-```
-
-### Import a Package
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/federation/packages/import \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "/path/to/bird-detector-v3.tar.gz"
-  }'
-```
-
-### Package Format
-
-Packages are `.tar.gz` archives containing:
-
-```
-package.tar.gz
-├── model.pt                  # Model weights
-├── metadata.json             # Model ID, version, base model, class names, etc.
-├── class_map.json            # {class_name: index} mapping
-└── validation_metrics.json   # Accuracy, mAP, per-class metrics
-```
-
-Packages are created automatically when the validation gate promotes a new model. On mesh deployments, packages are announced via Atmosphere gossip so peers can pull updated models.
-
----
-
-# Vision Pipeline
-
-LlamaFarm includes a complete vision pipeline for object detection, image classification, segmentation, CLIP embeddings, and OCR. The pipeline supports real-time streaming with an automatic learning loop that improves models over time with minimal human intervention.
-
-## Capabilities
-
-| Capability | Endpoint | Description |
-|-----------|----------|-------------|
-| [Object Detection](./detection) | `POST /v1/vision/detect` | Detect objects with YOLO models |
-| [Image Classification](./detection#image-classification) | `POST /v1/vision/classify` | Classify images with CLIP zero-shot |
-| [Segmentation](./detection#segmentation) | `POST /v1/vision/segment` | Instance/semantic segmentation |
-| [CLIP Embeddings](./detection#clip-embeddings) | `POST /v1/vision/embed` | Image and text embeddings for multimodal RAG |
-| [OCR](../models/specialized-ml#ocr-text-extraction) | `POST /v1/vision/ocr` | Extract text from images and PDFs |
-| [Streaming](./streaming) | `POST /v1/vision/stream/*` | Real-time frame processing with cascade |
-| [Training](./training) | `POST /v1/vision/train` | Fine-tune detection models |
-| [Federation](./federation) | `/v1/vision/federation/*` | Multi-node model distribution |
-
-## Architecture Overview
-
-The vision system is organized into layers:
-
-```
-                        ┌─────────────────────────┐
-                        │   Vision API Endpoints   │
-                        │  detect / classify / ocr │
-                        └────────────┬────────────┘
-                                     │
-                        ┌────────────▼────────────┐
-                        │   Streaming Pipeline     │
-                        │  cascade chain + enrich  │
-                        └────────────┬────────────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                      │
-    ┌─────────▼─────────┐ ┌─────────▼─────────┐ ┌─────────▼─────────┐
-    │   Local Models     │ │   Remote Models    │ │   Review Queue     │
-    │  YOLO / CLIP / SAM │ │  RemoteModelProxy  │ │  Human feedback    │
-    └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘
-              │                      │                      │
-              └──────────────────────┼──────────────────────┘
-                                     │
-                        ┌────────────▼────────────┐
-                        │    Replay Buffer         │
-                        │  SQLite-backed samples   │
-                        └────────────┬────────────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                      │
-    ┌─────────▼─────────┐ ┌─────────▼─────────┐ ┌─────────▼─────────┐
-    │   Auto Trainer     │ │   Audit Pipeline   │ │  Validation Gate   │
-    │  periodic retrain  │ │  model-checks-model│ │  blue/green swap   │
-    └───────────────────┘ └───────────────────┘ └───────────────────┘
-```
-
-## Deployment Modes
-
-The vision pipeline works identically in two deployment modes:
-
-**Standalone (laptop/desktop):** All models run locally. The cascade chain tries progressively larger models (e.g., yolov8n -> yolov8m -> yolov8x). Training happens on your GPU/CPU.
-
-**Mesh/Edge (Atmosphere):** A tiny model runs on the edge device. Uncertain detections escalate to GPU peers discovered via mesh service discovery. The `RemoteModelProxy` wraps remote LlamaFarm instances with the same `DetectionModel` interface -- the cascade loop doesn't know or care whether a model is local or remote.
-
-## The Learning Loop
-
-The system is designed to be 99% automatic. The only human task is occasionally reviewing uncertain detections in the review queue.
-
-1. **Detect** -- Fast model runs on every frame
-2. **Escalate** -- Uncertain detections cascade to bigger models with full context (bounding boxes, segmentation masks, prior opinions)
-3. **Feedback** -- Resolved detections automatically become training samples in the replay buffer
-4. **Train** -- Auto-trainer fires when the replay buffer hits a threshold (default: 50 samples)
-5. **Validate** -- Candidate model must beat current model on a held-out validation set
-6. **Promote** -- Blue/green swap with automatic rollback if needed
-7. **Audit** -- A bigger model periodically spot-checks the fast model's predictions, catching systematic errors
-
-## Quick Start
-
-```bash
-# Start the Universal Runtime
-nx start universal-runtime
-
-# Detect objects in an image
-curl -X POST http://localhost:14345/v1/vision/detect \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "images": ["data:image/png;base64,..."],
-    "confidence_threshold": 0.5
-  }'
-
-# Start a streaming session with cascade
-curl -X POST http://localhost:14345/v1/vision/stream/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "cascade": {
-      "enabled": true,
-      "cascade_chain": ["yolov8n", "yolov8m"],
-      "confidence_threshold": 0.7
-    }
-  }'
-```
-
-## Next Steps
-
-- [Detection, Classification & Embeddings](./detection) -- Single-frame inference endpoints
-- [Streaming & Cascade](./streaming) -- Real-time processing with automatic learning
-- [Training & Validation](./training) -- Auto-training, validation gate, model management
-- [Federation & Distribution](./federation) -- Multi-node deployment and model packaging
-
----
-
-# Streaming & Cascade
-
-The streaming pipeline processes video frames in real-time with an automatic multi-hop cascade. When a model is uncertain, the detection escalates to bigger models with full context -- bounding boxes, segmentation masks, and every prior model's opinion.
-
-## Streaming Sessions
-
-### Start a Session
-
-**Endpoint:** `POST /v1/vision/stream/start`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/stream/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "cascade": {
-      "enabled": true,
-      "cascade_chain": ["yolov8n", "yolov8m"],
-      "confidence_threshold": 0.7,
-      "enrich_on_escalation": true,
-      "segmentation_model_id": "yolov8n-seg",
-      "classification_model_id": "openai/clip-vit-base-patch32"
-    }
-  }'
-```
-
-**Cascade Configuration:**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable multi-hop cascade |
-| `cascade_chain` | list[string] | `[]` | Ordered list of model IDs to try |
-| `confidence_threshold` | float | `0.7` | Minimum confidence to accept a detection |
-| `enrich_on_escalation` | bool | `true` | Attach segmentation masks and CLIP labels before escalating |
-| `segmentation_model_id` | string | `null` | Model for bbox segmentation enrichment |
-| `classification_model_id` | string | `null` | CLIP model for classification enrichment |
-
-### Process Frames
-
-**Endpoint:** `POST /v1/vision/stream/frame`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/stream/frame \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_id": "abc123",
-    "image": "data:image/png;base64,..."
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "detections": [
-    {
-      "class_name": "bird",
-      "confidence": 0.85,
-      "bbox": [100, 50, 300, 250],
-      "model": "yolov8m"
-    }
-  ],
-  "hop_count": 2,
-  "cascade_resolved_by": "yolov8m",
-  "inference_time_ms": 45.2
-}
-```
-
-### Stop a Session
-
-**Endpoint:** `POST /v1/vision/stream/stop`
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/stream/stop \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "abc123"}'
-```
-
-### List Sessions and Stats
-
-```bash
-# List active sessions
-curl http://localhost:14345/v1/vision/stream/sessions
-
-# Get session statistics
-curl http://localhost:14345/v1/vision/stream/sessions/abc123/stats
-```
-
-## How the Cascade Works
-
-When a detection's confidence falls below the threshold, the pipeline escalates through the cascade chain:
-
-```
-Frame arrives
-  │
-  ├── Hop 0: yolov8n (fast, ~5ms)
-  │   confidence >= 0.7 → DONE (return result)
-  │   confidence < 0.7  → enrich bbox with seg + CLIP → Hop 1
-  │
-  ├── Hop 1: yolov8m (medium, ~25ms)
-  │   confidence >= 0.7 → DONE + auto-feedback to replay buffer
-  │   confidence < 0.7  → Hop 2
-  │
-  ├── Hop 2: yolov8x or remote model (~80ms+)
-  │   confidence >= 0.5 → DONE + feedback to hop 0 AND hop 1
-  │   confidence < 0.5  → REVIEW QUEUE (needs human eyes)
-  │
-  └── Max 3 hops (circuit breaker)
-```
-
-At each hop, the pipeline builds a `ModelOpinion` recording what that model saw. All opinions flow forward so the next model has full context.
-
-### Cross-Modal Enrichment
-
-When `enrich_on_escalation` is enabled, before escalating to the next model the pipeline:
-
-1. Crops the bounding box region from the full image
-2. Runs segmentation to get a pixel-level mask of the object
-3. Runs CLIP classification to get candidate class labels
-4. Packages everything into the escalation so the next model gets precise visual context
-
-### Escalation Envelope
-
-The data structure flowing through the cascade:
-
-```
-EscalationEnvelope
-├── image_bytes          # Original full frame
-├── image_hash           # For dedup
-├── source_id            # Camera/source identifier
-├── opinions[]           # What each model predicted
-│   ├── model_id         # "yolov8n" or "remote:gpu-server/yolov8x"
-│   ├── node_id          # "local" or Atmosphere node ID
-│   ├── class_name       # What it thinks this is
-│   ├── confidence       # How sure it is
-│   ├── bbox             # Bounding box coordinates
-│   └── mask_polygon     # Segmentation mask (if available)
-├── detections[]         # Bounding boxes with crops and masks
-├── hops                 # How many models have seen this
-└── max_hops             # Circuit breaker (default: 3)
-```
-
-## Corrections and Replay Buffer
-
-Submit human corrections for detections and inspect the replay buffer.
-
-```bash
-# Submit a correction
-curl -X POST http://localhost:14345/v1/vision/corrections \
-  -H "Content-Type: application/json" \
-  -d '{
-    "image_id": "img_abc123",
-    "correct_class": "eagle",
-    "bbox": [100, 50, 300, 250]
-  }'
-
-# Check replay buffer status
-curl http://localhost:14345/v1/vision/replay-buffer
-
-# Clear replay buffer
-curl -X POST http://localhost:14345/v1/vision/replay-buffer/clear
-```
-
-The replay buffer stores training samples with priority weighting:
-
-| Source | Priority | Description |
-|--------|----------|-------------|
-| Human correction | 2.0 | Manual review queue feedback |
-| Audit disagreement | 2.0 | Bigger model disagrees with small model |
-| Cascade resolved (hop 2+) | 1.8 | Multiple models needed to resolve |
-| Escalation resolved (hop 1) | 1.5 | Single escalation resolved it |
-| Low confidence | ~0.4 | Detection below threshold |
-
-Samples persist to SQLite so they survive restarts. When the buffer hits the training threshold (default: 50 samples), the auto-trainer fires automatically.
-
----
-
-# Training & Validation
-
-The vision pipeline includes automatic model retraining with a validation gate that prevents regressions. Models must prove they're better before going live.
-
-## Auto-Training
-
-When the replay buffer accumulates enough training samples (default: 50), the auto-trainer fires automatically. No manual intervention needed.
-
-### How It Works
-
-1. **Collect** -- Cascade resolutions, human corrections, and audit disagreements fill the replay buffer
-2. **Dataset** -- Auto-trainer builds a YOLO-format dataset with proper class maps and 80/20 train/val split
-3. **Train** -- Fine-tunes a candidate model for a few epochs with EWC (Elastic Weight Consolidation) to prevent catastrophic forgetting
-4. **Validate** -- Candidate runs against a held-out validation set of human-verified and audit-verified images
-5. **Promote or Reject** -- If the candidate beats the current model, blue/green swap. Otherwise, reject and keep current.
-
-### Check Auto-Train Status
-
-```bash
-curl http://localhost:14345/v1/vision/auto-train/status
-```
-
-### Trigger Training Manually
-
-```bash
-curl -X POST http://localhost:14345/v1/vision/auto-train/trigger
-```
-
-## Training API
-
-For manual training control:
-
-```bash
-# Start a training job
-curl -X POST http://localhost:14345/v1/vision/train \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "yolov8n",
-    "dataset_path": "/path/to/dataset",
-    "epochs": 10,
-    "batch_size": 16
-  }'
-
-# Check training status
-curl http://localhost:14345/v1/vision/train/job_abc123
-
-# List all training jobs
-curl http://localhost:14345/v1/vision/train
-
-# Cancel a training job
-curl -X DELETE http://localhost:14345/v1/vision/train/job_abc123
-```
-
-## Validation Gate
-
-The validation gate is the safety net between training and deployment. A candidate model must demonstrate improvement on known-good images before it replaces the current model.
-
-### Validation Set Sources
-
-The gate automatically builds a validation set from two sources:
-
-- **Human-verified images** -- Images where a human confirmed the correct label via the review queue (highest trust)
-- **Audit-verified images** -- Images where the audit pipeline's larger model agreed with the primary model's prediction
-
-### Blue/Green Promotion
-
-When validation passes:
-
-1. The current model is backed up as `{model_id}_v{N}.pt`
-2. The candidate is installed as the new current model
-3. A few live frames run through both models as a final check
-4. The old model stays available for rollback
-
-### Rollback
-
-If a promoted model misbehaves, the system can roll back to the previous version:
-
-- Automatic rollback if live-frame validation fails during promotion
-- Manual rollback via the model management API
-
-## Audit Pipeline
-
-A bigger model periodically reviews what the fast model has been classifying with high confidence. This catches systematic errors the cascade missed.
-
-### How It Works
-
-1. Sample N recent high-confidence predictions (the ones that were NOT escalated)
-2. Re-run through a larger model (local or remote via `RemoteModelProxy`)
-3. Compare results:
-   - **Agreement** -- Mark as verified (becomes validation data)
-   - **Disagreement** -- Add to replay buffer as training sample (priority 2.0)
-
-The audit model can be any model -- a larger local YOLO model, or a `RemoteModelProxy` pointing at a GPU server. The pipeline doesn't distinguish between local and remote.
-
-## Dataset Format
-
-The auto-trainer produces YOLO-format datasets:
-
-```
-dataset/
-├── data.yaml          # Class names, paths
-├── class_map.json     # {class_name: index}
-├── train/
-│   ├── images/        # Training images
-│   └── labels/        # YOLO-format .txt labels
-└── val/
-    ├── images/        # Validation images (20%)
-    └── labels/        # YOLO-format .txt labels
-```
-
-Each label file contains one line per detection:
-
-```
-# class_index center_x center_y width height (all normalized 0-1)
-0 0.45 0.52 0.30 0.60
-1 0.72 0.31 0.15 0.25
-```
 
 ---

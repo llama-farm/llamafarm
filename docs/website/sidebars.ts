@@ -84,17 +84,6 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Vision Pipeline',
-      link: { type: 'doc', id: 'vision/index' },
-      items: [
-        { type: 'doc', id: 'vision/detection', label: 'Detection & Classification' },
-        { type: 'doc', id: 'vision/streaming', label: 'Streaming & Cascade' },
-        { type: 'doc', id: 'vision/training', label: 'Training & Validation' },
-        { type: 'doc', id: 'vision/federation', label: 'Federation & Distribution' },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Models & Runtime',
       link: { type: 'doc', id: 'models/index' },
       items: [
