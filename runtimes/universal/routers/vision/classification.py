@@ -17,6 +17,7 @@ from api_types.vision import (
     ImageClassifyResponse,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ async def classify_image(request: ImageClassifyRequest) -> ImageClassifyResponse
     model = await loader(request.model)
 
     # Decode image
-    image_bytes = _decode_base64_image(request.image)
+    image_bytes = decode_base64_image(request.image)
 
     # Run classification
     result = await model.classify(
@@ -124,13 +125,3 @@ async def classify_image(request: ImageClassifyRequest) -> ImageClassifyResponse
     )
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes."""
-    import base64
-
-    if image_str.startswith("data:"):
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)

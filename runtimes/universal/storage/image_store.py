@@ -52,7 +52,7 @@ class ImageRecord:
 @dataclass
 class DetectionRecord:
     """Detection result for an image."""
-    
+
     id: int | None = None
     image_id: str = ""
     class_name: str = ""
@@ -63,6 +63,31 @@ class DetectionRecord:
     y2: float = 0.0
     model: str = ""
     verified: bool = False
+    created_at: datetime | None = None
+
+
+@dataclass
+class DetectionHistoryRecord:
+    """Full cascade history for a single model opinion on a detection.
+
+    Every time a model looks at an image during the cascade, one of these
+    is recorded. This is the audit trail for the entire learning loop.
+    """
+
+    id: int | None = None
+    image_id: str = ""
+    model_id: str = ""
+    node_id: str = "local"
+    class_name: str = ""
+    confidence: float = 0.0
+    x1: float = 0.0
+    y1: float = 0.0
+    x2: float = 0.0
+    y2: float = 0.0
+    mask_rle: str | None = None
+    stage: str = ""             # "primary", "secondary", "audit", "remote"
+    hop_number: int = 0
+    inference_time_ms: float = 0.0
     created_at: datetime | None = None
 
 
@@ -169,6 +194,22 @@ class ImageMetadataStore:
                     FOREIGN KEY (image_id) REFERENCES images(id)
                 );
                 
+                CREATE TABLE IF NOT EXISTS detection_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    image_id TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    node_id TEXT DEFAULT 'local',
+                    class_name TEXT NOT NULL,
+                    confidence REAL,
+                    x1 REAL, y1 REAL, x2 REAL, y2 REAL,
+                    mask_rle TEXT,
+                    stage TEXT,
+                    hop_number INTEGER DEFAULT 0,
+                    inference_time_ms REAL DEFAULT 0.0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (image_id) REFERENCES images(id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_images_source ON images(source);
                 CREATE INDEX IF NOT EXISTS idx_images_reviewed ON images(reviewed);
                 CREATE INDEX IF NOT EXISTS idx_images_created ON images(created_at);
@@ -176,6 +217,9 @@ class ImageMetadataStore:
                 CREATE INDEX IF NOT EXISTS idx_detections_class ON detections(class_name);
                 CREATE INDEX IF NOT EXISTS idx_labels_image ON labels(image_id);
                 CREATE INDEX IF NOT EXISTS idx_labels_label ON labels(label);
+                CREATE INDEX IF NOT EXISTS idx_detection_history_image ON detection_history(image_id);
+                CREATE INDEX IF NOT EXISTS idx_detection_history_model ON detection_history(model_id);
+                CREATE INDEX IF NOT EXISTS idx_detection_history_stage ON detection_history(stage);
             """)
     
     def add_image(self, record: ImageRecord) -> str:
@@ -278,6 +322,87 @@ class ImageMetadataStore:
             
             return [self._row_to_label_record(row) for row in rows]
     
+    def add_detection_history(
+        self,
+        image_id: str,
+        model_id: str,
+        class_name: str,
+        confidence: float,
+        box: tuple[float, float, float, float],
+        stage: str = "primary",
+        hop_number: int = 0,
+        node_id: str = "local",
+        mask_rle: str | None = None,
+        inference_time_ms: float = 0.0,
+    ) -> int:
+        """Record a model opinion in the cascade history.
+
+        Every hop in the cascade produces one of these. This is the
+        audit trail AND the source for building validation sets.
+
+        Args:
+            image_id: The image this opinion is about
+            model_id: Which model produced this opinion
+            class_name: What the model thinks this is
+            confidence: How sure the model is
+            box: Bounding box (x1, y1, x2, y2)
+            stage: "primary", "secondary", "audit", "remote"
+            hop_number: Which hop in the cascade (0-based)
+            node_id: Atmosphere node ID or "local"
+            mask_rle: Run-length encoded segmentation mask
+            inference_time_ms: How long inference took
+
+        Returns:
+            Detection history record ID
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                INSERT INTO detection_history
+                (image_id, model_id, node_id, class_name, confidence,
+                 x1, y1, x2, y2, mask_rle, stage, hop_number, inference_time_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                image_id, model_id, node_id, class_name, confidence,
+                *box, mask_rle, stage, hop_number, inference_time_ms,
+            ))
+            return cursor.lastrowid
+
+    def get_detection_history(
+        self,
+        image_id: str,
+    ) -> list[DetectionHistoryRecord]:
+        """Get all cascade opinions for an image, ordered by hop number."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM detection_history WHERE image_id = ? ORDER BY hop_number, created_at",
+                (image_id,)
+            ).fetchall()
+
+            return [self._row_to_detection_history_record(row) for row in rows]
+
+    def get_recent_high_confidence(
+        self,
+        min_confidence: float = 0.7,
+        stage: str = "primary",
+        limit: int = 50,
+    ) -> list[DetectionHistoryRecord]:
+        """Get recent high-confidence primary detections for auditing.
+
+        The audit pipeline pulls from here: images the primary model
+        was confident about, to re-check with a bigger model.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT * FROM detection_history
+                WHERE confidence >= ? AND stage = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (min_confidence, stage, limit)).fetchall()
+
+            return [self._row_to_detection_history_record(row) for row in rows]
+
     def get_pending_review(
         self,
         limit: int = 50,
@@ -342,7 +467,11 @@ class ImageMetadataStore:
             stats["total_labels"] = conn.execute(
                 "SELECT COUNT(*) FROM labels"
             ).fetchone()[0]
-            
+
+            stats["total_detection_history"] = conn.execute(
+                "SELECT COUNT(*) FROM detection_history"
+            ).fetchone()[0]
+
             # Top classes
             top_classes = conn.execute("""
                 SELECT class_name, COUNT(*) as count
@@ -373,9 +502,10 @@ class ImageMetadataStore:
             if not ids:
                 return 0
             
-            # Delete in order (labels, detections, images)
+            # Delete in order (labels, detection_history, detections, images)
             placeholders = ",".join("?" * len(ids))
             conn.execute(f"DELETE FROM labels WHERE image_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM detection_history WHERE image_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM detections WHERE image_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM images WHERE id IN ({placeholders})", ids)
             
@@ -427,6 +557,27 @@ class ImageMetadataStore:
             label=row["label"],
             confidence=row["confidence"],
             source=row["source"],
+            created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
+        )
+
+    @staticmethod
+    def _row_to_detection_history_record(row: sqlite3.Row) -> DetectionHistoryRecord:
+        """Convert database row to DetectionHistoryRecord."""
+        return DetectionHistoryRecord(
+            id=row["id"],
+            image_id=row["image_id"],
+            model_id=row["model_id"],
+            node_id=row["node_id"] or "local",
+            class_name=row["class_name"],
+            confidence=row["confidence"],
+            x1=row["x1"],
+            y1=row["y1"],
+            x2=row["x2"],
+            y2=row["y2"],
+            mask_rle=row["mask_rle"],
+            stage=row["stage"] or "",
+            hop_number=row["hop_number"] or 0,
+            inference_time_ms=row["inference_time_ms"] or 0.0,
             created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else None,
         )
 

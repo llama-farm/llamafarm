@@ -20,6 +20,7 @@ from api_types.vision import (
     DetectResponse,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ async def detect_objects(request: DetectRequest) -> DetectResponse:
     model = await loader(request.model)
 
     # Decode image from base64
-    image_bytes = _decode_base64_image(request.image)
+    image_bytes = decode_base64_image(request.image)
 
     # Run detection
     result = await model.detect(
@@ -135,18 +136,3 @@ async def detect_objects(request: DetectRequest) -> DetectResponse:
     )
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes.
-
-    Handles both raw base64 and data URI format.
-    """
-    import base64
-
-    # Remove data URI prefix if present
-    if image_str.startswith("data:"):
-        # Format: data:image/jpeg;base64,/9j/4AAQ...
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)

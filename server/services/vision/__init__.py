@@ -11,10 +11,22 @@ from .detection_service import VisionDetectionService
 from .classification_service import VisionClassificationService
 from .embedding_service import VisionEmbeddingService
 from .review_service import VisionReviewService
+from .pipeline_service import (
+    VisionStreamingService,
+    VisionTrainingService,
+    VisionModelService,
+    VisionSegmentationService,
+    VisionFederationService,
+)
 
 __all__ = [
     "VisionDetectionService",
     "VisionClassificationService",
     "VisionEmbeddingService",
     "VisionReviewService",
+    "VisionStreamingService",
+    "VisionTrainingService",
+    "VisionModelService",
+    "VisionSegmentationService",
+    "VisionFederationService",
 ]

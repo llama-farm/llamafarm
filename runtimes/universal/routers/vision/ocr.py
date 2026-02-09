@@ -13,6 +13,7 @@ from api_types.vision import (
     OCRBox,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +41,6 @@ def _get_loader():
     return _load_ocr_model_fn
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes."""
-    import base64
-
-    if image_str.startswith("data:"):
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)
 
 
 @router.post("/v1/vision/ocr", response_model=OCRResponse)
@@ -107,7 +98,7 @@ async def ocr_image(request: OCRRequest) -> OCRResponse:
     # Process images
     if request.images:
         for i, img_str in enumerate(request.images):
-            img_bytes = _decode_base64_image(img_str)
+            img_bytes = decode_base64_image(img_str)
             
             # Run OCR
             # usage: await model.predict(image_bytes)

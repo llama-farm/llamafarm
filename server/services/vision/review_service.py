@@ -2,6 +2,11 @@
 
 Manages the review queue for uncertain detections and corrections.
 Wires into the replay buffer for auto-learning.
+
+Review items include:
+- Bounding boxes from all models that examined the image
+- Each model's opinion (class, confidence, bbox)
+- Human reviewer can see exactly what each model thought
 """
 
 import logging
@@ -12,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid circular dependencies
 _image_store = None
+_metadata_store = None
 _replay_buffer = None
 
 
@@ -25,6 +31,18 @@ def get_image_store():
         except ImportError:
             logger.warning("ImageStore not available")
     return _image_store
+
+
+def get_metadata_store():
+    """Get or create the metadata store (for detection history)."""
+    global _metadata_store
+    if _metadata_store is None:
+        try:
+            from storage.image_store import ImageMetadataStore
+            _metadata_store = ImageMetadataStore()
+        except ImportError:
+            logger.warning("ImageMetadataStore not available")
+    return _metadata_store
 
 
 def get_replay_buffer():
@@ -115,57 +133,63 @@ class VisionReviewService:
         decision: str,
         corrections: list[dict] | None = None,
         reviewed_by: str = "anonymous",
+        reviewer_type: str = "human",
+        reviewer_model_id: str | None = None,
+        reviewer_confidence: float | None = None,
     ) -> dict[str, Any]:
-        """Submit a human review decision.
-        
+        """Submit a review decision (human or model).
+
         Args:
             image_id: Image to review
             decision: correct, wrong, or adjusted
             corrections: Corrected detections (for adjusted)
             reviewed_by: Reviewer identifier
-            
+            reviewer_type: "human" or "model" (audit pipeline)
+            reviewer_model_id: Model ID if reviewer_type is "model"
+            reviewer_confidence: Model confidence if reviewer_type is "model"
+
         Returns:
             Dict with processing result
         """
         store = get_image_store()
         buffer = get_replay_buffer()
-        
+
+        # Model reviews get higher training priority than human reviews
+        priority = 2.0 if reviewer_type == "human" else 1.8
+
         try:
             # Get image record
             record = None
             if store:
                 record = await store.get_image(image_id)
-            
+
             # Handle different decisions
             if decision == "correct":
-                # Mark as approved, no training needed
                 if store:
                     await store.mark_reviewed(
                         image_id=image_id,
                         decision="approved",
                         reviewed_by=reviewed_by,
                     )
-                    
+
             elif decision == "wrong":
-                # Mark as rejected (false positive), no training value
                 if store:
                     await store.mark_reviewed(
                         image_id=image_id,
                         decision="rejected",
                         reviewed_by=reviewed_by,
                     )
-                    
+
             elif decision == "adjusted" and corrections:
-                # Add corrections to replay buffer for training
                 if store:
                     await store.mark_reviewed(
                         image_id=image_id,
                         decision="corrected",
                         reviewed_by=reviewed_by,
                     )
-                
+
                 # Add to replay buffer
-                if buffer and record:
+                if buffer is not None and record:
                     for correction in corrections:
                         buffer.add_correction(
                             image_id=f"{image_id}_{correction.get('class_name', 'unknown')}",
@@ -173,8 +197,33 @@ class VisionReviewService:
                             corrected_label=correction.get("class_name", "unknown"),
                             original_confidence=correction.get("original_confidence", 0.0),
                         )
-                    logger.info(f"Added {len(corrections)} corrections to replay buffer")
-            
+                    logger.info(
+                        f"Added {len(corrections)} corrections to replay buffer "
+                        f"(reviewer={reviewer_type})"
+                    )
+
+            # Record in metadata store if model reviewer
+            if reviewer_type == "model" and reviewer_model_id:
+                metadata = get_metadata_store()
+                if metadata is not None:
+                    try:
+                        for correction in (corrections or []):
+                            box = correction.get("box", {})
+                            metadata.add_detection_history(
+                                image_id=image_id,
+                                model_id=reviewer_model_id,
+                                class_name=correction.get("class_name", ""),
+                                confidence=reviewer_confidence or 0.0,
+                                box=(
+                                    box.get("x1", 0), box.get("y1", 0),
+                                    box.get("x2", 0), box.get("y2", 0),
+                                ),
+                                stage="review",
+                                node_id="local",
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to record model review: {e}")
+
             # Get next pending image
             next_image_id = None
             if store:
@@ -185,15 +234,16 @@ class VisionReviewService:
                 )
                 if next_items:
                     next_image_id = next_items[0].id
-            
+
             return {
                 "image_id": image_id,
                 "decision": decision,
                 "processed": True,
+                "reviewer_type": reviewer_type,
                 "next_image_id": next_image_id,
-                "replay_buffer_size": len(buffer) if buffer else 0,
+                "replay_buffer_size": len(buffer) if buffer is not None else 0,
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to process review: {e}")
             return {
@@ -219,9 +269,10 @@ class VisionReviewService:
                 reviewed_today = await store.count_reviews_today()
                 corrections = await store.count_reviews(status="corrected")
             
-            # Calculate estimated accuracy from corrections ratio
-            total_reviewed = reviewed_today if reviewed_today > 0 else 1
-            accuracy_estimate = 1.0 - (corrections / total_reviewed) if total_reviewed > 0 else 0.0
+            # Calculate estimated accuracy: corrections / total non-pending reviews
+            total_reviewed = await store.count_reviews() if store else 0
+            non_pending = total_reviewed - pending if total_reviewed > pending else 0
+            accuracy_estimate = 1.0 - (corrections / non_pending) if non_pending > 0 else 0.0
             
             return {
                 "pending": pending,
@@ -258,15 +309,65 @@ class VisionReviewService:
     
     @classmethod
     def _record_to_item(cls, record: Any) -> dict[str, Any]:
-        """Convert storage record to review item."""
-        return {
+        """Convert storage record to review item.
+
+        Includes bounding boxes and all model opinions so humans
+        can see exactly what each model thought about the image.
+        """
+        item: dict[str, Any] = {
             "image_id": record.id,
             "image_url": f"/v1/vision/images/{record.id}",
             "thumbnail_url": f"/v1/vision/images/{record.id}/thumbnail",
             "timestamp": record.created_at.isoformat() if record.created_at else None,
-            "prediction": None,  # TODO: Include detection info
+            "prediction": None,
             "confidence": 0.0,
             "model": "",
             "source": record.source,
             "status": "reviewed" if record.reviewed else "pending",
+            "all_opinions": [],
         }
+
+        # Fetch detection history for this image
+        metadata = get_metadata_store()
+        if metadata is not None:
+            try:
+                history = metadata.get_detection_history(record.id)
+                if history:
+                    # Use the primary detection as the main prediction
+                    primary = next(
+                        (h for h in history if h.stage == "primary"),
+                        history[0],
+                    )
+                    item["prediction"] = {
+                        "box": {
+                            "x1": primary.x1,
+                            "y1": primary.y1,
+                            "x2": primary.x2,
+                            "y2": primary.y2,
+                        },
+                        "class_name": primary.class_name,
+                        "confidence": primary.confidence,
+                    }
+                    item["confidence"] = primary.confidence
+                    item["model"] = primary.model_id
+
+                    # All model opinions for context
+                    item["all_opinions"] = [
+                        {
+                            "model": h.model_id,
+                            "node": h.node_id,
+                            "class_name": h.class_name,
+                            "confidence": h.confidence,
+                            "box": {
+                                "x1": h.x1, "y1": h.y1,
+                                "x2": h.x2, "y2": h.y2,
+                            },
+                            "stage": h.stage,
+                            "hop": h.hop_number,
+                        }
+                        for h in history
+                    ]
+            except Exception as e:
+                logger.warning(f"Failed to get detection history for {record.id}: {e}")
+
+        return item

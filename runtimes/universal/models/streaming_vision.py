@@ -23,17 +23,27 @@ from .vision_base import DetectionBox, DetectionResult
 
 if TYPE_CHECKING:
     from .yolo_model import YOLOModel
+    from vision_training.replay_buffer import ModelOpinion
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CascadeConfig:
-    """Configuration for model cascade behavior."""
-    
-    secondary_model_id: str | None = None  # Fallback model for uncertain detections
+    """Configuration for model cascade behavior.
+
+    Supports both the simple secondary_model_id (backward compatible)
+    and cascade_chain for multi-hop escalation.
+    """
+
+    secondary_model_id: str | None = None  # Fallback model (backward compat)
+    cascade_chain: list[str] | None = None  # Ordered list of model IDs for multi-hop
     feedback_to_primary: bool = True  # Auto-add successful secondary results to replay
     save_uncertain_images: bool = True  # Save images for review queue
+    segmentation_model_id: str | None = None  # Enrich with segmentation before escalating
+    classification_model_id: str | None = None  # Enrich with CLIP before escalating
+    enrich_on_escalation: bool = True  # Attach seg+class enrichment on escalation
+    max_hops: int = 3  # Circuit breaker
 
 
 @dataclass
@@ -53,11 +63,12 @@ class StreamingConfig:
 @dataclass
 class StreamSession:
     """Active streaming session state."""
-    
+
     session_id: str
     config: StreamingConfig
     model_id: str
     secondary_model_id: str | None = None
+    cascade_chain: list[str] = field(default_factory=list)  # Resolved chain of model IDs
     created_at: float = field(default_factory=time.time)
     last_action_time: float = 0.0
     frames_processed: int = 0
@@ -68,10 +79,10 @@ class StreamSession:
     review_queue: list[str] = field(default_factory=list)
 
 
-@dataclass 
+@dataclass
 class FrameResult:
     """Result of processing a single frame."""
-    
+
     status: Literal["ok", "action", "review", "escalated"]
     detections: list[DetectionBox] = field(default_factory=list)
     confidence: float = 0.0
@@ -79,6 +90,9 @@ class FrameResult:
     suppressed: bool = False
     escalated_to: str | None = None  # Model that handled escalation
     added_to_replay: bool = False  # Whether result was added to replay buffer
+    hop_count: int = 0  # How many models were consulted
+    cascade_resolved_by: str | None = None  # Which model resolved it
+    opinions: list = field(default_factory=list)  # list[ModelOpinion]
 
 
 @dataclass
@@ -190,41 +204,140 @@ class StreamingVisionDetector:
         config: StreamingConfig | None = None,
     ) -> StreamSession:
         """Start a new streaming session.
-        
+
+        Builds the cascade chain from config. The chain always starts with
+        the primary model. Additional models come from cascade_chain or
+        secondary_model_id (backward compatible).
+
         Args:
             model_id: Primary detection model to use
             config: Session configuration including cascade settings
-            
+
         Returns:
             StreamSession with session_id
         """
         config = config or StreamingConfig()
         session_id = str(uuid.uuid4())[:8]
-        
+
         # Ensure primary model is loaded
         await self._ensure_model_loaded(model_id)
-        
-        # Ensure secondary model is loaded if configured
+
+        # Build the cascade chain
+        cascade_chain: list[str] = []
         secondary_model_id = None
-        if config.cascade and config.cascade.secondary_model_id:
-            secondary_model_id = config.cascade.secondary_model_id
-            await self._ensure_model_loaded(secondary_model_id)
-        
+
+        if config.cascade:
+            if config.cascade.cascade_chain:
+                # New multi-hop chain
+                cascade_chain = list(config.cascade.cascade_chain)
+            elif config.cascade.secondary_model_id:
+                # Backward compatible: single secondary
+                cascade_chain = [config.cascade.secondary_model_id]
+
+            # Set secondary_model_id for backward compat stats
+            secondary_model_id = cascade_chain[0] if cascade_chain else None
+
+            # Load all chain models
+            for chain_model_id in cascade_chain:
+                await self._ensure_model_loaded(chain_model_id)
+
+            # Load enrichment models if configured
+            if config.cascade.segmentation_model_id:
+                await self._ensure_model_loaded(config.cascade.segmentation_model_id)
+            if config.cascade.classification_model_id:
+                await self._ensure_model_loaded(config.cascade.classification_model_id)
+
         session = StreamSession(
             session_id=session_id,
             config=config,
             model_id=model_id,
             secondary_model_id=secondary_model_id,
+            cascade_chain=cascade_chain,
         )
-        
+
         self._sessions[session_id] = session
         logger.info(
             f"Started streaming session {session_id} with primary={model_id}, "
-            f"secondary={secondary_model_id or 'none'}"
+            f"cascade_chain={cascade_chain or 'none'}"
         )
-        
+
         return session
     
+    def _build_opinion(
+        self,
+        model_id: str,
+        detection: DetectionBox,
+        inference_time_ms: float = 0.0,
+        node_id: str = "local",
+    ) -> ModelOpinion:
+        """Build a ModelOpinion from a detection result."""
+        from vision_training.replay_buffer import ModelOpinion
+
+        return ModelOpinion(
+            model_id=model_id,
+            node_id=node_id,
+            class_name=detection.class_name,
+            confidence=detection.confidence,
+            bbox=(detection.x1, detection.y1, detection.x2, detection.y2),
+            mask_polygon=detection.mask,
+            inference_time_ms=inference_time_ms,
+        )
+
+    async def _enrich_detection(
+        self,
+        session: StreamSession,
+        image: bytes,
+        detection: DetectionBox,
+    ) -> DetectionBox:
+        """Enrich a detection with segmentation mask and/or classification.
+
+        When a detection is uncertain, this attaches additional context
+        before sending to the next model in the cascade.
+        """
+        cascade = session.config.cascade
+        if not cascade or not cascade.enrich_on_escalation:
+            return detection
+
+        enriched = DetectionBox(
+            x1=detection.x1, y1=detection.y1,
+            x2=detection.x2, y2=detection.y2,
+            class_name=detection.class_name,
+            class_id=detection.class_id,
+            confidence=detection.confidence,
+            mask=detection.mask,
+        )
+
+        # Enrich with segmentation
+        if cascade.segmentation_model_id:
+            seg_model = self._models.get(cascade.segmentation_model_id)
+            if seg_model and hasattr(seg_model, 'segment'):
+                try:
+                    seg_result = await seg_model.segment(
+                        image=image,
+                        boxes=[(detection.x1, detection.y1, detection.x2, detection.y2)],
+                    )
+                    if seg_result and seg_result.masks:
+                        mask = seg_result.masks[0]
+                        if mask.box:
+                            enriched.mask = mask.box.mask
+                except Exception as e:
+                    logger.debug(f"Segmentation enrichment failed: {e}")
+
+        # Enrich with classification
+        if cascade.classification_model_id:
+            cls_model = self._models.get(cascade.classification_model_id)
+            if cls_model and hasattr(cls_model, 'classify'):
+                try:
+                    cls_result = await cls_model.classify(image=image)
+                    if cls_result and cls_result.class_name:
+                        # If CLIP is more confident, update the class name
+                        if cls_result.confidence > enriched.confidence:
+                            enriched.class_name = cls_result.class_name
+                except Exception as e:
+                    logger.debug(f"Classification enrichment failed: {e}")
+
+        return enriched
+
     async def _escalate_to_secondary(
         self,
         session: StreamSession,
@@ -296,23 +409,30 @@ class StreamingVisionDetector:
         detections: list[DetectionBox],
         source: str,
         confidence: float,
+        opinions: list | None = None,
+        resolving_hop: int = 1,
     ) -> bool:
         """Add successful escalation to replay buffer for primary model training.
-        
+
+        Now carries the full ModelOpinion chain so training knows exactly
+        what happened in the cascade.
+
         Args:
             session_id: Session that produced this result
             image: Image bytes
-            detections: Verified detections from secondary model
+            detections: Verified detections from secondary/cascade model
             source: Source identifier (e.g., "escalation", "correction")
             confidence: Detection confidence
-            
+            opinions: Full list of ModelOpinions from the cascade
+            resolving_hop: Which hop resolved it (1-based)
+
         Returns:
             True if added successfully
         """
         if self._replay_buffer is None:
             logger.debug("No replay buffer configured, skipping auto-learning")
             return False
-        
+
         try:
             # Store image if we have image store
             image_path = None
@@ -323,42 +443,51 @@ class StreamingVisionDetector:
                     image_bytes=image,
                     source=source,
                 )
-            
-            # Add to replay buffer
-            # Convert detections to label format (YOLO format: class x_center y_center width height)
-            labels = []
-            for det in detections:
-                x_center = (det.x1 + det.x2) / 2
-                y_center = (det.y1 + det.y2) / 2
-                width = det.x2 - det.x1
-                height = det.y2 - det.y1
-                labels.append(f"{det.class_id} {x_center} {y_center} {width} {height}")
-            
+
             sample_id = f"{session_id}_{int(time.time() * 1000)}"
-            
-            if source == "escalation":
-                self._replay_buffer.add_low_confidence(
+
+            # Get best detection's bbox
+            best_det = detections[0] if detections else None
+            bbox = (best_det.x1, best_det.y1, best_det.x2, best_det.y2) if best_det else None
+            final_label = best_det.class_name if best_det else ""
+
+            if source == "escalation" and opinions:
+                # Cascade resolved: use structured add_cascade_resolved
+                self._replay_buffer.add_cascade_resolved(
                     image_id=sample_id,
                     image_path=image_path or "",
-                    predicted_label="\n".join(labels),
-                    confidence=confidence,
+                    opinions=opinions,
+                    final_label=final_label,
+                    bbox=bbox,
+                    resolving_hop=resolving_hop,
                 )
-            else:
+            elif source == "correction":
                 self._replay_buffer.add_correction(
                     image_id=sample_id,
                     image_path=image_path or "",
-                    corrected_label="\n".join(labels),
+                    corrected_label=final_label,
                     original_confidence=confidence,
+                    opinions=opinions,
+                    bbox=bbox,
                 )
-            
+            else:
+                self._replay_buffer.add_low_confidence(
+                    image_id=sample_id,
+                    image_path=image_path or "",
+                    predicted_label=final_label,
+                    confidence=confidence,
+                    opinions=opinions,
+                    bbox=bbox,
+                )
+
             # Check if we should trigger training
             buffer_size = len(self._replay_buffer)
             if self._on_replay_buffer_threshold:
                 await self._on_replay_buffer_threshold(buffer_size)
-            
+
             logger.info(f"Added to replay buffer: {sample_id} (buffer size: {buffer_size})")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to add to replay buffer: {e}")
             return False
@@ -406,195 +535,270 @@ class StreamingVisionDetector:
         image: bytes,
         callback: Callable[[FrameResult], Any] | None = None,
     ) -> FrameResult:
-        """Process a single frame with cascade and auto-learning.
-        
-        Flow:
-        1. Primary model detects
-        2. If high confidence → return "action"
-        3. If mid confidence → escalate to secondary
-           - Secondary succeeds → "action" + add to replay buffer
-           - Secondary fails → "review" queue
-        4. If low confidence → "review" queue
-        5. Otherwise → "ok"
-        
+        """Process a single frame with cascade chain and auto-learning.
+
+        Flow (multi-hop cascade):
+        1. Primary model (hop 0) detects
+        2. If high confidence -> return "action"
+        3. If mid/low confidence -> enrich with seg/classification, then
+           iterate through cascade_chain (hops 1..N):
+           - If any hop returns high confidence -> "action" + replay buffer
+           - If all hops fail -> "review" queue
+        4. No detections -> "ok"
+
+        The cascade chain is built at session start from cascade_chain config
+        or from secondary_model_id (backward compatible).
+
         Args:
             session_id: Active session ID
             image: Frame as bytes (JPEG/PNG)
             callback: Optional callback for action results
-            
+
         Returns:
-            FrameResult with status, detections, and learning info
+            FrameResult with status, detections, opinions, and learning info
         """
+        from vision_training.replay_buffer import ModelOpinion
+
         session = self._sessions.get(session_id)
         if session is None:
             raise ValueError(f"Session {session_id} not found")
-        
+
         model = self._models.get(session.model_id)
         if model is None:
             raise RuntimeError(f"Model {session.model_id} not loaded")
-        
+
         config = session.config
         session.frames_processed += 1
-        
-        # Run primary detection (use lower threshold to catch uncertain cases)
+        opinions: list[ModelOpinion] = []
+
+        # ---- Hop 0: Primary model ----
+        start_time = time.time()
         result = await model.detect(
             image=image,
             confidence_threshold=config.escalation_threshold,
         )
-        
+        primary_time_ms = (time.time() - start_time) * 1000
+
         # Separate detections by confidence
         high_confidence = []
         mid_confidence = []
         low_confidence = []
-        
+
         for box in result.boxes:
-            # Filter to action classes if specified
             if config.action_classes and box.class_name not in config.action_classes:
                 continue
-            
+
             if box.confidence >= config.confidence_threshold:
                 high_confidence.append(box)
             elif box.confidence >= config.escalation_threshold:
                 mid_confidence.append(box)
             else:
                 low_confidence.append(box)
-        
-        # Case 1: High confidence detections - return immediately
+
+        # Build primary opinion from best detection
+        best_primary = (
+            high_confidence[0] if high_confidence
+            else mid_confidence[0] if mid_confidence
+            else low_confidence[0] if low_confidence
+            else None
+        )
+        if best_primary:
+            opinions.append(self._build_opinion(
+                model_id=session.model_id,
+                detection=best_primary,
+                inference_time_ms=primary_time_ms,
+            ))
+
+        # Case 1: High confidence - return immediately
         if high_confidence:
             now = time.time()
-            
-            # Check cooldown
+
             if now - session.last_action_time < config.cooldown_seconds:
                 return FrameResult(
                     status="ok",
                     detections=high_confidence,
                     confidence=max(d.confidence for d in high_confidence),
                     suppressed=True,
+                    opinions=opinions,
+                    hop_count=1,
                 )
-            
-            # Trigger action
+
             session.last_action_time = now
             session.actions_triggered += 1
-            
+
             frame_result = FrameResult(
                 status="action",
                 detections=high_confidence,
                 confidence=max(d.confidence for d in high_confidence),
+                opinions=opinions,
+                hop_count=1,
             )
-            
+
             if callback:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(frame_result)
                 else:
                     callback(frame_result)
-            
+
             return frame_result
-        
-        # Case 2: Mid confidence - escalate to secondary model
-        if mid_confidence and config.cascade and config.cascade.secondary_model_id:
-            escalation_result = await self._escalate_to_secondary(
-                session=session,
-                image=image,
-                primary_detections=mid_confidence,
-            )
-            
-            if escalation_result.success:
+
+        # Case 2: Need to escalate through the cascade chain
+        uncertain_detections = mid_confidence or low_confidence
+        if uncertain_detections and session.cascade_chain:
+            # Enrich the best detection before escalating
+            best_uncertain = uncertain_detections[0]
+            enriched = await self._enrich_detection(session, image, best_uncertain)
+
+            # Walk the cascade chain
+            resolved = False
+            resolving_model_id = None
+            resolved_detections: list[DetectionBox] = []
+            resolved_confidence = 0.0
+
+            for hop_idx, chain_model_id in enumerate(session.cascade_chain):
+                hop_number = hop_idx + 1  # hop 0 is primary
+
+                # Circuit breaker
+                if hop_number >= (config.cascade.max_hops if config.cascade else 3):
+                    break
+
+                chain_model = self._models.get(chain_model_id)
+                if chain_model is None:
+                    logger.warning(f"Cascade model {chain_model_id} not loaded, skipping")
+                    continue
+
+                session.escalations_to_secondary += 1
+
+                # Run detection with cascade model
+                hop_start = time.time()
+                hop_result = await chain_model.detect(
+                    image=image,
+                    confidence_threshold=config.escalation_threshold,
+                )
+                hop_time_ms = (time.time() - hop_start) * 1000
+
+                # Filter to confident detections
+                if config.action_classes:
+                    hop_confident = [
+                        b for b in hop_result.boxes
+                        if b.class_name in config.action_classes
+                        and b.confidence >= config.confidence_threshold
+                    ]
+                else:
+                    hop_confident = [
+                        b for b in hop_result.boxes
+                        if b.confidence >= config.confidence_threshold
+                    ]
+
+                # Build opinion from this hop
+                best_hop = (
+                    hop_confident[0] if hop_confident
+                    else hop_result.boxes[0] if hop_result.boxes
+                    else None
+                )
+                if best_hop:
+                    opinions.append(self._build_opinion(
+                        model_id=chain_model_id,
+                        detection=best_hop,
+                        inference_time_ms=hop_time_ms,
+                    ))
+
+                if hop_confident:
+                    # This hop resolved it
+                    session.secondary_successes += 1
+                    resolved = True
+                    resolving_model_id = chain_model_id
+                    resolved_detections = hop_confident
+                    resolved_confidence = max(d.confidence for d in hop_confident)
+                    break
+
+            if resolved:
                 now = time.time()
-                
-                # Check cooldown
+
                 if now - session.last_action_time < config.cooldown_seconds:
                     return FrameResult(
                         status="ok",
-                        detections=escalation_result.detections,
-                        confidence=escalation_result.confidence,
+                        detections=resolved_detections,
+                        confidence=resolved_confidence,
                         suppressed=True,
-                        escalated_to=escalation_result.model_id,
+                        escalated_to=resolving_model_id,
+                        opinions=opinions,
+                        hop_count=len(opinions),
+                        cascade_resolved_by=resolving_model_id,
                     )
-                
-                # Trigger action
+
                 session.last_action_time = now
                 session.actions_triggered += 1
-                
-                # Add to replay buffer for primary model training
+
+                # Add to replay buffer with full opinion chain
                 added_to_replay = False
-                if config.cascade.feedback_to_primary:
+                if config.cascade and config.cascade.feedback_to_primary:
                     added_to_replay = await self._add_to_replay_buffer(
                         session_id=session_id,
                         image=image,
-                        detections=escalation_result.detections,
+                        detections=resolved_detections,
                         source="escalation",
-                        confidence=escalation_result.confidence,
+                        confidence=resolved_confidence,
+                        opinions=opinions,
+                        resolving_hop=len(opinions) - 1,
                     )
-                
+
                 frame_result = FrameResult(
                     status="action",
-                    detections=escalation_result.detections,
-                    confidence=escalation_result.confidence,
-                    escalated_to=escalation_result.model_id,
+                    detections=resolved_detections,
+                    confidence=resolved_confidence,
+                    escalated_to=resolving_model_id,
                     added_to_replay=added_to_replay,
+                    opinions=opinions,
+                    hop_count=len(opinions),
+                    cascade_resolved_by=resolving_model_id,
                 )
-                
+
                 if callback:
                     if asyncio.iscoroutinefunction(callback):
                         await callback(frame_result)
                     else:
                         callback(frame_result)
-                
+
                 return frame_result
             else:
-                # Secondary also uncertain - send to review queue
+                # All hops failed -> review queue
                 image_id = await self._send_to_review_queue(
                     session=session,
                     image=image,
-                    detections=mid_confidence + escalation_result.detections,
-                    confidence=max(
-                        [d.confidence for d in mid_confidence] +
-                        [d.confidence for d in escalation_result.detections],
-                        default=0.0
-                    ),
+                    detections=uncertain_detections,
+                    confidence=max(d.confidence for d in uncertain_detections),
                 )
-                
+
                 return FrameResult(
                     status="review",
-                    detections=mid_confidence,
-                    confidence=max(d.confidence for d in mid_confidence) if mid_confidence else 0.0,
+                    detections=uncertain_detections,
+                    confidence=max(d.confidence for d in uncertain_detections),
                     image_id=image_id,
-                    escalated_to=escalation_result.model_id,
+                    escalated_to=session.cascade_chain[-1] if session.cascade_chain else None,
+                    opinions=opinions,
+                    hop_count=len(opinions),
                 )
-        
-        # Case 3: Mid confidence but no secondary model - send to review
-        if mid_confidence:
+
+        # Case 3: Uncertain but no cascade chain - send to review
+        if uncertain_detections:
             image_id = await self._send_to_review_queue(
                 session=session,
                 image=image,
-                detections=mid_confidence,
-                confidence=max(d.confidence for d in mid_confidence),
+                detections=uncertain_detections,
+                confidence=max(d.confidence for d in uncertain_detections),
             )
-            
+
             return FrameResult(
                 status="review",
-                detections=mid_confidence,
-                confidence=max(d.confidence for d in mid_confidence),
+                detections=uncertain_detections,
+                confidence=max(d.confidence for d in uncertain_detections),
                 image_id=image_id,
+                opinions=opinions,
+                hop_count=len(opinions),
             )
-        
-        # Case 4: Only low confidence detections - send to review
-        if low_confidence:
-            image_id = await self._send_to_review_queue(
-                session=session,
-                image=image,
-                detections=low_confidence,
-                confidence=max(d.confidence for d in low_confidence),
-            )
-            
-            return FrameResult(
-                status="review",
-                detections=low_confidence,
-                confidence=max(d.confidence for d in low_confidence),
-                image_id=image_id,
-            )
-        
-        # Case 5: No detections matching our criteria
+
+        # Case 4: No detections matching our criteria
         return FrameResult(status="ok")
     
     async def submit_correction(
@@ -717,7 +921,7 @@ class StreamingVisionDetector:
     
     def get_replay_buffer_stats(self) -> dict[str, Any] | None:
         """Get replay buffer statistics."""
-        if self._replay_buffer:
+        if self._replay_buffer is not None:
             return self._replay_buffer.get_stats()
         return None
 

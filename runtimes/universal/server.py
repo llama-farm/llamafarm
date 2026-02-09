@@ -90,6 +90,7 @@ from routers.vision import (
     set_detection_loader,
     set_classification_loader,
     set_embedding_loader,
+    set_vision_models_dir,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -329,6 +330,7 @@ _cleanup_task: asyncio.Task | None = None
 # Data directories
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
+VISION_MODELS_DIR = _LF_DATA_DIR / "models" / "vision"
 
 
 # ============================================================================
@@ -963,11 +965,57 @@ set_detection_loader(load_detection)
 set_classification_loader(load_classification)
 set_embedding_loader(load_embedding)
 
+# Vision models directory (for save/load/versioning)
+set_vision_models_dir(VISION_MODELS_DIR)
+
 # Streaming vision uses same detection loader
-from models.streaming_vision import set_streaming_model_loader
+from models.streaming_vision import (
+    set_streaming_model_loader,
+    set_streaming_replay_buffer,
+    set_streaming_image_store,
+    set_streaming_training_trigger,
+)
 set_streaming_model_loader(load_detection)
 
-# Training uses detection loader
+# Wire up replay buffer and image store for the cascade learning loop
+from vision_training.replay_buffer import ReplayBuffer
+from storage.image_store import ImageMetadataStore
+
+_vision_replay_buffer = ReplayBuffer(
+    max_size=1000,
+    storage_dir=_LF_DATA_DIR / "vision" / "replay_buffer",
+)
+_vision_image_store = ImageMetadataStore(
+    db_path=_LF_DATA_DIR / "vision" / "metadata.db",
+)
+set_streaming_replay_buffer(_vision_replay_buffer)
+set_streaming_image_store(_vision_image_store)
+
+# Wire up auto-trainer with training trigger callback
+from vision_training.trainer import IncrementalTrainer
+from vision_training.auto_trainer import init_auto_trainer
+
+_vision_trainer = IncrementalTrainer(
+    model_loader=load_detection,
+    output_dir=VISION_MODELS_DIR,
+)
+_vision_auto_trainer = init_auto_trainer(
+    replay_buffer=_vision_replay_buffer,
+    trainer=_vision_trainer,
+)
+
+def _on_training_threshold(buffer_size: int):
+    """Trigger auto-training when replay buffer hits threshold."""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_vision_auto_trainer.check_and_train())
+    except RuntimeError:
+        pass  # No event loop running
+
+set_streaming_training_trigger(_on_training_threshold)
+
+# Training module-level loader (used by get_trainer() singleton fallback)
 from vision_training.trainer import set_trainer_model_loader
 set_trainer_model_loader(load_detection)
 

@@ -14,6 +14,7 @@ from api_types.vision import (
     Detection,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ async def segment_image(request: SegmentRequest) -> SegmentResponse:
         model = await _load_detection_model_fn(request.model.replace('-seg', ''))
 
     # Decode image
-    image_bytes = _decode_base64_image(request.image)
+    image_bytes = decode_base64_image(request.image)
 
     # Run detection (YOLO seg models return masks via detect)
     result = await model.detect(
@@ -147,13 +148,3 @@ async def segment_image(request: SegmentRequest) -> SegmentResponse:
     )
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes."""
-    import base64
-
-    if image_str.startswith("data:"):
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)

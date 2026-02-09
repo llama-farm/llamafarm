@@ -416,9 +416,7 @@ export function StreamingPanel() {
           }
           break
         case 'segment':
-          console.log('[DEBUG] Segment API response:', data)
           result.segments = data.segments || data.detections || []
-          console.log('[DEBUG] Parsed segments:', result.segments)
           break
         case 'ocr':
           // API returns { data: [{ index, text, confidence, boxes }] }
@@ -440,13 +438,10 @@ export function StreamingPanel() {
       
       return result
     } catch (error) {
-      console.error('[DEBUG] Process error:', error)
+      console.error('Vision process error:', error)
       return { ...queuedImage, status: 'error' }
     }
   }
-  
-  // Debug: log when segments change
-  console.log('[DEBUG] Current segments:', segments, 'mode:', mode, 'selectedImage:', selectedImage?.id, selectedImage?.status)
   
   // Process queue
   const processQueue = async () => {

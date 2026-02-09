@@ -597,6 +597,43 @@ properties:
               Minimum seconds between action triggers for same class.
               Prevents alert spam from continuous detections.
             default: 5.0
+          cascade_chain:
+            type: array
+            description: |
+              Ordered list of model IDs to try in the cascade.
+              Each model is tried in order until one returns a detection
+              above confidence_threshold. Models can be local (e.g., "yolov8m")
+              or remote (e.g., "remote:gpu-server/yolov8x").
+              If empty, falls back to [primary_model, fallback_model].
+            items:
+              type: string
+            default: []
+          max_cascade_hops:
+            type: integer
+            minimum: 1
+            maximum: 5
+            description: |
+              Maximum number of models to try before giving up.
+              Circuit breaker to prevent infinite escalation.
+            default: 3
+          enrich_on_escalation:
+            type: boolean
+            description: |
+              Attach segmentation masks and CLIP classification
+              to detections before escalating to the next model.
+            default: true
+          segmentation_model_id:
+            type: string
+            description: |
+              Model for segmentation enrichment on escalation.
+              Leave empty to skip segmentation enrichment.
+            default: ""
+          classification_model_id:
+            type: string
+            description: |
+              CLIP model for classification enrichment on escalation.
+              Leave empty to skip classification enrichment.
+            default: ""
       classification:
         type: object
         description: Image classification configuration
@@ -747,6 +784,94 @@ properties:
             minimum: 1
             description: Maximum storage size in GB before cleanup
             default: 10
+      validation:
+        type: object
+        description: |
+          Validation gate configuration for blue/green model promotion.
+          A candidate model must beat the current model on a held-out
+          validation set before being promoted to production.
+        properties:
+          enabled:
+            type: boolean
+            description: Enable validation gate before model promotion
+            default: true
+          min_validation_samples:
+            type: integer
+            minimum: 5
+            description: |
+              Minimum validation samples required to run the gate.
+              If fewer samples are available, validation is skipped.
+            default: 20
+          improvement_threshold:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            description: |
+              Minimum accuracy improvement required over current model.
+              0.0 means any improvement passes, 0.05 means 5% better.
+            default: 0.0
+          auto_rollback:
+            type: boolean
+            description: Automatically roll back if promoted model degrades
+            default: true
+      federation:
+        type: object
+        description: |
+          Federation configuration for multi-node vision cascade.
+          Allows distributing model inference and trained models across
+          multiple LlamaFarm instances. Optional -- standalone mode
+          works without any federation config.
+        properties:
+          enabled:
+            type: boolean
+            description: Enable federation features
+            default: false
+          peers:
+            type: array
+            description: |
+              Configured federation peers. Each peer is another LlamaFarm
+              instance that can provide model inference or receive model updates.
+              On mesh (Atmosphere), peers are discovered automatically.
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Human-readable peer name
+                url:
+                  type: string
+                  description: |
+                    Peer URL (e.g., "http://192.168.1.100:11540")
+                    or "atmosphere://node-id" for mesh discovery.
+                models:
+                  type: array
+                  description: Models available on this peer
+                  items:
+                    type: string
+                  default: []
+                gpu_vram_gb:
+                  type: number
+                  description: GPU VRAM on peer (for routing decisions)
+                  default: 0
+                priority:
+                  type: integer
+                  description: Lower = tried first in cascade
+                  default: 0
+                timeout:
+                  type: number
+                  description: Request timeout in seconds
+                  default: 30.0
+              required:
+                - name
+                - url
+            default: []
+          auto_package_on_promote:
+            type: boolean
+            description: |
+              Automatically create a model package when the validation
+              gate promotes a new model. Packages can then be pushed
+              to peers or discovered via mesh gossip.
+            default: true
 
 definitions:
   Tool:

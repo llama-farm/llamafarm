@@ -292,9 +292,10 @@ class YOLOModel(DetectionModel):
             "verbose": kwargs.get("verbose", True),
         }
 
-        # Add any additional kwargs
+        # Add any additional kwargs (filter out non-YOLO args)
+        _non_yolo_keys = {"use_ewc", "ewc_lambda", "use_replay", "replay_ratio", "model"}
         for key, value in kwargs.items():
-            if key not in train_args:
+            if key not in train_args and key not in _non_yolo_keys:
                 train_args[key] = value
 
         # Run training

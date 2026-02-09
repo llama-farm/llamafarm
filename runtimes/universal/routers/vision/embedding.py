@@ -17,6 +17,7 @@ from api_types.vision import (
     ImageEmbedResponse,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ async def embed_images_or_texts(request: ImageEmbedRequest) -> ImageEmbedRespons
 
     # Embed images if provided
     if request.images:
-        image_bytes_list = [_decode_base64_image(img) for img in request.images]
+        image_bytes_list = [decode_base64_image(img) for img in request.images]
         image_result = await model.embed_images(image_bytes_list)
         all_embeddings.extend(image_result.embeddings)
 
@@ -137,13 +138,3 @@ async def embed_images_or_texts(request: ImageEmbedRequest) -> ImageEmbedRespons
     )
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes."""
-    import base64
-
-    if image_str.startswith("data:"):
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)

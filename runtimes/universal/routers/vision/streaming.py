@@ -35,6 +35,7 @@ from models.streaming_vision import (
     get_streaming_detector,
 )
 from services.error_handler import handle_endpoint_errors
+from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +93,13 @@ async def start_streaming_session(request: StreamStartRequest) -> StreamStartRes
     if request.config.cascade:
         cascade_config = CascadeConfig(
             secondary_model_id=request.config.cascade.secondary_model_id,
+            cascade_chain=request.config.cascade.cascade_chain,
             feedback_to_primary=request.config.cascade.feedback_to_primary,
             save_uncertain_images=request.config.cascade.save_uncertain_images,
+            segmentation_model_id=request.config.cascade.segmentation_model_id,
+            classification_model_id=request.config.cascade.classification_model_id,
+            enrich_on_escalation=request.config.cascade.enrich_on_escalation,
+            max_hops=request.config.cascade.max_hops,
         )
     
     # Convert API config to model config
@@ -162,7 +168,7 @@ async def process_frame(request: StreamFrameRequest) -> StreamFrameResponse:
         )
     
     # Decode image
-    image_bytes = _decode_base64_image(request.image)
+    image_bytes = decode_base64_image(request.image)
     
     # Process frame
     result = await detector.process_frame(
@@ -414,13 +420,3 @@ async def clear_replay_buffer() -> dict[str, Any]:
     return {"cleared": False, "samples_removed": 0}
 
 
-def _decode_base64_image(image_str: str) -> bytes:
-    """Decode base64 image string to bytes."""
-    import base64
-
-    if image_str.startswith("data:"):
-        _, base64_data = image_str.split(",", 1)
-    else:
-        base64_data = image_str
-
-    return base64.b64decode(base64_data)

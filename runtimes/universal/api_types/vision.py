@@ -269,12 +269,32 @@ class ImageEmbedResponse(BaseModel):
 # =============================================================================
 
 
+class ModelOpinionResponse(BaseModel):
+    """What one model thought about a detection (API response)."""
+
+    model_id: str
+    node_id: str = "local"
+    class_name: str = ""
+    confidence: float = 0.0
+    bbox: BoundingBox | None = None
+    mask_polygon: list[list[float]] | None = None
+    inference_time_ms: float = 0.0
+
+
 class CascadeConfig(BaseModel):
-    """Configuration for model cascade behavior."""
+    """Configuration for model cascade behavior.
+
+    Supports both the simple secondary_model_id (backward compatible)
+    and the full cascade_chain for multi-hop escalation.
+    """
 
     secondary_model_id: str | None = Field(
         default=None,
         description="Fallback model for uncertain detections (e.g., yolov8m, yolov8l)",
+    )
+    cascade_chain: list[str] | None = Field(
+        default=None,
+        description="Ordered list of model IDs for multi-hop cascade. Overrides secondary_model_id if set.",
     )
     feedback_to_primary: bool = Field(
         default=True,
@@ -283,6 +303,22 @@ class CascadeConfig(BaseModel):
     save_uncertain_images: bool = Field(
         default=True,
         description="Save images that fail both models to review queue",
+    )
+    segmentation_model_id: str | None = Field(
+        default=None,
+        description="Run segmentation on uncertain bboxes before escalating",
+    )
+    classification_model_id: str | None = Field(
+        default=None,
+        description="Run CLIP classification on uncertain crops before escalating",
+    )
+    enrich_on_escalation: bool = Field(
+        default=True,
+        description="Attach seg masks and classification scores when escalating",
+    )
+    max_hops: int = Field(
+        default=3,
+        description="Circuit breaker: max cascade hops before sending to review",
     )
 
 
@@ -331,6 +367,9 @@ class StreamFrameResponse(BaseModel):
     suppressed: bool = False  # True if action was suppressed due to cooldown
     escalated_to: str | None = None  # Model that handled escalation (if any)
     added_to_replay: bool = False  # True if result was added to replay buffer
+    hop_count: int = 0  # How many models saw this frame
+    cascade_resolved_by: str | None = None  # Which model resolved it (if cascaded)
+    opinions: list[ModelOpinionResponse] | None = None  # All model opinions
 
 
 class StreamStopRequest(BaseModel):
@@ -529,14 +568,18 @@ class ReviewItem(BaseModel):
     model: str
     source: str  # e.g., "stream:camera1", "upload:batch123"
     status: Literal["pending", "approved", "rejected", "corrected"]
+    all_opinions: list[ModelOpinionResponse] | None = None  # Every model's take
 
 
 class ReviewDecision(BaseModel):
-    """Human review decision."""
+    """Human or model review decision."""
 
     image_id: str
     decision: Literal["correct", "wrong", "adjusted"]
     corrections: list[Detection] | None = None  # If adjusted
+    reviewer_type: Literal["human", "model"] = "human"
+    reviewer_model_id: str | None = None  # If reviewed by a model (audit)
+    reviewer_confidence: float | None = None  # Model's confidence in the review
 
 
 class ReviewDecisionResponse(BaseModel):

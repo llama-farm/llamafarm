@@ -103,16 +103,17 @@ class IncrementalTrainer:
         output_dir: Path | str | None = None,
     ):
         """Initialize trainer.
-        
+
         Args:
             model_loader: Async function to load models
             output_dir: Directory for trained models
         """
         self._model_loader = model_loader
-        self._output_dir = Path(output_dir) if output_dir else None
+        self._output_dir = Path(output_dir) if output_dir else Path.home() / ".llamafarm" / "models" / "vision" / "training"
         self._jobs: dict[str, TrainingJob] = {}
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
+        self._version_counter: dict[str, int] = {}
     
     def set_model_loader(self, loader: Callable[[str], Any]) -> None:
         """Set the model loader function."""
@@ -205,20 +206,70 @@ class IncrementalTrainer:
     ) -> dict[str, Any]:
         """Train a detection model."""
         config = job.config
-        
+
+        # Build training kwargs
+        train_kwargs: dict[str, Any] = {
+            "dataset_path": job.dataset_path,
+            "epochs": config.epochs,
+            "batch_size": config.batch_size,
+        }
+
+        # Pass EWC config if enabled
+        if config.use_ewc:
+            train_kwargs["use_ewc"] = True
+            train_kwargs["ewc_lambda"] = config.ewc_lambda
+
         # Use YOLO's built-in training
-        metrics = await model.train(
-            dataset_path=job.dataset_path,
-            epochs=config.epochs,
-            batch_size=config.batch_size,
-            # TODO: Add EWC and replay buffer integration
-        )
-        
-        # Update progress during training (simplified)
+        metrics = await model.train(**train_kwargs)
+
+        # Update progress
         job.progress = 1.0
         job.current_epoch = config.epochs
-        
+
+        # Save versioned model checkpoint
+        model_path = self._save_versioned_model(job.model_id, job.dataset_path)
+        if model_path:
+            metrics["model_path"] = model_path
+
         return metrics
+
+    def _save_versioned_model(self, model_id: str, dataset_path: str) -> str | None:
+        """Save the trained model with version number.
+
+        Returns path to saved model, or None if source not found.
+        """
+        # Increment version counter
+        version = self._version_counter.get(model_id, 0) + 1
+        self._version_counter[model_id] = version
+
+        # Look for the trained model in the dataset directory
+        # YOLO typically saves to runs/detect/train/weights/best.pt
+        dataset_dir = Path(dataset_path)
+        candidates = [
+            dataset_dir / "runs" / "detect" / "train" / "weights" / "best.pt",
+            dataset_dir / "best.pt",
+            dataset_dir / "weights" / "best.pt",
+        ]
+
+        src_path = None
+        for candidate in candidates:
+            if candidate.exists():
+                src_path = candidate
+                break
+
+        if src_path is None:
+            logger.warning(f"No trained model found for {model_id}")
+            return None
+
+        # Save to versioned path
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        dst_path = self._output_dir / f"{model_id}_v{version}.pt"
+
+        import shutil
+        shutil.copy2(str(src_path), str(dst_path))
+        logger.info(f"Saved model {model_id} v{version} to {dst_path}")
+
+        return str(dst_path)
     
     async def _train_classification(
         self,
