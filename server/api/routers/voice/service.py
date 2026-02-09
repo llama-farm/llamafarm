@@ -1496,6 +1496,17 @@ class VoiceChatService:
                     )
 
                     if self.session.is_interrupted():
+                        # Emit error results for remaining tool calls so every
+                        # tool_call in the assistant message has a matching result.
+                        remaining = collected_tool_calls[
+                            collected_tool_calls.index(tc) + 1 :
+                        ]
+                        for remaining_tc in remaining:
+                            self.session.messages.append({
+                                "role": "tool",
+                                "tool_call_id": remaining_tc.id,
+                                "content": "Interrupted by user.",
+                            })
                         break
 
                 if self.session.is_interrupted():

@@ -9,12 +9,14 @@ import sys
 
 # Inject addon paths from PYTHONPATH into sys.path
 # PyApp's Python doesn't automatically process PYTHONPATH, so we need to do it manually
-# Use enumerate to preserve original PYTHONPATH order (earlier entries = higher priority)
+# Track actual insert position so skipped duplicates don't shift later entries
 pythonpath = os.environ.get('PYTHONPATH', '')
 if pythonpath:
-    for i, path in enumerate(pythonpath.split(os.pathsep)):
+    insert_at = 0
+    for path in pythonpath.split(os.pathsep):
         if path and path not in sys.path:
-            sys.path.insert(i, path)
+            sys.path.insert(insert_at, path)
+            insert_at += 1
 
 # Allow bare imports (from models.xxx, from routers.xxx, etc.)
 sys.path.insert(0, os.path.dirname(__file__))
