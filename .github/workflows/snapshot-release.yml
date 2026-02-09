@@ -146,6 +146,17 @@ jobs:
             addon: tts
           - platform: windows-x86_64
             addon: tts
+          # ONNX Runtime addon - all platforms
+          - platform: macos-arm64
+            addon: onnxruntime
+          - platform: macos-x86_64
+            addon: onnxruntime
+          - platform: linux-x86_64
+            addon: onnxruntime
+          - platform: linux-aarch64
+            addon: onnxruntime
+          - platform: windows-x86_64
+            addon: onnxruntime
 
     steps:
       - name: Download artifact

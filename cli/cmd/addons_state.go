@@ -168,8 +168,13 @@ func getPlatformString() string {
 	}
 
 	// Map Go arch names to PyApp conventions
-	if arch == "amd64" {
+	switch arch {
+	case "amd64":
 		arch = "x86_64"
+	case "arm64":
+		if osName == "linux" {
+			arch = "aarch64"
+		}
 	}
 
 	return fmt.Sprintf("%s-%s", osName, arch)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/llamafarm/cli/cmd/orchestrator"
@@ -75,7 +76,7 @@ func LoadAddonRegistry() error {
 			}
 			searchPaths = append(searchPaths, filepath.Join("..", "addons", "registry"))
 
-			err = fmt.Errorf("addon registry directory not found. Searched:\n  - %s", filepath.Join(searchPaths...))
+			err = fmt.Errorf("addon registry directory not found. Searched:\n  - %s", strings.Join(searchPaths, "\n  - "))
 			return
 		}
 

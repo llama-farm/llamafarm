@@ -30,6 +30,21 @@ def load_platforms():
     return [p for p in data.get("platforms", []) if p.get("enabled", True)]
 
 
+def discover_addons():
+    """Discover addon names from the registry directory.
+
+    Only returns addons that have packages (i.e., need wheel builds).
+    """
+    registry_dir = Path(__file__).parent.parent / "addons" / "registry"
+    addons = []
+    for yaml_file in sorted(registry_dir.glob("*.yaml")):
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
+        if data and data.get("name") and data.get("packages"):
+            addons.append(data["name"])
+    return addons
+
+
 def generate_matrix(addons=None, platforms=None):
     """Generate a GitHub Actions matrix."""
     all_platforms = load_platforms()
@@ -39,9 +54,9 @@ def generate_matrix(addons=None, platforms=None):
         platform_names = platforms.split(",")
         all_platforms = [p for p in all_platforms if p["name"] in platform_names]
 
-    # Default addons
+    # Discover addons from registry if not specified
     if not addons:
-        addons = ["stt", "tts"]
+        addons = discover_addons()
     else:
         addons = addons.split(",")
 

@@ -53,5 +53,5 @@ async def get_task_status(task_id: str):
 @router.post("/uninstall")
 async def uninstall_addon(request: AddonInstallRequest):
     """Uninstall an addon."""
-    addon_service.uninstall_addon(request.name)
+    await addon_service.uninstall_addon(request.name)
     return {"status": "success"}

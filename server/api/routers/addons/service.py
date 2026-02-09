@@ -144,11 +144,12 @@ class AddonService:
                 task_id, "failed", 0, "Installation failed", str(e)
             )
 
-    def uninstall_addon(self, addon_name: str):
+    async def uninstall_addon(self, addon_name: str):
         """Uninstall an addon."""
         self._validate_addon_name(addon_name)
         cli_path = self._find_cli_binary()
-        subprocess.run(
+        await asyncio.to_thread(
+            subprocess.run,
             [cli_path, "addons", "uninstall", addon_name],
             check=True,
             timeout=60,

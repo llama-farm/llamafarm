@@ -22,6 +22,7 @@ on:
         options:
           - stt
           - tts
+          - onnxruntime
           - all
       platform:
         description: "Platform to build for (or 'all' for all platforms)"
@@ -71,7 +72,7 @@ jobs:
 
           # Determine addons to build
           if [[ "$ADDON" == "all" ]]; then
-            ADDONS='["stt","tts"]'
+            ADDONS='["stt","tts","onnxruntime"]'
           else
             ADDONS="[\"$ADDON\"]"
           fi

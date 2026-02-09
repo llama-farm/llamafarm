@@ -323,6 +323,30 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 }
 
 func runAddonsUninstall(cmd *cobra.Command, args []string) {
+	// Acquire global install lock to prevent concurrent install/uninstall races
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		utils.OutputError("Failed to get data directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	lockPath := filepath.Join(lfDir, "addons-install.lock")
+	uninstallLock := flock.New(lockPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	locked, err := uninstallLock.TryLockContext(ctx, 100*time.Millisecond)
+	if err != nil {
+		utils.OutputError("Failed to acquire installation lock: %v\n", err)
+		os.Exit(1)
+	}
+	if !locked {
+		utils.OutputError("Another addon operation is in progress. Please wait and try again.\n")
+		os.Exit(1)
+	}
+	defer uninstallLock.Unlock()
+
 	if err := LoadAddonRegistry(); err != nil {
 		utils.OutputError("Failed to load addon registry: %v\n", err)
 		os.Exit(1)
