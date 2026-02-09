@@ -11,14 +11,14 @@ LlamaFarm includes a complete vision pipeline for object detection, image classi
 
 | Capability | Endpoint | Description |
 |-----------|----------|-------------|
-| [Object Detection](./detection) | `POST /v1/vision/detect` | Detect objects with YOLO models |
-| [Image Classification](./detection#image-classification) | `POST /v1/vision/classify` | Classify images with CLIP zero-shot |
-| [Segmentation](./detection#segmentation) | `POST /v1/vision/segment` | Instance/semantic segmentation |
-| [CLIP Embeddings](./detection#clip-embeddings) | `POST /v1/vision/embed` | Image and text embeddings for multimodal RAG |
-| [OCR](../models/specialized-ml#ocr-text-extraction) | `POST /v1/vision/ocr` | Extract text from images and PDFs |
-| [Streaming](./streaming) | `POST /v1/vision/stream/*` | Real-time frame processing with cascade |
-| [Training](./training) | `POST /v1/vision/train` | Fine-tune detection models |
-| [Federation](./federation) | `/v1/vision/federation/*` | Multi-node model distribution |
+| [Object Detection](./detection.md) | `POST /v1/vision/detect` | Detect objects with YOLO models |
+| [Image Classification](./detection.md#image-classification) | `POST /v1/vision/classify` | Classify images with CLIP zero-shot |
+| [Segmentation](./detection.md#segmentation) | `POST /v1/vision/segment` | Instance/semantic segmentation |
+| [CLIP Embeddings](./detection.md#clip-embeddings) | `POST /v1/vision/embed` | Image and text embeddings for multimodal RAG |
+| [OCR](../models/specialized-ml.md#ocr-text-extraction) | `POST /v1/vision/ocr` | Extract text from images and PDFs |
+| [Streaming](./streaming.md) | `POST /v1/vision/stream/*` | Real-time frame processing with cascade |
+| [Training](./training.md) | `POST /v1/vision/train` | Fine-tune detection models |
+| [Federation](./federation.md) | `/v1/vision/federation/*` | Multi-node model distribution |
 
 ## Architecture Overview
 
@@ -107,7 +107,7 @@ curl -X POST http://localhost:14345/v1/vision/stream/start \
 
 ## Next Steps
 
-- [Detection, Classification & Embeddings](./detection) -- Single-frame inference endpoints
-- [Streaming & Cascade](./streaming) -- Real-time processing with automatic learning
-- [Training & Validation](./training) -- Auto-training, validation gate, model management
-- [Federation & Distribution](./federation) -- Multi-node deployment and model packaging
+- [Detection, Classification & Embeddings](./detection.md) -- Single-frame inference endpoints
+- [Streaming & Cascade](./streaming.md) -- Real-time processing with automatic learning
+- [Training & Validation](./training.md) -- Auto-training, validation gate, model management
+- [Federation & Distribution](./federation.md) -- Multi-node deployment and model packaging
