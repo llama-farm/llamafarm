@@ -127,6 +127,12 @@ class VisionModelService:
             "DELETE", f"/v1/vision/models/{task}/{name}"
         )
 
+    @classmethod
+    async def export_model(cls, request: dict[str, Any]) -> Any:
+        return await UniversalRuntimeService._make_request(
+            "POST", "/v1/vision/models/export", json=request, timeout=300.0
+        )
+
 
 class VisionSegmentationService:
     """Proxy for segmentation endpoint."""

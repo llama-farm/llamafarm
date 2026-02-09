@@ -91,6 +91,7 @@ from routers.vision import (
     set_classification_loader,
     set_embedding_loader,
     set_vision_models_dir,
+    set_model_export_loader,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -965,8 +966,9 @@ set_detection_loader(load_detection)
 set_classification_loader(load_classification)
 set_embedding_loader(load_embedding)
 
-# Vision models directory (for save/load/versioning)
+# Vision models directory (for save/load/versioning) and export loader
 set_vision_models_dir(VISION_MODELS_DIR)
+set_model_export_loader(load_detection)
 
 # Streaming vision uses same detection loader
 from models.streaming_vision import (

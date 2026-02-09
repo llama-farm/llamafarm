@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -495,6 +495,52 @@ class CLIPEmbedder(EmbeddingModel):
             embeddings=embeddings,
             dimensions=self.embedding_dim,
         )
+
+    async def export(
+        self,
+        format: Literal["onnx", "coreml", "tensorrt", "tflite", "openvino"],
+        output_path: str,
+        **kwargs,
+    ) -> str:
+        """Export CLIP model to ONNX using HuggingFace optimum.
+
+        Only ONNX format is supported for CLIP models.
+
+        Args:
+            format: Must be "onnx"
+            output_path: Directory to save the exported model
+            **kwargs: Ignored for CLIP export
+
+        Returns:
+            Path to exported model.onnx
+        """
+        if format != "onnx":
+            raise ValueError(f"CLIP export only supports ONNX, got {format}")
+
+        from pathlib import Path
+
+        from optimum.onnxruntime import ORTModelForFeatureExtraction
+        from transformers import AutoTokenizer
+
+        output_dir = Path(output_path)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        hf_model_id = CLIP_VARIANTS.get(self.model_id, self.model_id)
+
+        logger.info(f"Exporting CLIP model {hf_model_id} to ONNX")
+
+        ort_model = ORTModelForFeatureExtraction.from_pretrained(
+            hf_model_id, export=True
+        )
+        ort_model.save_pretrained(output_dir)
+
+        tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
+        tokenizer.save_pretrained(output_dir)
+
+        export_file = output_dir / "model.onnx"
+        logger.info(f"CLIP model exported to: {export_file}")
+
+        return str(export_file)
 
     def get_model_info(self) -> dict:
         """Get information about the loaded model."""

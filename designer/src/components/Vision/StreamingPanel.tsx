@@ -216,66 +216,86 @@ export function StreamingPanel() {
   // Draw overlays based on mode
   useEffect(() => {
     if (!canvasRef.current || !imageRef.current || !selectedImage?.data) return
-    
+
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    
+
     const img = imageRef.current
-    
+
     const draw = () => {
       if (!ctx || !img || !canvas) return
-      
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // Match canvas pixel size to the container so coordinates align
+      const container = canvas.parentElement
+      if (!container) return
+      const cw = container.clientWidth
+      const ch = container.clientHeight
+      canvas.width = cw
+      canvas.height = ch
+      ctx.clearRect(0, 0, cw, ch)
+
+      // Compute where object-contain places the image inside the container
+      const natW = img.naturalWidth || 1
+      const natH = img.naturalHeight || 1
+      const scale = Math.min(cw / natW, ch / natH)
+      const drawW = natW * scale
+      const drawH = natH * scale
+      const offsetX = (cw - drawW) / 2
+      const offsetY = (ch - drawH) / 2
+
+      // Map natural-pixel coords to canvas coords
+      const mapX = (x: number) => offsetX + x * scale
+      const mapY = (y: number) => offsetY + y * scale
       
       if (mode === 'detect' && selectedImage.detections) {
         // DETECTION: Bounding boxes with labels
         selectedImage.detections.forEach((det, i) => {
           const color = COLORS[i % COLORS.length]
           const { x1, y1, x2, y2 } = det.box
-          
+          const mx1 = mapX(x1), my1 = mapY(y1), mx2 = mapX(x2), my2 = mapY(y2)
+
           // Box
           ctx.strokeStyle = color
           ctx.lineWidth = 3
-          ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
-          
+          ctx.strokeRect(mx1, my1, mx2 - mx1, my2 - my1)
+
           // Label background
           const label = `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`
           ctx.font = 'bold 14px sans-serif'
           const tm = ctx.measureText(label)
           ctx.fillStyle = color
-          ctx.fillRect(x1, y1 - 22, tm.width + 8, 22)
-          
+          ctx.fillRect(mx1, my1 - 22, tm.width + 8, 22)
+
           // Label text
           ctx.fillStyle = '#FFF'
-          ctx.fillText(label, x1 + 4, y1 - 6)
+          ctx.fillText(label, mx1 + 4, my1 - 6)
         })
       }
-      
+
       if (mode === 'segment' && selectedImage.segments) {
         // SEGMENTATION: Filled masks with semi-transparency
         selectedImage.segments.forEach((seg, i) => {
           const color = COLORS[i % COLORS.length]
           const { x1, y1, x2, y2 } = seg.box
-          
+          const mx1 = mapX(x1), my1 = mapY(y1), mx2 = mapX(x2), my2 = mapY(y2)
+
           // Draw mask if available
           if (seg.mask && seg.mask.length > 0) {
             ctx.beginPath()
             // mask is list of [x, y] points
             const points = seg.mask as unknown as number[][]
             if (points.length > 0) {
-              ctx.moveTo(points[0][0], points[0][1])
+              ctx.moveTo(mapX(points[0][0]), mapY(points[0][1]))
               for (let j = 1; j < points.length; j++) {
-                ctx.lineTo(points[j][0], points[j][1])
+                ctx.lineTo(mapX(points[j][0]), mapY(points[j][1]))
               }
               ctx.closePath()
-              
+
               // Fill with semi-transparent color
               ctx.fillStyle = color + '80' // 50% opacity
               ctx.fill()
-              
+
               // Stroke border
               ctx.strokeStyle = color
               ctx.lineWidth = 2
@@ -284,36 +304,37 @@ export function StreamingPanel() {
           } else {
             // Fallback: Fill box area
             ctx.fillStyle = color + '60' // 40% opacity
-            ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+            ctx.fillRect(mx1, my1, mx2 - mx1, my2 - my1)
             ctx.strokeStyle = color
             ctx.lineWidth = 2
-            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
+            ctx.strokeRect(mx1, my1, mx2 - mx1, my2 - my1)
           }
-          
+
           // Label
           const label = seg.class_name
           ctx.font = 'bold 12px sans-serif'
           const tm = ctx.measureText(label)
           ctx.fillStyle = color
-          ctx.fillRect(x1, y2 - 20, tm.width + 8, 20)
+          ctx.fillRect(mx1, my2 - 20, tm.width + 8, 20)
           ctx.fillStyle = '#FFF'
-          ctx.fillText(label, x1 + 4, y2 - 6)
+          ctx.fillText(label, mx1 + 4, my2 - 6)
         })
       }
-      
+
       if (mode === 'ocr' && selectedImage.ocrRegions) {
         // OCR: Highlight text regions
         selectedImage.ocrRegions.forEach((region, i) => {
           if (!region.box) return
           const color = '#45B7D1'
           const { x1, y1, x2, y2 } = region.box
-          
+          const mx1 = mapX(x1), my1 = mapY(y1), mx2 = mapX(x2), my2 = mapY(y2)
+
           // Highlight box
           ctx.fillStyle = color + '30'
-          ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+          ctx.fillRect(mx1, my1, mx2 - mx1, my2 - my1)
           ctx.strokeStyle = color
           ctx.lineWidth = 2
-          ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
+          ctx.strokeRect(mx1, my1, mx2 - mx1, my2 - my1)
         })
       }
       
@@ -324,6 +345,14 @@ export function StreamingPanel() {
       img.onload = draw
     } else {
       draw()
+    }
+
+    // Redraw when container resizes so overlays stay aligned
+    const container = canvas.parentElement
+    if (container) {
+      const ro = new ResizeObserver(() => { if (img.complete) draw() })
+      ro.observe(container)
+      return () => ro.disconnect()
     }
   }, [selectedImage, mode])
   
@@ -544,17 +573,33 @@ export function StreamingPanel() {
   // Corrections
   const submitCorrection = async (original: string, corrected: string, index: number) => {
     if (!selectedImage?.data) return
-    
+
     try {
+      // Build image_id from selected image name + index
+      const imageId = `${selectedImage.id}_${index}`
+
+      // Get original confidence from the detection/segment
+      let originalConfidence = 0.0
+      let box: Box | null = null
+      if (mode === 'detect' && selectedImage.detections?.[index]) {
+        originalConfidence = selectedImage.detections[index].confidence
+        box = selectedImage.detections[index].box
+      } else if (mode === 'segment' && selectedImage.segments?.[index]) {
+        originalConfidence = selectedImage.segments[index].confidence
+        box = selectedImage.segments[index].box
+      } else if (mode === 'classify' && selectedImage.classifications?.[index]) {
+        originalConfidence = selectedImage.classifications[index].confidence
+      }
+
       await fetch(`${RUNTIME_URL}/v1/vision/corrections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: selectedImage.data,
-          original_label: original,
-          corrected_label: corrected,
-          mode,
-          box: mode === 'detect' ? selectedImage.detections?.[index]?.box : null,
+          image_id: imageId,
+          corrected_class: corrected,
+          original_confidence: originalConfidence,
+          box,
+          session_id: sessionId,
         }),
       })
       
@@ -674,7 +719,7 @@ export function StreamingPanel() {
             <div className="bg-card border rounded-lg p-4">
               <div className="relative aspect-video bg-muted rounded overflow-hidden">
                 <img ref={imageRef} src={selectedImage.data} alt="" className="max-w-full max-h-full object-contain mx-auto" />
-                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ objectFit: 'contain' }} />
+                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
                 
                 {/* Classification: Show top label as overlay */}
                 {mode === 'classify' && classifications.length > 0 && selectedImage.status === 'done' && (

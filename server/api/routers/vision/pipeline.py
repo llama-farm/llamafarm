@@ -88,6 +88,12 @@ class LoadModelRequest(BaseModel):
     name: str = ""
 
 
+class ExportModelRequest(BaseModel):
+    model_id: str
+    format: str = "onnx"
+    quantization: str = "fp16"
+
+
 class SegmentRequest(BaseModel):
     image: str = Field(..., description="Base64-encoded image")
     model: str = "yolov8n-seg"
@@ -243,6 +249,12 @@ async def load_vision_model(request: LoadModelRequest) -> Any:
 async def delete_vision_model(task: str, name: str) -> Any:
     """Delete a saved vision model."""
     return await VisionModelService.delete_model(task, name)
+
+
+@router.post("/models/export")
+async def export_vision_model(request: ExportModelRequest) -> Any:
+    """Export a model to ONNX/CoreML/TensorRT/TFLite/OpenVINO with quantization."""
+    return await VisionModelService.export_model(request.model_dump())
 
 
 # =============================================================================

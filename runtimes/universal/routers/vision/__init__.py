@@ -44,7 +44,7 @@ from .embedding import (
 )
 from .streaming import router as streaming_router
 from .training import router as training_router
-from .models import router as models_router, set_vision_models_dir
+from .models import router as models_router, set_vision_models_dir, set_model_export_loader
 from .segmentation import router as segmentation_router
 from .federation import router as federation_router
 
@@ -87,4 +87,5 @@ __all__ = [
     "set_embedding_loader",
     # Vision models
     "set_vision_models_dir",
+    "set_model_export_loader",
 ]

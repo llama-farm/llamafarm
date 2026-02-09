@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AutoTrainConfig:
     """Configuration for auto-training."""
-    
+
     enabled: bool = True
     threshold: int = 50  # Samples before auto-training
     min_interval_hours: float = 6.0  # Minimum hours between training
@@ -40,6 +40,9 @@ class AutoTrainConfig:
     use_ewc: bool = True
     use_replay: bool = True
     replay_ratio: float = 0.3
+    auto_export_onnx: bool = True  # Auto-export to ONNX after promotion
+    export_quantization: str = "fp16"  # fp32, fp16, or int8
+    export_formats: list[str] = field(default_factory=lambda: ["onnx"])
 
 
 @dataclass
@@ -261,6 +264,16 @@ class AutoTrainer:
                             f"Candidate promoted to v{version.version}: "
                             f"{validation_result.reason}"
                         )
+
+                        # Auto-export to ONNX after promotion
+                        if self._config.auto_export_onnx:
+                            try:
+                                exported = await self._auto_export(model_path)
+                                logger.info(f"Auto-exported {len(exported)} format(s)")
+                            except Exception as export_err:
+                                logger.warning(
+                                    f"Auto-export failed (non-fatal): {export_err}"
+                                )
                     else:
                         logger.info(
                             f"Candidate rejected: {validation_result.reason}"
@@ -398,6 +411,46 @@ class AutoTrainer:
 
         return str(dataset_dir)
     
+    async def _auto_export(self, model_path: str) -> list[str]:
+        """Export promoted model to configured formats with quantization.
+
+        Args:
+            model_path: Path to the promoted .pt model
+
+        Returns:
+            List of exported file paths
+        """
+        from pathlib import Path
+
+        from models.yolo_model import YOLOModel
+
+        model = YOLOModel(model_id="export_temp", model_path=model_path)
+        await model.load()
+
+        export_dir = Path(model_path).parent / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        exported: list[str] = []
+        try:
+            for fmt in self._config.export_formats:
+                kwargs: dict[str, Any] = {"simplify": True}
+                if self._config.export_quantization == "fp16":
+                    kwargs["half"] = True
+                elif self._config.export_quantization == "int8":
+                    kwargs["int8"] = True
+
+                path = await model.export(
+                    format=fmt, output_path=str(export_dir), **kwargs
+                )
+                exported.append(path)
+                logger.info(
+                    f"Auto-exported {fmt} ({self._config.export_quantization}): {path}"
+                )
+        finally:
+            await model.unload()
+
+        return exported
+
     async def start(self, check_interval_minutes: float = 30) -> None:
         """Start background monitoring.
         

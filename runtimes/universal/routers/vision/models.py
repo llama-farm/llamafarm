@@ -1,19 +1,22 @@
-"""Vision models router for saving, loading, and managing trained models.
+"""Vision models router for saving, loading, managing, and exporting trained models.
 
 Provides endpoints for:
 - Listing saved vision models (detection, classification, segmentation)
 - Saving trained models to disk
 - Loading saved models for inference
 - Deleting saved models
+- Exporting models to ONNX/CoreML/TensorRT/TFLite/OpenVINO with quantization
 """
 
 import logging
 import shutil
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 from fastapi import APIRouter, HTTPException
 
+from api_types.vision import ModelExportRequest, ModelExportResponse
 from services.error_handler import handle_endpoint_errors
 from services.path_validator import sanitize_model_name, validate_path_within_directory, PathValidationError
 
@@ -23,6 +26,17 @@ router = APIRouter(tags=["vision-models"])
 
 # Injected models directory
 _VISION_MODELS_DIR: Path | None = None
+
+# Dependency injection for model loader (used by export endpoint)
+_load_model_fn: Callable[..., Coroutine[Any, Any, Any]] | None = None
+
+
+def set_model_export_loader(
+    load_fn: Callable[..., Coroutine[Any, Any, Any]] | None,
+) -> None:
+    """Set the model loader function for export operations."""
+    global _load_model_fn
+    _load_model_fn = load_fn
 
 
 def set_vision_models_dir(models_dir: Path) -> None:
@@ -300,6 +314,56 @@ async def delete_vision_model(
         "task": task,
         "deleted": True,
     }
+
+
+@router.post("/v1/vision/models/export", response_model=ModelExportResponse)
+@handle_endpoint_errors("vision_export_model")
+async def export_vision_model(request: ModelExportRequest) -> ModelExportResponse:
+    """Export a model to ONNX, CoreML, TensorRT, TFLite, or OpenVINO.
+
+    Supports quantization levels: fp32 (full), fp16 (half), int8 (smallest).
+    ONNX models can run on any platform via ONNX Runtime.
+    """
+    if _load_model_fn is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Model export loader not initialized.",
+        )
+
+    # Load the model
+    model = await _load_model_fn(request.model_id)
+
+    # Map quantization to export kwargs
+    export_kwargs: dict[str, Any] = {"simplify": True}
+    if request.quantization == "fp16":
+        export_kwargs["half"] = True
+    elif request.quantization == "int8":
+        export_kwargs["int8"] = True
+
+    # Export to models/exports directory
+    export_dir = _get_models_dir() / "exports"
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    start = time.perf_counter()
+    export_path = await model.export(
+        format=request.format,
+        output_path=str(export_dir),
+        **export_kwargs,
+    )
+    elapsed = time.perf_counter() - start
+
+    export_file = Path(export_path)
+    if export_file.is_dir():
+        size_bytes = sum(f.stat().st_size for f in export_file.rglob("*") if f.is_file())
+    else:
+        size_bytes = export_file.stat().st_size
+
+    return ModelExportResponse(
+        export_path=str(export_path),
+        format=request.format,
+        size_mb=round(size_bytes / (1024 * 1024), 2),
+        export_time_seconds=round(elapsed, 2),
+    )
 
 
 @router.get("/v1/vision/auto-train/status")
