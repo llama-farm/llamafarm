@@ -8,7 +8,8 @@ Provides CLIP-based multimodal embeddings for:
 
 import logging
 import time
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
@@ -17,6 +18,7 @@ from api_types.vision import (
     ImageEmbedResponse,
 )
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)

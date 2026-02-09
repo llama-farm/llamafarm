@@ -245,7 +245,7 @@ class ModelPackager:
                 member_path = Path(member.name)
                 if member_path.is_absolute() or ".." in member_path.parts:
                     raise ValueError(f"Unsafe path in archive: {member.name}")
-            tar.extractall(str(dest))
+            tar.extractall(str(dest), filter="data")
 
         # Read metadata
         metadata_file = dest / "metadata.json"

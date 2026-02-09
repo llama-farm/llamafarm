@@ -6,7 +6,7 @@ Server-only endpoints (not mirrored in runtime).
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Form
+from fastapi import APIRouter, Form, HTTPException
 
 from services.vision import VisionReviewService
 

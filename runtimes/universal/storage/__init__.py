@@ -7,7 +7,7 @@ Provides:
 """
 
 from .image_store import ImageMetadataStore, ImageRecord
-from .retention import RetentionPolicy, RetentionConfig
+from .retention import RetentionConfig, RetentionPolicy
 
 __all__ = [
     "ImageMetadataStore",

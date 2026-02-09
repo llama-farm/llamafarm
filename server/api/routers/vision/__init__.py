@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter
 
-from .router import router as main_vision_router
-from .review import router as review_router
 from .pipeline import router as pipeline_router
+from .review import router as review_router
+from .router import router as main_vision_router
 
 # Main vision router includes all sub-routers
 # Note: main_vision_router already has prefix="/vision"

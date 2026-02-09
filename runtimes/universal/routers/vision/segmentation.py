@@ -5,15 +5,16 @@ Provides YOLO-based segmentation with pixel-level masks.
 
 import logging
 import time
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from api_types.vision import (
     BoundingBox,
-    Detection,
 )
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ def _get_loader():
 
 
 from pydantic import BaseModel, Field
+
 
 class SegmentRequest(BaseModel):
     """Request for image segmentation."""

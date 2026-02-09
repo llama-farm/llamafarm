@@ -11,11 +11,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from services.vision import (
-    VisionStreamingService,
-    VisionTrainingService,
+    VisionFederationService,
     VisionModelService,
     VisionSegmentationService,
-    VisionFederationService,
+    VisionStreamingService,
+    VisionTrainingService,
 )
 
 logger = logging.getLogger(__name__)

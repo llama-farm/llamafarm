@@ -10,7 +10,6 @@ Verifies:
 
 from __future__ import annotations
 
-import asyncio
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,7 +19,6 @@ import pytest
 
 from models.vision_base import DetectionBox, DetectionResult
 from storage.image_store import (
-    DetectionHistoryRecord,
     ImageMetadataStore,
     ImageRecord,
 )

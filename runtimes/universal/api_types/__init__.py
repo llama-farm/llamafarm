@@ -59,38 +59,54 @@ from .nlp import (
     RerankResult,
 )
 from .vision import (
+    # Common (new)
+    BoundingBox,
+    # Detection (new)
+    Detection,
+    DetectRequest,
+    DetectResponse,
     # OCR (existing)
     DocumentExtractRequest,
     DocumentField,
     DocumentResponse,
     DocumentResult,
+    # Classification (new)
+    ImageClassifyRequest,
+    ImageClassifyResponse,
+    # Embedding (new)
+    ImageEmbedRequest,
+    ImageEmbedResponse,
+    Mask,
+    ModelExportRequest,
+    ModelExportResponse,
+    ModelImportRequest,
+    ModelImportResponse,
+    ModelLoadRequest,
+    ModelLoadResponse,
+    ModelUnloadRequest,
+    ModelUnloadResponse,
     OCRBox,
     OCRRequest,
     OCRResponse,
     OCRResult,
-    # Common (new)
-    BoundingBox,
     Point,
-    Mask,
-    # Detection (new)
-    Detection,
-    DetectRequest,
-    DetectResponse,
-    # Classification (new)
-    ImageClassifyRequest,
-    ImageClassifyResponse,
+    ReviewBatchRequest,
+    ReviewBatchResponse,
+    ReviewDecision,
+    ReviewDecisionResponse,
+    # Review queue (new)
+    ReviewItem,
+    ReviewListRequest,
+    ReviewListResponse,
     # Segmentation (new)
     SegmentRequest,
     SegmentResponse,
-    # Embedding (new)
-    ImageEmbedRequest,
-    ImageEmbedResponse,
+    StreamFrameRequest,
+    StreamFrameResponse,
     # Streaming (new)
     StreamingConfig,
     StreamStartRequest,
     StreamStartResponse,
-    StreamFrameRequest,
-    StreamFrameResponse,
     StreamStopRequest,
     StreamStopResponse,
     # Training (new)
@@ -99,27 +115,11 @@ from .vision import (
     TrainResponse,
     TrainStatusRequest,
     TrainStatusResponse,
-    # Model management (new)
-    VisionModelInfo,
-    ModelLoadRequest,
-    ModelLoadResponse,
-    ModelUnloadRequest,
-    ModelUnloadResponse,
-    ModelExportRequest,
-    ModelExportResponse,
-    ModelImportRequest,
-    ModelImportResponse,
-    VisionModelsListResponse,
     VisionBackendInfo,
     VisionBackendsResponse,
-    # Review queue (new)
-    ReviewItem,
-    ReviewDecision,
-    ReviewDecisionResponse,
-    ReviewListRequest,
-    ReviewListResponse,
-    ReviewBatchRequest,
-    ReviewBatchResponse,
+    # Model management (new)
+    VisionModelInfo,
+    VisionModelsListResponse,
 )
 
 __all__ = [

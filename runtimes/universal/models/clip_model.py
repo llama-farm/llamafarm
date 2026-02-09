@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -92,7 +92,6 @@ class CLIPClassifier(ClassificationModel):
             logger.debug(f"CLIP model {self.model_id} already loaded")
             return
 
-        import torch
         from transformers import CLIPModel, CLIPProcessor
 
         # Resolve device
@@ -384,7 +383,6 @@ class CLIPEmbedder(EmbeddingModel):
         if self._loaded:
             return
 
-        import torch
         from transformers import CLIPModel, CLIPProcessor
 
         self.device = self._resolve_device(self.device)

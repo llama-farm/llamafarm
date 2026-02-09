@@ -7,21 +7,19 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from storage.image_store import (
+    DetectionHistoryRecord,
+    DetectionRecord,
     ImageMetadataStore,
     ImageRecord,
-    DetectionRecord,
-    DetectionHistoryRecord,
     LabelRecord,
     compute_image_hash,
 )
-
 
 # -----------------------------------------------------------------------------
 # Image Store Tests
@@ -405,7 +403,7 @@ class TestRetentionPolicy:
 
     @pytest.fixture
     def policy(self, store):
-        from storage.retention import RetentionPolicy, RetentionConfig
+        from storage.retention import RetentionConfig, RetentionPolicy
         return RetentionPolicy(store, RetentionConfig(
             high_confidence_hours=1,
             cleanup_enabled=True,
@@ -448,7 +446,7 @@ class TestRetentionPolicy:
 
     def test_cleanup_disabled(self, store):
         """Test that cleanup is a no-op when disabled."""
-        from storage.retention import RetentionPolicy, RetentionConfig
+        from storage.retention import RetentionConfig, RetentionPolicy
 
         policy = RetentionPolicy(store, RetentionConfig(cleanup_enabled=False))
         self._add_images(store, 3)

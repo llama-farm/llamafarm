@@ -1,15 +1,13 @@
 """Tests for vision cascade and auto-learning functionality."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from models.streaming_vision import (
-    StreamingVisionDetector,
-    StreamingConfig,
     CascadeConfig,
-    StreamSession,
-    FrameResult,
+    StreamingConfig,
+    StreamingVisionDetector,
 )
 from models.vision_base import DetectionBox, DetectionResult
 from vision_training.replay_buffer import ReplayBuffer

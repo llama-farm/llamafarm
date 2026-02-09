@@ -6,10 +6,10 @@ Tests all model classes with mocking to avoid downloading real models.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
 import pytest
-
 
 # -----------------------------------------------------------------------------
 # YOLO Model Tests
@@ -399,7 +399,7 @@ class TestStreamingVisionDetector:
     @pytest.fixture
     def mock_detector_model(self):
         """Create a mock detection model for streaming."""
-        from models.vision_base import DetectionResult, DetectionBox
+        from models.vision_base import DetectionBox, DetectionResult
         
         mock = AsyncMock()
         
@@ -427,7 +427,7 @@ class TestStreamingVisionDetector:
     @pytest.mark.asyncio
     async def test_start_session(self, mock_detector_model):
         """Test starting a streaming session."""
-        from models.streaming_vision import StreamingVisionDetector, StreamingConfig
+        from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
         
@@ -448,7 +448,7 @@ class TestStreamingVisionDetector:
     @pytest.mark.asyncio
     async def test_process_frame_action(self, mock_detector_model):
         """Test processing frame that triggers action."""
-        from models.streaming_vision import StreamingVisionDetector, StreamingConfig
+        from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
         detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
@@ -470,7 +470,7 @@ class TestStreamingVisionDetector:
     @pytest.mark.asyncio
     async def test_cooldown_suppression(self, mock_detector_model):
         """Test that cooldown suppresses repeated actions."""
-        from models.streaming_vision import StreamingVisionDetector, StreamingConfig
+        from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
         detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
@@ -497,7 +497,7 @@ class TestStreamingVisionDetector:
     @pytest.mark.asyncio
     async def test_stop_session_returns_stats(self, mock_detector_model):
         """Test stopping session returns statistics."""
-        from models.streaming_vision import StreamingVisionDetector, StreamingConfig
+        from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
         detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
@@ -528,7 +528,7 @@ class TestStreamingVisionDetector:
     @pytest.mark.asyncio
     async def test_list_sessions(self, mock_detector_model):
         """Test listing active sessions."""
-        from models.streaming_vision import StreamingVisionDetector, StreamingConfig
+        from models.streaming_vision import StreamingVisionDetector
         
         detector = StreamingVisionDetector()
         detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
@@ -565,7 +565,7 @@ class TestVisionBaseTypes:
 
     def test_detection_result_dataclass(self):
         """Test DetectionResult dataclass."""
-        from models.vision_base import DetectionResult, DetectionBox
+        from models.vision_base import DetectionBox, DetectionResult
         
         result = DetectionResult(
             confidence=0.95,

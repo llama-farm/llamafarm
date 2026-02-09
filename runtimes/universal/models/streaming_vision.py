@@ -15,15 +15,16 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from .vision_base import DetectionBox, DetectionResult
+from .vision_base import DetectionBox
 
 if TYPE_CHECKING:
-    from .yolo_model import YOLOModel
     from vision_training.replay_buffer import ModelOpinion
+
+    from .yolo_model import YOLOModel
 
 logger = logging.getLogger(__name__)
 
@@ -557,7 +558,6 @@ class StreamingVisionDetector:
         Returns:
             FrameResult with status, detections, opinions, and learning info
         """
-        from vision_training.replay_buffer import ModelOpinion
 
         session = self._sessions.get(session_id)
         if session is None:

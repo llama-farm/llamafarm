@@ -19,7 +19,6 @@ from pathlib import Path
 import pytest
 
 from vision_training.model_package import (
-    ModelPackage,
     ModelPackager,
     PackageMetadata,
 )

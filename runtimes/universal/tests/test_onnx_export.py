@@ -9,7 +9,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Export endpoint tests
 # ---------------------------------------------------------------------------
@@ -26,7 +25,11 @@ def mock_export_model():
 @pytest.fixture
 def export_app(mock_export_model, tmp_path):
     """FastAPI app with the models router wired up."""
-    from routers.vision.models import router, set_model_export_loader, set_vision_models_dir
+    from routers.vision.models import (
+        router,
+        set_model_export_loader,
+        set_vision_models_dir,
+    )
 
     async def mock_loader(model_id: str):
         return mock_export_model
@@ -119,7 +122,11 @@ def test_export_endpoint_fp32(export_client, mock_export_model):
 
 def test_export_endpoint_no_loader(tmp_path):
     """Test export fails gracefully when loader not initialized."""
-    from routers.vision.models import router, set_model_export_loader, set_vision_models_dir
+    from routers.vision.models import (
+        router,
+        set_model_export_loader,
+        set_vision_models_dir,
+    )
 
     set_model_export_loader(None)
     set_vision_models_dir(tmp_path / "models")

@@ -12,7 +12,6 @@ Verifies:
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -417,7 +416,11 @@ class TestAutoTrainerValidation:
         """Auto-trainer uses validation gate after training completes."""
         from vision_training.auto_trainer import AutoTrainConfig, AutoTrainer
         from vision_training.replay_buffer import ReplayBuffer
-        from vision_training.trainer import IncrementalTrainer, TrainingJob, TrainingStatus
+        from vision_training.trainer import (
+            IncrementalTrainer,
+            TrainingJob,
+            TrainingStatus,
+        )
 
         # Mock trainer that "completes" immediately
         trainer = MagicMock(spec=IncrementalTrainer)
@@ -583,6 +586,7 @@ class TestCreateDataset:
         assert (dataset_dir / "class_map.json").exists()
 
         import json
+
         import yaml
 
         # Check class map

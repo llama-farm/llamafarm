@@ -172,8 +172,9 @@ async def handle_escalation(request: EscalateRequest) -> dict[str, Any]:
 async def list_packages() -> list[dict[str, Any]]:
     """List available model packages."""
     try:
-        from vision_training.model_package import ModelPackager
         from pathlib import Path
+
+        from vision_training.model_package import ModelPackager
 
         packager = ModelPackager()
         packages = packager.list_packages()

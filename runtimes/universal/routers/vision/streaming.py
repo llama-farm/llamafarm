@@ -15,26 +15,27 @@ from fastapi import APIRouter, HTTPException
 
 from api_types.vision import (
     BoundingBox,
-    CascadeConfig as APICascadeConfig,
     CorrectionRequest,
     CorrectionResponse,
     Detection,
     ReplayBufferResponse,
     ReplayBufferStats,
-    StreamingConfig,
-    StreamStartRequest,
-    StreamStartResponse,
     StreamFrameRequest,
     StreamFrameResponse,
+    StreamStartRequest,
+    StreamStartResponse,
     StreamStopRequest,
     StreamStopResponse,
 )
 from models.streaming_vision import (
     CascadeConfig,
-    StreamingConfig as ModelStreamingConfig,
     get_streaming_detector,
 )
+from models.streaming_vision import (
+    StreamingConfig as ModelStreamingConfig,
+)
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)

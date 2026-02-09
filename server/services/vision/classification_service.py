@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-from core.settings import settings
 from services.universal_runtime_service import get_runtime_client
 
 logger = logging.getLogger(__name__)

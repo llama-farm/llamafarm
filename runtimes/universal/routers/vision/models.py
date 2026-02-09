@@ -11,14 +11,19 @@ Provides endpoints for:
 import logging
 import shutil
 import time
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from api_types.vision import ModelExportRequest, ModelExportResponse
 from services.error_handler import handle_endpoint_errors
-from services.path_validator import sanitize_model_name, validate_path_within_directory, PathValidationError
+from services.path_validator import (
+    PathValidationError,
+    sanitize_model_name,
+    validate_path_within_directory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +61,18 @@ def _get_models_dir() -> Path:
     return _VISION_MODELS_DIR
 
 
+def _validate_task(task: str) -> str:
+    """Validate task parameter to prevent path traversal."""
+    if ".." in task or "/" in task or "\\" in task:
+        raise HTTPException(status_code=400, detail="Invalid task name")
+    return task
+
+
 def _get_model_path(model_name: str, task: str = "detection") -> Path:
     """Get the path for a vision model directory."""
     safe_name = sanitize_model_name(model_name)
-    return _get_models_dir() / task / safe_name
+    safe_task = _validate_task(task)
+    return _get_models_dir() / safe_task / safe_name
 
 
 @router.get("/v1/vision/models")
@@ -94,7 +107,9 @@ async def list_vision_models(
     """
     models_dir = _get_models_dir()
     models = []
-    
+
+    if task:
+        _validate_task(task)
     tasks = [task] if task else ["detection", "classification", "segmentation"]
     
     for task_type in tasks:
@@ -106,8 +121,9 @@ async def list_vision_models(
             if not model_path.is_dir():
                 continue
             
-            # Read model info
-            info = {"name": model_path.name, "task": task_type, "path": str(model_path)}
+            # Read model info (use relative path to avoid leaking filesystem paths)
+            relative_path = model_path.relative_to(models_dir)
+            info = {"name": model_path.name, "task": task_type, "path": str(relative_path)}
             
             # Try to read metadata
             meta_file = model_path / "metadata.json"
@@ -147,7 +163,6 @@ async def list_vision_models(
     return {
         "models": models,
         "total": len(models),
-        "models_dir": str(models_dir),
     }
 
 
@@ -211,7 +226,7 @@ async def save_vision_model(
     return {
         "name": name,
         "task": task,
-        "path": str(save_path),
+        "path": str(save_path.relative_to(models_dir)),
         "saved": True,
     }
 
@@ -272,7 +287,7 @@ async def load_vision_model(
     return {
         "name": name,
         "task": task,
-        "path": str(model_path),
+        "path": str(model_path.relative_to(_get_models_dir())),
         "classes": classes,
         "num_classes": len(classes),
         "metadata": metadata,

@@ -7,17 +7,17 @@ NOTE: Vision methods are kept separate from universal_runtime_service.py
       to maintain modularity and keep the codebase manageable.
 """
 
-from .detection_service import VisionDetectionService
 from .classification_service import VisionClassificationService
+from .detection_service import VisionDetectionService
 from .embedding_service import VisionEmbeddingService
-from .review_service import VisionReviewService
 from .pipeline_service import (
-    VisionStreamingService,
-    VisionTrainingService,
+    VisionFederationService,
     VisionModelService,
     VisionSegmentationService,
-    VisionFederationService,
+    VisionStreamingService,
+    VisionTrainingService,
 )
+from .review_service import VisionReviewService
 
 __all__ = [
     "VisionDetectionService",

@@ -217,8 +217,9 @@ class VisionModel(BaseModel):
         if isinstance(image, np.ndarray):
             return image
 
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         img = Image.open(io.BytesIO(image))
         if img.mode != "RGB":
@@ -234,8 +235,9 @@ class VisionModel(BaseModel):
         Returns:
             PIL Image in RGB mode
         """
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         if isinstance(image, np.ndarray):
             return Image.fromarray(image)

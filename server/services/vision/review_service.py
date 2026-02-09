@@ -10,7 +10,6 @@ Review items include:
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)

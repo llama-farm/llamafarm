@@ -6,8 +6,8 @@ Provides:
 - Training job management
 """
 
-from .trainer import IncrementalTrainer, TrainingJob, TrainingConfig
 from .replay_buffer import ReplayBuffer, ReplaySample
+from .trainer import IncrementalTrainer, TrainingConfig, TrainingJob
 
 __all__ = [
     "IncrementalTrainer",

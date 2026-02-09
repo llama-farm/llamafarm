@@ -391,19 +391,30 @@ async def detect_objects(
     # Get image from file or base64
     if file is not None and file.filename:
         import base64
+
         content = await file.read()
         from pathlib import Path
+
         ext = Path(file.filename).suffix.lower()
-        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+        mime_map = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }
         mime = mime_map.get(ext, "image/jpeg")
         image_b64 = f"data:{mime};base64,{base64.b64encode(content).decode()}"
     elif image:
         image_b64 = image
     else:
-        raise HTTPException(status_code=400, detail="Either 'file' or 'image' must be provided")
+        raise HTTPException(
+            status_code=400, detail="Either 'file' or 'image' must be provided"
+        )
 
     # Parse classes filter
-    class_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+    class_list = (
+        [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+    )
 
     return await VisionDetectionService.detect(
         image=image_b64,
@@ -466,8 +477,10 @@ async def classify_image(
     # Get image
     if file is not None and file.filename:
         import base64
+
         content = await file.read()
         from pathlib import Path
+
         ext = Path(file.filename).suffix.lower()
         mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
         mime = mime_map.get(ext, "image/jpeg")
@@ -475,12 +488,16 @@ async def classify_image(
     elif image:
         image_b64 = image
     else:
-        raise HTTPException(status_code=400, detail="Either 'file' or 'image' must be provided")
+        raise HTTPException(
+            status_code=400, detail="Either 'file' or 'image' must be provided"
+        )
 
     # Parse classes
     class_list = [c.strip() for c in classes.split(",") if c.strip()]
     if not class_list:
-        raise HTTPException(status_code=400, detail="At least one class must be provided")
+        raise HTTPException(
+            status_code=400, detail="At least one class must be provided"
+        )
 
     return await VisionClassificationService.classify(
         image=image_b64,
@@ -542,8 +559,10 @@ async def embed_images(
     # Get image from file
     if file is not None and file.filename:
         import base64
+
         content = await file.read()
         from pathlib import Path
+
         ext = Path(file.filename).suffix.lower()
         mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
         mime = mime_map.get(ext, "image/jpeg")
@@ -563,7 +582,9 @@ async def embed_images(
         text_list = [t.strip() for t in texts.split(",") if t.strip()]
 
     if not image_list and not text_list:
-        raise HTTPException(status_code=400, detail="Either images or texts must be provided")
+        raise HTTPException(
+            status_code=400, detail="Either images or texts must be provided"
+        )
 
     return await VisionEmbeddingService.embed(
         model=model,

@@ -1,17 +1,19 @@
 """OCR router for text extraction endpoints."""
 
 import logging
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
 from api_types.vision import (
+    OCRBox,
     OCRRequest,
     OCRResponse,
     OCRResult,
-    OCRBox,
 )
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)

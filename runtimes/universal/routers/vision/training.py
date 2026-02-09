@@ -12,17 +12,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from api_types.vision import (
-    TrainingConfig as APITrainingConfig,
     TrainRequest,
     TrainResponse,
     TrainStatusResponse,
 )
+from services.error_handler import handle_endpoint_errors
 from vision_training.trainer import (
-    get_trainer,
     TrainingConfig,
     TrainingStatus,
+    get_trainer,
 )
-from services.error_handler import handle_endpoint_errors
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,6 @@ Verifies:
 
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -241,11 +240,11 @@ class TestRemoteModelInCascade:
     async def test_cascade_with_remote_model(self):
         """Remote model works alongside local models in cascade."""
         from models.streaming_vision import (
-            StreamingVisionDetector,
-            StreamingConfig,
             CascadeConfig,
+            StreamingConfig,
+            StreamingVisionDetector,
         )
-        from models.vision_base import DetectionResult, DetectionBox
+        from models.vision_base import DetectionResult
 
         # Track which models were called
         called = set()

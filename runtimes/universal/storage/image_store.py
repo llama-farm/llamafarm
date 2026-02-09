@@ -880,8 +880,9 @@ class ImageStore:
     ) -> Path:
         """Create a thumbnail for an image."""
         import asyncio
-        from PIL import Image
         import io
+
+        from PIL import Image
         
         def _create():
             img = Image.open(io.BytesIO(image_bytes))
@@ -899,8 +900,9 @@ class ImageStore:
         
         def _get():
             try:
-                from PIL import Image
                 import io
+
+                from PIL import Image
                 img = Image.open(io.BytesIO(image_bytes))
                 return img.size
             except Exception:

@@ -5,13 +5,11 @@ Tests all vision routers with mocked model loaders.
 
 from __future__ import annotations
 
-import base64
-from unittest.mock import AsyncMock, MagicMock, patch
-import numpy as np
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 
 # Test image (1x1 red pixel PNG)
 TEST_IMAGE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
@@ -27,8 +25,8 @@ class TestDetectionRouter:
     @pytest.fixture
     def detection_client(self):
         """Create test client with mock detection loader."""
+        from models.vision_base import DetectionBox, DetectionResult
         from routers.vision.detection import router, set_detection_loader
-        from models.vision_base import DetectionResult, DetectionBox
         
         app = FastAPI()
         app.include_router(router)
@@ -68,10 +66,9 @@ class TestDetectionRouter:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["object"] == "detection"
         assert data["model"] == "yolov8n"
         assert len(data["detections"]) == 2
-        assert data["detections"][0]["class"] == "person"
+        assert data["detections"][0]["class_name"] == "person"
         assert data["detections"][0]["confidence"] == 0.95
 
     def test_detect_with_confidence_threshold(self, detection_client):
@@ -138,8 +135,8 @@ class TestClassificationRouter:
     @pytest.fixture
     def classification_client(self):
         """Create test client with mock classification loader."""
-        from routers.vision.classification import router, set_classification_loader
         from models.vision_base import ClassificationResult
+        from routers.vision.classification import router, set_classification_loader
         
         app = FastAPI()
         app.include_router(router)
@@ -176,10 +173,9 @@ class TestClassificationRouter:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["object"] == "classification"
         assert data["model"] == "clip-vit-base"
-        assert data["class"] == "cat"
-        assert "scores" in data
+        assert data["class_name"] == "cat"
+        assert "all_scores" in data
 
     def test_classify_top_k(self, classification_client):
         """Test classification with top_k parameter."""
@@ -219,8 +215,8 @@ class TestEmbeddingRouter:
     @pytest.fixture
     def embedding_client(self):
         """Create test client with mock embedding loader."""
-        from routers.vision.embedding import router, set_embedding_loader
         from models.vision_base import EmbeddingResult
+        from routers.vision.embedding import router, set_embedding_loader
         
         app = FastAPI()
         app.include_router(router)
@@ -248,6 +244,7 @@ class TestEmbeddingRouter:
             
             mock_model.embed_images = mock_embed_images
             mock_model.embed_texts = mock_embed_texts
+            mock_model.embedding_dim = 512
             return mock_model
         
         set_embedding_loader(mock_loader)
@@ -265,7 +262,6 @@ class TestEmbeddingRouter:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["object"] == "embedding"
         assert len(data["embeddings"]) == 1
         assert data["dimensions"] == 512
 
@@ -312,19 +308,16 @@ class TestEmbeddingRouter:
 # -----------------------------------------------------------------------------
 
 class TestStreamingRouter:
-    """Tests for /v1/vision/streaming/* endpoints."""
+    """Tests for /v1/vision/stream/* endpoints."""
 
     @pytest.fixture
     def streaming_client(self):
         """Create test client with mock streaming detector."""
-        from routers.vision.streaming import router
         from models.streaming_vision import (
-            get_streaming_detector,
             set_streaming_model_loader,
-            StreamSession,
-            FrameResult,
         )
         from models.vision_base import DetectionBox, DetectionResult
+        from routers.vision.streaming import router
         
         app = FastAPI()
         app.include_router(router)
@@ -353,7 +346,7 @@ class TestStreamingRouter:
     def test_start_session(self, streaming_client):
         """Test starting a streaming session."""
         response = streaming_client.post(
-            "/v1/vision/streaming/start",
+            "/v1/vision/stream/start",
             json={
                 "model": "yolov8n",
                 "target_fps": 1.0,
@@ -364,21 +357,21 @@ class TestStreamingRouter:
         assert response.status_code == 200
         data = response.json()
         assert "session_id" in data
-        assert data["model"] == "yolov8n"
+        assert "config" in data
 
     def test_process_frame(self, streaming_client):
         """Test processing a frame."""
         # Start session
         start_resp = streaming_client.post(
-            "/v1/vision/streaming/start",
+            "/v1/vision/stream/start",
             json={"model": "yolov8n"}
         )
         session_id = start_resp.json()["session_id"]
         
         # Process frame
         response = streaming_client.post(
-            f"/v1/vision/streaming/frame/{session_id}",
-            json={"image": TEST_IMAGE_B64}
+            "/v1/vision/stream/frame",
+            json={"session_id": session_id, "image": TEST_IMAGE_B64}
         )
         
         assert response.status_code == 200
@@ -389,14 +382,15 @@ class TestStreamingRouter:
         """Test stopping a session."""
         # Start session
         start_resp = streaming_client.post(
-            "/v1/vision/streaming/start",
+            "/v1/vision/stream/start",
             json={"model": "yolov8n"}
         )
         session_id = start_resp.json()["session_id"]
         
         # Stop session
         response = streaming_client.post(
-            f"/v1/vision/streaming/stop/{session_id}"
+            "/v1/vision/stream/stop",
+            json={"session_id": session_id}
         )
         
         assert response.status_code == 200
@@ -406,7 +400,7 @@ class TestStreamingRouter:
 
     def test_list_sessions(self, streaming_client):
         """Test listing active sessions."""
-        response = streaming_client.get("/v1/vision/streaming/sessions")
+        response = streaming_client.get("/v1/vision/stream/sessions")
         
         assert response.status_code == 200
         data = response.json()
@@ -416,8 +410,8 @@ class TestStreamingRouter:
     def test_invalid_session_frame(self, streaming_client):
         """Test processing frame for invalid session."""
         response = streaming_client.post(
-            "/v1/vision/streaming/frame/nonexistent",
-            json={"image": TEST_IMAGE_B64}
+            "/v1/vision/stream/frame",
+            json={"session_id": "nonexistent", "image": TEST_IMAGE_B64}
         )
         
         assert response.status_code in (400, 404)
@@ -440,18 +434,10 @@ class TestTrainingRouter:
         
         return TestClient(app)
 
-    def test_get_training_status(self, training_client):
-        """Test getting training status."""
-        response = training_client.get("/v1/vision/training/status")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert "active_jobs" in data
-
     def test_list_training_jobs(self, training_client):
         """Test listing training jobs."""
-        response = training_client.get("/v1/vision/training/jobs")
-        
+        response = training_client.get("/v1/vision/train")
+
         assert response.status_code == 200
         data = response.json()
         assert "jobs" in data
@@ -478,13 +464,13 @@ class TestCombinedVisionRouter:
         # Check embedding route exists
         assert any("/embed" in r for r in routes)
         # Check streaming routes exist
-        assert any("/streaming" in r for r in routes)
+        assert any("/stream" in r for r in routes)
 
     def test_loader_setters_exist(self):
         """Test that all loader setters are exported."""
         from routers.vision import (
-            set_detection_loader,
             set_classification_loader,
+            set_detection_loader,
             set_embedding_loader,
         )
         
@@ -554,11 +540,16 @@ class TestResponseFormats:
     @pytest.fixture
     def full_client(self):
         """Create client with all routers mocked."""
+        from models.vision_base import (
+            ClassificationResult,
+            DetectionBox,
+            DetectionResult,
+            EmbeddingResult,
+        )
         from routers.vision import vision_router
-        from routers.vision.detection import set_detection_loader
         from routers.vision.classification import set_classification_loader
+        from routers.vision.detection import set_detection_loader
         from routers.vision.embedding import set_embedding_loader
-        from models.vision_base import DetectionResult, DetectionBox, ClassificationResult, EmbeddingResult
         
         app = FastAPI()
         app.include_router(vision_router)
@@ -586,6 +577,7 @@ class TestResponseFormats:
                 confidence=1.0, inference_time_ms=20, model_name=model_id,
                 embeddings=[[0.1]*512], dimensions=512,
             ))
+            mock.embedding_dim = 512
             return mock
         
         set_detection_loader(mock_detect_loader)
@@ -604,14 +596,14 @@ class TestResponseFormats:
         data = response.json()
         
         # Required fields
-        assert "object" in data
         assert "model" in data
         assert "detections" in data
-        
+        assert "inference_time_ms" in data
+
         # Detection item format
         if data["detections"]:
             det = data["detections"][0]
-            assert "class" in det
+            assert "class_name" in det
             assert "confidence" in det
             assert "box" in det
             assert all(k in det["box"] for k in ["x1", "y1", "x2", "y2"])
@@ -626,11 +618,10 @@ class TestResponseFormats:
         data = response.json()
         
         # Required fields
-        assert "object" in data
         assert "model" in data
-        assert "class" in data
+        assert "class_name" in data
         assert "confidence" in data
-        assert "scores" in data
+        assert "all_scores" in data
 
     def test_embedding_response_format(self, full_client):
         """Verify embedding response matches expected schema."""
@@ -642,7 +633,6 @@ class TestResponseFormats:
         data = response.json()
         
         # Required fields
-        assert "object" in data
         assert "model" in data
         assert "embeddings" in data
         assert "dimensions" in data

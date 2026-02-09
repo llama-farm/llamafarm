@@ -27,7 +27,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
-from utils.safe_home import get_data_dir
 from models import (
     AnomalyModel,
     BaseModel,
@@ -84,20 +83,21 @@ from routers.vision import (
     router as vision_router,
 )
 from routers.vision import (
-    set_document_loader,
-    set_file_image_getter,
-    set_ocr_loader,
-    set_detection_loader,
     set_classification_loader,
+    set_detection_loader,
+    set_document_loader,
     set_embedding_loader,
-    set_vision_models_dir,
+    set_file_image_getter,
     set_model_export_loader,
+    set_ocr_loader,
+    set_vision_models_dir,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
+from utils.safe_home import get_data_dir
 
 # Configure logging FIRST, before anything else
 log_file = os.getenv("LOG_FILE", "")
@@ -972,16 +972,17 @@ set_model_export_loader(load_detection)
 
 # Streaming vision uses same detection loader
 from models.streaming_vision import (
+    set_streaming_image_store,
     set_streaming_model_loader,
     set_streaming_replay_buffer,
-    set_streaming_image_store,
     set_streaming_training_trigger,
 )
+
 set_streaming_model_loader(load_detection)
 
 # Wire up replay buffer and image store for the cascade learning loop
-from vision_training.replay_buffer import ReplayBuffer
 from storage.image_store import ImageMetadataStore
+from vision_training.replay_buffer import ReplayBuffer
 
 _vision_replay_buffer = ReplayBuffer(
     max_size=1000,
@@ -994,8 +995,8 @@ set_streaming_replay_buffer(_vision_replay_buffer)
 set_streaming_image_store(_vision_image_store)
 
 # Wire up auto-trainer with training trigger callback
-from vision_training.trainer import IncrementalTrainer
 from vision_training.auto_trainer import init_auto_trainer
+from vision_training.trainer import IncrementalTrainer
 
 _vision_trainer = IncrementalTrainer(
     model_loader=load_detection,
@@ -1023,6 +1024,7 @@ set_streaming_training_trigger(_on_training_threshold)
 
 # Training module-level loader (used by get_trainer() singleton fallback)
 from vision_training.trainer import set_trainer_model_loader
+
 set_trainer_model_loader(load_detection)
 
 # Anomaly router

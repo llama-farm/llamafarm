@@ -15,38 +15,52 @@ This module provides endpoints for:
 
 from fastapi import APIRouter
 
-# Import legacy OCR & document router (/v1/ocr, /v1/documents/extract)
-from .router import (
-    router as legacy_ocr_router,
-    set_document_loader,
-    set_file_image_getter,
-    set_ocr_loader as set_legacy_ocr_loader,
+from .classification import (
+    router as classification_router,
 )
-
-# Import new vision OCR router (/v1/vision/ocr)
-from .ocr import (
-    router as vision_ocr_router,
-    set_ocr_loader as set_vision_ocr_loader,
+from .classification import (
+    set_classification_loader,
 )
 
 # Import other routers
 from .detection import (
     router as detection_router,
-    set_detection_loader,
 )
-from .classification import (
-    router as classification_router,
-    set_classification_loader,
+from .detection import (
+    set_detection_loader,
 )
 from .embedding import (
     router as embedding_router,
+)
+from .embedding import (
     set_embedding_loader,
 )
+from .federation import router as federation_router
+from .models import router as models_router
+from .models import set_model_export_loader, set_vision_models_dir
+
+# Import new vision OCR router (/v1/vision/ocr)
+from .ocr import (
+    router as vision_ocr_router,
+)
+from .ocr import (
+    set_ocr_loader as set_vision_ocr_loader,
+)
+
+# Import legacy OCR & document router (/v1/ocr, /v1/documents/extract)
+from .router import (
+    router as legacy_ocr_router,
+)
+from .router import (
+    set_document_loader,
+    set_file_image_getter,
+)
+from .router import (
+    set_ocr_loader as set_legacy_ocr_loader,
+)
+from .segmentation import router as segmentation_router
 from .streaming import router as streaming_router
 from .training import router as training_router
-from .models import router as models_router, set_vision_models_dir, set_model_export_loader
-from .segmentation import router as segmentation_router
-from .federation import router as federation_router
 
 # Create combined vision router
 vision_router = APIRouter(tags=["vision"])

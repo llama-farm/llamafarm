@@ -8,17 +8,17 @@ Verifies:
 - Backward compat: secondary_model_id still works via cascade_chain
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from models.streaming_vision import (
-    StreamingVisionDetector,
-    StreamingConfig,
     CascadeConfig,
-    FrameResult,
+    StreamingConfig,
+    StreamingVisionDetector,
 )
-from models.vision_base import DetectionBox, DetectionResult, SegmentationMask
-from vision_training.replay_buffer import ReplayBuffer, ModelOpinion
+from models.vision_base import DetectionBox, DetectionResult
+from vision_training.replay_buffer import ReplayBuffer
 
 
 @pytest.fixture

@@ -159,6 +159,11 @@ class ReplayBuffer:
         samples = self._persistence.load_all()
         for s in samples:
             self._samples[s.id] = s
+
+        # Trim to max_size if persisted data exceeds the limit
+        while len(self._samples) > self.max_size:
+            self._evict_lowest_priority()
+
         if samples:
             logger.info(f"Restored {len(samples)} samples from persistent storage")
 
@@ -386,7 +391,6 @@ class ReplayBufferPersistence:
     """
 
     def __init__(self, db_path: Path | str):
-        import sqlite3
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
