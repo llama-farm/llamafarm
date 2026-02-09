@@ -80,6 +80,92 @@ else:
 PYEOF
 fi
 
+# Fix go-jsonschema duplicate types: when the schema has cross-file $ref paths
+# that resolve to the same definition (e.g., componentsDefinition referenced from
+# both config/schema.yaml and rag/schema.yaml), go-jsonschema emits duplicate
+# struct definitions and methods. This script removes the second occurrence.
+python3 - << 'PYEOF'
+import re
+
+with open('types.go', 'r') as f:
+    content = f.read()
+
+# Find all type declarations: "type FooBar struct {"
+type_pattern = re.compile(r'^type (\w+) struct \{', re.MULTILINE)
+all_types = type_pattern.findall(content)
+
+# Find duplicates
+seen = set()
+duplicates = set()
+for t in all_types:
+    if t in seen:
+        duplicates.add(t)
+    seen.add(t)
+
+if not duplicates:
+    print("No duplicate types found")
+else:
+    lines = content.split('\n')
+    output_lines = []
+    skip_until_closing = False
+    skip_type_name = None
+    first_seen = set()
+    removed = 0
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Check for duplicate type declaration
+        type_match = re.match(r'^type (\w+) struct \{', line)
+        if type_match:
+            name = type_match.group(1)
+            if name in duplicates:
+                if name in first_seen:
+                    # Skip this duplicate type block
+                    skip_until_closing = True
+                    skip_type_name = name
+                    brace_depth = 1
+                    i += 1
+                    while i < len(lines) and brace_depth > 0:
+                        brace_depth += lines[i].count('{') - lines[i].count('}')
+                        i += 1
+                    removed += 1
+                    continue
+                else:
+                    first_seen.add(name)
+
+        # Check for duplicate method declaration
+        method_match = re.match(r'^func \(j \*(\w+)\) (\w+)\(', line)
+        if method_match:
+            name = method_match.group(1)
+            sig = f"{name}.{method_match.group(2)}"
+            if name in duplicates and name in first_seen:
+                # Check if we already have this method
+                method_key = f"func (j *{name}) {method_match.group(2)}"
+                # Count how many times this method signature appears before this line
+                preceding = '\n'.join(output_lines)
+                if method_key in preceding:
+                    # Skip duplicate method
+                    brace_depth = 0
+                    while i < len(lines):
+                        brace_depth += lines[i].count('{') - lines[i].count('}')
+                        if brace_depth <= 0 and '}' in lines[i]:
+                            i += 1
+                            break
+                        i += 1
+                    removed += 1
+                    continue
+
+        output_lines.append(line)
+        i += 1
+
+    if removed > 0:
+        with open('types.go', 'w') as f:
+            f.write('\n'.join(output_lines))
+        print(f"Removed {removed} duplicate type/method declarations: {', '.join(sorted(duplicates))}")
+PYEOF
+
 # Clean up temporary JSON file
 rm -f schema.json schema.yaml
 
