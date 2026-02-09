@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
-from config.datamodel import DataProcessingStrategyDefinition, LlamaFarmConfig
+from config.datamodel import DataProcessingStrategy, LlamaFarmConfig
 from config.defaults.parser_defaults import get_parser_defaults
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class StrategyResolver:
     def __init__(self, config: LlamaFarmConfig):
         self._config = config
 
-    def get_strategy(self, strategy_name: str) -> DataProcessingStrategyDefinition:
+    def get_strategy(self, strategy_name: str) -> DataProcessingStrategy:
         strategies = list(self._iter_strategies())
         for strategy in strategies:
             if strategy.name == strategy_name:
@@ -34,7 +34,7 @@ class StrategyResolver:
         self,
         strategy_name: str,
         api_overrides: dict[str, dict[str, Any]] | None = None,
-    ) -> DataProcessingStrategyDefinition:
+    ) -> DataProcessingStrategy:
         """Return a strategy with parser configs merged with defaults and overrides."""
         strategy = self.get_strategy(strategy_name)
         resolved = strategy.model_copy(deep=True)
@@ -78,7 +78,7 @@ class StrategyResolver:
 
         return resolved
 
-    def _iter_strategies(self) -> Iterable[DataProcessingStrategyDefinition]:
+    def _iter_strategies(self) -> Iterable[DataProcessingStrategy]:
         rag_config = getattr(self._config, "rag", None)
         if not rag_config:
             return []
