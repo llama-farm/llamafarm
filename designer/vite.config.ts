@@ -66,6 +66,17 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Proxy vision endpoints to Universal Runtime (11540)
+      '/v1/vision': {
+        target: 'http://localhost:11540',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log(`[PROXY] ${req.method} ${req.url} -> ${options.target}${req.url}`)
+          })
+        },
+      },
       // Proxy all /api/* requests to the backend server
       // Rewrite /api/v1/* to /v1/* since backend doesn't have /api prefix
       '/api': {
