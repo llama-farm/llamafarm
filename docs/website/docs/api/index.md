@@ -173,6 +173,48 @@ Common HTTP status codes:
 - `POST /v1/vision/ocr` - OCR text extraction (accepts file upload or base64)
 - `POST /v1/vision/documents/extract` - Document extraction/VQA (accepts file upload or base64)
 
+### Vision (Detection, Classification & Streaming)
+
+**Single-Frame Inference:**
+- `POST /v1/vision/detect` - Object detection (YOLO)
+- `POST /v1/vision/classify` - Image classification (CLIP zero-shot)
+- `POST /v1/vision/segment` - Instance/semantic segmentation
+- `POST /v1/vision/embed` - Image/text CLIP embeddings
+
+**Streaming Pipeline:**
+- `POST /v1/vision/stream/start` - Start streaming session with cascade
+- `POST /v1/vision/stream/frame` - Process a video frame
+- `POST /v1/vision/stream/stop` - Stop streaming session
+- `GET /v1/vision/stream/sessions` - List active sessions
+- `GET /v1/vision/stream/sessions/{session_id}/stats` - Session statistics
+- `POST /v1/vision/corrections` - Submit human correction
+- `GET /v1/vision/replay-buffer` - Replay buffer status
+- `POST /v1/vision/replay-buffer/clear` - Clear replay buffer
+
+**Training:**
+- `POST /v1/vision/train` - Start training job
+- `GET /v1/vision/train/{job_id}` - Training job status
+- `GET /v1/vision/train` - List training jobs
+- `DELETE /v1/vision/train/{job_id}` - Cancel training job
+- `GET /v1/vision/auto-train/status` - Auto-training status
+- `POST /v1/vision/auto-train/trigger` - Trigger auto-training
+
+**Model Management:**
+- `GET /v1/vision/models` - List vision models
+- `POST /v1/vision/models/save` - Save model to disk
+- `POST /v1/vision/models/load` - Load saved model
+- `DELETE /v1/vision/models/{task}/{name}` - Delete saved model
+
+**Federation:**
+- `GET /v1/vision/federation/peers` - List federation peers
+- `POST /v1/vision/federation/peers` - Register peer
+- `DELETE /v1/vision/federation/peers/{name}` - Remove peer
+- `GET /v1/vision/federation/status` - Federation health
+- `POST /v1/vision/federation/escalate` - Inbound escalation from peer
+- `GET /v1/vision/federation/packages` - List model packages
+- `POST /v1/vision/federation/packages` - Create model package
+- `POST /v1/vision/federation/packages/import` - Import model package
+
 ### ML (Custom Classifiers & Anomaly Detection)
 
 **Text Classification (SetFit):**
@@ -3101,6 +3143,142 @@ curl -X POST http://localhost:14345/v1/vision/documents/extract \
 
 ---
 
+## Vision API (Detection, Classification & Streaming)
+
+The Vision Pipeline provides object detection, classification, segmentation, CLIP embeddings, and real-time streaming with automatic model improvement. These endpoints are available through the LlamaFarm server (port 14345).
+
+**Base URL:** `http://localhost:14345/v1/vision`
+
+:::tip Full Documentation
+For architecture details, cascade configuration, and the learning loop, see the [Vision Pipeline guide](../vision/index.md).
+:::
+
+### Object Detection
+
+**Endpoint:** `POST /v1/vision/detect`
+
+```bash
+curl -X POST http://localhost:14345/v1/vision/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "yolov8n",
+    "images": ["data:image/png;base64,..."],
+    "confidence_threshold": 0.5,
+    "classes": ["person", "car"]
+  }'
+```
+
+### Image Classification (CLIP)
+
+**Endpoint:** `POST /v1/vision/classify`
+
+```bash
+curl -X POST http://localhost:14345/v1/vision/classify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai/clip-vit-base-patch32",
+    "images": ["data:image/png;base64,..."],
+    "labels": ["cat", "dog", "bird"]
+  }'
+```
+
+### Segmentation
+
+**Endpoint:** `POST /v1/vision/segment`
+
+```bash
+curl -X POST http://localhost:14345/v1/vision/segment \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "yolov8n-seg",
+    "images": ["data:image/png;base64,..."],
+    "confidence_threshold": 0.5
+  }'
+```
+
+### CLIP Embeddings
+
+**Endpoint:** `POST /v1/vision/embed`
+
+```bash
+curl -X POST http://localhost:14345/v1/vision/embed \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openai/clip-vit-base-patch32",
+    "images": ["data:image/png;base64,..."],
+    "texts": ["a photo of a bird"]
+  }'
+```
+
+### Streaming Session Management
+
+```bash
+# Start session with cascade
+curl -X POST http://localhost:14345/v1/vision/stream/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "yolov8n",
+    "cascade": {
+      "enabled": true,
+      "cascade_chain": ["yolov8n", "yolov8m"],
+      "confidence_threshold": 0.7
+    }
+  }'
+
+# Process frame
+curl -X POST http://localhost:14345/v1/vision/stream/frame \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "abc123", "image": "data:image/png;base64,..."}'
+
+# Stop session
+curl -X POST http://localhost:14345/v1/vision/stream/stop \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "abc123"}'
+```
+
+### Training
+
+```bash
+# Start training
+curl -X POST http://localhost:14345/v1/vision/train \
+  -H "Content-Type: application/json" \
+  -d '{"model": "yolov8n", "dataset_path": "/path/to/dataset", "epochs": 10}'
+
+# Check status
+curl http://localhost:14345/v1/vision/train/job_abc123
+
+# Auto-train status and trigger
+curl http://localhost:14345/v1/vision/auto-train/status
+curl -X POST http://localhost:14345/v1/vision/auto-train/trigger
+```
+
+### Federation
+
+```bash
+# Register peer
+curl -X POST http://localhost:14345/v1/vision/federation/peers \
+  -H "Content-Type: application/json" \
+  -d '{"name": "gpu-server", "url": "http://192.168.1.100:14345", "models": ["yolov8x"]}'
+
+# Create model package
+curl -X POST http://localhost:14345/v1/vision/federation/packages \
+  -H "Content-Type: application/json" \
+  -d '{"model_id": "my-detector", "model_path": "/path/to/best.pt"}'
+
+# Import model package
+curl -X POST http://localhost:14345/v1/vision/federation/packages/import \
+  -H "Content-Type: application/json" \
+  -d '{"source": "/path/to/package.tar.gz"}'
+```
+
+For the complete API with request/response schemas, see:
+- [Detection & Classification](../vision/detection.md)
+- [Streaming & Cascade](../vision/streaming.md)
+- [Training & Validation](../vision/training.md)
+- [Federation & Distribution](../vision/federation.md)
+
+---
+
 ## ML API (Custom Classifiers & Anomaly Detection)
 
 The ML API provides custom text classification and anomaly detection capabilities through the main LlamaFarm API server. These endpoints proxy to the Universal Runtime with automatic model versioning support.
@@ -3618,6 +3796,19 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+| **Vision: Detection** | `POST /v1/vision/detect` | Detect objects (YOLO) |
+| **Vision: Classification** | `POST /v1/vision/classify` | Classify images (CLIP) |
+| **Vision: Segmentation** | `POST /v1/vision/segment` | Instance/semantic segmentation |
+| **Vision: Embeddings** | `POST /v1/vision/embed` | CLIP image/text embeddings |
+| **Vision: Streaming** | `POST /v1/vision/stream/start` | Start streaming session |
+| **Vision: Streaming** | `POST /v1/vision/stream/frame` | Process video frame |
+| **Vision: Streaming** | `POST /v1/vision/stream/stop` | Stop streaming session |
+| **Vision: Training** | `POST /v1/vision/train` | Start training job |
+| **Vision: Training** | `GET /v1/vision/train/{job_id}` | Training job status |
+| **Vision: Models** | `GET /v1/vision/models` | List vision models |
+| **Vision: Federation** | `GET /v1/vision/federation/peers` | List federation peers |
+| **Vision: Federation** | `POST /v1/vision/federation/escalate` | Inbound escalation |
+| **Vision: Federation** | `GET /v1/vision/federation/packages` | List model packages |
 
 :::info Classification Endpoints
 - **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
@@ -3681,6 +3872,7 @@ For complete documentation, see:
 
 ## Next Steps
 
+- Explore the [Vision Pipeline](../vision/index.md) for detection, streaming, and auto-training
 - Learn about [Configuration](../configuration/index.md)
 - Explore [RAG concepts](../rag/index.md)
 - Review [Examples](../examples/index.md)

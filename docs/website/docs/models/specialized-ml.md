@@ -18,6 +18,10 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
 | [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Object Detection](../vision/detection) | `POST /v1/vision/detect` | Detect objects with YOLO models |
+| [Image Classification](../vision/detection#image-classification) | `POST /v1/vision/classify` | CLIP zero-shot classification |
+| [Segmentation](../vision/detection#segmentation) | `POST /v1/vision/segment` | Instance/semantic segmentation |
+| [CLIP Embeddings](../vision/detection#clip-embeddings) | `POST /v1/vision/embed` | Multimodal image/text embeddings |
 
 ## Starting the Universal Runtime
 
@@ -680,6 +684,7 @@ Files are stored temporarily (5-minute TTL by default).
 
 ## Next Steps
 
+- [Vision Pipeline](../vision/index.md) - Object detection, streaming cascade, auto-training, and federation
 - [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
 - [Universal Runtime Overview](./index.md#universal-runtime) - General runtime configuration
 - [API Reference](../api/index.md) - Full API documentation
