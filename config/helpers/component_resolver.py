@@ -27,7 +27,7 @@ from config.datamodel import (
     NamedEmbeddingStrategy,
     NamedParserDefinition,
     NamedRetrievalStrategy,
-    Parsers,
+    Parser,
 )
 
 
@@ -205,7 +205,7 @@ class ComponentResolver:
         """Expand parser references within a data processing strategy."""
         strat_copy: DataProcessingStrategy = strategy.model_copy(deep=True)
         parsers: list[Any] = getattr(strategy, "parsers", None) or []
-        resolved_parsers: list[Parsers] = []
+        resolved_parsers: list[Parser] = []
 
         for parser in parsers:
             if isinstance(parser, str):
@@ -282,8 +282,8 @@ class ComponentResolver:
             raise ValueError(f"Invalid retrieval strategy definition: {e}") from e
 
     @staticmethod
-    def _to_parser(defn: Any) -> Parsers:
-        if isinstance(defn, Parsers):
+    def _to_parser(defn: Any) -> Parser:
+        if isinstance(defn, Parser):
             return defn.model_copy(deep=True)
         try:
             payload = (
@@ -293,6 +293,6 @@ class ComponentResolver:
             )
             if isinstance(payload, dict):
                 payload.pop("name", None)
-            return Parsers(**payload)
+            return Parser(**payload)
         except Exception as e:  # pragma: no cover - defensive guardrails
             raise ValueError(f"Invalid parser definition: {e}") from e

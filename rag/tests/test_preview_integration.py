@@ -84,7 +84,7 @@ unlabeled datasets.
     ):
         """Preview chunks MUST match what ingestion produces."""
         # Create a minimal strategy config for testing
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -93,7 +93,7 @@ unlabeled datasets.
             name="test_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
@@ -141,7 +141,7 @@ unlabeled datasets.
         sample_markdown_file: Path,
     ):
         """Preview matches ingestion for markdown files."""
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -150,7 +150,7 @@ unlabeled datasets.
             name="test_markdown_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="MarkdownParser_Python",
                     file_include_patterns=["*.md"],
                     config={"chunk_size": 300, "chunk_overlap": 30},
@@ -194,7 +194,7 @@ unlabeled datasets.
         sample_text_file: Path,
     ):
         """Extractors are applied same way in preview and ingestion."""
-        from config.datamodel import DataProcessingStrategy, Extractor, Parsers
+        from config.datamodel import DataProcessingStrategy, Extractor, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -203,7 +203,7 @@ unlabeled datasets.
             name="test_extractor_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
@@ -243,7 +243,7 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_with_different_chunk_sizes(self, sample_text_file: Path):
         """Preview correctly records chunk size override in result."""
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -252,7 +252,7 @@ unlabeled datasets.
             name="test_small_chunks_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 100, "chunk_overlap": 10},
@@ -292,7 +292,7 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_positions_are_accurate(self, sample_text_content: str):
         """Preview chunk positions accurately map to original text."""
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -301,7 +301,7 @@ unlabeled datasets.
             name="test_position_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 100, "chunk_overlap": 0},
@@ -337,7 +337,7 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_overlap_detection(self):
         """Preview correctly identifies overlapping regions."""
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -348,7 +348,7 @@ unlabeled datasets.
         strategy = DataProcessingStrategy(
             name="test_overlap_strategy",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 15, "chunk_overlap": 5},
@@ -381,7 +381,7 @@ unlabeled datasets.
     @pytest.mark.integration
     def test_preview_idempotent(self, sample_text_file: Path):
         """Calling preview multiple times produces same result."""
-        from config.datamodel import DataProcessingStrategy, Parsers
+        from config.datamodel import DataProcessingStrategy, Parser
 
         from core.blob_processor import BlobProcessor
         from core.preview_handler import PreviewHandler
@@ -390,7 +390,7 @@ unlabeled datasets.
             name="test_strategy",
             description="",
             parsers=[
-                Parsers(
+                Parser(
                     type="TextParser_Python",
                     file_include_patterns=["*.txt"],
                     config={"chunk_size": 200, "chunk_overlap": 20},
