@@ -3,10 +3,11 @@
 from pathlib import Path
 from typing import Any
 
+from components.embedders.clip_embedder.clip_embedder import CLIPEmbedder
+
 # Import embedders
 from components.embedders.ollama_embedder.ollama_embedder import OllamaEmbedder
 from components.embedders.universal_embedder.universal_embedder import UniversalEmbedder
-from components.embedders.clip_embedder.clip_embedder import CLIPEmbedder
 
 # Import the unified parser system
 from components.parsers import (

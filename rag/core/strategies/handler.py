@@ -23,12 +23,16 @@ try:
     from config.datamodel import (
         Database,
         DatabaseEmbeddingStrategy,
-        Type5 as DatabaseEmbeddingType,
         DatabaseRetrievalStrategy,
-        Type6 as DatabaseRetrievalType,
         DataProcessingStrategy,
         Extractor,
         Parsers,
+    )
+    from config.datamodel import (
+        Type5 as DatabaseEmbeddingType,
+    )
+    from config.datamodel import (
+        Type6 as DatabaseRetrievalType,
     )
 except ImportError as e:
     raise ImportError(
@@ -48,7 +52,7 @@ def _create_default_universal_rag_strategy() -> DataProcessingStrategy:
         name="universal_rag",
         description="Universal RAG pipeline using MarkItDown parser with semantic chunking and comprehensive metadata extraction",
         parsers=[
-            Parser(
+            Parsers(
                 type="UniversalParser",
                 file_include_patterns=None,
                 fallback_parser=None,
@@ -388,7 +392,7 @@ class SchemaHandler:
         parsers = self.get_parsers_config(proc_config)
         if parsers:
             return parsers[0]
-        return Parser(
+        return Parsers(
             type="TextParser_Python",
             fallback_parser=None,
             file_extensions=None,
