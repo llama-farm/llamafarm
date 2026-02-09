@@ -26,7 +26,8 @@ from pathlib import Path
 import httpx
 import numpy as np
 
-RUNTIME_URL = "http://localhost:11540"
+API_URL = os.environ.get("LLAMAFARM_URL", "http://localhost:14345")
+RUNTIME_URL = API_URL
 
 # Sample images
 IMAGES = [

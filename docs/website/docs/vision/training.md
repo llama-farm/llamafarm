@@ -22,13 +22,13 @@ When the replay buffer accumulates enough training samples (default: 50), the au
 ### Check Auto-Train Status
 
 ```bash
-curl http://localhost:11540/v1/vision/auto-train/status
+curl http://localhost:14345/v1/vision/auto-train/status
 ```
 
 ### Trigger Training Manually
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/auto-train/trigger
+curl -X POST http://localhost:14345/v1/vision/auto-train/trigger
 ```
 
 ## Training API
@@ -37,7 +37,7 @@ For manual training control:
 
 ```bash
 # Start a training job
-curl -X POST http://localhost:11540/v1/vision/train \
+curl -X POST http://localhost:14345/v1/vision/train \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -47,13 +47,13 @@ curl -X POST http://localhost:11540/v1/vision/train \
   }'
 
 # Check training status
-curl http://localhost:11540/v1/vision/train/job_abc123
+curl http://localhost:14345/v1/vision/train/job_abc123
 
 # List all training jobs
-curl http://localhost:11540/v1/vision/train
+curl http://localhost:14345/v1/vision/train
 
 # Cancel a training job
-curl -X DELETE http://localhost:11540/v1/vision/train/job_abc123
+curl -X DELETE http://localhost:14345/v1/vision/train/job_abc123
 ```
 
 ## Validation Gate

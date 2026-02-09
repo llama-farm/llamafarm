@@ -11,12 +11,14 @@ Demonstrates:
 
 import argparse
 import base64
+import os
 import sys
 import time
 
 import httpx
 
-RUNTIME_URL = "http://localhost:11540"
+API_URL = os.environ.get("LLAMAFARM_URL", "http://localhost:14345")
+RUNTIME_URL = API_URL
 
 # Simulated video frames (using same image repeatedly with slight variations)
 SAMPLE_IMAGE_URL = "https://ultralytics.com/images/zidane.jpg"

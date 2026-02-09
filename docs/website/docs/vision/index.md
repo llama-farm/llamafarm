@@ -84,7 +84,7 @@ The system is designed to be 99% automatic. The only human task is occasionally 
 nx start universal-runtime
 
 # Detect objects in an image
-curl -X POST http://localhost:11540/v1/vision/detect \
+curl -X POST http://localhost:14345/v1/vision/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -93,7 +93,7 @@ curl -X POST http://localhost:11540/v1/vision/detect \
   }'
 
 # Start a streaming session with cascade
-curl -X POST http://localhost:11540/v1/vision/stream/start \
+curl -X POST http://localhost:14345/v1/vision/stream/start \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",

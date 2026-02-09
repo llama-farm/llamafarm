@@ -42,7 +42,7 @@ def get_runtime_url():
                 line = line.strip()
                 if line.startswith("RUNTIME_URL="):
                     return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
-    return "http://localhost:11540"
+    return "http://localhost:14345"
 
 
 RUNTIME_URL = get_runtime_url()

@@ -38,7 +38,7 @@ def get_runtime_url():
                 line = line.strip()
                 if line.startswith("RUNTIME_URL="):
                     return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
-    return "http://localhost:11540"
+    return "http://localhost:14345"
 
 
 RUNTIME_URL = get_runtime_url()
@@ -211,7 +211,7 @@ async def main():
 
         resp = await client.post("/v1/vision/federation/peers", json={
             "name": "demo-gpu-server",
-            "url": "http://192.168.1.100:11540",
+            "url": "http://192.168.1.100:14345",
             "models": ["yolov8x", "yolov8l"],
             "gpu_vram_gb": 24.0,
             "priority": 1,

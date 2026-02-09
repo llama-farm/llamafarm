@@ -3145,9 +3145,9 @@ curl -X POST http://localhost:14345/v1/vision/documents/extract \
 
 ## Vision API (Detection, Classification & Streaming)
 
-The Vision Pipeline provides object detection, classification, segmentation, CLIP embeddings, and real-time streaming with automatic model improvement. These endpoints run on the Universal Runtime (port 11540).
+The Vision Pipeline provides object detection, classification, segmentation, CLIP embeddings, and real-time streaming with automatic model improvement. These endpoints are available through the LlamaFarm server (port 14345).
 
-**Base URL:** `http://localhost:11540/v1/vision`
+**Base URL:** `http://localhost:14345/v1/vision`
 
 :::tip Full Documentation
 For architecture details, cascade configuration, and the learning loop, see the [Vision Pipeline guide](../vision/index.md).
@@ -3158,7 +3158,7 @@ For architecture details, cascade configuration, and the learning loop, see the 
 **Endpoint:** `POST /v1/vision/detect`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/detect \
+curl -X POST http://localhost:14345/v1/vision/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -3173,7 +3173,7 @@ curl -X POST http://localhost:11540/v1/vision/detect \
 **Endpoint:** `POST /v1/vision/classify`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/classify \
+curl -X POST http://localhost:14345/v1/vision/classify \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/clip-vit-base-patch32",
@@ -3187,7 +3187,7 @@ curl -X POST http://localhost:11540/v1/vision/classify \
 **Endpoint:** `POST /v1/vision/segment`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/segment \
+curl -X POST http://localhost:14345/v1/vision/segment \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n-seg",
@@ -3201,7 +3201,7 @@ curl -X POST http://localhost:11540/v1/vision/segment \
 **Endpoint:** `POST /v1/vision/embed`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/embed \
+curl -X POST http://localhost:14345/v1/vision/embed \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/clip-vit-base-patch32",
@@ -3214,7 +3214,7 @@ curl -X POST http://localhost:11540/v1/vision/embed \
 
 ```bash
 # Start session with cascade
-curl -X POST http://localhost:11540/v1/vision/stream/start \
+curl -X POST http://localhost:14345/v1/vision/stream/start \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -3226,12 +3226,12 @@ curl -X POST http://localhost:11540/v1/vision/stream/start \
   }'
 
 # Process frame
-curl -X POST http://localhost:11540/v1/vision/stream/frame \
+curl -X POST http://localhost:14345/v1/vision/stream/frame \
   -H "Content-Type: application/json" \
   -d '{"session_id": "abc123", "image": "data:image/png;base64,..."}'
 
 # Stop session
-curl -X POST http://localhost:11540/v1/vision/stream/stop \
+curl -X POST http://localhost:14345/v1/vision/stream/stop \
   -H "Content-Type: application/json" \
   -d '{"session_id": "abc123"}'
 ```
@@ -3240,33 +3240,33 @@ curl -X POST http://localhost:11540/v1/vision/stream/stop \
 
 ```bash
 # Start training
-curl -X POST http://localhost:11540/v1/vision/train \
+curl -X POST http://localhost:14345/v1/vision/train \
   -H "Content-Type: application/json" \
   -d '{"model": "yolov8n", "dataset_path": "/path/to/dataset", "epochs": 10}'
 
 # Check status
-curl http://localhost:11540/v1/vision/train/job_abc123
+curl http://localhost:14345/v1/vision/train/job_abc123
 
 # Auto-train status and trigger
-curl http://localhost:11540/v1/vision/auto-train/status
-curl -X POST http://localhost:11540/v1/vision/auto-train/trigger
+curl http://localhost:14345/v1/vision/auto-train/status
+curl -X POST http://localhost:14345/v1/vision/auto-train/trigger
 ```
 
 ### Federation
 
 ```bash
 # Register peer
-curl -X POST http://localhost:11540/v1/vision/federation/peers \
+curl -X POST http://localhost:14345/v1/vision/federation/peers \
   -H "Content-Type: application/json" \
-  -d '{"name": "gpu-server", "url": "http://192.168.1.100:11540", "models": ["yolov8x"]}'
+  -d '{"name": "gpu-server", "url": "http://192.168.1.100:14345", "models": ["yolov8x"]}'
 
 # Create model package
-curl -X POST http://localhost:11540/v1/vision/federation/packages \
+curl -X POST http://localhost:14345/v1/vision/federation/packages \
   -H "Content-Type: application/json" \
   -d '{"model_id": "my-detector", "model_path": "/path/to/best.pt"}'
 
 # Import model package
-curl -X POST http://localhost:11540/v1/vision/federation/packages/import \
+curl -X POST http://localhost:14345/v1/vision/federation/packages/import \
   -H "Content-Type: application/json" \
   -d '{"source": "/path/to/package.tar.gz"}'
 ```

@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Configuration
-RUNTIME_PORT="${RUNTIME_PORT:-11540}"
+RUNTIME_PORT="${RUNTIME_PORT:-14345}"
 
 # Load from .env if exists
 if [ -f "$SCRIPT_DIR/.env" ]; then

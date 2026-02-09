@@ -6,7 +6,7 @@ sidebar_label: Detection & Classification
 
 # Detection, Classification & Embeddings
 
-Single-frame inference endpoints for object detection, image classification, segmentation, and CLIP embeddings. All endpoints run on the Universal Runtime (port 11540).
+Single-frame inference endpoints for object detection, image classification, segmentation, and CLIP embeddings. All endpoints are available through the LlamaFarm server (port 14345).
 
 ## Object Detection
 
@@ -15,7 +15,7 @@ Detect objects in images using YOLO models.
 **Endpoint:** `POST /v1/vision/detect`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/detect \
+curl -X POST http://localhost:14345/v1/vision/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -69,7 +69,7 @@ Zero-shot image classification using CLIP models. Classify images into arbitrary
 **Endpoint:** `POST /v1/vision/classify`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/classify \
+curl -X POST http://localhost:14345/v1/vision/classify \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/clip-vit-base-patch32",
@@ -93,7 +93,7 @@ Instance and semantic segmentation to get pixel-level object boundaries.
 **Endpoint:** `POST /v1/vision/segment`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/segment \
+curl -X POST http://localhost:14345/v1/vision/segment \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n-seg",
@@ -112,7 +112,7 @@ Generate embeddings for images and/or text using CLIP models. Useful for multimo
 
 ```bash
 # Embed images
-curl -X POST http://localhost:11540/v1/vision/embed \
+curl -X POST http://localhost:14345/v1/vision/embed \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/clip-vit-base-patch32",
@@ -120,7 +120,7 @@ curl -X POST http://localhost:11540/v1/vision/embed \
   }'
 
 # Embed text
-curl -X POST http://localhost:11540/v1/vision/embed \
+curl -X POST http://localhost:14345/v1/vision/embed \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai/clip-vit-base-patch32",
@@ -136,18 +136,18 @@ List, load, save, and delete vision models.
 
 ```bash
 # List available models
-curl http://localhost:11540/v1/vision/models
+curl http://localhost:14345/v1/vision/models
 
 # Save a model to disk
-curl -X POST http://localhost:11540/v1/vision/models/save \
+curl -X POST http://localhost:14345/v1/vision/models/save \
   -H "Content-Type: application/json" \
   -d '{"model": "yolov8n", "task": "detection", "name": "my-detector"}'
 
 # Load a saved model
-curl -X POST http://localhost:11540/v1/vision/models/load \
+curl -X POST http://localhost:14345/v1/vision/models/load \
   -H "Content-Type: application/json" \
   -d '{"task": "detection", "name": "my-detector"}'
 
 # Delete a saved model
-curl -X DELETE http://localhost:11540/v1/vision/models/detection/my-detector
+curl -X DELETE http://localhost:14345/v1/vision/models/detection/my-detector
 ```

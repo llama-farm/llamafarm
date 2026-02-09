@@ -16,9 +16,9 @@ from pathlib import Path
 
 import httpx
 
-# Server URLs
-RUNTIME_URL = "http://localhost:11540"
-SERVER_URL = "http://localhost:14345"
+# LlamaFarm API server (proxies to Universal Runtime)
+API_URL = os.environ.get("LLAMAFARM_URL", "http://localhost:14345")
+RUNTIME_URL = API_URL  # backwards compat
 
 # Sample images for demo
 SAMPLE_IMAGES = [

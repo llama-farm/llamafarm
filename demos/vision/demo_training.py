@@ -25,7 +25,8 @@ from pathlib import Path
 import httpx
 import numpy as np
 
-RUNTIME_URL = "http://localhost:11540"
+API_URL = os.environ.get("LLAMAFARM_URL", "http://localhost:14345")
+RUNTIME_URL = API_URL
 
 # Sample images for mini-dataset
 SAMPLE_IMAGES = [
@@ -283,7 +284,7 @@ def run_demo(epochs: int = 3, skip_training: bool = False):
   
   You can then use the fine-tuned model:
   
-    curl -X POST http://localhost:11540/v1/vision/detect \\
+    curl -X POST http://localhost:14345/v1/vision/detect \\
       -H "Content-Type: application/json" \\
       -d '{
         "model": "runs/train/exp/weights/best.pt",

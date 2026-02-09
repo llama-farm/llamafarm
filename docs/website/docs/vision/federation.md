@@ -19,14 +19,14 @@ Federation connects multiple LlamaFarm instances so they can share model inferen
 
 ```bash
 # List federation peers
-curl http://localhost:11540/v1/vision/federation/peers
+curl http://localhost:14345/v1/vision/federation/peers
 
 # Register a peer
-curl -X POST http://localhost:11540/v1/vision/federation/peers \
+curl -X POST http://localhost:14345/v1/vision/federation/peers \
   -H "Content-Type: application/json" \
   -d '{
     "name": "gpu-server",
-    "url": "http://192.168.1.100:11540",
+    "url": "http://192.168.1.100:14345",
     "models": ["yolov8x"],
     "gpu_vram_gb": 24,
     "priority": 0,
@@ -34,10 +34,10 @@ curl -X POST http://localhost:11540/v1/vision/federation/peers \
   }'
 
 # Remove a peer
-curl -X DELETE http://localhost:11540/v1/vision/federation/peers/gpu-server
+curl -X DELETE http://localhost:14345/v1/vision/federation/peers/gpu-server
 
 # Check federation health
-curl http://localhost:11540/v1/vision/federation/status
+curl http://localhost:14345/v1/vision/federation/status
 ```
 
 ## Inbound Escalation
@@ -47,7 +47,7 @@ When another LlamaFarm instance is uncertain about a detection, it sends the ful
 **Endpoint:** `POST /v1/vision/federation/escalate`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/federation/escalate \
+curl -X POST http://localhost:14345/v1/vision/federation/escalate \
   -H "Content-Type: application/json" \
   -d '{
     "image": "<base64-encoded>",
@@ -86,7 +86,7 @@ curl -X POST http://localhost:11540/v1/vision/federation/escalate \
 Add remote models to a streaming session's cascade chain by prefixing with `remote:`:
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/stream/start \
+curl -X POST http://localhost:14345/v1/vision/stream/start \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -110,13 +110,13 @@ Package trained models for distribution to other nodes.
 ### List Packages
 
 ```bash
-curl http://localhost:11540/v1/vision/federation/packages
+curl http://localhost:14345/v1/vision/federation/packages
 ```
 
 ### Create a Package
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/federation/packages \
+curl -X POST http://localhost:14345/v1/vision/federation/packages \
   -H "Content-Type: application/json" \
   -d '{
     "model_id": "bird-detector-v3",
@@ -128,7 +128,7 @@ curl -X POST http://localhost:11540/v1/vision/federation/packages \
 ### Import a Package
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/federation/packages/import \
+curl -X POST http://localhost:14345/v1/vision/federation/packages/import \
   -H "Content-Type: application/json" \
   -d '{
     "source": "/path/to/bird-detector-v3.tar.gz"

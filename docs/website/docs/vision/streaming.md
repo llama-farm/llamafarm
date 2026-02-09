@@ -14,7 +14,7 @@ The streaming pipeline processes video frames in real-time with an automatic mul
 **Endpoint:** `POST /v1/vision/stream/start`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/stream/start \
+curl -X POST http://localhost:14345/v1/vision/stream/start \
   -H "Content-Type: application/json" \
   -d '{
     "model": "yolov8n",
@@ -45,7 +45,7 @@ curl -X POST http://localhost:11540/v1/vision/stream/start \
 **Endpoint:** `POST /v1/vision/stream/frame`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/stream/frame \
+curl -X POST http://localhost:14345/v1/vision/stream/frame \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "abc123",
@@ -76,7 +76,7 @@ curl -X POST http://localhost:11540/v1/vision/stream/frame \
 **Endpoint:** `POST /v1/vision/stream/stop`
 
 ```bash
-curl -X POST http://localhost:11540/v1/vision/stream/stop \
+curl -X POST http://localhost:14345/v1/vision/stream/stop \
   -H "Content-Type: application/json" \
   -d '{"session_id": "abc123"}'
 ```
@@ -85,10 +85,10 @@ curl -X POST http://localhost:11540/v1/vision/stream/stop \
 
 ```bash
 # List active sessions
-curl http://localhost:11540/v1/vision/stream/sessions
+curl http://localhost:14345/v1/vision/stream/sessions
 
 # Get session statistics
-curl http://localhost:11540/v1/vision/stream/sessions/abc123/stats
+curl http://localhost:14345/v1/vision/stream/sessions/abc123/stats
 ```
 
 ## How the Cascade Works
@@ -151,7 +151,7 @@ Submit human corrections for detections and inspect the replay buffer.
 
 ```bash
 # Submit a correction
-curl -X POST http://localhost:11540/v1/vision/corrections \
+curl -X POST http://localhost:14345/v1/vision/corrections \
   -H "Content-Type: application/json" \
   -d '{
     "image_id": "img_abc123",
@@ -160,10 +160,10 @@ curl -X POST http://localhost:11540/v1/vision/corrections \
   }'
 
 # Check replay buffer status
-curl http://localhost:11540/v1/vision/replay-buffer
+curl http://localhost:14345/v1/vision/replay-buffer
 
 # Clear replay buffer
-curl -X POST http://localhost:11540/v1/vision/replay-buffer/clear
+curl -X POST http://localhost:14345/v1/vision/replay-buffer/clear
 ```
 
 The replay buffer stores training samples with priority weighting:

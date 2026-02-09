@@ -194,55 +194,92 @@ Generate embeddings for images or text.
 
 ### Streaming Endpoints
 
-**POST** `/v1/vision/streaming/start`
+**POST** `/v1/vision/stream/start`
 
 Start a streaming detection session.
 
 ```json
 {
   "model": "yolov8n",
-  "target_fps": 1.0,
-  "confidence_threshold": 0.7,
-  "action_classes": ["person", "car"],
-  "cooldown_seconds": 5.0
+  "config": {
+    "target_fps": 1.0,
+    "confidence_threshold": 0.7,
+    "action_classes": ["person", "car"],
+    "cooldown_seconds": 5.0,
+    "cascade": {
+      "secondary_model_id": "yolov8m",
+      "cascade_chain": ["yolov8n", "yolov8m"],
+      "enrich_on_escalation": true
+    }
+  }
 }
 ```
 
-**POST** `/v1/vision/streaming/frame/{session_id}`
+**POST** `/v1/vision/stream/frame`
 
-Process a single frame in an active session.
+Process a single frame in an active session. Body: `{"session_id": "...", "image": "base64..."}`.
 
-**POST** `/v1/vision/streaming/stop/{session_id}`
+**POST** `/v1/vision/stream/stop`
 
-Stop a session and get statistics.
+Stop a session and get statistics. Body: `{"session_id": "..."}`.
 
-**GET** `/v1/vision/streaming/sessions`
+**GET** `/v1/vision/stream/sessions`
 
 List all active sessions.
 
+**GET** `/v1/vision/stream/sessions/{session_id}/stats`
+
+Get cascade statistics for a session.
+
 ### Training Endpoints
 
-**POST** `/v1/vision/training/start`
+**POST** `/v1/vision/train`
 
 Start a YOLO fine-tuning job.
 
 ```json
 {
-  "base_model": "yolov8n",
-  "dataset_path": "/path/to/dataset",
+  "model": "yolov8n",
+  "dataset": "/path/to/dataset",
+  "task": "detection",
   "epochs": 10,
-  "batch_size": 16,
-  "output_name": "my_custom_model"
+  "batch_size": 16
 }
 ```
 
-**GET** `/v1/vision/training/status`
+**GET** `/v1/vision/train/{job_id}`
 
-Get current training job status.
+Get training job status.
 
-**GET** `/v1/vision/training/jobs`
+**GET** `/v1/vision/train`
 
 List all training jobs.
+
+**DELETE** `/v1/vision/train/{job_id}`
+
+Cancel a training job.
+
+**GET** `/v1/vision/auto-train/status`
+
+Get auto-training status.
+
+**POST** `/v1/vision/auto-train/trigger`
+
+Manually trigger auto-training.
+
+### Export Endpoints
+
+**POST** `/v1/vision/models/export`
+
+Export a model to ONNX with quantization.
+
+```json
+{
+  "model_id": "yolov8n",
+  "format": "onnx",
+  "quantization": "fp16"
+}
+```
 
 ## Model Variants
 
