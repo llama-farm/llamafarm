@@ -10,8 +10,10 @@ Usage:
 """
 
 import argparse
+import platform
 import shutil
 import subprocess
+import sys
 import tarfile
 import yaml
 from pathlib import Path
@@ -69,7 +71,21 @@ ADDON_SPECS = load_addon_specs()
 PLATFORMS = load_platforms()
 
 
-def build_addon_wheels(addon_name: str, platform: str, output_dir: Path):
+def get_host_platform() -> str:
+    """Detect the current host platform in our naming convention."""
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        arch = "arm64" if machine == "arm64" else "x86_64"
+        return f"macos-{arch}"
+    elif sys.platform == "linux":
+        arch = "aarch64" if machine == "aarch64" else "x86_64"
+        return f"linux-{arch}"
+    elif sys.platform == "win32":
+        return "windows-x86_64"
+    return "unknown"
+
+
+def build_addon_wheels(addon_name: str, target_platform: str, output_dir: Path):
     """Build wheels for an addon."""
     spec = ADDON_SPECS[addon_name]
 
@@ -78,10 +94,19 @@ def build_addon_wheels(addon_name: str, platform: str, output_dir: Path):
         print(f"Skipping {addon_name} (meta-addon with no packages)")
         return
 
-    print(f"Building {addon_name} for {platform}...")
+    # Validate that the target platform matches the host, since pip download
+    # fetches wheels for the current host regardless of the target label
+    host = get_host_platform()
+    if host != target_platform:
+        raise RuntimeError(
+            f"Cannot build for {target_platform} on {host}; "
+            f"pip downloads wheels for the host platform"
+        )
+
+    print(f"Building {addon_name} for {target_platform}...")
 
     # Create temp directory for wheels
-    wheels_dir = output_dir / f"{addon_name}-{platform}-wheels"
+    wheels_dir = output_dir / f"{addon_name}-{target_platform}-wheels"
     wheels_dir.mkdir(parents=True, exist_ok=True)
 
     # Download wheels
@@ -113,7 +138,7 @@ def build_addon_wheels(addon_name: str, platform: str, output_dir: Path):
     print(f"  Downloaded {len(wheel_files)} wheel(s)")
 
     # Create tar.gz
-    tarball_path = output_dir / f"{addon_name}-wheels-{platform}.tar.gz"
+    tarball_path = output_dir / f"{addon_name}-wheels-{target_platform}.tar.gz"
     print(f"  Creating {tarball_path.name}...")
     with tarfile.open(tarball_path, "w:gz") as tar:
         for wheel_file in wheels_dir.iterdir():
@@ -160,14 +185,22 @@ def main():
         platforms = [args.platform]
 
     # Build all combinations
+    failures = 0
     for addon in addons:
         for platform in platforms:
             try:
                 build_addon_wheels(addon, platform, output_dir)
             except Exception as e:
                 print(f"✗ Failed to build {addon} for {platform}: {e}")
+                failures += 1
+
+    if failures:
+        print(f"\nBuild finished with {failures} failure(s)")
+        return 1
 
     print("\nBuild complete!")
+
+    return 0
 
 
 if __name__ == "__main__":

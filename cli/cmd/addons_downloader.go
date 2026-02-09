@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/llamafarm/cli/internal/buildinfo"
@@ -19,6 +20,7 @@ import (
 
 type AddonDownloader struct {
 	version string // LlamaFarm version for downloading wheels
+	client  *http.Client
 }
 
 func NewAddonDownloader(version string) *AddonDownloader {
@@ -34,7 +36,10 @@ func NewAddonDownloader(version string) *AddonDownloader {
 			resolvedVersion = "latest"
 		}
 	}
-	return &AddonDownloader{version: resolvedVersion}
+	return &AddonDownloader{
+		version: resolvedVersion,
+		client:  &http.Client{Timeout: 10 * time.Minute},
+	}
 }
 
 // DownloadAndInstallAddon downloads the addon wheel bundle and extracts it
@@ -130,7 +135,7 @@ func (d *AddonDownloader) buildDownloadURL(filename string) string {
 }
 
 func (d *AddonDownloader) downloadFile(url string, dest *os.File) error {
-	resp, err := http.Get(url)
+	resp, err := d.client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -147,7 +152,7 @@ func (d *AddonDownloader) downloadFile(url string, dest *os.File) error {
 // verifyChecksum downloads the checksum file and verifies the downloaded file
 func (d *AddonDownloader) verifyChecksum(filePath, checksumURL string) error {
 	// Download checksum file
-	resp, err := http.Get(checksumURL)
+	resp, err := d.client.Get(checksumURL)
 	if err != nil {
 		return fmt.Errorf("failed to download checksum: %w", err)
 	}

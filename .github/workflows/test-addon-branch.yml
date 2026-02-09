@@ -103,8 +103,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    env:
+      BRANCH_SAFE: ${{ github.event.inputs.branch }}
 
     steps:
+      - name: Sanitize branch name
+        shell: bash
+        run: echo "BRANCH_SAFE=${BRANCH_SAFE//\//-}" >> "$GITHUB_ENV"
+
       - name: Checkout branch
         uses: actions/checkout@v4
         with:
@@ -152,7 +158,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}-${{ github.event.inputs.branch }}
+          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}-${{ env.BRANCH_SAFE }}
           path: |
             dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz
             dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz.sha256
@@ -166,8 +172,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.create-release.outputs.tag_name }}
+    env:
+      BRANCH_SAFE: ${{ github.event.inputs.branch }}
 
     steps:
+      - name: Sanitize branch name
+        run: echo "BRANCH_SAFE=${BRANCH_SAFE//\//-}" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -177,27 +188,27 @@ jobs:
         id: version
         run: |
           # Create a snapshot version based on branch name and timestamp
-          BRANCH="${{ github.event.inputs.branch }}"
-          # Sanitize branch name for tag (replace / with -)
-          BRANCH_SAFE=$(echo "$BRANCH" | sed 's/\//-/g')
+          BRANCH_SAFE="${{ env.BRANCH_SAFE }}"
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           VERSION="snapshot-${BRANCH_SAFE}-${TIMESTAMP}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
 
       - name: Create release tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.event.inputs.branch }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${VERSION}" -m "Snapshot release from branch ${{ github.event.inputs.branch }}"
+          git tag -a "v${VERSION}" -m "Snapshot release from branch ${BRANCH}"
           git push origin "v${VERSION}"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist/
-          pattern: addon-wheels-*-${{ github.event.inputs.branch }}
+          pattern: addon-wheels-*-${{ env.BRANCH_SAFE }}
 
       - name: Flatten artifacts
         run: |
@@ -211,11 +222,11 @@ jobs:
         id: create-release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.event.inputs.branch }}
+          ADDON: ${{ github.event.inputs.addon }}
+          PLATFORM: ${{ github.event.inputs.platform }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="${{ github.event.inputs.branch }}"
-          ADDON="${{ github.event.inputs.addon }}"
-          PLATFORM="${{ github.event.inputs.platform }}"
 
           cat > release-notes.md <<EOF
           ## Branch Testing Snapshot
@@ -277,20 +288,26 @@ jobs:
 
     steps:
       - name: Create summary
+        env:
+          BRANCH: ${{ github.event.inputs.branch }}
+          ADDON: ${{ github.event.inputs.addon }}
+          PLATFORM: ${{ github.event.inputs.platform }}
+          CREATE_RELEASE: ${{ github.event.inputs.create_release }}
+          TAG_NAME: ${{ needs.create-snapshot-release.outputs.tag_name }}
         run: |
           echo "## Branch Addon Testing" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.event.inputs.branch }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Addon:** ${{ github.event.inputs.addon }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Platform:** ${{ github.event.inputs.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${BRANCH}" >> $GITHUB_STEP_SUMMARY
+          echo "**Addon:** ${ADDON}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${PLATFORM}" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+          if [ "$CREATE_RELEASE" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Test with:" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo '```bash' >> $GITHUB_STEP_SUMMARY
-            echo "export LF_ADDON_RELEASE_TAG=${{ needs.create-snapshot-release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-            echo "lf addons install ${{ github.event.inputs.addon }}" >> $GITHUB_STEP_SUMMARY
+            echo "export LF_ADDON_RELEASE_TAG=${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+            echo "lf addons install ${ADDON}" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           else
             echo "" >> $GITHUB_STEP_SUMMARY

@@ -107,6 +107,14 @@ class ToolCallMessage(BaseModel):
     arguments: str  # JSON string of arguments
 
 
+class ToolExecutingMessage(BaseModel):
+    """Server is executing a tool call (notifies client that server handles it)."""
+
+    type: Literal["tool_executing"] = "tool_executing"
+    tool_call_id: str
+    function_name: str
+
+
 class TTSStartMessage(BaseModel):
     """TTS synthesis starting for a phrase."""
 

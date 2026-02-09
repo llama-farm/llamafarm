@@ -26,7 +26,7 @@ func TestExtractTarGz_PathTraversal(t *testing.T) {
 	// Attempt to extract (should fail)
 	err := d.extractTarGz(tarPath, extractDir)
 	if err == nil {
-		t.Error("extractTarGz() should reject path traversal attempts")
+		t.Fatal("extractTarGz() should reject path traversal attempts")
 	}
 
 	if !strings.Contains(err.Error(), "illegal path") {

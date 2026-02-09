@@ -34,6 +34,10 @@ func TestValidateAddonName(t *testing.T) {
 }
 
 func TestResolveDependencies(t *testing.T) {
+	// Save and restore the global registry to avoid leaking test state
+	origRegistry := AddonRegistry
+	t.Cleanup(func() { AddonRegistry = origRegistry })
+
 	// Setup test registry
 	AddonRegistry = map[string]*AddonDefinition{
 		"base": {

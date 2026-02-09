@@ -272,7 +272,7 @@ class SpeechModel(BaseModel):
         )
 
         return TranscriptionResult(
-            text="".join(full_text_parts).strip(),
+            text=" ".join(full_text_parts).strip(),
             segments=segments,
             language=info.language,
             language_probability=info.language_probability,
@@ -482,7 +482,7 @@ class SpeechModel(BaseModel):
         )
 
         return TranscriptionResult(
-            text="".join(full_text_parts).strip(),
+            text=" ".join(full_text_parts).strip(),
             segments=segments,
             language=info.language,
             language_probability=info.language_probability,

@@ -69,6 +69,10 @@ func LoadAddonsState() (*AddonsState, error) {
 		return nil, fmt.Errorf("failed to parse state file: %w", err)
 	}
 
+	if state.InstalledAddons == nil {
+		state.InstalledAddons = make(map[string]*InstalledAddon)
+	}
+
 	return &state, nil
 }
 
