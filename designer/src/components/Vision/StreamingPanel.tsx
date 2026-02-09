@@ -323,7 +323,7 @@ export function StreamingPanel() {
 
       if (mode === 'ocr' && selectedImage.ocrRegions) {
         // OCR: Highlight text regions
-        selectedImage.ocrRegions.forEach((region, i) => {
+        selectedImage.ocrRegions.forEach((region) => {
           if (!region.box) return
           const color = '#45B7D1'
           const { x1, y1, x2, y2 } = region.box
