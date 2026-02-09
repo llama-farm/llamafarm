@@ -158,9 +158,9 @@ class RetentionPolicy:
         # Delete oldest 10% of images
         stats = self.store.get_stats()
         to_delete = max(1, stats["total_images"] // 10)
-        
+
         cutoff = datetime.utcnow() - timedelta(hours=1)  # At least 1 hour old
-        deleted = self.store.delete_old_images(cutoff)
+        deleted = self.store.delete_old_images(cutoff, limit=to_delete)
         
         return deleted
     

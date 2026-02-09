@@ -836,19 +836,20 @@ class StreamingVisionDetector:
                 image_path = record.file_path
         
         try:
-            # Create detection box if not provided
+            # Create detection box if not provided (used for replay buffer context)
             detection = box or DetectionBox(
                 x1=0.0, y1=0.0, x2=1.0, y2=1.0,  # Full image
                 class_name=corrected_class,
                 class_id=0,  # Will be resolved by training
                 confidence=1.0,  # Human-verified
             )
-            
+
             self._replay_buffer.add_correction(
                 image_id=image_id,
                 image_path=image_path or "",
                 corrected_label=corrected_class,
                 original_confidence=original_confidence,
+                bbox=(detection.x1, detection.y1, detection.x2, detection.y2),
             )
             
             # Mark as reviewed in image store
@@ -924,6 +925,11 @@ class StreamingVisionDetector:
         if self._replay_buffer is not None:
             return self._replay_buffer.get_stats()
         return None
+
+    def clear_replay_buffer(self) -> None:
+        """Clear the replay buffer."""
+        if self._replay_buffer is not None:
+            self._replay_buffer.clear()
 
 
 # Global streaming detector instance

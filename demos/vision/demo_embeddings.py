@@ -57,7 +57,7 @@ def download_image(url: str) -> bytes:
 def embed_images(images_b64: List[str], model: str = "clip-vit-base") -> dict:
     """Generate embeddings for images."""
     response = httpx.post(
-        f"{RUNTIME_URL}/v1/vision/embed",
+        f"{RUNTIME_URL}/v1/vision/embed/image",
         json={
             "model": model,
             "images": images_b64,
@@ -71,7 +71,7 @@ def embed_images(images_b64: List[str], model: str = "clip-vit-base") -> dict:
 def embed_texts(texts: List[str], model: str = "clip-vit-base") -> dict:
     """Generate embeddings for texts."""
     response = httpx.post(
-        f"{RUNTIME_URL}/v1/vision/embed",
+        f"{RUNTIME_URL}/v1/vision/embed/text",
         json={
             "model": model,
             "texts": texts,

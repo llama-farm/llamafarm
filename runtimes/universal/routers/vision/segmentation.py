@@ -111,7 +111,8 @@ async def segment_image(request: SegmentRequest) -> SegmentResponse:
     except Exception as e:
         # Fallback to regular detection if seg model not found
         logger.warning(f"Segmentation model {model_name} not found, falling back to detection: {e}")
-        model = await _load_detection_model_fn(request.model.replace('-seg', ''))
+        model_name = request.model.replace('-seg', '')
+        model = await _load_detection_model_fn(model_name)
 
     # Decode image
     image_bytes = decode_base64_image(request.image)
@@ -136,7 +137,7 @@ async def segment_image(request: SegmentRequest) -> SegmentResponse:
             class_name=box.class_name,
             class_id=box.class_id,
             confidence=box.confidence,
-            mask=getattr(box, 'mask', None),  # Include mask if available
+            mask=getattr(box, 'mask', None) if request.return_masks else None,
         )
         for box in result.boxes
     ]

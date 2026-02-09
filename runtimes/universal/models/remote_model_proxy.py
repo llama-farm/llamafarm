@@ -126,6 +126,8 @@ class RemoteModelProxy(DetectionModel):
             from PIL import Image
             import io
             pil_img = Image.fromarray(image)
+            if pil_img.mode == "RGBA":
+                pil_img = pil_img.convert("RGB")
             buf = io.BytesIO()
             pil_img.save(buf, format="JPEG")
             image_bytes = buf.getvalue()

@@ -196,7 +196,7 @@ class CLIPClassifier(ClassificationModel):
         # Use provided classes or pre-computed ones
         if classes:
             await self.set_classes(classes)
-        elif not self.class_names:
+        elif not self.class_names or self._class_embeddings is None:
             raise ValueError("No classes provided. Call set_classes() or pass classes parameter.")
 
         # Process image

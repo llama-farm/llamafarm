@@ -214,9 +214,8 @@ async def main():
 
         resp = await client.post("/v1/vision/corrections", json={
             "image_id": "demo_correction_001",
-            "correct_class": "truck",
-            "bbox": [100.0, 150.0, 300.0, 350.0],
-            "reviewed_by": "demo_user",
+            "corrected_class": "truck",
+            "box": [100.0, 150.0, 300.0, 350.0],
         })
         if resp.status_code == 200:
             print(f"  Correction submitted: {resp.json()}")

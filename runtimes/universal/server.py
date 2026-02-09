@@ -1006,12 +1006,16 @@ _vision_auto_trainer = init_auto_trainer(
     trainer=_vision_trainer,
 )
 
+_background_tasks: set[asyncio.Task] = set()
+
 def _on_training_threshold(buffer_size: int):
     """Trigger auto-training when replay buffer hits threshold."""
     import asyncio
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_vision_auto_trainer.check_and_train())
+        task = loop.create_task(_vision_auto_trainer.check_and_train())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     except RuntimeError:
         pass  # No event loop running
 

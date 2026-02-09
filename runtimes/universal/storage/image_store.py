@@ -484,18 +484,24 @@ class ImageMetadataStore:
             
             return stats
     
-    def delete_old_images(self, before: datetime) -> int:
+    def delete_old_images(self, before: datetime, limit: int | None = None) -> int:
         """Delete images older than the given timestamp.
-        
+
+        Args:
+            before: Delete images created before this timestamp
+            limit: Max number of images to delete (oldest first)
+
         Returns:
             Number of images deleted
         """
         with sqlite3.connect(self.db_path) as conn:
             # Get IDs to delete
-            rows = conn.execute(
-                "SELECT id FROM images WHERE created_at < ?",
-                (before,)
-            ).fetchall()
+            query = "SELECT id FROM images WHERE created_at < ? ORDER BY created_at ASC"
+            params: list[Any] = [before]
+            if limit is not None:
+                query += " LIMIT ?"
+                params.append(limit)
+            rows = conn.execute(query, params).fetchall()
             
             ids = [row[0] for row in rows]
             
@@ -660,8 +666,13 @@ class ImageStore:
         # Determine format from magic bytes
         fmt = self._detect_format(image_bytes)
         
+        # Sanitize image_id to prevent path traversal
+        safe_id = Path(image_id).name
+        if safe_id != image_id or ".." in image_id or "/" in image_id or "\\" in image_id:
+            raise ValueError(f"Invalid image_id: {image_id!r}")
+
         # Save image file
-        image_path = self.images_dir / f"{image_id}.{fmt}"
+        image_path = self.images_dir / f"{safe_id}.{fmt}"
         await asyncio.to_thread(image_path.write_bytes, image_bytes)
         
         # Create thumbnail
@@ -773,12 +784,22 @@ class ImageStore:
                 source=source,
             )
         
-        # For other statuses, we need to query differently
-        return await asyncio.to_thread(
-            self._metadata_store.get_pending_review,
-            limit=limit,
-            source=source,
-        )
+        # For other statuses, query by reviewed_by field which stores "reviewer:decision"
+        def _query_by_status():
+            import sqlite3 as _sqlite3
+            with _sqlite3.connect(self._metadata_store.db_path) as conn:
+                conn.row_factory = _sqlite3.Row
+                query = "SELECT * FROM images WHERE reviewed_by LIKE ?"
+                params: list[Any] = [f"%:{status}"]
+                if source:
+                    query += " AND source = ?"
+                    params.append(source)
+                query += " ORDER BY created_at DESC LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(query, params).fetchall()
+                return [self._metadata_store._row_to_image_record(row) for row in rows]
+
+        return await asyncio.to_thread(_query_by_status)
     
     async def count_reviews(self, status: str | None = None) -> int:
         """Count reviews by status."""

@@ -140,9 +140,21 @@ export function ReviewPanel() {
   
   // Reject (remove from queue without adding to training)
   const rejectItem = async (item: ReviewItem) => {
+    setIsSubmitting(true)
     try {
-      // For now just remove from local list
-      // In a real implementation, you'd call an API to remove from queue
+      const response = await fetch(`${RUNTIME_URL}/v1/vision/corrections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_id: item.image_id,
+          corrected_class: '__rejected__',
+          original_confidence: item.confidence,
+          session_id: item.session_id,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to reject')
+
       setItems(prev => prev.filter(i => i.id !== item.id))
       if (selectedItem?.id === item.id) {
         setSelectedItem(null)
@@ -150,6 +162,8 @@ export function ReviewPanel() {
       toast({ message: 'Removed from review queue' })
     } catch (error) {
       toast({ message: 'Failed to reject', variant: 'destructive' })
+    } finally {
+      setIsSubmitting(false)
     }
   }
   

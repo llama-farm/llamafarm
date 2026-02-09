@@ -15,7 +15,7 @@ import { Switch } from '../ui/switch'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 
-const RUNTIME_URL = ''
+const RUNTIME_URL = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL || ''
 
 interface TrainingJob {
   job_id: string

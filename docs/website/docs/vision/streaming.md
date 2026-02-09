@@ -155,8 +155,8 @@ curl -X POST http://localhost:14345/v1/vision/corrections \
   -H "Content-Type: application/json" \
   -d '{
     "image_id": "img_abc123",
-    "correct_class": "eagle",
-    "bbox": [100, 50, 300, 250]
+    "corrected_class": "eagle",
+    "box": [100, 50, 300, 250]
   }'
 
 # Check replay buffer status

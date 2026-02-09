@@ -19,6 +19,7 @@ import httpx
 # LlamaFarm API server (proxies to Universal Runtime)
 API_URL = os.environ.get("LLAMAFARM_URL", "http://localhost:14345")
 RUNTIME_URL = API_URL  # backwards compat
+SERVER_URL = API_URL
 
 # Sample images for demo
 SAMPLE_IMAGES = [
@@ -100,32 +101,33 @@ def print_detections(result: dict, name: str):
         print("\n  (No objects detected)")
 
 
-def run_demo(image_path: str | None = None, model: str = "yolov8n"):
+def run_demo(image_path: str | None = None, model: str = "yolov8n", use_server: bool = False):
     """Run the detection demo."""
+    detect_fn = detect_via_server if use_server else detect_via_runtime
     print("🔍 LlamaFarm Vision - Object Detection Demo")
     print("=" * 60)
-    
+
     if image_path:
         # Use provided image
         print(f"\nUsing custom image: {image_path}")
         with open(image_path, "rb") as f:
             image_data = f.read()
         image_b64 = base64.b64encode(image_data).decode()
-        
+
         print(f"\nDetecting with {model}...")
-        result = detect_via_runtime(image_b64, model)
+        result = detect_fn(image_b64, model)
         print_detections(result, Path(image_path).name)
     else:
         # Use sample images
         print(f"\nUsing {len(SAMPLE_IMAGES)} sample images...")
-        
+
         for sample in SAMPLE_IMAGES:
             try:
                 image_data = download_image(sample["url"])
                 image_b64 = base64.b64encode(image_data).decode()
-                
+
                 print(f"\nDetecting with {model}...")
-                result = detect_via_runtime(image_b64, model)
+                result = detect_fn(image_b64, model)
                 print_detections(result, sample["name"])
                 
                 # Verify expected classes
@@ -153,7 +155,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        run_demo(args.image, args.model)
+        run_demo(args.image, args.model, args.server)
     except httpx.ConnectError:
         print("❌ Could not connect to server!")
         print("   Make sure the runtime is running:")

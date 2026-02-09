@@ -412,9 +412,10 @@ async def clear_replay_buffer() -> dict[str, Any]:
     """
     detector = get_streaming_detector()
     
-    if detector._replay_buffer:
-        old_size = len(detector._replay_buffer)
-        detector._replay_buffer.clear()
+    stats = detector.get_replay_buffer_stats()
+    if stats and stats["size"] > 0:
+        old_size = stats["size"]
+        detector.clear_replay_buffer()
         return {"cleared": True, "samples_removed": old_size}
     
     return {"cleared": False, "samples_removed": 0}

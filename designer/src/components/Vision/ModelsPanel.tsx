@@ -90,7 +90,7 @@ export function ModelsPanel() {
     if (!confirm(`Delete model "${model.name}"? This cannot be undone.`)) return
     
     try {
-      const response = await fetch(`${RUNTIME_URL}/v1/vision/models/${model.task}/${model.name}`, {
+      const response = await fetch(`${RUNTIME_URL}/v1/vision/models/${encodeURIComponent(model.task)}/${encodeURIComponent(model.name)}`, {
         method: 'DELETE',
       })
       
