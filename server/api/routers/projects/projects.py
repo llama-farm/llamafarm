@@ -774,7 +774,7 @@ def _process_group_children(
             try:
                 result_data = child.result
                 # Handle tuple/list format: (success, details)
-                if isinstance(result_data, (list, tuple)) and len(result_data) >= 2:
+                if isinstance(result_data, list | tuple) and len(result_data) >= 2:
                     _success, details = result_data[0], result_data[1]
                     if isinstance(details, dict):
                         file_status["filename"] = details.get("filename", filename)
@@ -962,7 +962,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                             result_data = child.result
                             # Inject file_hash into the result for frontend consumption
                             if (
-                                isinstance(result_data, (list, tuple))
+                                isinstance(result_data, list | tuple)
                                 and len(result_data) >= 2
                             ):
                                 # Format: [success, details] - inject hash into details
@@ -1003,7 +1003,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
 
                 for result in results:
                     # Handle multiple result formats
-                    if isinstance(result, (list, tuple)) and len(result) >= 2:
+                    if isinstance(result, list | tuple) and len(result) >= 2:
                         # New format: [success, info]
                         success, info = result[0], result[1]
                     elif isinstance(result, dict):
@@ -1105,7 +1105,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                             result_data = child.result
                             # Inject file_hash into the result for frontend consumption
                             if (
-                                isinstance(result_data, (list, tuple))
+                                isinstance(result_data, list | tuple)
                                 and len(result_data) >= 2
                             ):
                                 # Format: [success, details] - inject hash into details
@@ -1238,7 +1238,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             pass
 
     if res.info:
-        if isinstance(res.info, (dict, list, str, int, float, bool, type(None))):
+        if isinstance(res.info, dict | list | str | int | float | bool | type(None)):
             response.meta = res.info
         else:
             response.meta = {"message": str(res.info)}
