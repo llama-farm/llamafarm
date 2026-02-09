@@ -14,12 +14,13 @@ function getApiHost(): string {
   // 1) Explicit URL from env (for custom deployments)
   const envUrl = (import.meta.env as Record<string, string>).VITE_APP_API_URL
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl
+    return envUrl.trim()
   }
 
-  // 2) Derive from current window location (works for localhost and remote access)
+  // 2) Default to backend port on current hostname for split-origin dev setups
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.host}`
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+    return `${protocol}//${window.location.hostname}:14345`
   }
 
   // 3) Fallback for SSR or edge cases
@@ -289,9 +290,8 @@ export function createVoiceChatConnection(
   callbacks: VoiceChatCallbacks
 ): WebSocket {
   // Build WebSocket URL with query params
-  const wsProtocol = API_HOST.startsWith('https') ? 'wss' : 'ws'
-  const wsHost = API_HOST.replace(/^https?:\/\//, '')
-  const url = new URL(`${wsProtocol}://${wsHost}/v1/${namespace}/${project}/voice/chat`)
+  const url = new URL(`/v1/${namespace}/${project}/voice/chat`, API_HOST)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 
   // Add query parameters
   if (config.sessionId) url.searchParams.set('session_id', config.sessionId)
