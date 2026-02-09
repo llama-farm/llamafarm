@@ -10,14 +10,14 @@ correctly even when audio is sent faster than real-time.
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-class VADState(str, Enum):
+class VADState(StrEnum):
     """Voice activity state."""
 
     IDLE = "idle"  # No speech detected yet
