@@ -83,7 +83,8 @@ class AddonService:
             await self._update_task_status_async(
                 task_id, "in_progress", 50, "Installing addon..."
             )
-            subprocess.run(
+            await asyncio.to_thread(
+                subprocess.run,
                 [cli_path, "addons", "install", addon_name],
                 check=True,
                 capture_output=True,
@@ -104,12 +105,14 @@ class AddonService:
                 if not ADDON_NAME_PATTERN.match(component):
                     raise ValueError(f"Invalid component name: {component}")
 
-                subprocess.run(
+                await asyncio.to_thread(
+                    subprocess.run,
                     [cli_path, "services", "stop", component],
                     check=True,
                     timeout=60,
                 )
-                subprocess.run(
+                await asyncio.to_thread(
+                    subprocess.run,
                     [cli_path, "services", "start", component],
                     check=True,
                     timeout=60,

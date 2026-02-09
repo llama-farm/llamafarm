@@ -1445,53 +1445,58 @@ class VoiceChatService:
                 ]
                 self.session.messages.append(assistant_msg)
 
-                # Execute tool calls (one per iteration, like chat orchestrator)
-                tc = collected_tool_calls[0]
-                logger.info(f"Executing tool call: {tc.name} (id={tc.id})")
-
+                # Execute all tool calls and add results to history.
+                # The OpenAI API requires a tool result for every tool_call
+                # in the assistant message.
                 await self._ensure_mcp_tools()
 
-                if self._can_execute_tool_call(tc.name):
-                    # Server-side MCP execution
-                    await websocket.send_json(
-                        ToolExecutingMessage(
-                            tool_call_id=tc.id,
-                            function_name=tc.name,
-                        ).model_dump()
-                    )
-                    result_text = await self._execute_mcp_tool(tc.name, tc.arguments)
-                    is_error = result_text.startswith("Error")
-                else:
-                    # Client round-trip: send tool call, wait for result
-                    await websocket.send_json(
-                        ToolCallMessage(
-                            tool_call_id=tc.id,
-                            function_name=tc.name,
-                            arguments=tc.arguments,
-                        ).model_dump()
-                    )
-                    tool_result = await self.session.wait_for_tool_result(
-                        tc.id, timeout=TOOL_RESULT_TIMEOUT
-                    )
-                    if tool_result is None:
-                        result_text = (
-                            "Tool execution timed out or was interrupted."
-                        )
-                        is_error = True
-                    else:
-                        result_text = tool_result.get("result", "")
-                        is_error = tool_result.get("is_error", False)
+                for tc in collected_tool_calls:
+                    logger.info(f"Executing tool call: {tc.name} (id={tc.id})")
 
-                # Add tool result to history
-                self.session.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_text,
-                })
-                logger.info(
-                    f"Tool result added to history: {tc.name}, "
-                    f"error={is_error}, len={len(result_text)}"
-                )
+                    if self._can_execute_tool_call(tc.name):
+                        # Server-side MCP execution
+                        await websocket.send_json(
+                            ToolExecutingMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                            ).model_dump()
+                        )
+                        result_text = await self._execute_mcp_tool(tc.name, tc.arguments)
+                        is_error = result_text.startswith("Error")
+                    else:
+                        # Client round-trip: send tool call, wait for result
+                        await websocket.send_json(
+                            ToolCallMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                                arguments=tc.arguments,
+                            ).model_dump()
+                        )
+                        tool_result = await self.session.wait_for_tool_result(
+                            tc.id, timeout=TOOL_RESULT_TIMEOUT
+                        )
+                        if tool_result is None:
+                            result_text = (
+                                "Tool execution timed out or was interrupted."
+                            )
+                            is_error = True
+                        else:
+                            result_text = tool_result.get("result", "")
+                            is_error = tool_result.get("is_error", False)
+
+                    # Add tool result to history
+                    self.session.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_text,
+                    })
+                    logger.info(
+                        f"Tool result added to history: {tc.name}, "
+                        f"error={is_error}, len={len(result_text)}"
+                    )
+
+                    if self.session.is_interrupted():
+                        break
 
                 if self.session.is_interrupted():
                     break

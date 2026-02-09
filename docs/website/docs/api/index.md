@@ -2063,6 +2063,7 @@ curl -X POST "http://localhost:14345/v1/default/my-project/audio/speech" \
 **Python Example:**
 
 ```python
+import asyncio
 import httpx
 
 async def generate_speech(text: str, voice: str = "af_heart") -> bytes:
@@ -2078,10 +2079,12 @@ async def generate_speech(text: str, voice: str = "af_heart") -> bytes:
         response.raise_for_status()
         return response.content
 
-# Save to file
-audio = await generate_speech("Hello, world!")
-with open("speech.mp3", "wb") as f:
-    f.write(audio)
+async def main():
+    audio = await generate_speech("Hello, world!")
+    with open("speech.mp3", "wb") as f:
+        f.write(audio)
+
+asyncio.run(main())
 ```
 
 ### List Voices

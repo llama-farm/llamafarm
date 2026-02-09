@@ -297,8 +297,11 @@ func (d *AddonDownloader) extractWheel(wheelPath, destDir string) error {
 
 			_, err = io.Copy(outFile, rc)
 			rc.Close()
-			outFile.Close()
 			if err != nil {
+				outFile.Close()
+				return err
+			}
+			if err := outFile.Close(); err != nil {
 				return err
 			}
 		}
@@ -484,7 +487,7 @@ func (d *AddonDownloader) extractTarGz(tarGzPath, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
 				return err
 			}
@@ -492,7 +495,9 @@ func (d *AddonDownloader) extractTarGz(tarGzPath, destDir string) error {
 				f.Close()
 				return err
 			}
-			f.Close()
+			if err := f.Close(); err != nil {
+				return err
+			}
 		default:
 			// Ignore symlinks and other special file types for security
 			utils.LogDebug(fmt.Sprintf("Skipping unsupported file type in archive: %s (type: %c)", header.Name, header.Typeflag))

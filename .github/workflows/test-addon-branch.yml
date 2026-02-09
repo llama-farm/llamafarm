@@ -109,7 +109,11 @@ jobs:
     steps:
       - name: Sanitize branch name
         shell: bash
-        run: echo "BRANCH_SAFE=${BRANCH_SAFE//\//-}" >> "$GITHUB_ENV"
+        run: |
+          SANITIZED="${BRANCH_SAFE//\//-}"
+          SANITIZED="${SANITIZED//$'\n'/}"
+          SANITIZED="${SANITIZED//$'\r'/}"
+          echo "BRANCH_SAFE=${SANITIZED}" >> "$GITHUB_ENV"
 
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -177,7 +181,11 @@ jobs:
 
     steps:
       - name: Sanitize branch name
-        run: echo "BRANCH_SAFE=${BRANCH_SAFE//\//-}" >> "$GITHUB_ENV"
+        run: |
+          SANITIZED="${BRANCH_SAFE//\//-}"
+          SANITIZED="${SANITIZED//$'\n'/}"
+          SANITIZED="${SANITIZED//$'\r'/}"
+          echo "BRANCH_SAFE=${SANITIZED}" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v4

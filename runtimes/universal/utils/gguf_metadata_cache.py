@@ -149,8 +149,8 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                     try:
                         val = int(field.parts[field.data[0]])
                         setattr(metadata, attr, val)
-                    except (IndexError, ValueError, TypeError):
-                        pass
+                    except (IndexError, ValueError, TypeError) as e:
+                        logger.debug("Could not parse GGUF field %s: %s", key, e)
 
             # Chat template
             if key == "tokenizer.chat_template":

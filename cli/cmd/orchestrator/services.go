@@ -427,10 +427,12 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 	} else if len(addonPaths) > 0 {
 		// Get existing PYTHONPATH from environment and remove it from env slice
 		var existingPath string
+		foundInEnv := false
 		filteredEnv := make([]string, 0, len(env))
 		for _, envVar := range env {
 			if strings.HasPrefix(envVar, "PYTHONPATH=") {
 				existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+				foundInEnv = true
 				// Skip this entry - we'll add the combined path below
 			} else {
 				filteredEnv = append(filteredEnv, envVar)
@@ -438,8 +440,8 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 		}
 		env = filteredEnv
 
-		// If not in env list, check OS environment
-		if existingPath == "" {
+		// Only fall back to OS environment if PYTHONPATH was not explicitly set
+		if !foundInEnv {
 			existingPath = os.Getenv("PYTHONPATH")
 		}
 
@@ -539,10 +541,12 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 	} else if len(addonPaths) > 0 {
 		// Get existing PYTHONPATH from environment and remove it from env slice
 		var existingPath string
+		foundInEnv := false
 		filteredEnv := make([]string, 0, len(env))
 		for _, envVar := range env {
 			if strings.HasPrefix(envVar, "PYTHONPATH=") {
 				existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+				foundInEnv = true
 				// Skip this entry - we'll add the combined path below
 			} else {
 				filteredEnv = append(filteredEnv, envVar)
@@ -550,8 +554,8 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 		}
 		env = filteredEnv
 
-		// If not in env list, check OS environment
-		if existingPath == "" {
+		// Only fall back to OS environment if PYTHONPATH was not explicitly set
+		if !foundInEnv {
 			existingPath = os.Getenv("PYTHONPATH")
 		}
 

@@ -20,8 +20,8 @@ type AddonDefinition struct {
 	Version       string                                     `yaml:"version"`
 	Dependencies  []string                                   `yaml:"dependencies"`
 	Packages      []string                                   `yaml:"packages"`
-	HardwareNotes map[orchestrator.HardwareCapability]string `yaml:"-"`
-	hardwareNotes map[string]string                          `yaml:"hardware_notes"`
+	HardwareNotes    map[orchestrator.HardwareCapability]string `yaml:"-"`
+	HardwareNotesRaw map[string]string                         `yaml:"hardware_notes"`
 }
 
 // AddonRegistry maps addon names to their definitions
@@ -114,7 +114,7 @@ func LoadAddonRegistry() error {
 
 			// Map string hardware notes to HardwareCapability enum
 			addon.HardwareNotes = make(map[orchestrator.HardwareCapability]string)
-			for key, value := range addon.hardwareNotes {
+			for key, value := range addon.HardwareNotesRaw {
 				switch key {
 				case "cuda":
 					addon.HardwareNotes[orchestrator.HardwareCUDA] = value

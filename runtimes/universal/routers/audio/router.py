@@ -232,9 +232,9 @@ async def create_transcription(
                 # Streaming response - yield segments as they're transcribed
                 async def generate_sse():
                     if audio_array is not None:
-                        # Use numpy array directly
-                        async for segment in speech_model.transcribe_stream(
-                            audio_array=audio_array,
+                        # Use numpy array streaming method
+                        async for segment in speech_model.transcribe_audio_stream(
+                            audio=audio_array,
                             language=language,
                             word_timestamps=word_timestamps,
                             initial_prompt=prompt,

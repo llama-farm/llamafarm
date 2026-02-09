@@ -436,8 +436,9 @@ class VoiceSession:
     # Partial transcription for turn detection (updated during silence window)
     _partial_transcript: str = ""
 
-    # Tool result queue for client round-trip tool execution
+    # Tool result storage for client round-trip tool execution
     _tool_result_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    _tool_result_stash: dict = field(default_factory=dict)
 
     def __post_init__(self):
         """Initialize session with system prompt if provided."""
@@ -527,6 +528,10 @@ class VoiceSession:
         Returns:
             Result dict with tool_call_id/result/is_error, or None on timeout/interrupt.
         """
+        # Check stash first (may have been stored by a previous iteration)
+        if tool_call_id in self._tool_result_stash:
+            return self._tool_result_stash.pop(tool_call_id)
+
         deadline = asyncio.get_event_loop().time() + timeout
         while True:
             remaining = deadline - asyncio.get_event_loop().time()
@@ -540,8 +545,8 @@ class VoiceSession:
                 )
                 if result["tool_call_id"] == tool_call_id:
                     return result
-                # Not ours, put it back
-                self._tool_result_queue.put_nowait(result)
+                # Not ours — stash by ID so other waiters can find it
+                self._tool_result_stash[result["tool_call_id"]] = result
             except TimeoutError:
                 continue
 
