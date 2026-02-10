@@ -75,8 +75,9 @@ generate_changelog_for_version() {
         return 1
     fi
 
-    # Check if version already exists in index (use specific pattern)
-    if grep -qE "<strong>v${version}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
+    # Check if version already exists in index (escape dots for regex)
+    version_regex=$(echo "$version" | sed 's/\./\\./g')
+    if grep -qE "<strong>v${version_regex}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
         log_warn "v${version} already in index.md, skipping"
         return 0
     fi
@@ -97,7 +98,9 @@ ${prose_content}
 EOF
 
     # Close the currently open accordion (remove 'open' attribute)
-    sed -i '' 's/<details open>/<details>/g' "$DOCS_CHANGELOG_DIR/index.md"
+    # Use portable sed syntax (works on both BSD/macOS and GNU/Linux)
+    sed 's/<details open>/<details>/g' "$DOCS_CHANGELOG_DIR/index.md" > "$DOCS_CHANGELOG_DIR/index.md.tmp"
+    mv "$DOCS_CHANGELOG_DIR/index.md.tmp" "$DOCS_CHANGELOG_DIR/index.md"
 
     # Insert new section after "## Latest Release" heading
     awk -v section_file="$tmp_section" '
@@ -144,9 +147,13 @@ main() {
         # Generate for all versions in CHANGELOG.md
         log_info "Generating changelogs for all versions..."
 
-        versions=$(grep '## \[' "$CHANGELOG_FILE" | sed 's/.*\[\([^]]*\)\].*/\1/')
+        # Extract versions and store in array
+        mapfile -t versions < <(grep '## \[' "$CHANGELOG_FILE" | sed 's/.*\[\([^]]*\)\].*/\1/')
 
-        for version in $versions; do
+        # Reverse the array so oldest is processed first
+        # This ensures newest ends up at the top when inserting at "## Latest Release"
+        for ((i=${#versions[@]}-1; i>=0; i--)); do
+            version="${versions[$i]}"
             log_info "Processing version $version..."
             generate_changelog_for_version "$version" || log_warn "Failed for $version, continuing..."
         done

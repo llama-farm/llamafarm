@@ -72,8 +72,9 @@ jobs:
         id: check-exists
         run: |
           VERSION="${{ steps.detect-version.outputs.version }}"
-          # Use word boundary pattern to avoid matching v1.2 when checking for v1.20
-          if grep -qE "<strong>v${VERSION}</strong>" docs/website/docs/changelog/index.md; then
+          # Escape dots in version for regex (. matches any char, \. matches literal dot)
+          VERSION_REGEX=$(echo "$VERSION" | sed 's/\./\\./g')
+          if grep -qE "<strong>v${VERSION_REGEX}</strong>" docs/website/docs/changelog/index.md; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Version v${VERSION} already in changelog docs, will skip"
           else
@@ -111,25 +112,17 @@ jobs:
           INDEX_FILE="docs/website/docs/changelog/index.md"
 
           # Create new accordion section for the release
-          cat > /tmp/new-release.md <<'EOF'
+          # Use unquoted EOF delimiter to allow variable expansion (handles multi-line prose)
+          cat > /tmp/new-release.md <<EOF
           <details open>
-          <summary><strong>vVERSION_PLACEHOLDER</strong> — DATE_PLACEHOLDER</summary>
+          <summary><strong>v${VERSION}</strong> — ${DATE}</summary>
 
-          PROSE_PLACEHOLDER
+          ${PROSE_CHANGELOG}
 
-          **[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#VERSION_ANCHOR)**
+          **[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${VERSION//./})**
 
           </details>
           EOF
-
-          # Replace placeholders
-          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" /tmp/new-release.md
-          sed -i "s/DATE_PLACEHOLDER/${DATE}/g" /tmp/new-release.md
-          sed -i "s/VERSION_ANCHOR/${VERSION//./}/g" /tmp/new-release.md
-
-          # Insert prose content (escape for sed)
-          PROSE_ESCAPED=$(printf '%s\n' "$PROSE_CHANGELOG" | sed 's/[&/\]/\\&/g')
-          sed -i "s/PROSE_PLACEHOLDER/${PROSE_ESCAPED}/" /tmp/new-release.md
 
           # Move current "Latest Release" to "Recent Releases" section
           # 1. Remove 'open' from old latest
