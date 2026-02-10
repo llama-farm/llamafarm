@@ -66,6 +66,109 @@ class AddonService:
         registry = get_addon_registry()
         return name in registry
 
+    async def _install_dependencies(
+        self, task_id: str, addon_name: str, installing_chain: set[str]
+    ) -> None:
+        """
+        Recursively install dependencies for an addon.
+
+        Args:
+            task_id: Task ID for status updates
+            addon_name: Name of the addon whose dependencies to install
+            installing_chain: Set of addon names currently being installed (prevents circular deps)
+        """
+        registry = get_addon_registry()
+        state = self._load_state()
+
+        addon = registry.get(addon_name)
+        if not addon:
+            return
+
+        dependencies = addon.get("dependencies", [])
+        if not dependencies:
+            return
+
+        for dep_name in dependencies:
+            # Skip if already in installation chain (circular dependency)
+            if dep_name in installing_chain:
+                logger.warning(f"Circular dependency detected: {dep_name} already in chain")
+                continue
+
+            # Skip if already installed
+            if dep_name in state.get("installed_addons", {}):
+                logger.info(f"Dependency {dep_name} already installed, skipping")
+                continue
+
+            # Validate dependency exists
+            if dep_name not in registry:
+                raise ValueError(f"Dependency not found: {dep_name}")
+
+            logger.info(f"Installing dependency: {dep_name} for {addon_name}")
+            await self._update_task_status_async(
+                task_id, "in_progress", 10, f"Installing dependency: {dep_name}..."
+            )
+
+            # Add to chain before recursing
+            installing_chain.add(dep_name)
+
+            # Recursively install dependencies of this dependency
+            await self._install_dependencies(task_id, dep_name, installing_chain)
+
+            # Install this dependency
+            await self._install_single_addon(task_id, dep_name, restart=False)
+
+            # Remove from chain after installation
+            installing_chain.discard(dep_name)
+
+    async def _install_single_addon(
+        self, task_id: str, addon_name: str, restart: bool
+    ) -> None:
+        """Install a single addon without dependencies."""
+        registry = get_addon_registry()
+        addon = registry[addon_name]
+        packages = addon.get("packages", [])
+
+        if not packages:
+            # Meta-addon with no packages (only dependencies)
+            logger.info(f"Addon {addon_name} has no packages (meta-addon)")
+            await self._mark_installed(addon_name)
+            return
+
+        # Determine the component directory to install packages into
+        component = addon["component"]
+        if component == "universal-runtime":
+            component_dir = Path(__file__).parent.parent.parent.parent.parent / "runtimes" / "universal"
+        else:
+            raise ValueError(f"Unsupported component: {component}")
+
+        if not component_dir.exists():
+            raise ValueError(f"Component directory not found: {component_dir}")
+
+        # Install packages using uv
+        await self._update_task_status_async(
+            task_id, "in_progress", 20, f"Installing {len(packages)} package(s) for {addon_name}..."
+        )
+
+        for i, package in enumerate(packages):
+            progress = 20 + int((i / len(packages)) * 50)
+            await self._update_task_status_async(
+                task_id, "in_progress", progress, f"Installing {package}..."
+            )
+
+            await asyncio.to_thread(
+                subprocess.run,
+                ["uv", "add", package],
+                cwd=component_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=180,  # 3 minute timeout per package
+            )
+
+        # Mark addon as installed in state
+        await self._mark_installed(addon_name)
+        logger.info(f"Successfully installed {addon_name}")
+
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
         """Background task to install an addon."""
         try:
@@ -81,48 +184,17 @@ class AddonService:
             if addon_name not in registry:
                 raise ValueError(f"Addon not found: {addon_name}")
 
+            # Install dependencies first (recursively)
+            installing_chain: set[str] = {addon_name}
+            await self._install_dependencies(task_id, addon_name, installing_chain)
+
+            # Install the addon itself
+            await self._install_single_addon(task_id, addon_name, restart=False)
+
             addon = registry[addon_name]
-            packages = addon.get("packages", [])
-
-            if not packages:
-                raise ValueError(f"Addon {addon_name} has no packages defined")
-
-            # Determine the component directory to install packages into
-            component = addon["component"]
-            if component == "universal-runtime":
-                component_dir = Path(__file__).parent.parent.parent.parent.parent / "runtimes" / "universal"
-            else:
-                raise ValueError(f"Unsupported component: {component}")
-
-            if not component_dir.exists():
-                raise ValueError(f"Component directory not found: {component_dir}")
-
-            # Install packages using uv
-            await self._update_task_status_async(
-                task_id, "in_progress", 20, f"Installing {len(packages)} package(s)..."
-            )
-
-            for i, package in enumerate(packages):
-                progress = 20 + int((i / len(packages)) * 50)
-                await self._update_task_status_async(
-                    task_id, "in_progress", progress, f"Installing {package}..."
-                )
-
-                await asyncio.to_thread(
-                    subprocess.run,
-                    ["uv", "add", package],
-                    cwd=component_dir,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=180,  # 3 minute timeout per package
-                )
-
-            # Mark addon as installed in state
-            await self._mark_installed(addon_name)
 
             await self._update_task_status_async(
-                task_id, "in_progress", 90, "Packages installed successfully"
+                task_id, "in_progress", 90, "Installation complete"
             )
 
             # Restart the service if requested

@@ -43,17 +43,11 @@ export function useListAddons(options?: {
  * @returns Mutation for installing addons
  */
 export function useInstallAddon() {
-  const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: (request: AddonInstallRequest) =>
       addonsService.installAddon(request),
-    onSuccess: () => {
-      // Invalidate addon list to refetch installation status
-      queryClient.invalidateQueries({
-        queryKey: addonKeys.list(),
-      })
-    },
+    // Note: Query invalidation happens in onComplete callback after installation finishes,
+    // not here (which fires when task starts, not when it completes)
   })
 }
 

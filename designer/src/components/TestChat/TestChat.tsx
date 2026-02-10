@@ -25,7 +25,8 @@ import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifie
 import { Selector } from '../ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
-import { useListAddons, useInstallAddon } from '../../hooks/useAddons'
+import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { useQueryClient } from '@tanstack/react-query'
 import type { AddonInfo } from '../../types/addons'
 import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
 import { AddonInstallProgress } from '../Addons/AddonInstallProgress'
@@ -1841,6 +1842,7 @@ export default function TestChat({
   // ============================================================================
 
   // Fetch addon list only when speech mode is active
+  const queryClient = useQueryClient()
   const { data: addonsData, isLoading: isLoadingAddons } = useListAddons({
     enabled: modelType === 'speech',
     staleTime: 0, // Always refetch to avoid stale cache issues
@@ -1876,35 +1878,48 @@ export default function TestChat({
   const installAddonMutation = useInstallAddon()
 
   // Handle install confirmation from side pane
-  const handleAddonInstallConfirm = useCallback((selectedAddons: string[]) => {
+  const handleAddonInstallConfirm = useCallback(async (selectedAddons: string[]) => {
     setShowAddonSidePane(false)
     if (selectedAddons.length === 0) return
 
-    // Get the first addon to use for display name
-    const firstAddon = uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))
+    // Display name for progress panel
     const displayName = selectedAddons.length === 1
-      ? firstAddon?.display_name || 'Add-on'
+      ? uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))?.display_name || 'Add-on'
       : `${selectedAddons.length} add-ons`
 
-    // Install all selected addons (backend handles dependencies)
-    // We'll just trigger installation for the first one and let the backend handle the rest
-    installAddonMutation.mutate(
-      { name: selectedAddons[0], restart_service: true },
-      {
-        onSuccess: (response) => {
+    // Install all selected addons sequentially
+    // Only restart service after the LAST addon to avoid multiple restarts
+    try {
+      for (let i = 0; i < selectedAddons.length; i++) {
+        const addonName = selectedAddons[i]
+        const isLastAddon = i === selectedAddons.length - 1
+
+        const response = await installAddonMutation.mutateAsync({
+          name: addonName,
+          restart_service: isLastAddon, // Only restart after last addon
+        })
+
+        // Show progress panel for the last addon installation
+        if (isLastAddon) {
           setAddonInstallTaskId(response.task_id)
           setAddonInstallName(displayName)
-        },
+        }
       }
-    )
+    } catch (error) {
+      console.error('Failed to install addons:', error)
+      // TODO: Show error toast to user
+    }
   }, [uninstalledSpeechAddons, installAddonMutation])
 
   // Handle install completion - refresh addon list
   const handleAddonInstallComplete = useCallback(() => {
     setAddonInstallTaskId(null)
     setAddonInstallName('')
-    // The addon list will be invalidated automatically by the hook's onSuccess
-  }, [])
+    // Invalidate addon list to refetch installation status NOW that installation is complete
+    queryClient.invalidateQueries({
+      queryKey: addonKeys.list(),
+    })
+  }, [queryClient])
 
   // Handle install cancel/dismiss
   const handleAddonInstallCancel = useCallback(() => {

@@ -28,10 +28,14 @@ export function AddonInstallProgress({
   const [minimized, setMinimized] = useState(false)
   const { data: status } = useTaskStatus(taskId)
 
-  // Watch for completion
+  // Watch for completion - show success state for 2 seconds before closing
   useEffect(() => {
     if (status?.status === 'completed') {
-      onComplete()
+      // Wait 2 seconds to let user see the success state
+      const timer = setTimeout(() => {
+        onComplete()
+      }, 2000)
+      return () => clearTimeout(timer)
     }
   }, [status?.status, onComplete])
 

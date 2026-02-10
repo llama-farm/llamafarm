@@ -23,12 +23,15 @@ export function AddonInstallSidePane({
   addons,
   onConfirm,
 }: AddonInstallSidePaneProps) {
-  // Track which addons are selected (default: STT and TTS checked, dependencies auto-included)
+  // Track which addons are selected (default: primary addons checked, dependencies auto-included)
   const [selectedAddons, setSelectedAddons] = useState<Set<string>>(() => {
     const selected = new Set<string>()
-    // Auto-select non-dependency addons (stt, tts) by default
+    // Auto-select primary addons (those that aren't dependencies of others)
     addons.forEach(addon => {
-      if (addon.name === 'stt' || addon.name === 'tts') {
+      const isDependency = addons.some(other =>
+        other.name !== addon.name && other.dependencies.includes(addon.name)
+      )
+      if (!isDependency) {
         selected.add(addon.name)
       }
     })
@@ -39,8 +42,12 @@ export function AddonInstallSidePane({
   useEffect(() => {
     if (open) {
       const selected = new Set<string>()
+      // Auto-select primary addons (those that aren't dependencies of others)
       addons.forEach(addon => {
-        if (addon.name === 'stt' || addon.name === 'tts') {
+        const isDependency = addons.some(other =>
+          other.name !== addon.name && other.dependencies.includes(addon.name)
+        )
+        if (!isDependency) {
           selected.add(addon.name)
         }
       })
@@ -48,9 +55,21 @@ export function AddonInstallSidePane({
     }
   }, [open, addons])
 
-  // Separate addons into selectable and dependencies
-  const selectableAddons = addons.filter(a => a.name === 'stt' || a.name === 'tts')
-  const dependencyAddons = addons.filter(a => a.name !== 'stt' && a.name !== 'tts')
+  // Separate addons into selectable (primary) and dependencies
+  // A primary addon is one that isn't a dependency of any other addon in the list
+  const selectableAddons = addons.filter(addon => {
+    const isDependency = addons.some(other =>
+      other.name !== addon.name && other.dependencies.includes(addon.name)
+    )
+    return !isDependency
+  })
+
+  const dependencyAddons = addons.filter(addon => {
+    const isDependency = addons.some(other =>
+      other.name !== addon.name && other.dependencies.includes(addon.name)
+    )
+    return isDependency
+  })
 
   // Calculate size based on selected addons + their dependencies
   const estimatedSize = (() => {
@@ -61,14 +80,14 @@ export function AddonInstallSidePane({
     }
 
     let total = 0
-    // Add selected addons
+    // Add selected primary addons
     selectedAddons.forEach(name => {
       total += sizes[name] || 50
     })
-    // Add dependencies (onnxruntime if STT is selected)
-    if (selectedAddons.has('stt')) {
-      total += sizes['onnxruntime'] || 100
-    }
+    // Add dependencies that will be auto-installed
+    dependencyAddons.forEach(dep => {
+      total += sizes[dep.name] || 50
+    })
     return total
   })()
 
@@ -83,14 +102,13 @@ export function AddonInstallSidePane({
     setSelectedAddons(newSelected)
   }
 
-  // Determine which addons to install (selected + dependencies)
+  // Determine which addons to install (selected + all dependencies)
   const getAddonsToInstall = (): string[] => {
     const toInstall: string[] = []
+    // Add selected primary addons
     selectedAddons.forEach(name => toInstall.push(name))
-    // Auto-add dependencies
-    if (selectedAddons.has('stt')) {
-      toInstall.push('onnxruntime')
-    }
+    // Add all dependencies (they're automatically included)
+    dependencyAddons.forEach(dep => toInstall.push(dep.name))
     return toInstall
   }
 
@@ -203,7 +221,7 @@ export function AddonInstallSidePane({
             )}
 
             {/* Auto-included Dependencies */}
-            {dependencyAddons.length > 0 && selectedAddons.has('stt') && (
+            {dependencyAddons.length > 0 && selectedAddons.size > 0 && (
               <div className="space-y-2.5">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Required Dependencies
