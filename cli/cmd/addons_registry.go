@@ -29,10 +29,10 @@ type AddonDefinition struct {
 var AddonRegistry map[string]*AddonDefinition
 
 var registryOnce sync.Once
+var registryErr error
 
 // LoadAddonRegistry loads the addon registry from individual YAML files in addons/registry/
 func LoadAddonRegistry() error {
-	var err error
 	registryOnce.Do(func() {
 		// Find registry directory - check multiple locations
 		var registryDir string
@@ -76,7 +76,7 @@ func LoadAddonRegistry() error {
 			}
 			searchPaths = append(searchPaths, filepath.Join("..", "addons", "registry"))
 
-			err = fmt.Errorf("addon registry directory not found. Searched:\n  - %s", strings.Join(searchPaths, "\n  - "))
+			registryErr = fmt.Errorf("addon registry directory not found. Searched:\n  - %s", strings.Join(searchPaths, "\n  - "))
 			return
 		}
 
@@ -85,7 +85,7 @@ func LoadAddonRegistry() error {
 
 		entries, e := os.ReadDir(registryDir)
 		if e != nil {
-			err = fmt.Errorf("failed to read addon registry directory at %s: %w", registryDir, e)
+			registryErr = fmt.Errorf("failed to read addon registry directory at %s: %w", registryDir, e)
 			return
 		}
 
@@ -132,9 +132,9 @@ func LoadAddonRegistry() error {
 		}
 
 		if len(AddonRegistry) == 0 {
-			err = fmt.Errorf("no valid addons found in %s", registryDir)
+			registryErr = fmt.Errorf("no valid addons found in %s", registryDir)
 		}
 	})
 
-	return err
+	return registryErr
 }
