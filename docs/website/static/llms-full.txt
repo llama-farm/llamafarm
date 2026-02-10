@@ -28,15 +28,15 @@ Run sophisticated AI workloads on your own hardware:
 
 LlamaFarm isn't just a wrapper—it's a complete AI development platform:
 
-| Capability | What It Does |
-|-----------|--------------|
+| Capability                               | What It Does                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **RAG (Retrieval-Augmented Generation)** | Ingest PDFs, docs, CSVs and query them with AI. Your documents become searchable knowledge. |
-| **Multi-Model Runtime** | Switch between Ollama, OpenAI, vLLM, or local GGUF models in one config file. |
-| **Custom Classifiers** | Train text classifiers with 8-16 examples using SetFit. No ML expertise required. |
-| **Anomaly Detection** | Detect outliers in logs, metrics, or transactions with one API call. |
-| **OCR & Document Extraction** | Extract text and structured data from images and PDFs. |
-| **Named Entity Recognition** | Find people, organizations, and locations in your text. |
-| **Agentic Tools (MCP)** | Give AI models access to filesystems, databases, and APIs. |
+| **Multi-Model Runtime**                  | Switch between Ollama, OpenAI, vLLM, or local GGUF models in one config file.               |
+| **Custom Classifiers**                   | Train text classifiers with 8-16 examples using SetFit. No ML expertise required.           |
+| **Anomaly Detection**                    | Detect outliers in logs, metrics, or transactions with one API call.                        |
+| **OCR & Document Extraction**            | Extract text and structured data from images and PDFs.                                      |
+| **Named Entity Recognition**             | Find people, organizations, and locations in your text.                                     |
+| **Agentic Tools (MCP)**                  | Give AI models access to filesystems, databases, and APIs.                                  |
 
 ### ⚡ Developer Experience
 
@@ -60,19 +60,23 @@ The desktop app bundles everything: server, Universal Runtime, and the Designer 
 Install the `lf` command-line tool:
 
 **macOS / Linux:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
 ```
 
 **Or download directly:**
+
 - [Latest Release](https://github.com/llama-farm/llamafarm/releases/latest) — Download `lf` binary for your platform
 
 Verify installation:
+
 ```bash
 lf --help
 ```
@@ -90,7 +94,9 @@ lf --help
 ## What Can You Build?
 
 ### Document Q&A
+
 Upload your company's documents and ask questions in natural language:
+
 ```bash
 lf datasets upload knowledge-base ./contracts/*.pdf
 lf datasets process knowledge-base
@@ -98,7 +104,9 @@ lf chat "What are our standard payment terms?"
 ```
 
 ### Custom Intent Classification
+
 Train a classifier to route support tickets:
+
 ```python
 # Train with just 8 examples per category
 POST /v1/ml/classifier/fit
@@ -113,7 +121,9 @@ POST /v1/ml/classifier/fit
 ```
 
 ### Real-Time Anomaly Detection
+
 Monitor API logs for suspicious activity:
+
 ```python
 # Train on normal traffic
 POST /v1/ml/anomaly/fit
@@ -125,7 +135,9 @@ POST /v1/ml/anomaly/detect
 ```
 
 ### Document Processing Pipeline
+
 Extract structured data from invoices and forms:
+
 ```bash
 curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@invoice.pdf" \
@@ -136,11 +148,11 @@ curl -X POST http://localhost:14345/v1/vision/ocr \
 
 ## Choose Your Path
 
-| Get Started | Go Deeper | Build Your Own |
-|-------------|-----------|----------------|
-| [Quickstart](./quickstart/index.md) — Install, init, chat, ingest your first dataset | [Core Concepts](./concepts/index.md) — Architecture, sessions, and components | [Extending LlamaFarm](./extending/index.md) — Add runtimes, stores, parsers |
-| [Designer Web UI](./designer/index.md) — Visual interface for project management | [Configuration Guide](./configuration/index.md) — Schema-driven project settings | [RAG Guide](./rag/index.md) — Strategies, processing pipelines |
-| [CLI Reference](./cli/index.md) — Command matrix and examples | [Models & Runtime](./models/index.md) — Configure AI models and providers | [API Reference](./api/index.md) — Full REST API documentation |
+| Get Started                                                                          | Go Deeper                                                                        | Build Your Own                                                              |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Quickstart](./quickstart/index.md) — Install, init, chat, ingest your first dataset | [Core Concepts](./concepts/index.md) — Architecture, sessions, and components    | [Extending LlamaFarm](./extending/index.md) — Add runtimes, stores, parsers |
+| [Designer Web UI](./designer/index.md) — Visual interface for project management     | [Configuration Guide](./configuration/index.md) — Schema-driven project settings | [RAG Guide](./rag/index.md) — Strategies, processing pipelines              |
+| [CLI Reference](./cli/index.md) — Command matrix and examples                        | [Models & Runtime](./models/index.md) — Configure AI models and providers        | [API Reference](./api/index.md) — Full REST API documentation               |
 
 ---
 
@@ -164,7 +176,7 @@ mcp:
     - name: filesystem
       transport: stdio
       command: npx
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir']
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
 
 runtime:
   models:
@@ -196,23 +208,25 @@ Get LlamaFarm installed, ingest a dataset, and run your first RAG-powered chat i
 
 Download the all-in-one desktop application:
 
-| Platform | Download |
-|----------|----------|
-| **Mac (Universal)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg) |
-| **Windows (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe) |
-| **Linux (x86_64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
-| **Linux (arm64)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage) |
+| Platform            | Download                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Mac (Universal)** | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg)     |
+| **Windows**         | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe)           |
+| **Linux (x86_64)**  | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
+| **Linux (arm64)**   | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)  |
 
 The desktop app bundles everything you need—no additional installation required.
 
 ### Option B: CLI Installation
 
 **macOS / Linux:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | iex
 ```
@@ -221,26 +235,28 @@ irm https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.ps1 | ie
 
 Download the `lf` binary directly from the [releases page](https://github.com/llama-farm/llamafarm/releases/latest):
 
-| Platform | Binary |
-|----------|--------|
-| macOS (Apple Silicon) | `lf-darwin-arm64` |
-| macOS (Intel) | `lf-darwin-amd64` |
-| Linux (x86_64) | `lf-linux-amd64` |
-| Linux (arm64) | `lf-linux-arm64` |
-| Windows (x86_64) | `lf-windows-amd64.exe` |
+| Platform              | Binary                 |
+| --------------------- | ---------------------- |
+| macOS (Apple Silicon) | `lf-darwin-arm64`      |
+| macOS (Intel)         | `lf-darwin-amd64`      |
+| Linux (x64)           | `lf-linux-amd64`       |
+| Linux (arm64)         | `lf-linux-arm64`       |
+| Windows (x86_64)      | `lf-windows-amd64.exe` |
 
 After downloading, make it executable and add to your PATH:
+
 ```bash
 chmod +x lf-darwin-arm64
 sudo mv lf-darwin-arm64 /usr/local/bin/lf
 ```
 
 Verify installation:
+
 ```bash
 lf --help
 ```
 
-## 3. Configure Your Runtime (only if you plan to use Ollama)
+## 3. Configure Your Runtime (Ollama)
 
 For best RAG results with longer documents, increase the Ollama context window:
 
@@ -249,6 +265,7 @@ For best RAG results with longer documents, increase the Ollama context window:
 3. Adjust the context window size (recommended: 32K+ for documents)
 
 Pull a model if you haven't already:
+
 ```bash
 ollama pull llama3.2
 ollama pull nomic-embed-text  # For embeddings
@@ -270,6 +287,7 @@ lf start
 ```
 
 This command:
+
 - Starts the API server and Universal Runtime natively
 - Opens the interactive chat TUI
 - Launches the Designer web UI at `http://localhost:14345`
@@ -311,6 +329,7 @@ lf chat "What can you do?"
 ```
 
 Useful options:
+
 - `--no-rag` — Bypass retrieval, hit the model directly
 - `--database`, `--retrieval-strategy` — Override RAG behavior
 - `--curl` — Print the equivalent curl command
@@ -321,14 +340,16 @@ Useful options:
 # Create a dataset
 lf datasets create -s pdf_ingest -b main_db research-notes
 
-# Upload documents (supports globs/directories)
+# Upload documents (supports globs/directories); auto-processes by default
 lf datasets upload research-notes ./examples/fda_rag/files/*.pdf
+# For batching without processing:
+# lf datasets upload research-notes ./examples/fda_rag/files/*.pdf --no-process
 ```
 
 ## 8. Process Documents
 
 ```bash
-lf datasets process research-notes
+lf datasets process research-notes    # Only needed if you skipped auto-processing
 ```
 
 This sends documents through the RAG pipeline—parsing, chunking, embedding, and indexing.
@@ -342,6 +363,7 @@ lf rag query --database main_db "What are the key findings?"
 ```
 
 Useful flags:
+
 - `--top-k 10` — Number of results
 - `--filter "file_type:pdf"` — Metadata filtering
 - `--include-metadata` — Show document sources
@@ -490,6 +512,37 @@ Common symptoms, their causes, and how to resolve them when working with LlamaFa
 | `lf` command not found after installation | Binary not in system PATH | Ensure `/usr/local/bin` (or custom install directory) is in your PATH. Run `echo $PATH` to verify. |
 | Installation script fails | Permissions issue or unsupported platform | Try with `sudo` or check platform compatibility (macOS/Linux supported). Windows users should download `lf.exe` manually. |
 
+## GPU & CUDA Issues
+
+| Issue | Cause | Fix |
+| ----- | ----- | --- |
+| CUDA 11 falls back to CPU | Upstream llama.cpp (b7694+) no longer provides CUDA 11 binaries | Upgrade to CUDA 12+, or build llama.cpp from source with CUDA 11 support (see below). |
+| GPU not detected | CUDA/Vulkan drivers not installed or not in PATH | Install appropriate GPU drivers. For CUDA, ensure `nvidia-smi` works. |
+| Metal not used on macOS | Running on Intel Mac | Metal acceleration is only available on Apple Silicon (M1/M2/M3). Intel Macs use CPU. |
+
+### Building llama.cpp with CUDA 11
+
+If you need CUDA 11 support, you must build llama.cpp from source:
+
+```bash
+# Clone llama.cpp
+git clone https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+git checkout b7694
+
+# Build with CUDA 11
+mkdir build && cd build
+cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="native"
+cmake --build . --config Release
+
+# Copy the library to LlamaFarm cache
+mkdir -p ~/.cache/llamafarm-llama/b7694
+cp bin/libllama.so ~/.cache/llamafarm-llama/b7694/  # Linux
+# or: cp bin/llama.dll ~/.cache/llamafarm-llama/b7694/  # Windows
+```
+
+Set `LLAMAFARM_BACKEND=cpu` to force CPU mode if GPU detection causes issues.
+
 ## Sessions & State
 
 - Delete `.llamafarm/projects/<namespace>/<project>/dev/context` to reset dev chat history.
@@ -501,7 +554,7 @@ Common symptoms, their causes, and how to resolve them when working with LlamaFa
 | Issue | Cause | Fix |
 | ----- | ----- | --- |
 | `nx build docs` sqlite I/O error | Nx cache database lock or permission issue | Remove `.nx/` cache directory or run with `NX_SKIP_NX_CACHE=1`. |
-| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 8000/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
+| Docker containers fail to start | Port conflicts or missing dependencies | Check if ports 14345/6379/5432 are available. Run `lf services stop` first, then `lf services start`. |
 | Python module import errors | Virtual environment not activated or dependencies not installed | Run `cd server && uv sync` or `cd rag && uv sync` to install dependencies. |
 
 ## Extensibility Pitfalls
@@ -531,7 +584,7 @@ The LlamaFarm Desktop App provides a complete local AI environment with visual p
 
 To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
-| Component | Mac | Windows | Linux |
+| Component | Mac (M1+) | Windows | Linux |
 |-----------|-----------|---------|-------|
 | **CPU** | Apple M1 or newer | Intel i5 / AMD Ryzen 5 (8th gen+) | Intel i5 / AMD Ryzen 5 (8th gen+) |
 | **RAM** | 8 GB | 8 GB | 8 GB |
@@ -543,13 +596,13 @@ To run the desktop app with small models (1-3B parameters like Qwen 1.7B):
 
 For larger models (7-8B parameters) and better performance:
 
-| Component | Mac | Windows | Linux |
+| Component | Mac (M1+) | Windows | Linux |
 |-----------|-----------|---------|-------|
-| **CPU** | Apple M2 Pro or better | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
-| **RAM** | 32 GB+ | 32 GB+ | 32 GB+ |
+| **CPU** | Apple M1 Pro/Max or M2+ | Intel i7 / AMD Ryzen 7 | Intel i7 / AMD Ryzen 7 |
+| **RAM** | 16 GB+ | 16 GB+ | 16 GB+ |
 | **Storage** | 50 GB+ SSD | 50 GB+ SSD | 50 GB+ SSD |
 | **OS** | macOS 13+ (Ventura) | Windows 11 | Ubuntu 22.04+ |
-| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3090+ (24GB+ VRAM) | NVIDIA RTX 3090+ (24GB+ VRAM) |
+| **GPU** | Unified Memory (Metal) | NVIDIA RTX 3060+ (8GB+ VRAM) | NVIDIA RTX 3060+ (8GB+ VRAM) |
 
 ---
 
@@ -1159,7 +1212,7 @@ lf start
 # Option 2: Manual server start
 cd ../server
 uv sync
-uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn server.main:app --reload --host 0.0.0.0 --port 14345
 ```
 
 Verify the server is running:
@@ -1597,10 +1650,10 @@ lf rag stats --auto-start=false
 ```yaml
 - name: Start services
   run: lf start &
-
+  
 - name: Wait for health
   run: timeout 60 bash -c 'until curl -f http://localhost:14345/health; do sleep 2; done'
-
+  
 - name: Run tests
   run: |
     lf datasets create --auto-start=false -s pdf_ingest -b main_db test-data
@@ -1672,7 +1725,7 @@ lf services stop server        # Stop specific service
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 8000 |
+| `server` | Main FastAPI server | 14345 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server | 11540 |
 
@@ -2140,7 +2193,7 @@ lf services <subcommand> [service-name] [flags]
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 8000 |
+| `server` | Main FastAPI server | 14345 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server for HuggingFace models | 11540 |
 
@@ -2398,6 +2451,7 @@ runtime: { ... }
 prompts: [...]
 rag: { ... }
 datasets: [...]
+voice: { ... }
 ```
 
 ### Metadata
@@ -2508,7 +2562,7 @@ runtime:
 
 ### Prompts
 
-Prompts are named sets of messages that seed instructions for each session.
+Prompts are named sets of messages that seed instructions for each session. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax.
 
 ```yaml
 prompts:
@@ -2524,25 +2578,110 @@ prompts:
 - Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
 
+#### Dynamic Variable Substitution
+
+Use Jinja2-style `{{variable}}` syntax to inject values at request time:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          The customer's name is {{user_name | Valued Customer}}.
+          Account tier: {{account_tier | standard}}
+```
+
+**Syntax:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `{{variable}}` | Required variable | `Hello {{name}}` → Error if `name` not provided |
+| `{{variable \| default}}` | Variable with default | `Hello {{name \| Guest}}` → `Hello Guest` if missing |
+| `{{ variable }}` | Whitespace allowed | Same as above |
+
+**Passing variables via API:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/ns/project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi"}],
+    "variables": {
+      "company_name": "TechCorp",
+      "user_name": "Alice",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+Variables can be used in:
+- **Prompt message content** - Personalize system instructions
+- **Tool descriptions** - Customize tool behavior per request
+- **Tool parameter descriptions** - Dynamic parameter help text
+
+See the [Prompts Guide](../prompts/index.md) for detailed examples.
+
 ### RAG Configuration
 
 The `rag` section mirrors [`rag/schema.yaml`](/rag/schema.yaml). It defines databases and data-processing strategies.
 
 ```yaml
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  parsers:
+    - name: pdf_parser
+      type: PDFParser_LlamaIndex
+      config:
+        chunk_size: 1500
+        chunk_overlap: 200
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+    parser: pdf_parser
+
 rag:
   databases:
     - name: main_db
       type: ChromaStore
+      # Reuse components by reference (defaults also apply when fields are omitted)
+      embedding_strategy: default_embeddings
+      retrieval_strategy: semantic_search
+  data_processing_strategies:
+    - name: pdf_ingest
+      parsers:
+        - pdf_parser         # reference to components.parsers
+      extractors:
+        - type: HeadingExtractor
+        - type: ContentStatisticsExtractor
+```
+
+Inline (legacy) configs are still supported:
+
+```yaml
+rag:
+  databases:
+    - name: inline_db
+      type: ChromaStore
       default_embedding_strategy: default_embeddings
-      default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
       retrieval_strategies:
         - name: semantic_search
-          type: VectorRetriever
+          type: BasicSimilarityStrategy
           config:
             top_k: 5
   data_processing_strategies:
@@ -2562,7 +2701,12 @@ Key points:
 - `databases` map to vector stores; choose from `ChromaStore` or `QdrantStore` by default.
 - `embedding_strategies` and `retrieval_strategies` let you define hybrid or metadata-aware search.
 - `data_processing_strategies` describe parser/extractor pipelines applied during ingestion.
+- Inline parsers can omit `name` (only `type`/`config` are required); `name` is required only for reusable parsers declared under `components.parsers` so they can be referenced by string or set as defaults. This keeps older inline configs valid while allowing named, reusable components.
 - For a complete field reference, see the [RAG Guide](../rag/index.md).
+
+Defaults and persistence:
+- `components.defaults` are used when a database or processing strategy omits a field.
+- Server resolves references at load time and persists fully inlined configs; GET responses return the expanded strategies (no reference strings).
 
 ### Memory Configuration
 
@@ -2665,6 +2809,119 @@ datasets:
 
 - `files` are SHA256 hashes tracked by the server.
 - Not required, but useful for syncing dataset metadata across environments.
+
+### Voice
+
+The `voice` section configures real-time voice chat via WebSocket. This enables a full-duplex voice assistant pipeline: Speech In → STT → LLM → TTS → Speech Out.
+
+```yaml
+voice:
+  enabled: true
+  llm_model: chat-model      # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro            # TTS model ID
+    voice: af_heart          # Voice ID
+    speed: 1.0               # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base              # Whisper model size
+    language: en             # Language code
+```
+
+#### Voice Fields
+
+| Field       | Type    | Default | Description                                                              |
+| ----------- | ------- | ------- | ------------------------------------------------------------------------ |
+| `enabled`   | boolean | `true`  | Enable or disable the voice chat endpoint                                |
+| `llm_model` | string  | —       | Reference to a model name in `runtime.models[]` for voice conversations  |
+| `tts`       | object  | —       | Text-to-speech configuration                                             |
+| `stt`       | object  | —       | Speech-to-text configuration                                             |
+
+#### TTS (Text-to-Speech)
+
+| Field   | Type   | Default     | Description                                     |
+| ------- | ------ | ----------- | ----------------------------------------------- |
+| `model` | string | `kokoro`    | TTS model ID                                    |
+| `voice` | string | `af_heart`  | Voice ID (see available voices below)           |
+| `speed` | number | `1.0`       | Speech speed multiplier (0.5-2.0)               |
+
+**Available Voices:**
+
+| Voice ID      | Description               |
+| ------------- | ------------------------- |
+| `af_heart`    | Heart (American Female) - default |
+| `af_bella`    | Bella (American Female)   |
+| `af_nicole`   | Nicole (American Female)  |
+| `af_sarah`    | Sarah (American Female)   |
+| `af_sky`      | Sky (American Female)     |
+| `am_adam`     | Adam (American Male)      |
+| `am_michael`  | Michael (American Male)   |
+| `bf_emma`     | Emma (British Female)     |
+| `bf_isabella` | Isabella (British Female) |
+| `bm_george`   | George (British Male)     |
+| `bm_lewis`    | Lewis (British Male)      |
+
+#### STT (Speech-to-Text)
+
+| Field      | Type   | Default | Description                                         |
+| ---------- | ------ | ------- | --------------------------------------------------- |
+| `model`    | string | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
+| `language` | string | `en`    | Language code for transcription                     |
+
+**STT Model Comparison:**
+
+| Model      | Size   | Speed    | Accuracy |
+| ---------- | ------ | -------- | -------- |
+| `tiny`     | 39M    | Fastest  | Lower    |
+| `base`     | 74M    | Fast     | Good     |
+| `small`    | 244M   | Medium   | Better   |
+| `medium`   | 769M   | Slower   | High     |
+| `large-v3` | 1.5B   | Slowest  | Highest  |
+
+#### Example: Complete Voice Configuration
+
+```yaml
+version: v1
+name: voice-assistant
+namespace: default
+
+prompts:
+  - name: voice_system
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational. Avoid long lists or complex formatting
+          since your output will be spoken aloud.
+
+runtime:
+  default_model: voice-model
+  models:
+    - name: voice-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      base_url: http://localhost:11540/v1
+      prompts: [voice_system]
+      model_api_parameters:
+        temperature: 0.7
+        max_tokens: 256
+
+voice:
+  enabled: true
+  llm_model: voice-model
+  tts:
+    model: kokoro
+    voice: am_adam
+    speed: 1.1
+  stt:
+    model: small
+    language: en
+```
+
+The prompts attached to the referenced LLM model are automatically applied to voice conversations.
+
+---
 
 ## Validation & Errors
 
@@ -3275,6 +3532,116 @@ datasets:
     data_processing_strategy: universal_processor
 ```
 
+## Dynamic Variables in Prompts and Tools
+
+Use Jinja2-style `{{variable | default}}` syntax to customize prompts and tools at request time:
+
+```yaml
+version: v1
+name: dynamic-demo
+namespace: default
+
+runtime:
+  default_model: assistant
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      default: true
+      tool_call_strategy: native_api
+      prompts:
+        - system
+        - context
+      tools:
+        - type: function
+          name: search_knowledge_base
+          description: "Search the {{company_name | Company}} knowledge base"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | General}} topics"
+            required:
+              - query
+        - type: function
+          name: create_ticket
+          description: "Create a support ticket for {{user_name | a customer}}"
+          parameters:
+            type: object
+            properties:
+              title:
+                type: string
+              priority:
+                type: string
+                enum: ["low", "medium", "high"]
+            required:
+              - title
+
+prompts:
+  - name: system
+    messages:
+      - role: system
+        content: |
+          You are a helpful assistant for {{company_name | Acme Corp}}.
+          You work in the {{department | General}} department.
+          Current date: {{current_date | today}}
+
+  - name: context
+    messages:
+      - role: system
+        content: |
+          ## Customer Information
+          - Name: {{user_name | Valued Customer}}
+          - Account Tier: {{account_tier | standard}}
+          - Language: {{language | English}}
+
+          Adjust responses based on tier:
+          - basic: Focus on self-service
+          - standard: Provide helpful guidance
+          - premium: Offer personalized assistance
+```
+
+**Usage with full variables:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi, what can you help me with?"}],
+    "variables": {
+      "company_name": "TechCorp Solutions",
+      "department": "Technical Support",
+      "user_name": "Alice Johnson",
+      "account_tier": "premium",
+      "current_date": "2024-01-15"
+    }
+  }'
+```
+
+**Usage with defaults (minimal variables):**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/default/dynamic-demo/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "variables": {
+      "user_name": "Bob"
+    }
+  }'
+```
+
+Unprovided variables use their defaults (e.g., `company_name` becomes "Acme Corp").
+
+**Variable syntax:**
+
+| Pattern | Description |
+|---------|-------------|
+| `{{variable}}` | Required - error if not provided |
+| `{{variable \| default}}` | Uses default if not provided |
+| `{{ variable }}` | Whitespace is allowed |
+
 ## Qdrant Production Setup
 
 Production-ready configuration with Qdrant vector database:
@@ -3537,6 +3904,10 @@ Common HTTP status codes:
 - `GET /v1/ml/anomaly/models` - List saved anomaly models
 - `DELETE /v1/ml/anomaly/models/{filename}` - Delete saved anomaly model
 
+### Voice Chat (Real-time Voice Assistant)
+
+- `WebSocket /v1/{namespace}/{project}/voice/chat` - Full-duplex voice chat (Speech → STT → LLM → TTS → Speech)
+
 ### Health
 
 - `GET /health` - Overall health check
@@ -3602,6 +3973,8 @@ Send a chat message to the LLM. This endpoint is compatible with OpenAI's chat c
 - `rag_queries` (optional): Array of custom queries for RAG retrieval, overriding the user message. Can be a single query `["my query"]` or multiple queries `["query1", "query2"]` - results from multiple queries are executed concurrently, merged, and deduplicated
 - `think` (optional): Enable thinking/reasoning mode for supported models like Qwen3 (default: `false`)
 - `thinking_budget` (optional): Maximum tokens for thinking process when `think: true` (default: `1024`)
+- `variables` (optional): Object of key-value pairs for dynamic template substitution in prompts and tools. See [Dynamic Variables](#dynamic-variables) below
+- `tools` (optional): Array of tool definitions (OpenAI format). Tools can also contain `{{variable}}` placeholders
 
 **Response (Non-Streaming):**
 
@@ -3787,6 +4160,143 @@ curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions 
 ```
 
 Results from multiple queries are automatically executed concurrently, merged, deduplicated by content, sorted by relevance score, and limited to `rag_top_k` total results.
+
+### Dynamic Variables
+
+LlamaFarm supports dynamic variable substitution in prompts and tools using Jinja2-style `{{variable}}` syntax. Pass variable values in the `variables` field of your request, and they are resolved before the request is processed.
+
+**Example (Basic Variables):**
+
+If your `llamafarm.yaml` contains prompts with variables:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          Customer name: {{user_name | Valued Customer}}
+          Account tier: {{account_tier | standard}}
+```
+
+Pass the values at request time:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "What can you help me with?"}
+    ],
+    "variables": {
+      "company_name": "TechCorp Solutions",
+      "user_name": "Alice Johnson",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+The system prompt becomes: "You are a customer service assistant for TechCorp Solutions. Customer name: Alice Johnson. Account tier: premium."
+
+**Example (Variables in Tools):**
+
+Tool definitions in your config can also use variables:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      tools:
+        - type: function
+          name: search_kb
+          description: "Search the {{company_name | Company}} knowledge base"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | General}} topics"
+```
+
+Pass values to customize the tool:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Search for shipping policies"}],
+    "variables": {
+      "company_name": "Acme Corp",
+      "department": "Customer Support"
+    }
+  }'
+```
+
+**Example (Request-Level Tools with Variables):**
+
+You can also pass tools directly in the request with variables:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "What tools do you have?"}],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup",
+          "description": "Look up data in {{data_source | the database}}",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "description": "ID to look up"}
+            },
+            "required": ["id"]
+          }
+        }
+      }
+    ],
+    "variables": {
+      "data_source": "the CRM system"
+    }
+  }'
+```
+
+**Variable Syntax:**
+
+| Pattern | Behavior |
+|---------|----------|
+| `{{variable}}` | Required - returns error 400 if not provided |
+| `{{variable \| default}}` | Optional - uses default if not provided |
+| `{{ variable }}` | Whitespace is allowed |
+
+**Supported Value Types:**
+
+- `string` - Inserted as-is
+- `int`, `float` - Converted to string
+- `boolean` - Converted to `True` or `False` (Python-style)
+- `null` - Converted to empty string
+
+Complex types (arrays, objects) are not supported and will return an error.
+
+**Error Handling:**
+
+If a required variable (no default) is missing, the API returns:
+
+```json
+{
+  "detail": "Template resolution failed: Template variable '{{ user_id }}' not found in provided variables. Available variables: ['company_name']. Add a default with '{{ user_id | default_value }}'."
+}
+```
+
+**Use Cases:**
+
+- **Multi-tenant apps** - Customize branding per customer
+- **Personalization** - Inject user names, roles, preferences
+- **A/B testing** - Swap prompt variants without config changes
+- **Dynamic context** - Pass dates, session IDs, account info
 
 ### Get Chat History
 
@@ -4976,6 +5486,199 @@ curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
 
 ---
 
+## Voice Chat API
+
+The Voice Chat API provides a full-duplex WebSocket endpoint for real-time voice assistant functionality. It orchestrates Speech-to-Text (STT), LLM inference, and Text-to-Speech (TTS) into a seamless voice conversation pipeline.
+
+### Configuration (llamafarm.yaml)
+
+Voice settings can be configured in your project's `llamafarm.yaml` file. Query parameters override config defaults.
+
+```yaml
+# Voice chat configuration
+voice:
+  enabled: true                    # Enable/disable voice chat (default: true)
+  llm_model: chat-model            # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro                  # TTS model ID
+    voice: af_heart                # Voice ID (see available voices below)
+    speed: 1.0                     # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base                    # Whisper model (tiny/base/small/medium/large-v3)
+    language: en                   # Language code
+
+# The llm_model references a model in runtime.models[]
+# Prompts attached to that model apply to voice conversations
+runtime:
+  models:
+    - name: chat-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      prompts: [voice_assistant]   # System prompts apply to voice chat
+
+prompts:
+  - name: voice_assistant
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational for spoken output.
+```
+
+**Available TTS Voices:**
+
+| Voice ID | Description |
+|----------|-------------|
+| `af_heart` | Heart (American Female) - default |
+| `af_bella`, `af_nicole`, `af_sarah`, `af_sky` | American Female voices |
+| `am_adam`, `am_michael` | American Male voices |
+| `bf_emma`, `bf_isabella` | British Female voices |
+| `bm_george`, `bm_lewis` | British Male voices |
+
+**STT Model Sizes:**
+
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| `tiny` | 39M | Fastest | Lower |
+| `base` | 74M | Fast | Good (default) |
+| `small` | 244M | Medium | Better |
+| `medium` | 769M | Slower | High |
+| `large-v3` | 1.5B | Slowest | Highest |
+
+### Voice Chat WebSocket
+
+Real-time voice chat with stateful conversation sessions.
+
+**Endpoint:** `WebSocket /v1/{namespace}/{project}/voice/chat`
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace |
+| `project` | string | Project name |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `session_id` | string | auto | Resume existing session (optional) |
+| `stt_model` | string | `"base"` | Whisper model size (overrides config) |
+| `tts_model` | string | `"kokoro"` | TTS model ID (overrides config) |
+| `tts_voice` | string | `"af_heart"` | TTS voice ID (overrides config) |
+| `llm_model` | string | from config | LLM model ID (required if not in config) |
+| `language` | string | `"en"` | STT language code (overrides config) |
+| `speed` | float | `1.0` | TTS speed multiplier (overrides config) |
+| `system_prompt` | string | none | System prompt for LLM (optional) |
+
+**Client → Server Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Audio | Binary | PCM 16kHz 16-bit mono, or WebM/Opus |
+| Interrupt | `{"type": "interrupt"}` | Stop current TTS playback (barge-in) |
+| End | `{"type": "end"}` | Process accumulated audio |
+| Config | `{"type": "config", ...}` | Update session settings |
+
+**Server → Client Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Session Info | `{"type": "session_info", "session_id": "..."}` | Session created/resumed |
+| Transcription | `{"type": "transcription", "text": "...", "is_final": bool}` | STT result |
+| LLM Text | `{"type": "llm_text", "text": "...", "is_final": bool}` | LLM response phrase (for display) |
+| TTS Audio | Binary | PCM 24kHz 16-bit mono audio chunks |
+| TTS Start | `{"type": "tts_start", "phrase_index": N}` | Phrase synthesis starting |
+| TTS Done | `{"type": "tts_done", "phrase_index": N, "duration": N}` | Phrase synthesis complete |
+| Status | `{"type": "status", "state": "..."}` | Pipeline state change |
+| Error | `{"type": "error", "message": "..."}` | Error occurred |
+| Closed | `{"type": "closed"}` | Session ended |
+
+**Pipeline States:**
+
+- `idle` - Waiting for input
+- `listening` - Receiving audio input
+- `processing` - STT + LLM in progress
+- `speaking` - TTS output playing
+- `interrupted` - Barge-in occurred
+
+**Example (JavaScript):**
+
+```javascript
+// Connect using project config (voice settings from llamafarm.yaml)
+const ws = new WebSocket(
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat'
+);
+
+// Override specific settings via query params
+const ws2 = new WebSocket(
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat?' +
+  'tts_voice=am_adam&' +  // Override voice from config
+  'speed=1.2'             // Override speed from config
+);
+
+// Handle session info
+ws.onopen = () => console.log('Connected');
+
+// Handle messages
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary TTS audio chunk - play it
+    playAudioChunk(event.data);
+  } else {
+    const msg = JSON.parse(event.data);
+    switch (msg.type) {
+      case 'session_info':
+        console.log('Session:', msg.session_id);
+        break;
+      case 'transcription':
+        console.log('You said:', msg.text);
+        break;
+      case 'llm_text':
+        console.log('Assistant:', msg.text);
+        break;
+      case 'status':
+        console.log('State:', msg.state);
+        break;
+      case 'error':
+        console.error('Error:', msg.message);
+        break;
+    }
+  }
+};
+
+// Send audio from microphone
+navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+  const mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
+  mediaRecorder.ondataavailable = (e) => ws.send(e.data);
+  mediaRecorder.start(100); // Send chunks every 100ms
+});
+
+// Signal end of speech (triggers processing)
+function endSpeech() {
+  ws.send(JSON.stringify({type: 'end'}));
+}
+
+// Barge-in: interrupt current TTS
+function interrupt() {
+  ws.send(JSON.stringify({type: 'interrupt'}));
+}
+```
+
+**Features:**
+
+- **Config-Driven**: Define voice settings in `llamafarm.yaml` for reproducible deployments
+- **Stateful Sessions**: Conversation history is maintained across turns
+- **Barge-in Support**: User can interrupt TTS playback to speak
+- **Low-Latency Streaming**: TTS starts as soon as LLM generates complete phrases
+- **Phrase Boundary Detection**: Natural speech pacing with intelligent text segmentation
+- **Session Resume**: Reconnect with `session_id` to continue conversations
+- **Prompt Inheritance**: System prompts from the LLM model config apply to voice chat
+
+---
+
 ## Health API
 
 ### Overall Health Check
@@ -5909,6 +6612,12 @@ The ML API provides custom text classification and anomaly detection capabilitie
 **TIP: Model Versioning**
 When `overwrite: false` (default), models are saved with timestamps like `my-model_20251215_155054`. Use the `-latest` suffix (e.g., `my-model-latest`) to automatically resolve to the newest version.
 
+**Endpoints supporting `-latest` resolution:**
+- `/v1/ml/classifier/predict`, `/v1/ml/classifier/load`
+- `/v1/ml/anomaly/score`, `/v1/ml/anomaly/detect`, `/v1/ml/anomaly/load`
+
+Note: The `fit` endpoints do NOT support `-latest` since they create new models.
+
 ### Custom Text Classification (SetFit)
 
 Train custom classifiers with as few as 8-16 examples per class using SetFit (Sentence Transformer Fine-tuning).
@@ -5949,6 +6658,9 @@ Train a new text classifier.
 | `num_iterations` | int | No | 20 | Contrastive learning iterations |
 | `batch_size` | int | No | 16 | Training batch size |
 | `overwrite` | bool | No | false | If false, version with timestamp |
+
+**NOTE: Description Field**
+To add a description to a model, use the `/v1/ml/classifier/save` endpoint after fitting. The `description` parameter in fit requests is not persisted.
 
 **Response:**
 
@@ -6131,6 +6843,8 @@ Load a previously saved classifier.
 
 **Endpoint:** `DELETE /v1/ml/classifier/models/{model_name}`
 
+The `model_name` is the directory name (e.g., `intent-classifier_20251215_155054`). SetFit classifiers are stored as directories under `~/.llamafarm/models/classifier/`.
+
 ---
 
 ### Anomaly Detection
@@ -6186,7 +6900,7 @@ Train an anomaly detection model.
 | `backend` | string | No | "isolation_forest" | Algorithm: `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder` |
 | `data` | array | Yes | - | Training data (numeric arrays or dicts) |
 | `schema` | object | No | - | Feature encoding schema (required for dict data) |
-| `contamination` | float | No | 0.1 | Expected proportion of anomalies (0-0.5) |
+| `contamination` | float | No | 0.1 | Expected proportion of anomalies (must be >0 and ≤0.5) |
 | `overwrite` | bool | No | false | If false, version with timestamp |
 
 **Response:**
@@ -6351,6 +7065,8 @@ The anomalies detected are:
 
 **Endpoint:** `DELETE /v1/ml/anomaly/models/{filename}`
 
+The `filename` includes the file extension (e.g., `sensor-detector_isolation_forest.pkl`). Anomaly models are stored as `.pkl` files under `~/.llamafarm/models/anomaly/`.
+
 ---
 
 ## Universal Runtime API
@@ -6401,6 +7117,10 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+
+**INFO: Classification Endpoints**
+- **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
+- **`/v1/ml/classifier/*`** (LlamaFarm Server) - Train and use custom classifiers with your own categories via SetFit. Available at `http://localhost:14345`.
 
 ### Quick Examples
 
@@ -6498,17 +7218,36 @@ For detailed configuration options, see these reference guides:
 Each database entry declares a store type (default `ChromaStore` or `QdrantStore`) and the embedding/retrieval strategies available.
 
 ```yaml
+components:
+  embedding_strategies:
+    - name: default_embeddings
+      type: UniversalEmbedder
+      config:
+        model: sentence-transformers/all-MiniLM-L6-v2
+  retrieval_strategies:
+    - name: semantic_search
+      type: BasicSimilarityStrategy
+      config:
+        top_k: 5
+  defaults:
+    embedding_strategy: default_embeddings
+    retrieval_strategy: semantic_search
+
 rag:
   databases:
     - name: main_db
+      type: ChromaStore
+      embedding_strategy: default_embeddings   # reference to components
+      retrieval_strategy: semantic_search      # reference to components
+    - name: hybrid_db
       type: ChromaStore
       default_embedding_strategy: default_embeddings
       default_retrieval_strategy: semantic_search
       embedding_strategies:
         - name: default_embeddings
-          type: OllamaEmbedder
+          type: UniversalEmbedder
           config:
-            model: nomic-embed-text:latest
+            model: sentence-transformers/all-MiniLM-L6-v2
       retrieval_strategies:
         - name: semantic_search
           type: VectorRetriever
@@ -6524,6 +7263,10 @@ rag:
 - Add multiple strategies for different workloads (semantic, keyword, reranked).
 - Set `default_*` fields to control CLI defaults.
 - Extend store/types by editing `rag/schema.yaml` and following the [Extending guide](../extending/index.md#extend-rag-components).
+- References vs inline:
+  - Use references (`embedding_strategy`, `retrieval_strategy`) to DRY configs; defaults apply when fields are omitted.
+  - Inline arrays (`embedding_strategies`, `retrieval_strategies`) still work for one-off configs.
+  - The server resolves references at load time and returns fully inlined configs on GET.
 
 ## Define Processing Strategies
 
@@ -6557,8 +7300,8 @@ rag:
    ```bash
    lf datasets create -s pdf_ingest -b main_db research-notes
    ```
-2. **Upload** files via `lf datasets upload` (supports globs and directories). The CLI stores file hashes for dedupe.
-3. **Process** documents with `lf datasets process research-notes`. The server schedules a Celery job; monitor progress in the CLI output and server logs.
+2. **Upload** files via `lf datasets upload` (supports globs and directories). Auto-processing runs by default; use `--no-process` or `--bulk` for batch uploads.
+3. **Process** documents with `lf datasets process research-notes` only when you skipped auto-processing. The server schedules a Celery job; monitor progress in the CLI output and server logs.
 4. **Query** with `lf rag query` to validate retrieval quality.
 
 ## Querying & Retrieval Strategies
@@ -9462,7 +10205,7 @@ runtime:
     - name: vllm-model
       provider: openai
       model: mistral-small
-      base_url: http://localhost:14345/v1
+      base_url: http://localhost:8000/v1
       api_key: sk-local-placeholder
       instructor_mode: json
       default: true
@@ -9477,7 +10220,43 @@ LlamaFarm selects an agent handler based on configuration:
 - **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
 - **Classifier / Custom** – future handlers for specialized workflows.
 
-Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don’t handle tools, so stick with simple chat.
+Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
+
+## Inline Tools with Dynamic Variables
+
+Models can define tools inline in the config, and these tools support dynamic variable substitution:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: search_docs
+          description: "Search {{company_name | the company}} documentation"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | general}} topics"
+            required:
+              - query
+```
+
+Pass values at request time via the `variables` field:
+
+```bash
+curl -X POST .../chat/completions -d '{
+  "messages": [{"role": "user", "content": "Find shipping info"}],
+  "variables": {"company_name": "Acme Corp", "department": "logistics"}
+}'
+```
+
+See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
 
 ## Lemonade Runtime
 
@@ -9527,7 +10306,7 @@ runtime:
 - **Hardware acceleration**: Automatically detects and uses Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
 - **Multiple backends**: llamacpp (GGUF models), ONNX, or Transformers (PyTorch)
 - **OpenAI-compatible API**: Drop-in replacement for OpenAI-compatible endpoints
-- **Port 11534**: Default port (different from LlamaFarm's 8000 and Ollama's 11434)
+- **Port 11534**: Default port (different from LlamaFarm's 14345 and Ollama's 11434)
 
 ### Multi-Model with Lemonade
 
@@ -9577,11 +10356,90 @@ The Universal Runtime is LlamaFarm's most versatile runtime provider, supporting
 **Current Support (Production):**
 - **HuggingFace Transformers** – All PyTorch text models (GPT-2, Llama, Mistral, Qwen, Phi, BERT, etc.)
 - **HuggingFace Diffusers** – All PyTorch diffusion models (Stable Diffusion, SDXL, FLUX)
+- **GGUF Models** – Quantized models via llama.cpp (supports offline loading from HuggingFace cache)
 - **Model Types**: Text Generation, Embeddings, Image Generation, Vision Classification, Audio Processing, Multimodal
 
 **Coming Soon:**
 - **ONNX Runtime** – 2-5x faster inference with automatic model conversion
 - **TensorRT** – GPU-optimized inference for NVIDIA hardware
+
+### GGUF Model Configuration
+
+Universal Runtime supports GGUF models via llama.cpp with full parameter control. This is especially useful for **memory-constrained devices** like Jetson Orin Nano (8GB shared memory).
+
+**Key Features:**
+- **Offline Loading**: Models cached locally are used without network calls
+- **Memory Guard**: Automatic batch size reduction when available memory is low
+- **Full Parameter Passthrough**: Configure all llama.cpp parameters via `extra_body`
+
+#### GGUF Parameters Reference
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `n_ctx` | int | Context window size. Lower = less memory. Auto-detected if not set. |
+| `n_batch` | int | Batch size for prompt processing. Lower values (512) reduce memory. |
+| `n_gpu_layers` | int | GPU layer count. `-1` = all layers on GPU. |
+| `n_threads` | int | CPU thread count. Auto-detected if not set. |
+| `flash_attn` | bool | Enable flash attention for faster inference. |
+| `use_mmap` | bool | Memory-map model file. Recommended for large models. |
+| `use_mlock` | bool | Lock model in RAM. Set `false` on constrained devices. |
+| `cache_type_k` | string | KV cache key quantization: `f32`, `f16`, `q8_0`, `q4_0`, etc. |
+| `cache_type_v` | string | KV cache value quantization. `q4_0` reduces cache by ~4x. |
+
+#### Example: Jetson Orin Nano Configuration
+
+```yaml
+runtime:
+  models:
+    - name: qwen3-8b
+      provider: universal
+      model: unsloth/Qwen3-8B-GGUF:Q4_K_M
+      base_url: http://127.0.0.1:11540
+      extra_body:
+        n_ctx: 2048          # Small context to save KV cache memory
+        n_batch: 512         # Reduced batch for smaller compute buffer
+        n_gpu_layers: -1     # Full GPU offload
+        flash_attn: true     # Enable flash attention
+        use_mmap: true       # Memory-map for efficient swapping
+        use_mlock: false     # Allow OS memory management
+        cache_type_k: q4_0   # Quantize KV cache keys
+        cache_type_v: q4_0   # Quantize KV cache values
+```
+
+#### Memory Estimation
+
+| Parameter | Memory Impact |
+|-----------|--------------|
+| `n_ctx: 2048` | ~256MB KV cache |
+| `n_ctx: 8192` | ~1GB KV cache |
+| `n_batch: 2048` | ~1.2GB compute buffer |
+| `n_batch: 512` | ~300MB compute buffer |
+| `cache_type: q4_0` | ~4x reduction vs f16 |
+
+#### Memory Guard (Automatic)
+
+When available memory drops below 3GB, Universal Runtime automatically:
+1. Reduces `n_batch` from 2048 to 512
+2. Logs a warning with the adjustment
+
+This prevents out-of-memory crashes on constrained devices.
+
+#### Offline Operation
+
+GGUF models support fully offline operation:
+1. Download model once (requires network)
+2. Model is cached in `~/.cache/huggingface/hub/`
+3. Subsequent loads use cache without network
+4. Works on air-gapped systems
+
+```bash
+# First run downloads the model
+curl -X POST http://localhost:11540/v1/chat/completions \
+  -d '{"model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M", "messages": [...]}'
+
+# Subsequent runs work offline
+# (disconnect network and it still works)
+```
 
 ### Quick Setup
 
@@ -9914,6 +10772,19 @@ LF_RUNTIME_PORT=8080 nx start universal-runtime
 
 The server runs on `http://localhost:11540` by default.
 
+### Model Caching
+
+The Universal Runtime caches loaded models in memory for faster inference on repeated requests:
+
+- **Default TTL:** 5 minutes (300 seconds) of inactivity before unloading
+- **Environment variable:** Set `MODEL_UNLOAD_TIMEOUT` to customize (in seconds)
+- **Flash Attention 2:** Automatically enabled on CUDA devices for compatible models
+
+```bash
+# Keep models loaded for 30 minutes
+MODEL_UNLOAD_TIMEOUT=1800 nx start universal-runtime
+```
+
 ---
 
 ## OCR (Text Extraction)
@@ -10116,6 +10987,9 @@ Use **pre-trained HuggingFace models** for common classification tasks like sent
 | `facebook/bart-large-mnli` | Zero-shot classification |
 | `cardiffnlp/twitter-roberta-base-sentiment-latest` | Social media sentiment |
 
+**TIP: Model Quantization**
+You can use quantized models for faster inference by appending a quantization suffix: `model:Q4_K_M`. For example: `distilbert-base-uncased-finetuned-sst-2-english:Q4_K_M`
+
 ### Basic Classification
 
 ```bash
@@ -10127,9 +11001,18 @@ curl -X POST http://localhost:11540/v1/classify \
       "I love this product!",
       "This is terrible and broken.",
       "It works okay I guess."
-    ]
+    ],
+    "max_length": 512
   }'
 ```
+
+**Request Fields:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model` | string | Yes | - | HuggingFace model ID |
+| `texts` | array | Yes | - | Texts to classify |
+| `max_length` | int | No | auto | Max sequence length (auto-detects: 8192 for ModernBERT, 512 for classic BERT) |
 
 ### Response Format
 
@@ -10175,15 +11058,18 @@ SetFit uses contrastive learning to fine-tune a sentence-transformer model on yo
 The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the Universal Runtime with added features:
 - **Model Versioning**: Automatic timestamped versions when `overwrite: false`
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
-- **File Upload Support**: Direct file handling without base64 encoding
 
 ```bash
-# Via LlamaFarm API (port 8000)
+# Via LlamaFarm API (port 14345)
 curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
 ```
+
+**WARNING: Server vs Universal Runtime**
+- **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
+- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 14345) and proxies to Universal Runtime.
 
 ### Step 1: Train Your Classifier
 
@@ -10270,6 +11156,13 @@ curl -X POST http://localhost:11540/v1/classifier/save \
   "status": "saved"
 }
 ```
+
+**NOTE: Storage Structure**
+SetFit classifiers are stored as **directories** (not files) under `~/.llamafarm/models/classifier/`. Each directory contains:
+- Model weights and config
+- `labels.txt` - Class labels for the classifier
+
+**Note:** Models are auto-saved immediately after fitting, so explicit save is optional but recommended for adding descriptions.
 
 ### Loading Saved Models
 
@@ -10549,7 +11442,7 @@ The LlamaFarm API (`/v1/ml/anomaly/*`) provides the same functionality as the Un
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000) - with versioning
+# Via LlamaFarm API (port 14345) - with versioning
 curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-monitor", "backend": "isolation_forest", "data": [...], "overwrite": false}'
@@ -11465,7 +12358,7 @@ LF_DATA_DIR=/path/to/llamafarm/data
 
 # Prompts
 
-Prompts in LlamaFarm are simple but powerful: you define static instructions in `llamafarm.yaml`, and the runtime merges them with chat history and (optionally) RAG context. This section outlines current capabilities and roadmap plans.
+Prompts in LlamaFarm are simple but powerful: you define instructions in `llamafarm.yaml`, and the runtime merges them with chat history and (optionally) RAG context. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax, allowing you to customize behavior per-request.
 
 ## Prompt Configuration
 
@@ -11486,22 +12379,114 @@ prompts:
 - Models can specify which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Combine with RAG by including instructions explaining how to use context snippets (the server injects them automatically).
 
+## Dynamic Variables
+
+Use Jinja2-style template syntax to inject values at request time. This is ideal for personalizing prompts per user, session, or context.
+
+### Syntax
+
+```yaml
+# Required variable (error if not provided)
+content: "Hello {{user_name}}"
+
+# Variable with default (uses default if not provided)
+content: "Welcome to {{company | Our Service}}"
+
+# Whitespace is allowed
+content: "Hello {{ user_name }}"
+```
+
+### Example: Personalized Customer Service
+
+```yaml
+prompts:
+  - name: system
+    messages:
+      - role: system
+        content: |
+          You are a helpful customer service assistant for {{company_name | Acme Corp}}.
+          You work in the {{department | General}} department.
+          Current date: {{current_date | today}}
+          Be professional, helpful, and concise in your responses.
+
+  - name: context
+    messages:
+      - role: system
+        content: |
+          ## Customer Information
+          - Name: {{user_name | Valued Customer}}
+          - Account Tier: {{account_tier | standard}}
+          - Preferred Language: {{language | English}}
+
+          Adjust your responses based on the customer's tier:
+          - basic: Focus on self-service options
+          - standard: Provide helpful guidance
+          - premium: Offer personalized, detailed assistance
+```
+
+### Passing Variables via API
+
+Variables are passed in the `variables` field of the chat request:
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/my-org/chatbot/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "variables": {
+      "company_name": "TechCorp Solutions",
+      "user_name": "Alice Johnson",
+      "account_tier": "premium",
+      "current_date": "2024-01-15"
+    }
+  }'
+```
+
+### Variable Behavior
+
+| Scenario | Syntax | Result |
+|----------|--------|--------|
+| Variable provided | `{{name}}` with `{"name": "Alice"}` | `Alice` |
+| Variable with default, not provided | `{{name \| Guest}}` with `{}` | `Guest` |
+| Required variable missing | `{{name}}` with `{}` | **Error 400** |
+| Null value | `{{name}}` with `{"name": null}` | Empty string |
+| Non-string types | `{{count}}` with `{"count": 42}` | `42` (converted) |
+
+### Supported Types
+
+Variable values can be:
+- **String** - Inserted as-is
+- **Integer** - Converted to string (e.g., `42` → `"42"`)
+- **Float** - Converted to string (e.g., `3.14` → `"3.14"`)
+- **Boolean** - Converted to `True` or `False` (Python-style)
+- **None/null** - Converted to empty string
+
+Complex types (lists, dicts) are **not supported** and will raise an error.
+
 ## Best Practices
 
-- **Explain context usage**: remind the model that context chunks contain citations or metadata.
-- **Handle non-RAG scenarios**: mention what to do when no documents are retrieved (“answer from general knowledge” or “state that no information was found”).
-- **Keep prompts concise**: long system instructions can reduce available tokens on smaller models.
-- **Avoid conflicting instructions**: align prompts with agent handler expectations (structured vs. simple chat).
+- **Use defaults for optional context**: Always provide defaults for variables that might not be passed in every request.
+- **Keep required variables minimal**: Only mark variables as required (no default) when they're truly essential.
+- **Explain context usage**: Remind the model that context chunks contain citations or metadata.
+- **Handle non-RAG scenarios**: Mention what to do when no documents are retrieved.
+- **Keep prompts concise**: Long system instructions can reduce available tokens on smaller models.
+- **Avoid conflicting instructions**: Align prompts with agent handler expectations (structured vs. simple chat).
 
-## Roadmap & Limitations
+## Use Cases
 
-- Prompt templates, versioning, and evaluation tooling are in development. Track progress in the roadmap.
-- For now, dynamic templating (Jinja, variables) is not built-in—generate prompts upstream if needed.
+Dynamic variables are ideal for:
+
+- **Multi-tenant applications** - Customize branding per customer (`{{company_name}}`)
+- **Personalization** - Inject user names, preferences, or roles
+- **A/B testing** - Swap prompt variants without config changes
+- **Context injection** - Pass session-specific data (dates, account tiers)
+- **Internationalization** - Set language preferences per request
 
 ## Related Guides
 
-- [Configuration Guide](../configuration/index.md)
-- [RAG Guide](../rag/index.md) (for context injection tips)
+- [Configuration Guide](../configuration/index.md) - Full variable syntax reference
+- [API Reference](../api/index.md#send-chat-message-openai-compatible) - Using `variables` in requests
+- [RAG Guide](../rag/index.md) - Context injection tips
 - [Extending agent handlers](../extending/index.md#extend-runtimes)
 
 ---
@@ -12274,53 +13259,14 @@ mcp:
 
 LlamaFarm is designed for native deployment without containers. The application runs directly on your system using native binaries and the UV package manager for Python dependencies.
 
-## Local Development
-
-### Option A: `lf start` (Recommended)
-
-The easiest path is the integrated dev stack:
-
-```bash
-lf start
-```
-
-This command:
-- Starts the server and Universal Runtime natively
-- Watches `llamafarm.yaml` for changes
-- Opens the Designer web UI at `http://localhost:14345`
-
-### Option B: Manual control
-
-Open separate terminals for each service:
-
-```bash
-# Terminal 1 – API Server
-nx start server
-
-# Terminal 2 – Universal Runtime (for ML, OCR, embeddings)
-nx start universal-runtime
-```
-
-Then run CLI commands against the default server at `http://localhost:14345`.
-
-## Desktop Application
-
-The easiest way to run LlamaFarm is with the **Desktop App**, which bundles everything you need:
-
-- **Mac (Universal)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-mac-universal.dmg)
-- **Windows**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-windows.exe)
-- **Linux (x86_64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage)
-- **Linux (arm64)**: [Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)
-
-The desktop app includes the server, Universal Runtime, and Designer UI in a single package.
-
 ## Production Deployment
 
 ### Native Process Management
 
-For production, use process supervisors to keep services running:
+For production, use process supervisors to start services
 
 **systemd (Linux)**:
+
 ```ini
 [Unit]
 Description=LlamaFarm Server
@@ -12330,7 +13276,7 @@ After=network.target
 Type=simple
 User=llamafarm
 WorkingDirectory=/opt/llamafarm
-ExecStart=/opt/llamafarm/lf start
+ExecStart=/opt/llamafarm/lf services start
 Restart=always
 Environment=LF_DATA_DIR=/var/lib/llamafarm
 
@@ -12339,12 +13285,14 @@ WantedBy=multi-user.target
 ```
 
 **PM2 (Node.js)**:
+
 ```bash
-pm2 start "lf start" --name llamafarm
+pm2 start "lf services start" --name llamafarm
 pm2 save
 ```
 
 **launchd (macOS)**:
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -12355,6 +13303,7 @@ pm2 save
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/lf</string>
+        <string>services</string>
         <string>start</string>
     </array>
     <key>RunAtLoad</key>
@@ -12370,7 +13319,7 @@ pm2 save
 - **Environment variables**: Store API keys (OpenAI, Together, etc.) in `.env` files or secret managers. Update `runtime.api_key` to reference them.
 - **Data directory**: Set `LF_DATA_DIR` to a persistent location with adequate storage for models and vector databases.
 - **Firewall**: Restrict access to ports 14345 (API) and 11540 (Universal Runtime) as needed.
-- **TLS termination**: Use a reverse proxy (nginx, Caddy) for HTTPS in production.
+- **TLS termination**: Use a reverse proxy (Traefik, nginx, Caddy) for HTTPS in production.
 - **Monitoring**: Enable logging and set up health checks against `/health` endpoint.
 
 ### Reverse Proxy Example (nginx)
@@ -12422,6 +13371,10 @@ curl http://localhost:14345/health
 # Liveness probe (for orchestrators)
 curl http://localhost:14345/health/liveness
 ```
+
+## Platform-Specific Guides
+
+- [NVIDIA Jetson](./jetson.md) – Deploy on Jetson Orin, Xavier, TX2, Nano with CUDA acceleration
 
 ## Resources
 
@@ -13181,7 +14134,7 @@ eventSource.onmessage = (event) => {
 **Solutions:**
 - Verify LlamaFarm is running: `lf start`
 - Check API endpoint in `.env.local`
-- Ensure correct port (default: 8000)
+- Ensure correct port (default: 14345)
 - Check firewall settings
 - Review LlamaFarm logs for errors
 
@@ -13264,7 +14217,7 @@ Example (vLLM running with OpenAI-compatible API):
 runtime:
   provider: openai
   model: mistral-small
-  base_url: http://localhost:14345/v1
+  base_url: http://localhost:8000/v1
   api_key: sk-test
 ```
 
@@ -13364,6 +14317,604 @@ Re-run relevant tests to ensure generated code compiles and integrations still w
 - Weekly sync details are pinned in Discord.
 
 Thanks for helping grow LlamaFarm!
+
+---
+
+# Changelog Documentation System
+
+This directory contains human-readable release notes for LlamaFarm, automatically generated from conventional commits.
+
+## How It Works
+
+### Automated Workflow (Primary Method)
+
+When a release PR is created by release-please:
+
+1. **Workflow triggers** - [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml) detects the release PR
+2. **Extracts version** - Reads the latest version from CHANGELOG.md
+3. **Generates prose** - Uses LlamaFarm AI to transform conventional commits into narrative release notes
+4. **Creates individual file** - Writes `v{version}.md` to this directory
+5. **Updates index** - Adds a new row to the changelog index table
+6. **Commits to PR** - Pushes the changelog docs back to the release PR
+7. **Posts comment** - Adds a comment with status (success/failure)
+
+### Manual Fallback (Backup Method)
+
+If the automated workflow fails or you need to backfill historical releases:
+
+```bash
+# Generate changelog for latest release
+./scripts/update-changelog-docs.sh
+
+# Generate for specific version
+./scripts/update-changelog-docs.sh 0.0.26
+
+# Generate for all versions in CHANGELOG.md
+./scripts/update-changelog-docs.sh --all
+```
+
+**Requirements for manual script:**
+- LlamaFarm CLI (`lf`) must be installed
+- LlamaFarm services must be running (`lf start`)
+- Or `OPENAI_API_KEY` environment variable set for OpenAI provider
+
+## File Structure
+
+```
+docs/website/docs/changelog/
+├── README.md              # This file (developer documentation)
+├── index.md               # Changelog landing page with release table
+├── v0.0.26.md            # Release notes for v0.0.26
+├── v0.0.25.md            # Release notes for v0.0.25
+├── v0.0.24.md            # Release notes for v0.0.24
+└── ...                    # More release versions
+```
+
+Each release has its own dedicated page. The index page shows a table with links to all releases.
+
+## Testing the System
+
+### Test with Workflow Dispatch (Recommended)
+
+You can test the workflow without creating a real release PR:
+
+1. Go to GitHub Actions → "Update Changelog Docs" workflow
+2. Click "Run workflow"
+3. Leave inputs empty (auto-detects latest version) or specify:
+   - `version`: e.g., "0.0.26"
+   - `pr_number`: If testing on an existing PR
+4. Check the workflow output and generated files
+
+### Test Locally with Manual Script
+
+```bash
+# 1. Start LlamaFarm services
+lf start
+
+# 2. Run the script
+./scripts/update-changelog-docs.sh 0.0.26
+
+# 3. Check the generated files
+ls -la docs/website/docs/changelog/
+
+# 4. Preview in Docusaurus
+cd docs/website
+npm run start
+# Visit http://localhost:3000/docs/changelog
+```
+
+## Prose Changelog Generation
+
+The human-readable release notes are generated using:
+
+**Action:** [.github/actions/prose-changelog/](../../../../.github/actions/prose-changelog/)
+
+**Process:**
+1. Extracts conventional commits from CHANGELOG.md
+2. Feeds them to `lf chat` with a specialized prompt
+3. AI transforms commits into user-friendly narrative
+4. Focuses on **user impact** and **value**, not technical details
+
+**Prompt configuration:** [.github/actions/prose-changelog/llamafarm.yaml](../../../../.github/actions/prose-changelog/llamafarm.yaml)
+
+## Docusaurus Integration
+
+Release notes appear under the "Changelog" section in the docs sidebar:
+- Landing page: https://docs.llamafarm.dev/docs/changelog
+- Individual releases: https://docs.llamafarm.dev/docs/changelog/v0.0.26
+
+### Sidebar Configuration
+
+The sidebar in [sidebars.ts](../../sidebars.ts) includes the changelog category:
+
+```typescript
+{
+  type: 'category',
+  label: 'Changelog',
+  link: { type: 'doc', id: 'changelog/index' },
+  items: [
+    { type: 'doc', id: 'changelog/v0.0.26', label: 'v0.0.26' },
+    // ... more versions
+  ],
+}
+```
+
+**Note:** New releases need to be manually added to the sidebar items. Consider using auto-generated sidebars in the future.
+
+## Troubleshooting
+
+### Workflow Failed
+
+Check the workflow logs for errors. Common issues:
+
+1. **Prose generation failed**
+   - Ensure GPU runner has LlamaFarm CLI installed
+   - Check if `lf start` is working on the runner
+   - Verify the model is downloaded
+
+2. **Git push failed**
+   - Check GH_RELEASE_TOKEN permissions
+   - Verify bot has write access to the repo
+
+3. **File already exists**
+   - The workflow skips if the version file already exists
+   - Delete the file if you want to regenerate
+
+### Manual Script Failed
+
+1. **`lf: command not found`**
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
+   ```
+
+2. **Generation timeout or error**
+   ```bash
+   lf start
+   lf services status
+   ```
+
+3. **Version not found**
+   - Check that the version exists in CHANGELOG.md
+   - Use exact version format (e.g., "0.0.26", not "v0.0.26")
+
+## Adding a New Release Manually
+
+If you need to add a release without the AI generation:
+
+1. Create `docs/website/docs/changelog/v{version}.md` with frontmatter
+2. Add a row to the table in `index.md`
+3. Add an entry to `sidebars.ts` (optional but recommended)
+
+## Questions or Issues?
+
+- **Workflow issues**: Check [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml)
+- **Generation issues**: Check [.github/actions/prose-changelog/](../../../../.github/actions/prose-changelog/)
+- **Docs issues**: Check individual version files and `index.md`
+
+---
+
+# Changelog
+
+Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
+
+## Recent Releases
+
+<details>
+<summary><strong>v0.0.25</strong> — 2026-01-14</summary>
+
+This release focuses on improving the developer experience with better tooling, native tool calling support, and automatic file processing capabilities.
+
+### New Features
+
+- **Native Tool Calling** - The Universal Runtime now supports native tool calling, enabling your AI models to interact with external tools and APIs more efficiently
+- **Automatic File Processing** - Files uploaded to datasets now process automatically
+- **Enhanced Designer Development Tools** - Comprehensive API call logging in the dev tools
+- **Streaming Model Downloads** - SSE streaming for embedding model downloads with real-time progress
+- **Extended Testing Capabilities** - Support for anomaly detection and classifier tests
+
+### Bug Fixes
+
+- Fixed config validation error output for clearer debugging
+- Resolved install and run failures on Windows with NVIDIA GPUs
+- Removed parser fallback to prevent unexpected behavior
+- Enabled offline GGUF model loading
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0025)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.24</strong> — 2026-01-06</summary>
+
+This release introduces anomaly detection capabilities to help identify outliers in your data.
+
+### New Features
+
+- **Anomaly Detection** - Support for anomaly detection with configurable normalization methods
+- **Designer UX** - New interface for configuring and testing anomaly detection models
+
+### Bug Fixes
+
+- Fixed anomaly and classifier UX issues in the Designer
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0024)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.23</strong> — 2025-12-20</summary>
+
+A stability release fixing a logging issue that could cause broken pipe errors.
+
+### Bug Fixes
+
+- Fixed broken pipe errors caused by bad logging in the Universal Runtime
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0023)**
+
+</details>
+
+---
+
+## Older Releases
+
+<details>
+<summary><strong>View more releases</strong></summary>
+
+<details>
+<summary><strong>v0.0.22</strong> — 2025-12-19</summary>
+
+Bug fix release addressing an issue with logits processor handling.
+
+- Fixed logits_processor to be passed as callable instead of list
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0022)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.21</strong> — 2025-12-19</summary>
+
+A feature-packed release bringing specialized ML models and major Designer enhancements.
+
+### New Features
+
+- **Specialized ML Models** - OCR, document extraction, and anomaly detection
+- **Vision API** - New vision router and model versioning for ML endpoints
+- **Santa's Holiday Helper Demo** - A festive demo project to help you get started
+- **Enhanced RAG UX** - Improved retrieval strategy settings
+- **Cross-Platform Support** - Native llama-cpp bindings for all platforms
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0021)**
+
+</details>
+
+</details>
+
+---
+
+## About These Release Notes
+
+These human-readable release notes are automatically generated from our conventional commit history using LlamaFarm's own AI capabilities.
+
+For the complete structured changelog with commit links, see the [CHANGELOG.md](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md) on GitHub.
+
+## Stay Updated
+
+- **GitHub Releases**: [github.com/llama-farm/llamafarm/releases](https://github.com/llama-farm/llamafarm/releases)
+- **Reddit**: [r/LlamaFarm](https://www.reddit.com/r/LlamaFarm/)
+- **Discord**: [Join our community](https://discord.gg/jtChvg8T)
+
+---
+
+# NVIDIA Jetson
+
+LlamaFarm runs natively on NVIDIA Jetson devices (Orin, Xavier, TX2, Nano) with CUDA acceleration. This guide covers setup, optimization, and troubleshooting for Jetson deployments.
+
+## Supported Devices
+
+| Device | Compute Capability | Memory | Performance |
+|--------|-------------------|--------|-------------|
+| Jetson Orin Nano | 8.7 | 8GB shared | 35+ tok/s |
+| Jetson Orin NX | 8.7 | 8-16GB shared | 35+ tok/s |
+| Jetson AGX Orin | 8.7 | 32-64GB shared | 40+ tok/s |
+| Jetson Xavier NX | 7.2 | 8-16GB shared | 25+ tok/s |
+| Jetson AGX Xavier | 7.2 | 16-32GB shared | 30+ tok/s |
+
+## Quick Start (Automated)
+
+LlamaFarm includes setup scripts that automate the Jetson configuration:
+
+```bash
+# 1. Start the Jetson container
+docker run -it --rm --runtime=nvidia --network host \
+  -v $HOME/.cache:/root/.cache \
+  -v /path/to/llamafarm:/data/llamafarm \
+  dustynv/l4t-pytorch:r36.2.0 \
+  bash
+
+# 2. Install UV package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.cargo/env
+
+# 3. Run the automated setup
+cd /data/llamafarm
+./deployment/jetson/setup.sh
+
+# 4. Start the server
+./deployment/jetson/start.sh
+```
+
+The setup script automatically:
+- Detects Jetson hardware
+- Finds system Python with CUDA PyTorch
+- Creates venv with `--system-site-packages` to inherit CUDA torch
+- Installs dependencies and removes conflicting PyPI packages
+- Creates `.env.jetson` with optimized environment variables
+
+For custom model or context size:
+
+```bash
+./deployment/jetson/start.sh 'unsloth/Qwen3-0.6B-GGUF:Q4_K_M' 4096
+```
+
+## Prerequisites
+
+1. **JetPack SDK** installed (includes CUDA, cuDNN, TensorRT)
+2. **Python 3.10+** with UV package manager
+3. **Custom llama.cpp build** (see below)
+
+## Building llama.cpp for Jetson
+
+Pre-built llama.cpp binaries don't include ARM64 CUDA. You must build from source:
+
+```bash
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+
+# CRITICAL: Disable CUDA graphs for Tegra stability
+cmake -B build \
+    -DGGML_CUDA=ON \
+    -DGGML_CUDA_GRAPHS=OFF \
+    -DCMAKE_CUDA_ARCHITECTURES="87" \
+    -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build --config Release -j$(nproc)
+```
+
+### Why GGML_CUDA_GRAPHS=OFF?
+
+CUDA graphs provide performance benefits on discrete GPUs but cause stability issues on Jetson's unified memory architecture:
+- Graph compilation overhead exceeds benefits for small batch sizes
+- Memory pressure from graph captures
+- Unpredictable behavior on unified memory systems
+
+### Architecture Flags
+
+| Device | Flag |
+|--------|------|
+| Orin (Nano/NX/AGX) | `-DCMAKE_CUDA_ARCHITECTURES="87"` |
+| Xavier (NX/AGX) | `-DCMAKE_CUDA_ARCHITECTURES="72"` |
+| TX2 | `-DCMAKE_CUDA_ARCHITECTURES="62"` |
+| Nano | `-DCMAKE_CUDA_ARCHITECTURES="53"` |
+
+## Docker Container Setup (Recommended)
+
+The easiest way to run LlamaFarm on Jetson is using NVIDIA's PyTorch container which includes CUDA-enabled PyTorch:
+
+```bash
+docker run -it --rm --runtime=nvidia --network host \
+  -v /home/$USER/.cache:/root/.cache \
+  -v /path/to/llamafarm:/data/llamafarm \
+  dustynv/l4t-pytorch:r36.2.0 \
+  bash
+```
+
+### Install UV Package Manager
+
+Inside the container:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.cargo/env
+```
+
+### Setup Universal Runtime with CUDA PyTorch
+
+The container has CUDA-enabled PyTorch (Python 3.10), but the venv must be configured to use it:
+
+```bash
+cd /data/llamafarm/runtimes/universal
+
+# Create venv with system site packages (inherits CUDA torch)
+uv venv .venv --python /usr/local/bin/python3 --system-site-packages
+
+# Install dependencies (this pulls CPU torch from PyPI)
+uv pip install -r pyproject.toml --python .venv/bin/python
+
+# Remove CPU torch, fall back to system CUDA torch
+uv pip uninstall torch torchvision --python .venv/bin/python
+
+# Downgrade numpy (system torch needs numpy 1.x)
+uv pip install "numpy<2" --python .venv/bin/python
+```
+
+### Verify CUDA PyTorch
+
+```bash
+.venv/bin/python -c "import torch; print('CUDA:', torch.cuda.is_available())"
+# Should print: CUDA: True
+```
+
+This enables GPU acceleration for:
+- **llama.cpp inference** (GGUF models) - 35+ tok/s
+- **Transformers models** (classifiers, embeddings) - GPU accelerated
+- **Anomaly detection** (sklearn) - CPU only
+
+## Installing Built Libraries
+
+Copy the built libraries to LlamaFarm's cache:
+
+```bash
+CACHE_DIR="$HOME/.cache/llamafarm-llama/jetson"
+mkdir -p "$CACHE_DIR"
+
+cp build/src/libllama.so "$CACHE_DIR/"
+cp build/ggml/src/libggml*.so* "$CACHE_DIR/"
+
+# Point LlamaFarm to the custom build
+export LLAMAFARM_LLAMA_LIB_DIR="$CACHE_DIR"
+```
+
+## Running the Server
+
+```bash
+cd /path/to/llamafarm/runtimes/universal
+
+# Start with conservative settings for 8GB memory
+uv run python server.py \
+    --model 'unsloth/Qwen3-1.7B-GGUF:Q4_K_M' \
+    --ctx-len 2048
+```
+
+### Test the API
+
+```bash
+curl -s -X POST http://localhost:11540/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "unsloth/Qwen3-1.7B-GGUF:Q4_K_M",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 100,
+    "n_ctx": 2048
+  }'
+```
+
+**Important**: Always pass `n_ctx` in requests to avoid defaulting to the model's full context (40960 for Qwen3), which causes OOM.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLAMAFARM_SYNC_INFERENCE` | Force sync (`1`) or async (`0`) inference | Auto-detect |
+| `LLAMAFARM_LLAMA_LIB_DIR` | Path to custom llama.cpp libraries | Auto |
+| `CUDA_CACHE_DISABLE` | Disable CUDA cache (reduces fragmentation) | 0 |
+
+## Memory Optimization
+
+Jetson uses unified memory shared between CPU and GPU. Optimize with:
+
+### 1. Use Quantized Models
+
+Q4_K_M provides the best balance of quality and memory:
+
+```
+Model Size (Qwen3-1.7B):
+- Q4_K_M: ~1.0 GB
+- Q8_0: ~1.8 GB
+- FP16: ~3.4 GB
+```
+
+### 2. Reduce Context Size
+
+Start with `n_ctx=2048` and increase only if needed:
+
+```
+KV Cache Memory (Qwen3-1.7B):
+- n_ctx=2048: ~224 MB
+- n_ctx=4096: ~448 MB
+- n_ctx=8192: ~896 MB
+```
+
+### 3. Enable KV Cache Quantization
+
+For even lower memory, use quantized KV cache:
+
+```python
+# In your model configuration
+cache_type_k="q4_0"  # 4-bit keys
+cache_type_v="q4_0"  # 4-bit values
+```
+
+This reduces KV cache memory by ~4x.
+
+## Troubleshooting
+
+### "double free or corruption" crash
+
+**Cause**: CUDA backend initialization from worker thread.
+
+**Solution**: LlamaFarm automatically initializes the backend from the main thread. If you see this error, ensure you're using the latest version.
+
+### Slow performance (< 25 tok/s)
+
+**Check**:
+1. Rebuild llama.cpp with `GGML_CUDA_GRAPHS=OFF`
+2. Verify all layers on GPU: look for "offloaded 29/29 layers" in logs
+3. Check `n_ctx` isn't too large (causes memory pressure)
+
+### Out of memory
+
+**Solutions**:
+1. Reduce `n_ctx` (e.g., 2048 instead of 4096)
+2. Use smaller quantization (Q4_K_M instead of Q8_0)
+3. Enable KV cache quantization
+4. Monitor with `tegrastats`
+
+### Model loads on CPU
+
+**Check**:
+1. Verify CUDA: `nvcc --version`
+2. Ensure libggml-cuda.so exists in library directory
+3. Check logs for "CUDA0" device detection
+
+## Performance Benchmarks
+
+Tested on Jetson Orin Nano 8GB with Qwen3-1.7B Q4_K_M:
+
+| Metric | Value |
+|--------|-------|
+| Tokens/second | 35-36 tok/s |
+| Time to first token | ~70-100ms |
+| Memory usage | ~2.5 GB |
+| Power consumption | ~15W |
+
+## systemd Service
+
+Create `/etc/systemd/system/llamafarm.service`:
+
+```ini
+[Unit]
+Description=LlamaFarm Universal Runtime
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/data/llamafarm/runtimes/universal
+Environment=LLAMAFARM_LLAMA_LIB_DIR=/root/.cache/llamafarm-llama/jetson
+Environment=LLAMAFARM_SYNC_INFERENCE=1
+ExecStart=/root/.local/bin/uv run python server.py --model unsloth/Qwen3-1.7B-GGUF:Q4_K_M --ctx-len 2048
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable llamafarm
+sudo systemctl start llamafarm
+```
+
+## See Also
+
+- [Deployment Overview](./index.md)
+- [Configuration Guide](../configuration/index.md)
+- [Troubleshooting](../troubleshooting/index.md)
 
 ---
 

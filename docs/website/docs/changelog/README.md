@@ -11,8 +11,8 @@ When a release PR is created by release-please:
 1. **Workflow triggers** - [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml) detects the release PR
 2. **Extracts version** - Reads the latest version from CHANGELOG.md
 3. **Generates prose** - Uses LlamaFarm AI to transform conventional commits into narrative release notes
-4. **Creates docs** - Writes Docusaurus-formatted markdown to this directory
-5. **Updates index** - Adds the new release to the changelog index
+4. **Creates individual file** - Writes `v{version}.md` to this directory
+5. **Updates index** - Adds a new row to the changelog index table
 6. **Commits to PR** - Pushes the changelog docs back to the release PR
 7. **Posts comment** - Adds a comment with status (success/failure)
 
@@ -41,10 +41,14 @@ If the automated workflow fails or you need to backfill historical releases:
 ```
 docs/website/docs/changelog/
 ├── README.md              # This file (developer documentation)
-└── index.md               # Changelog page with all releases as expandable sections
+├── index.md               # Changelog landing page with release table
+├── v0.0.26.md            # Release notes for v0.0.26
+├── v0.0.25.md            # Release notes for v0.0.25
+├── v0.0.24.md            # Release notes for v0.0.24
+└── ...                    # More release versions
 ```
 
-All release notes are embedded in `index.md` as expandable `<details>` sections. The most recent release is expanded by default.
+Each release has its own dedicated page. The index page shows a table with links to all releases.
 
 ## Testing the System
 
@@ -77,14 +81,6 @@ npm run start
 # Visit http://localhost:3000/docs/changelog
 ```
 
-### Test on a Real Release PR
-
-1. Wait for release-please to create a release PR (or create one manually)
-2. The workflow will automatically trigger
-3. Check for the comment on the PR
-4. Review the committed changelog files
-5. Merge when ready
-
 ## Prose Changelog Generation
 
 The human-readable release notes are generated using:
@@ -99,33 +95,29 @@ The human-readable release notes are generated using:
 
 **Prompt configuration:** [.github/actions/prose-changelog/llamafarm.yaml](../../../../.github/actions/prose-changelog/llamafarm.yaml)
 
-The prompt instructs the AI to:
-- Write in a professional yet approachable tone
-- Group changes into logical sections
-- Explain WHAT users can do and WHY it matters
-- Avoid technical jargon and commit references
-- Combine related commits into cohesive narratives
-
 ## Docusaurus Integration
 
-All release notes appear on a single page at `/docs/changelog`:
-- https://docs.llamafarm.dev/docs/changelog
-
-Each release is an expandable section. The most recent release is expanded by default for immediate visibility.
+Release notes appear under the "Changelog" section in the docs sidebar:
+- Landing page: https://docs.llamafarm.dev/docs/changelog
+- Individual releases: https://docs.llamafarm.dev/docs/changelog/v0.0.26
 
 ### Sidebar Configuration
 
-Changelog section added to [sidebars.ts](../../sidebars.ts):
+The sidebar in [sidebars.ts](../../sidebars.ts) includes the changelog category:
 
 ```typescript
 {
-  type: 'doc',
-  id: 'changelog/index',
+  type: 'category',
   label: 'Changelog',
+  link: { type: 'doc', id: 'changelog/index' },
+  items: [
+    { type: 'doc', id: 'changelog/v0.0.26', label: 'v0.0.26' },
+    // ... more versions
+  ],
 }
 ```
 
-All releases are on a single page with expandable sections.
+**Note:** New releases need to be manually added to the sidebar items. Consider using auto-generated sidebars in the future.
 
 ## Troubleshooting
 
@@ -142,24 +134,20 @@ Check the workflow logs for errors. Common issues:
    - Check GH_RELEASE_TOKEN permissions
    - Verify bot has write access to the repo
 
-3. **No changes detected**
-   - Changelog might already exist for this version
-   - Check if the version was already processed
+3. **File already exists**
+   - The workflow skips if the version file already exists
+   - Delete the file if you want to regenerate
 
 ### Manual Script Failed
 
 1. **`lf: command not found`**
    ```bash
-   # Install LlamaFarm CLI
    curl -fsSL https://raw.githubusercontent.com/llama-farm/llamafarm/main/install.sh | bash
    ```
 
 2. **Generation timeout or error**
    ```bash
-   # Start services
    lf start
-
-   # Verify services are running
    lf services status
    ```
 
@@ -167,19 +155,16 @@ Check the workflow logs for errors. Common issues:
    - Check that the version exists in CHANGELOG.md
    - Use exact version format (e.g., "0.0.26", not "v0.0.26")
 
-## Future Improvements
+## Adding a New Release Manually
 
-Potential enhancements:
+If you need to add a release without the AI generation:
 
-- [ ] Add version-specific sidebar items (might get too long)
-- [ ] Generate changelog on release tag (not just PR)
-- [ ] Support for pre-releases and release candidates
-- [ ] Automated Reddit posting using generated prose
-- [ ] RSS feed for changelog updates
-- [ ] Email notifications for new releases
+1. Create `docs/website/docs/changelog/v{version}.md` with frontmatter
+2. Add a row to the table in `index.md`
+3. Add an entry to `sidebars.ts` (optional but recommended)
 
 ## Questions or Issues?
 
 - **Workflow issues**: Check [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml)
 - **Generation issues**: Check [.github/actions/prose-changelog/](../../../../.github/actions/prose-changelog/)
-- **Docs issues**: Check [index.md](./index.md) and individual version files
+- **Docs issues**: Check individual version files and `index.md`

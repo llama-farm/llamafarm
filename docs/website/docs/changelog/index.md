@@ -2,20 +2,14 @@
 
 Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 
-Our releases follow [Semantic Versioning](https://semver.org/) and use [Conventional Commits](https://www.conventionalcommits.org/) for clear, structured change tracking.
-
 ---
 
-## Recent Releases
+## Latest Release
 
 <details open>
-<summary><strong>v0.0.26 (2026-01-27)</strong> - Latest</summary>
+<summary><strong>v0.0.26</strong> — 2026-01-27</summary>
 
-<br/>
-
-*Released on 2026-01-27*
-
-LlamaFarm 0.0.26: Smarter, Faster, and More Accessible
+**LlamaFarm 0.0.26: Smarter, Faster, and More Accessible**
 
 This release brings a range of improvements to make LlamaFarm more intuitive, efficient, and accessible across different platforms and use cases.
 
@@ -47,38 +41,29 @@ This release introduces a full-duplex speech reasoning pipeline with audio proce
 
 #### Cross-Platform Support
 
-**Desktop App Improvements** - Better splash screen UX and enhanced cross-platform support for Windows, macOS, and Linux.
-
-**Intel Mac Support** - Added support for Intel Macs (x86_64) with PyTorch 2.2.2, ensuring LlamaFarm works on older hardware.
-
-**Jetson/Tegra Optimization** - Improved CUDA optimization and unified memory GPU support for NVIDIA Jetson and Tegra platforms, perfect for edge AI deployments.
+- **Desktop App Improvements** - Better splash screen UX and enhanced cross-platform support
+- **Intel Mac Support** - Added support for Intel Macs (x86_64) with PyTorch 2.2.2
+- **Jetson/Tegra Optimization** - Improved CUDA optimization and unified memory GPU support
 
 ### Bug Fixes
 
-- Fixed an issue where dev builds would stop running services
-- Resolved sample project creation failures related to PyTorch memory settings
+- Fixed dev builds stopping running services
+- Resolved sample project creation failures
 - Fixed chat input clearing during streaming
-- Improved error message display and overflow handling in the Designer
-- Enhanced Service Status panel reliability and accessibility
-- Restricted synchronous inference to Jetson/Tegra platforms where it's needed
+- Improved error display and Service Status panel reliability
 
-### Developer Notes
-
-This release includes numerous internal improvements to make LlamaFarm more maintainable and easier to extend. We've refined our testing infrastructure and improved error handling across the platform.
-
----
-
-**Full Changelog**: [v0.0.26](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0026)
-
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.26)**
 
 </details>
 
+---
+
+## Recent Releases
+
 <details>
-<summary><strong>v0.0.25 (2026-01-14)</strong></summary>
+<summary><strong>v0.0.25</strong> — 2026-01-14</summary>
 
-
-
-*Released on 2026-01-14*
+**LlamaFarm 0.0.25: Native Tool Calling and Developer Productivity**
 
 This release focuses on improving the developer experience with better tooling, native tool calling support, and automatic file processing capabilities.
 
@@ -86,102 +71,314 @@ This release focuses on improving the developer experience with better tooling, 
 
 #### Native Tool Calling
 
-The Universal Runtime now supports native tool calling, enabling your AI models to interact with external tools and APIs more efficiently. This opens up new possibilities for building agentic AI applications.
+The Universal Runtime now supports native tool calling, enabling your AI models to interact with external tools and APIs more efficiently. This is a major step forward for building agentic AI applications that can take actions in the real world.
 
 #### Automatic File Processing
 
-Files uploaded to datasets now process automatically, eliminating the manual processing step and streamlining your workflow.
+Files uploaded to datasets now process automatically, eliminating the manual processing step and streamlining your workflow. Just upload and go.
 
 #### Enhanced Designer Development Tools
 
-The Designer now includes comprehensive API call logging in the dev tools, making it easier to debug and understand how your application communicates with the backend.
+The Designer now includes comprehensive API call logging in the dev tools panel, making it easier to debug and understand how your application communicates with the backend. See every request and response in real-time.
 
 #### Streaming Model Downloads
 
-Embedding model downloads now use SSE streaming, providing real-time progress updates so you know exactly what's happening during long downloads.
+Embedding model downloads now use SSE streaming, providing real-time progress updates so you always know exactly what's happening during long downloads.
 
 #### Extended Testing Capabilities
 
-The test space now includes support for anomaly detection and classifier tests, giving you more ways to validate your AI models.
+The test space now includes support for anomaly detection and classifier tests, giving you more ways to validate your AI models before deployment.
 
 ### Bug Fixes
 
 - Fixed config validation error output for clearer debugging
 - Resolved install and run failures on Windows with NVIDIA GPUs
 - Removed parser fallback to prevent unexpected behavior
-- Moved dependencies to main package and enabled offline GGUF model loading
+- Enabled offline GGUF model loading for air-gapped environments
 
-### What's Coming Next
-
-We're continuing to improve the platform's ease of use and expanding support for more specialized ML tasks. Stay tuned for more updates!
-
----
-
-**Full Changelog**: [v0.0.25](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0025)
-
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.25)**
 
 </details>
 
 <details>
-<summary><strong>View More Releases...</strong></summary>
+<summary><strong>v0.0.24</strong> — 2026-01-06</summary>
 
-<br/>
+**LlamaFarm 0.0.24: Anomaly Detection**
 
-### v0.0.24 (2026-01-06)
+This release introduces anomaly detection capabilities to help identify outliers and unusual patterns in your data.
 
-This release introduces anomaly detection capabilities to help identify outliers in your data.
+### New Features
 
 #### Anomaly Detection
 
-The Universal Runtime now supports anomaly detection with configurable normalization methods for scoring. The Designer includes a new UX for configuring and testing anomaly detection models, making it easy to identify unusual patterns in your datasets.
+The Universal Runtime now supports anomaly detection with configurable normalization methods for scoring. Whether you're monitoring for fraud, equipment failures, or data quality issues, LlamaFarm can now help identify when something doesn't look right.
 
-**Full Changelog**: [v0.0.24](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0024)
+#### Designer UX for Anomaly Detection
 
----
+The Designer includes a new interface for configuring and testing anomaly detection models, making it easy to set up detection pipelines and visualize results.
 
-### v0.0.23 (2025-12-20)
+### Bug Fixes
 
-A stability release fixing a logging issue that could cause broken pipe errors in the runtime.
+- Fixed anomaly and classifier UX issues in the Designer for smoother workflows
 
-**Full Changelog**: [v0.0.23](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0023)
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.24)**
 
----
+</details>
 
-### v0.0.22 (2025-12-19)
+<details>
+<summary><strong>v0.0.23</strong> — 2025-12-20</summary>
 
-Bug fix release addressing an issue with logits processor handling in the Universal Runtime.
+**LlamaFarm 0.0.23: Stability Improvements**
 
-**Full Changelog**: [v0.0.22](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0022)
+A focused stability release addressing a critical logging issue in the Universal Runtime.
 
----
+### Bug Fixes
 
-### v0.0.21 (2025-12-19)
+- Fixed broken pipe errors caused by problematic logging in the Universal Runtime, improving reliability for long-running inference tasks
 
-A feature-packed holiday release bringing specialized ML models and major Designer enhancements.
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.23)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.22</strong> — 2025-12-19</summary>
+
+**LlamaFarm 0.0.22: Inference Fix**
+
+A quick bug fix release addressing an issue with logits processor handling.
+
+### Bug Fixes
+
+- Fixed logits_processor to be passed as callable instead of list, resolving inference issues with certain model configurations
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.22)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.21</strong> — 2025-12-19</summary>
+
+**LlamaFarm 0.0.21: Specialized ML Models and Vision API**
+
+A feature-packed holiday release bringing specialized ML models, vision capabilities, and major Designer enhancements.
+
+### New Features
 
 #### Specialized ML Models
 
-Added support for OCR, document extraction, and anomaly detection models in the Universal Runtime. These specialized models expand what you can build with LlamaFarm beyond text generation.
+Added support for OCR, document extraction, and anomaly detection models in the Universal Runtime. These specialized models expand what you can build with LlamaFarm beyond text generation - now you can extract text from images, parse documents, and detect anomalies.
 
 #### Vision API
 
-New vision router and model versioning for ML endpoints, enabling image understanding capabilities in your applications.
+New vision router and model versioning for ML endpoints, enabling image understanding capabilities in your applications. Build apps that can see and understand visual content.
 
 #### Designer Improvements
 
-- **Santa's Holiday Helper Demo** - A festive demo project to help you get started
+- **Santa's Holiday Helper Demo** - A festive demo project to help new users get started
 - **Enhanced RAG UX** - Improved retrieval strategy settings in test chat
 - **Data Enhancements** - Better tools for managing your datasets
+- **Global Project Listing** - Easily see all your projects in one place
 
 #### Cross-Platform Support
 
-Native llama-cpp bindings now included for all platforms, and Windows builds correctly include the `.exe` extension.
+Native llama-cpp bindings now included for all platforms, and Windows builds correctly include the `.exe` extension for seamless installation.
 
-**Full Changelog**: [v0.0.21](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#0021)
+### Bug Fixes
+
+- Fixed upgrade failures on Linux
+- Ensured multi-arch Linux builds work correctly
+- Fixed model unload cleanup and OpenAI message validation
+- Removed console log spam in Designer
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.21)**
+
+</details>
 
 ---
 
-**Full History**: [CHANGELOG.md](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md)
+## Older Releases
+
+<details>
+<summary><strong>View all releases</strong></summary>
+
+<details>
+<summary><strong>v0.0.20</strong> — 2025-12-10</summary>
+
+**Auto-Start Services, RAG Stats, and Reliability Improvements**
+
+### New Features
+
+- **Auto-Start Service Flag** - Services can now start automatically when you run LlamaFarm
+- **More GGUF Download Options** - More quantization options for model downloads in Designer
+- **RAG Database Listing** - List all documents in your RAG databases
+- **RAG Statistics** - View detailed stats about your RAG setup
+- **Chunk Cleanup** - Automatically remove database chunks when files are deleted
+- **Data Processing Control** - Start and stop data processing from the API
+
+### Bug Fixes
+
+- Fixed first-run startup failures for new users
+- Improved path resolution with `~` expansion
+- Better process manager locking to prevent conflicts
+- Fixed upgrade hang caused by process stop deadlock
+- Prevented storage of failed vectors in RAG
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.20)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.19</strong> — 2025-12-03</summary>
+
+**Automatic Model Downloads, Custom RAG Queries, and Reasoning Models**
+
+### New Features
+
+- **Automatic Model Download Management** - Models download automatically when needed
+- **Custom RAG Queries** - Send custom RAG queries through the chat/completions endpoint
+- **Thinking/Reasoning Model Support** - Support for models that show their reasoning process
+- **Database CRUD API** - Full create, read, update, delete operations for databases
+- **Better Day-2 UX** - Improved experience for returning users
+- **Disk Space Checking** - Check available disk space before downloading models
+- **GGUF Model Listing** - Browse available GGUF models for download
+
+### Bug Fixes
+
+- Fixed datasets endpoint trailing slash requirement
+- Improved cross-filesystem data moves
+- Fixed PDF parsing issues in RAG
+- Addressed demo timeout issues
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.19)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.18</strong> — 2025-11-25</summary>
+
+**Code Signing and Advanced RAG Retrieval**
+
+### New Features
+
+- **Signed Apps** - Windows and Mac apps are now code-signed for easier installation
+- **Advanced RAG Retrieval** - Cross-encoder reranking and multi-turn RAG for better search results
+
+### Bug Fixes
+
+- Ensured service logs are always enabled
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.18)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.17</strong> — 2025-11-24</summary>
+
+**Bug Fixes and Documentation**
+
+### Bug Fixes
+
+- Fixed empty prompts array for new projects
+- Added troubleshooting documentation
+- Fixed HuggingFace progress bar crashes
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.17)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.16</strong> — 2025-11-23</summary>
+
+**CLI Packaging Fix**
+
+### Bug Fixes
+
+- Fixed CLI packaging issues
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.16)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.15</strong> — 2025-11-22</summary>
+
+**Desktop App Launch and GGUF Model Support**
+
+### New Features
+
+- **Desktop App** - Full Electron desktop app with auto-updates and polished UI
+- **GGUF Model Support** - Run quantized GGUF models in the Universal Runtime
+- **Demo Project System** - Interactive demo projects to help new users get started
+- **Universal Event Logging** - Comprehensive observability across the platform
+- **Enhanced Tool Calling** - Improved tool calling capabilities
+- **Project Cloning** - Create new projects from existing ones
+
+### Bug Fixes
+
+- Fixed upgrade failures on Unix-like systems
+- Improved RAG integration and chat context management
+- Fixed database tab switching in Designer
+- Better dataset validation and status display
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.15)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.14</strong> — 2025-11-13</summary>
+
+**Database Strategies and RAG Improvements**
+
+### New Features
+
+- RAG query stats showing size information
+- Database embedding and retrieval strategies in Designer
+
+### Bug Fixes
+
+- Fixed build chat errors
+- Fixed file drop dataset selection
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.14)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.13</strong> — 2025-11-11</summary>
+
+**Version Number Fix**
+
+### Bug Fixes
+
+- CLI now displays correct version number
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.13)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.12</strong> — 2025-11-11</summary>
+
+**Project Management and Config Editor**
+
+### New Features
+
+- **Delete Projects** - Remove projects from CLI and API
+- **Config Editor Enhancements** - Copy button, search, anchor points, unsaved changes prompts
+- **Embedding Strategies API** - Configure embedding strategies via API
+- **MCP Server Config** - Add MCP server configuration to runtime
+- **Project Context Provider** - Better project context management
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.12)**
+
+</details>
+
+<details>
+<summary><strong>v0.0.11 and earlier</strong></summary>
+
+For releases v0.0.11 and earlier, please see the [full changelog on GitHub](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md).
+
+</details>
 
 </details>
 
@@ -189,9 +386,7 @@ Native llama-cpp bindings now included for all platforms, and Windows builds cor
 
 ## About These Release Notes
 
-These human-readable release notes are automatically generated from our conventional commit history using LlamaFarm's own AI capabilities. Each release note focuses on explaining the value and impact of changes for end users, rather than technical implementation details.
-
-For the complete structured changelog with commit links, see the [CHANGELOG.md](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md) in the repository.
+These release notes are generated from our conventional commit history. For the complete structured changelog with commit links and PR references, see the [CHANGELOG.md](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md) on GitHub.
 
 ## Stay Updated
 
