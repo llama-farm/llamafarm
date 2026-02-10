@@ -130,6 +130,7 @@ export function TextToSpeechConfig({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Text-to-Speech</h3>
+          <AddonsLink />
           {currentModel?.supportsVoiceCloning && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
               Cloning
@@ -145,7 +146,6 @@ export function TextToSpeechConfig({
           <span className="text-xs text-muted-foreground">
             {enabled ? 'Enabled' : 'Disabled'}
           </span>
-          <AddonsLink />
         </div>
       </div>
 

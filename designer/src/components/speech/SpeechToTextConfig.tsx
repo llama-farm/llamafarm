@@ -36,7 +36,10 @@ export function SpeechToTextConfig({
     <div className={`rounded-lg border border-border bg-card/40 p-3 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium">Speech-to-Text</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">Speech-to-Text</h3>
+          <AddonsLink />
+        </div>
         <div className="flex items-center gap-2">
           <Switch
             checked={enabled}
@@ -46,7 +49,6 @@ export function SpeechToTextConfig({
           <span className="text-xs text-muted-foreground">
             {enabled ? 'Enabled' : 'Disabled'}
           </span>
-          <AddonsLink />
         </div>
       </div>
 
