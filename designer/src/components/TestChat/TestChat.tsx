@@ -1844,7 +1844,7 @@ export default function TestChat({
   // Fetch addon list only when speech mode is active
   const queryClient = useQueryClient()
   const { data: addonsData, isLoading: isLoadingAddons } = useListAddons({
-    enabled: modelType === 'speech',
+    enabled: modelType === 'speech' || modelType === 'inference', // Also fetch for inference (mic button)
     staleTime: 0, // Always refetch to avoid stale cache issues
   })
 
@@ -2366,15 +2366,25 @@ export default function TestChat({
 
   // Handler for mic button click
   const handleMicClick = useCallback(async () => {
+    // Check if STT is installed (required for voice input)
+    const sttAddon = addonsData?.find((a: AddonInfo) => a.name === 'stt')
+    const isSttInstalled = sttAddon?.installed
+
     if (voiceInput.recordingState === 'recording') {
       // Stop recording and transcribe
       await voiceInput.stopRecording()
     } else if (voiceInput.recordingState === 'idle') {
+      // Check if STT is installed before starting recording
+      if (!isSttInstalled) {
+        // Show addon installation modal
+        setShowAddonSidePane(true)
+        return
+      }
       // Start recording
       await voiceInput.startRecording()
     }
     // If processing, do nothing (wait for transcription)
-  }, [voiceInput])
+  }, [voiceInput, addonsData])
 
   // Dismiss the speech mode suggestion for this session
   const dismissSpeechSuggestion = useCallback(() => {
