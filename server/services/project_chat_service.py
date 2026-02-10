@@ -469,7 +469,6 @@ class ProjectChatService:
                     for chunk in limited_chunks
                 ]
                 # Yield sources event (empty array signals "RAG ran but found nothing")
-                logger.info(f"Yielding sources event with {len(sources)} sources")
                 yield {"type": "sources", "sources": sources}
 
             logger.debug("Running async stream")
