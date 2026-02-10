@@ -40,6 +40,14 @@ SIMILARITY_LENGTH_FACTOR = (
 )
 
 
+def _first_not_none(*values: object) -> object:
+    """Return the first non-None value from the provided arguments."""
+    for value in values:
+        if value is not None:
+            return value
+    return 0.0
+
+
 class RAGParameters:
     """Container for resolved RAG parameters."""
 
@@ -438,12 +446,6 @@ class ProjectChatService:
                 chunks = []
                 if context_provider and hasattr(context_provider, "chunks"):
                     chunks = context_provider.chunks or []
-
-                def _first_not_none(*values: object) -> object:
-                    for value in values:
-                        if value is not None:
-                            return value
-                    return 0.0
 
                 # Limit chunks to prevent performance issues
                 limited_chunks = chunks[:sources_limit]

@@ -131,7 +131,6 @@ def create_streaming_response_from_iterator(
                 # Handle custom events (sources, etc.) - dict with "type" field
                 if isinstance(chunk, dict) and chunk.get("type"):
                     try:
-                        logger.info(f"SSE: Sending custom event type={chunk.get('type')}")
                         yield f"data: {json.dumps(chunk)}\n\n".encode()
                         # NOTE: Custom events (like sources) are metadata, not chat content.
                         # We intentionally do NOT set emitted=True here so that if the LLM
