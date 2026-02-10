@@ -147,8 +147,11 @@ main() {
         # Generate for all versions in CHANGELOG.md
         log_info "Generating changelogs for all versions..."
 
-        # Extract versions and store in array
-        mapfile -t versions < <(grep '## \[' "$CHANGELOG_FILE" | sed 's/.*\[\([^]]*\)\].*/\1/')
+        # Extract versions and store in array (portable approach for Bash 3.2+)
+        versions=()
+        while IFS= read -r version; do
+            versions+=("$version")
+        done < <(grep '## \[' "$CHANGELOG_FILE" | sed 's/.*\[\([^]]*\)\].*/\1/')
 
         # Reverse the array so oldest is processed first
         # This ensures newest ends up at the top when inserting at "## Latest Release"
