@@ -1,11 +1,9 @@
-import copy
-from typing import Any, Dict
+from typing import Any
 
-import pytest
+from config.datamodel import LlamaFarmConfig
 from fastapi.testclient import TestClient
 
 from api.main import llama_farm_api
-from config.datamodel import LlamaFarmConfig
 
 
 def _client() -> TestClient:
@@ -14,10 +12,10 @@ def _client() -> TestClient:
 
 
 def _base_config(
-    components: Dict[str, Any] | None = None,
-    rag: Dict[str, Any] | None = None,
+    components: dict[str, Any] | None = None,
+    rag: dict[str, Any] | None = None,
 ) -> LlamaFarmConfig:
-    cfg_dict: Dict[str, Any] = {
+    cfg_dict: dict[str, Any] = {
         "version": "v1",
         "name": "proj",
         "namespace": "ns",
@@ -37,7 +35,7 @@ def _base_config(
     return LlamaFarmConfig(**cfg_dict)
 
 
-def _patch_project_service(mocker, state: Dict[str, Any]):
+def _patch_project_service(mocker, state: dict[str, Any]):
     """Patch ProjectService.load_config/save_config to use in-memory state."""
     mock_ps = mocker.patch("services.database_service.ProjectService")
     mock_ps.load_config.side_effect = lambda ns, pr: state["config"]
@@ -139,9 +137,10 @@ def test_create_database_with_both_reference_and_inline_error(mocker):
         },
     )
     assert resp.status_code == 400
-    assert "either embedding_strategy reference or embedding_strategies inline" in resp.json()[
-        "detail"
-    ]
+    assert (
+        "either embedding_strategy reference or embedding_strategies inline"
+        in resp.json()["detail"]
+    )
 
 
 def test_create_database_with_missing_reference_error(mocker):

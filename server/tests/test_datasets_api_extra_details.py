@@ -7,6 +7,7 @@ focusing on the include_extra_details parameter and file metadata handling.
 
 from unittest.mock import patch
 
+import pytest
 from config.datamodel import (
     Dataset,
     LlamaFarmConfig,
@@ -32,6 +33,14 @@ client = TestClient(app)
 
 class TestDatasetsAPIExtraDetails:
     """Test cases for datasets API extra details functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
@@ -554,6 +563,14 @@ class TestDatasetsAPIExtraDetails:
 # Integration tests for end-to-end workflows
 class TestDatasetsAPIExtraDetailsIntegration:
     """Integration tests for datasets API extra details workflows."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_list_rag_documents(self):
+        with patch(
+            "services.dataset_service.list_rag_documents",
+            return_value={"documents": []},
+        ):
+            yield
 
     @patch.object(ProjectService, "load_config")
     @patch.object(DatasetService, "list_dataset_files")

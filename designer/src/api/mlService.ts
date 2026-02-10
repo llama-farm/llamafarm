@@ -25,6 +25,11 @@ import type {
   AnomalyLoadRequest,
   AnomalyLoadResponse,
   AnomalyListModelsResponse,
+  // Streaming Anomaly types
+  StreamingAnomalyRequest,
+  StreamingAnomalyResponse,
+  StreamingDetectorStats,
+  StreamingDetectorListResponse,
   // Document Scanning types
   DocumentScanningResponse,
   // Encoder types
@@ -215,6 +220,70 @@ export async function deleteAnomalyModel(
 }
 
 // =============================================================================
+// Streaming Anomaly Detection Endpoints
+// =============================================================================
+
+/**
+ * Stream data through an anomaly detector (auto-creates if needed)
+ * Implements the Tick-Tock pattern: fast inference with auto-rolling retraining
+ */
+export async function streamAnomaly(
+  request: StreamingAnomalyRequest
+): Promise<StreamingAnomalyResponse> {
+  const response = await apiClient.post<StreamingAnomalyResponse>(
+    '/ml/anomaly/stream',
+    request
+  )
+  return response.data
+}
+
+/**
+ * List all active streaming detectors
+ */
+export async function listStreamingDetectors(): Promise<StreamingDetectorListResponse> {
+  const response = await apiClient.get<StreamingDetectorListResponse>(
+    '/ml/anomaly/stream/detectors'
+  )
+  return response.data
+}
+
+/**
+ * Get stats for a specific streaming detector
+ */
+export async function getStreamingDetector(
+  modelId: string
+): Promise<StreamingDetectorStats> {
+  const response = await apiClient.get<StreamingDetectorStats>(
+    `/ml/anomaly/stream/${encodeURIComponent(modelId)}`
+  )
+  return response.data
+}
+
+/**
+ * Delete a streaming detector
+ */
+export async function deleteStreamingDetector(
+  modelId: string
+): Promise<MLDeleteResponse> {
+  const response = await apiClient.delete<MLDeleteResponse>(
+    `/ml/anomaly/stream/${encodeURIComponent(modelId)}`
+  )
+  return response.data
+}
+
+/**
+ * Reset a streaming detector (clears data, restarts cold start)
+ */
+export async function resetStreamingDetector(
+  modelId: string
+): Promise<StreamingDetectorStats> {
+  const response = await apiClient.post<StreamingDetectorStats>(
+    `/ml/anomaly/stream/${encodeURIComponent(modelId)}/reset`
+  )
+  return response.data
+}
+
+// =============================================================================
 // Document Scanning Endpoints
 // =============================================================================
 
@@ -323,6 +392,12 @@ export default {
   loadAnomaly,
   listAnomalyModels,
   deleteAnomalyModel,
+  // Streaming Anomaly
+  streamAnomaly,
+  listStreamingDetectors,
+  getStreamingDetector,
+  deleteStreamingDetector,
+  resetStreamingDetector,
   // Document Scanning
   scanDocument,
   // Encoder

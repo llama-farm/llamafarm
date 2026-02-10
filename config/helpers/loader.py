@@ -98,6 +98,7 @@ def _deep_merge(target: dict, source: dict) -> dict:
 # Handle both relative and absolute imports
 try:
     from config.datamodel import LlamaFarmConfig
+
     from .component_resolver import ComponentResolver
 except ImportError:
     # If relative import fails, try absolute import (when run directly)
@@ -410,8 +411,11 @@ def load_config(
     config_obj = LlamaFarmConfig(**config_dict)
 
     # Resolve reusable components (embedding/retrieval/parsers) into inline configs
-    resolver = ComponentResolver(config_obj)
-    return resolver.resolve_config(config_obj)
+    try:
+        resolver = ComponentResolver(config_obj)
+        return resolver.resolve_config(config_obj)
+    except ValueError as e:
+        raise ConfigError(f"Configuration validation error: {e}") from e
 
 
 # ============================================================================

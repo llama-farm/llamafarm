@@ -29,7 +29,7 @@ class TestSchemaValidation:
                 "chunk_overlap": 100,
                 "chunk_strategy": "semantic",
                 "use_ocr": True,
-                "ocr_endpoint": "http://127.0.0.1:8000/v1/vision/ocr",
+                "ocr_endpoint": "http://127.0.0.1:14345/v1/vision/ocr",
                 "extract_metadata": True,
                 "min_chunk_size": 50,
                 "max_chunk_size": 8000,

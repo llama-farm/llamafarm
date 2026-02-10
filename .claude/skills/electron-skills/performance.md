@@ -143,7 +143,7 @@ async waitForServer(): Promise<void> {
   while (attempts < maxAttempts) {
     try {
       // Use 127.0.0.1 instead of localhost to avoid IPv6 delays
-      const response = await axios.get('http://127.0.0.1:8000/health', {
+      const response = await axios.get('http://127.0.0.1:14345/health', {
         timeout: 3000
       })
 

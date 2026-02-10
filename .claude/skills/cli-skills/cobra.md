@@ -140,7 +140,7 @@ grep -rn "PersistentFlags()" cli/cmd/*.go
 // In root.go
 func init() {
     rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug output")
-    rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "http://localhost:8000", "Server URL")
+    rootCmd.PersistentFlags().StringVar(&serverURL, "server-url", "http://localhost:14345", "Server URL")
 }
 
 // Subcommands automatically inherit these flags

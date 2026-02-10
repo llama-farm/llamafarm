@@ -25,7 +25,7 @@ docker-compose down
 
 Services will be available at:
 - ChromaDB Server: http://localhost:8001
-- Backend API: http://localhost:8000
+- Backend API: http://localhost:14345
 - **Designer Web UI**: http://localhost:3123 (visual interface for project management)
 
 ### Development
@@ -40,7 +40,7 @@ docker-compose -f docker-compose.dev.yml up server
 
 Development services:
 - ChromaDB Server: http://localhost:8001
-- Backend API: http://localhost:8000 (with auto-reload)
+- Backend API: http://localhost:14345 (with auto-reload)
 - **Designer Web UI**: http://localhost:5173 (Vite dev server with hot reload)
 
 ## Environment Variables
@@ -49,7 +49,7 @@ You can customize the deployment by creating a `.env` file:
 
 ```env
 # Frontend environment variables
-VITE_APP_API_URL=http://localhost:8000
+VITE_APP_API_URL=http://localhost:14345
 VITE_APP_ENV=production
 
 # Backend environment variables

@@ -59,7 +59,7 @@ runtime:
     - name: vllm-model
       provider: openai
       model: mistral-small
-      base_url: http://localhost:8000/v1
+      base_url: http://localhost:14345/v1
       api_key: sk-local-placeholder
       instructor_mode: json
       default: true
@@ -74,7 +74,43 @@ LlamaFarm selects an agent handler based on configuration:
 - **RAG chat** – augments prompts with retrieved context, citations, and guardrails.
 - **Classifier / Custom** – future handlers for specialized workflows.
 
-Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don’t handle tools, so stick with simple chat.
+Choose handler behaviour in your project configuration (e.g., advanced agents defined by the server). Ensure the model supports the required features—some small models (TinyLlama) don't handle tools, so stick with simple chat.
+
+## Inline Tools with Dynamic Variables
+
+Models can define tools inline in the config, and these tools support dynamic variable substitution:
+
+```yaml
+runtime:
+  models:
+    - name: assistant
+      provider: universal
+      model: llama3.2:3b
+      tool_call_strategy: native_api
+      tools:
+        - type: function
+          name: search_docs
+          description: "Search {{company_name | the company}} documentation"
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: "Search query for {{department | general}} topics"
+            required:
+              - query
+```
+
+Pass values at request time via the `variables` field:
+
+```bash
+curl -X POST .../chat/completions -d '{
+  "messages": [{"role": "user", "content": "Find shipping info"}],
+  "variables": {"company_name": "Acme Corp", "department": "logistics"}
+}'
+```
+
+See [Dynamic Variables](../prompts/index.md#dynamic-variables) for full syntax documentation.
 
 ## Lemonade Runtime
 
@@ -124,7 +160,7 @@ runtime:
 - **Hardware acceleration**: Automatically detects and uses Metal (macOS), CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
 - **Multiple backends**: llamacpp (GGUF models), ONNX, or Transformers (PyTorch)
 - **OpenAI-compatible API**: Drop-in replacement for OpenAI-compatible endpoints
-- **Port 11534**: Default port (different from LlamaFarm's 8000 and Ollama's 11434)
+- **Port 11534**: Default port (different from LlamaFarm's 14345 and Ollama's 11434)
 
 ### Multi-Model with Lemonade
 
@@ -546,16 +582,20 @@ Beyond text generation, the Universal Runtime provides specialized ML capabiliti
 | **Text Classification** | `POST /v1/classify` | Sentiment analysis, routing |
 | **Named Entity Recognition** | `POST /v1/ner` | Extract people, places, organizations |
 | **Reranking** | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| **Anomaly Detection** | `POST /v1/anomaly/*` | Detect outliers in data |
+| **Anomaly Detection** | `POST /v1/ml/anomaly/*` | Detect outliers in data |
 
 See the detailed guides:
 - [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
-- [Anomaly Detection Guide](./anomaly-detection.md) - Complete anomaly detection documentation
+- [Anomaly Detection Guide](./anomaly-detection.md) - Batch anomaly detection for training and scoring
+- [Streaming Anomaly Detection](./streaming-anomaly-detection.md) - Real-time streaming with auto-retraining
+- [Polars Buffer API](./polars-buffers.md) - High-performance data buffers for feature engineering
 
 ## Next Steps
 
 - [Specialized ML Models](./specialized-ml.md) – OCR, document extraction, and more.
 - [Anomaly Detection](./anomaly-detection.md) – detect outliers in your data.
+- [Streaming Anomaly Detection](./streaming-anomaly-detection.md) – real-time streaming detection.
+- [Polars Buffer API](./polars-buffers.md) – direct access to Polars data buffers.
 - [Configuration Guide](../configuration/index.md) – runtime schema details.
 - [Extending runtimes](../extending/index.md#extend-runtimes) – step-by-step provider integration.
 - [Prompts](../prompts/index.md) – control how system prompts interact with runtime capabilities.

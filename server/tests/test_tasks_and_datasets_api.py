@@ -29,7 +29,9 @@ def test_dataset_actions_ingest_triggers_task_and_returns_task_uri(mocker):
     assert data["message"] == "Dataset ingestion started"
     assert data["task_uri"].endswith("/v1/projects/ns1/proj1/tasks/task-123")
     assert data["task_id"] == "task-123"
-    start_ingest.assert_called_once_with("ns1", "proj1", "ds1")
+    start_ingest.assert_called_once_with(
+        "ns1", "proj1", "ds1", parser_overrides=None
+    )
 
 
 def test_dataset_actions_invalid_type_returns_400():

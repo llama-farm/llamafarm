@@ -86,7 +86,7 @@ lf services status
 lf services start
 
 # Check if Designer is accessible
-curl -s http://localhost:8000/health
+curl -s http://localhost:14345/health
 ```
 
 ## Testing Signed Builds
@@ -128,7 +128,7 @@ docker ps
 ollama --version
 
 # Check port is available
-lsof -i :8000
+lsof -i :14345
 ```
 
 ### CLI not found after install
@@ -151,7 +151,7 @@ Before releasing:
 - [ ] Remove quarantine and verify app opens
 - [ ] Check CLI installs correctly
 - [ ] Verify services start automatically
-- [ ] Test Designer loads at localhost:8000
+- [ ] Test Designer loads at localhost:14345
 - [ ] Test auto-update check (production builds only)
 - [ ] Test menu items (Help links, etc.)
 - [ ] Test quit behavior (services stop cleanly)

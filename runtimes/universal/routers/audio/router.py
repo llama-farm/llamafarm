@@ -562,6 +562,22 @@ async def websocket_transcription(
                                 "is_final": False,
                             }
                         )
+                    except Exception as transcribe_err:
+                        # Handle errors gracefully - log and send empty segment
+                        # This can happen when VAD removes all audio or audio is corrupted
+                        logger.warning(
+                            f"Transcription error (may be silence): {transcribe_err}"
+                        )
+                        # Send empty segment to indicate we processed but found no speech
+                        await websocket.send_json(
+                            {
+                                "type": "segment",
+                                "text": "",
+                                "duration": buffer_duration,
+                                "is_final": False,
+                                "warning": "No speech detected",
+                            }
+                        )
 
                     finally:
                         Path(tmp_path).unlink(missing_ok=True)
@@ -597,6 +613,20 @@ async def websocket_transcription(
                                 "text": result.text,
                                 "duration": len(audio_buffer) / bytes_per_second,
                                 "is_final": True,
+                            }
+                        )
+                    except Exception as transcribe_err:
+                        # Handle errors gracefully - log and send empty final segment
+                        logger.warning(
+                            f"Final transcription error (may be silence): {transcribe_err}"
+                        )
+                        await websocket.send_json(
+                            {
+                                "type": "segment",
+                                "text": "",
+                                "duration": len(audio_buffer) / bytes_per_second,
+                                "is_final": True,
+                                "warning": "No speech detected",
                             }
                         )
 

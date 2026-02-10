@@ -100,6 +100,14 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const [playingTtsId, setPlayingTtsId] = useState<string | null>(null)
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Track typed input audio playback (for stop button in conversation mode)
+  const [isTypedAudioPlaying, setIsTypedAudioPlaying] = useState(false)
+  const typedAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Track waiting states for conversation mode (typed input)
+  const [isWaitingForLLM, setIsWaitingForLLM] = useState(false)
+  const [isSynthesizingTypedTTS, setIsSynthesizingTypedTTS] = useState(false)
+
   // Input State
   const [textInput, setTextInput] = useState('')
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
@@ -138,7 +146,13 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   }, [availableLLMModels, selectedLLMModel])
 
   // Determine which mode we're in (calculated early for hook config)
-  const mode = sttEnabled && ttsEnabled ? 'conversation' : sttEnabled ? 'stt' : 'tts'
+  // If LLM is enabled, always use conversation mode (supports typed input with LLM responses)
+  // Otherwise, use STT-only or TTS-only mode based on what's enabled
+  const mode = llmEnabled
+    ? 'conversation'  // LLM enabled - show conversation UI regardless of STT/TTS
+    : sttEnabled
+      ? 'stt'         // STT only (no LLM) - show transcription UI
+      : 'tts'         // TTS only (no LLM) - show TTS-only UI
 
   // Default voice system prompt for concise responses
   const voiceSystemPrompt = 'You are a helpful voice assistant. Keep responses brief and conversational - aim for 1-3 sentences unless more detail is explicitly requested. Speak naturally as if having a conversation.'
@@ -235,47 +249,132 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     return new Blob([buffer], { type: 'audio/wav' })
   }, [])
 
+  // Track blob URLs for cleanup to prevent memory leaks
+  const blobUrlsRef = useRef<Map<string, string>>(new Map())
+
   // Sync voiceChat messages with local messages state
+  // Only sync voice messages - typed input messages are added directly to messages state
   useEffect(() => {
     if (mode === 'conversation' && llmAvailable) {
       // Convert VoiceMessage to SpeechMessage format
-      // This also handles clearing when voiceChat.messages becomes empty
-      const convertedMessages: SpeechMessage[] = voiceChat.messages.map((vm: VoiceMessage) => ({
-        id: vm.id,
-        role: vm.role,
-        text: vm.text,
-        timestamp: vm.timestamp,
-        // Convert PCM to proper WAV so HTML Audio element can play it
-        audioUrl: vm.audioData ? URL.createObjectURL(pcmToWavBlob(vm.audioData, 24000)) : undefined,
-      }))
-      setMessages(convertedMessages)
+      const voiceMessagesConverted: SpeechMessage[] = voiceChat.messages.map((vm: VoiceMessage) => {
+        // Reuse existing blob URL if we already created one for this message
+        const existingUrl = blobUrlsRef.current.get(vm.id)
+        if (existingUrl) {
+          return {
+            id: vm.id,
+            role: vm.role,
+            text: vm.text,
+            timestamp: vm.timestamp,
+            audioUrl: existingUrl,
+          }
+        }
+
+        // Create new blob URL only for new messages with audio
+        let audioUrl: string | undefined
+        if (vm.audioData) {
+          audioUrl = URL.createObjectURL(pcmToWavBlob(vm.audioData, 24000))
+          blobUrlsRef.current.set(vm.id, audioUrl)
+        }
+
+        return {
+          id: vm.id,
+          role: vm.role,
+          text: vm.text,
+          timestamp: vm.timestamp,
+          audioUrl,
+        }
+      })
+
+      // Merge voice messages with existing typed messages (those with 'msg-' prefix)
+      // Voice messages have 'user-' prefix from voiceChat
+      setMessages(prev => {
+        // Keep typed messages (ids starting with 'msg-')
+        const typedMessages = prev.filter(m => m.id.startsWith('msg-'))
+        // Combine: voice messages + typed messages, sorted by timestamp
+        const combined = [...voiceMessagesConverted, ...typedMessages]
+        combined.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+        return combined
+      })
+
+      // Clean up blob URLs for voice messages that no longer exist
+      // Note: Don't clean up typed message URLs (msg- prefix) here - they're managed separately
+      const currentIds = new Set(voiceChat.messages.map(m => m.id))
+      for (const [id, url] of blobUrlsRef.current.entries()) {
+        // Skip typed message URLs - they're not in voiceChat.messages
+        if (id.startsWith('msg-')) continue
+        if (!currentIds.has(id)) {
+          URL.revokeObjectURL(url)
+          blobUrlsRef.current.delete(id)
+        }
+      }
     }
   }, [mode, llmAvailable, voiceChat.messages, pcmToWavBlob])
 
-  // Start recording when voice chat connects (if we were waiting)
+  // Clear transient errors when we receive a successful assistant response
+  // This prevents errors from intermediate failures (like streaming STT) from persisting
+  // when the overall conversation succeeds (via fallback paths)
+  const lastMessageCountRef = useRef(0)
   useEffect(() => {
-    if (pendingVoiceChatRecord && voiceChat.isConnected) {
-      setPendingVoiceChatRecord(false)
-      voiceChat.startRecording().then(() => {
-        setRecordingState('recording')
-        setActiveStream(voiceChat.activeStream)
-      }).catch((err) => {
-        setTranscriptionError(err instanceof Error ? err.message : 'Failed to start recording')
-        setRecordingState('idle')
-      })
+    const assistantMessages = voiceChat.messages.filter(m => m.role === 'assistant')
+    if (assistantMessages.length > lastMessageCountRef.current) {
+      // New assistant message arrived - conversation succeeded, clear transient errors
+      setTranscriptionError(null)
     }
-  }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat])
+    lastMessageCountRef.current = assistantMessages.length
+  }, [voiceChat.messages])
 
-  // Note: Text messages now use REST API, so no pending message handling needed
-
-  // Handle voice chat connection errors
+  // Cleanup blob URLs on unmount
   useEffect(() => {
-    if (pendingVoiceChatRecord && voiceChat.error) {
+    return () => {
+      blobUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      blobUrlsRef.current.clear()
+    }
+  }, [])
+
+  // Handle pending voice chat recording - consolidated effect for connection success/error
+  // Note: Text messages now use REST API, so no pending message handling needed
+  useEffect(() => {
+    if (!pendingVoiceChatRecord) return
+
+    // Handle error case first (takes priority over connection success)
+    if (voiceChat.error) {
       setPendingVoiceChatRecord(false)
       setRecordingState('idle')
       setTranscriptionError(voiceChat.error)
+      return
     }
-  }, [pendingVoiceChatRecord, voiceChat.error])
+
+    // Handle successful connection - start recording
+    if (voiceChat.isConnected) {
+      setPendingVoiceChatRecord(false)
+      voiceChat.startRecording()
+        .then(() => {
+          setRecordingState('recording')
+          setActiveStream(voiceChat.activeStream)
+        })
+        .catch((err) => {
+          setTranscriptionError(err instanceof Error ? err.message : 'Failed to start recording')
+          setRecordingState('idle')
+        })
+    }
+  }, [pendingVoiceChatRecord, voiceChat.isConnected, voiceChat.error, voiceChat])
+
+  // Connection timeout - prevents infinite spinner if connection hangs
+  useEffect(() => {
+    if (!pendingVoiceChatRecord) return
+
+    const timeout = setTimeout(() => {
+      if (pendingVoiceChatRecord) {
+        setPendingVoiceChatRecord(false)
+        setRecordingState('idle')
+        setTranscriptionError('Connection timed out. Please try again.')
+        voiceChat.disconnect()
+      }
+    }, 10000) // 10 second timeout
+
+    return () => clearTimeout(timeout)
+  }, [pendingVoiceChatRecord, voiceChat])
 
   // Sync voiceChat state with local state
   // IMPORTANT: voiceChat.isRecording reflects whether the MediaRecorder is active.
@@ -286,19 +385,20 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     if (mode === 'conversation' && llmAvailable) {
       // Update recording state based on voiceChat
       // Priority: isRecording > other states
+      // Use functional updates and guards to prevent infinite loops
       if (voiceChat.isRecording) {
         // MediaRecorder is active - always show recording UI regardless of voiceState
         // This ensures continuous listening works after each turn
-        setRecordingState('recording')
+        setRecordingState(prev => prev !== 'recording' ? 'recording' : prev)
         if (voiceChat.activeStream) {
           setActiveStream(voiceChat.activeStream)
         }
       } else if (voiceChat.voiceState === 'processing' || voiceChat.voiceState === 'speaking') {
         // Not recording but still processing/speaking (e.g., text input turn)
-        setRecordingState('processing')
-      } else if (voiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingVoiceChatRecord) {
+        setRecordingState(prev => prev !== 'processing' ? 'processing' : prev)
+      } else if (voiceChat.voiceState === 'idle' && !pendingVoiceChatRecord) {
         // Voice chat is idle and we're not recording - reset to idle
-        setRecordingState('idle')
+        setRecordingState(prev => prev !== 'idle' ? 'idle' : prev)
       }
 
       // Update transcription display
@@ -311,22 +411,23 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         setTranscriptionError(voiceChat.error)
       }
     }
-  }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord])
+  }, [mode, llmAvailable, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, pendingVoiceChatRecord])
 
   // Sync STT-only voice chat state with local state (for turn detection-based transcription)
   // Now uses the same voiceChat hook with sttOnly mode
   useEffect(() => {
     if (mode === 'stt' && turnDetectionEnabled) {
       // Update recording state based on voiceChat (in sttOnly mode)
+      // Use functional updates and guards to prevent infinite loops
       if (voiceChat.isRecording) {
-        setRecordingState('recording')
+        setRecordingState(prev => prev !== 'recording' ? 'recording' : prev)
         if (voiceChat.activeStream) {
           setActiveStream(voiceChat.activeStream)
         }
       } else if (voiceChat.voiceState === 'processing') {
-        setRecordingState('processing')
-      } else if (voiceChat.voiceState === 'idle' && recordingState !== 'idle' && !pendingVoiceChatRecord) {
-        setRecordingState('idle')
+        setRecordingState(prev => prev !== 'processing' ? 'processing' : prev)
+      } else if (voiceChat.voiceState === 'idle' && !pendingVoiceChatRecord) {
+        setRecordingState(prev => prev !== 'idle' ? 'idle' : prev)
       }
 
       // When we get a final transcription from STT-only mode, update the result
@@ -346,7 +447,39 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         setTranscriptionError(voiceChat.error)
       }
     }
-  }, [mode, turnDetectionEnabled, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, recordingState, pendingVoiceChatRecord, sttLanguage])
+  }, [mode, turnDetectionEnabled, voiceChat.isRecording, voiceChat.activeStream, voiceChat.voiceState, voiceChat.currentTranscription, voiceChat.error, pendingVoiceChatRecord, sttLanguage])
+
+  // Comprehensive error reset effect - ensures recording state resets on any error
+  // This catches cases where voiceState conditions don't trigger a reset
+  // Only applies when using voiceChat (not local MediaRecorder)
+  const shouldUseVoiceChat = (mode === 'conversation' && llmAvailable) || (mode === 'stt' && turnDetectionEnabled)
+
+  useEffect(() => {
+    // Only reset based on voiceChat state when we're supposed to be using voiceChat
+    // When LLM is disabled, we use local MediaRecorder and shouldn't reset based on voiceChat
+    if (!shouldUseVoiceChat) return
+
+    // Reset on any error while not idle (unless we're handling it in pending effect)
+    // Note: Don't clear activeStream here - the microphone may still be recording
+    // and user should still see the waveform. The stream is cleared when recording stops.
+    if (voiceChat.error && !pendingVoiceChatRecord) {
+      setRecordingState(prev => prev !== 'idle' ? 'idle' : prev)
+      // Don't clear activeStream - voiceChat may still be recording
+      // The stream will be cleared when voiceChat.isRecording goes false
+    }
+    // Also reset when voiceChat goes idle but local state is stuck
+    // (catches edge cases where main sync effect conditions don't match)
+    if (voiceChat.voiceState === 'idle' && !voiceChat.isRecording &&
+        !pendingVoiceChatRecord && !voiceChat.isPlayingAudio) {
+      // Small delay to avoid race with legitimate state transitions
+      const timer = setTimeout(() => {
+        if (voiceChat.voiceState === 'idle' && !voiceChat.isRecording && !pendingVoiceChatRecord) {
+          setRecordingState(prev => prev !== 'idle' ? 'idle' : prev)
+        }
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [shouldUseVoiceChat, voiceChat.error, voiceChat.voiceState, voiceChat.isRecording, voiceChat.isPlayingAudio, pendingVoiceChatRecord])
 
   // Fetch available voices from backend
   useEffect(() => {
@@ -708,8 +841,121 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
     // Collapse settings on first interaction
     setConfigExpanded(false)
 
+    // Check if we should use LLM (regardless of mode - user might have STT off but LLM on)
+    if (llmAvailable && activeProject) {
+      // Use LLM for text input - conversation mode
+      const inputText = textInput
+      setTextInput('')
+
+      // Add user message immediately
+      const userMessage: SpeechMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        text: inputText,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, userMessage])
+
+      // Start waiting for LLM response
+      setIsWaitingForLLM(true)
+
+      // Send via REST API with full conversation history
+      try {
+        // Convert existing messages to API format and append new user message
+        // Include system prompt for concise voice-friendly responses
+        const apiMessages = [
+          { role: 'system' as const, content: voiceSystemPrompt },
+          ...messages.map(m => ({ role: m.role, content: m.text })),
+          { role: 'user' as const, content: inputText },
+        ]
+        const result = await sendChatCompletion(
+          activeProject.namespace,
+          activeProject.project,
+          {
+            messages: apiMessages,
+            model: selectedLLMModel,
+          }
+        )
+
+        // LLM response received
+        setIsWaitingForLLM(false)
+
+        // Add assistant response
+        const assistantText = result.response.choices?.[0]?.message?.content || ''
+        if (assistantText) {
+          const messageId = `msg-${Date.now() + 1}`
+
+          // Add message first (without audio)
+          const assistantMessage: SpeechMessage = {
+            id: messageId,
+            role: 'assistant',
+            text: assistantText,
+            timestamp: new Date(),
+          }
+          setMessages(prev => [...prev, assistantMessage])
+
+          // If TTS is enabled, synthesize and UPDATE message with audioUrl
+          if (ttsEnabled) {
+            setIsSynthesizingTypedTTS(true)
+            try {
+              const audioBlob = await synthesizeSpeech({
+                model: ttsModel,
+                input: assistantText,
+                voice: ttsVoice,
+                speed: ttsSpeed,
+                response_format: 'mp3',
+              })
+              const audioUrl = URL.createObjectURL(audioBlob)
+              // Track the blob URL for cleanup to prevent memory leaks
+              blobUrlsRef.current.set(messageId, audioUrl)
+
+              // Update the message with audioUrl so play button appears
+              setMessages(prev => prev.map(msg =>
+                msg.id === messageId ? { ...msg, audioUrl } : msg
+              ))
+
+              // Auto-play the audio with tracking for stop button
+              const audio = new Audio(audioUrl)
+              typedAudioRef.current = audio
+              setIsTypedAudioPlaying(true)
+              audio.onended = () => {
+                setIsTypedAudioPlaying(false)
+                typedAudioRef.current = null
+              }
+              audio.onerror = () => {
+                setIsTypedAudioPlaying(false)
+                typedAudioRef.current = null
+              }
+              audio.play().catch(() => {
+                setIsTypedAudioPlaying(false)
+                typedAudioRef.current = null
+              })
+            } catch (ttsErr) {
+              console.error('TTS synthesis failed:', ttsErr)
+              // Show a brief error message to the user
+              const errorMessage = ttsErr instanceof Error ? ttsErr.message : 'Audio synthesis failed'
+              if (errorMessage.includes('Network Error')) {
+                setTtsError('TTS unavailable - Universal Runtime not running')
+              } else {
+                setTtsError(`Audio synthesis failed: ${errorMessage}`)
+              }
+              // Clear error after 5 seconds
+              setTimeout(() => setTtsError(null), 5000)
+            } finally {
+              setIsSynthesizingTypedTTS(false)
+            }
+          }
+        }
+      } catch (err) {
+        setIsWaitingForLLM(false)
+        const message = err instanceof Error ? err.message : 'Chat request failed'
+        setTranscriptionError(message)
+      }
+      return
+    }
+
     if (mode === 'tts') {
-      // TTS-only mode: synthesize the text and add to history
+      // TTS-only mode (no LLM): synthesize the text and add to history
       setIsSynthesizing(true)
       const inputTextCopy = textInput
       setTtsError(null)
@@ -751,123 +997,8 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       } finally {
         setIsSynthesizing(false)
       }
-    } else {
-      // Conversation mode - text input
-      const inputText = textInput
-      setTextInput('')
-
-      // If LLM is available, use REST API for text input
-      if (llmAvailable && activeProject) {
-        // Add user message immediately
-        const userMessage: SpeechMessage = {
-          id: `msg-${Date.now()}`,
-          role: 'user',
-          text: inputText,
-          timestamp: new Date(),
-        }
-        setMessages(prev => [...prev, userMessage])
-
-        // Send via REST API with full conversation history
-        try {
-          // Convert existing messages to API format and append new user message
-          const apiMessages = [
-            ...messages.map(m => ({ role: m.role, content: m.text })),
-            { role: 'user' as const, content: inputText },
-          ]
-          const result = await sendChatCompletion(
-            activeProject.namespace,
-            activeProject.project,
-            {
-              messages: apiMessages,
-              model: selectedLLMModel,
-            }
-          )
-
-          // Add assistant response
-          const assistantText = result.response.choices?.[0]?.message?.content || ''
-          if (assistantText) {
-            const assistantMessage: SpeechMessage = {
-              id: `msg-${Date.now() + 1}`,
-              role: 'assistant',
-              text: assistantText,
-              timestamp: new Date(),
-            }
-            setMessages(prev => [...prev, assistantMessage])
-
-            // If TTS is enabled, synthesize and play the response
-            if (ttsEnabled) {
-              try {
-                const audioBlob = await synthesizeSpeech({
-                  model: ttsModel,
-                  input: assistantText,
-                  voice: ttsVoice,
-                  speed: ttsSpeed,
-                  response_format: 'mp3',
-                })
-                const audioUrl = URL.createObjectURL(audioBlob)
-                const audio = new Audio(audioUrl)
-                // Revoke blob URL after playback to prevent memory leak
-                audio.onended = () => URL.revokeObjectURL(audioUrl)
-                audio.onerror = () => URL.revokeObjectURL(audioUrl)
-                audio.play().catch(() => URL.revokeObjectURL(audioUrl))
-              } catch (ttsErr) {
-                console.error('TTS synthesis failed:', ttsErr)
-              }
-            }
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Chat request failed'
-          setTranscriptionError(message)
-        }
-        return
-      }
-
-      // Fallback: No LLM, use echo mode
-      const userMessage: SpeechMessage = {
-        id: `msg-${Date.now()}`,
-        role: 'user',
-        text: inputText,
-        timestamp: new Date(),
-      }
-      setMessages(prev => [...prev, userMessage])
-
-      // Generate TTS response if enabled (echo mode)
-      if (ttsEnabled) {
-        const responseText = `I heard you say: "${inputText}"`
-
-        try {
-          const audioBlob = await synthesizeSpeech({
-            model: ttsModel,
-            input: responseText,
-            voice: ttsVoice,
-            speed: ttsSpeed,
-            response_format: 'mp3',
-          })
-
-          const audioUrl = URL.createObjectURL(audioBlob)
-
-          const assistantMessage: SpeechMessage = {
-            id: `msg-${Date.now() + 1}`,
-            role: 'assistant',
-            text: responseText,
-            timestamp: new Date(),
-            audioUrl,
-          }
-          setMessages(prev => [...prev, assistantMessage])
-          setBackendConnected(true)
-        } catch (err) {
-          // TTS failed, add text-only response
-          const assistantMessage: SpeechMessage = {
-            id: `msg-${Date.now() + 1}`,
-            role: 'assistant',
-            text: responseText,
-            timestamp: new Date(),
-          }
-          setMessages(prev => [...prev, assistantMessage])
-        }
-      }
     }
-  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, activeProject, selectedLLMModel, messages, voiceChat, stopAudioPlayback])
+  }, [textInput, mode, ttsModel, ttsVoice, ttsSpeed, ttsEnabled, llmAvailable, activeProject, selectedLLMModel, messages, voiceSystemPrompt, stopAudioPlayback])
 
   // Handle key press in textarea
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -958,6 +1089,14 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
   const handleClearConversation = useCallback(() => {
     // Stop any ongoing audio playback and backend generation
     voiceChat.interrupt()
+
+    // Clean up blob URLs for typed messages before clearing
+    for (const [id, url] of blobUrlsRef.current.entries()) {
+      if (id.startsWith('msg-')) {
+        URL.revokeObjectURL(url)
+        blobUrlsRef.current.delete(id)
+      }
+    }
 
     // Clear conversation mode state
     setMessages([])
@@ -1270,14 +1409,38 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
                   </button>
                 </div>
               )}
+              {/* TTS error display for conversation mode */}
+              {ttsError && (
+                <div className="flex-shrink-0 mx-4 mt-4 flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-600 text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{ttsError}</span>
+                  <button
+                    onClick={() => setTtsError(null)}
+                    className="ml-auto text-xs hover:text-amber-800"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               <ConversationView
                 messages={messages}
                 onPlayAudio={handlePlayMessageAudio}
                 playingMessageId={playingMessageId}
                 streamingUserText={llmAvailable ? voiceChat.currentTranscription : undefined}
                 streamingAssistantText={llmAvailable ? voiceChat.currentLLMText : undefined}
-                isSpeaking={llmAvailable && (voiceChat.voiceState === 'speaking' || voiceChat.isPlayingAudio)}
-                onStopSpeaking={() => voiceChat.interrupt()}
+                isSpeaking={isTypedAudioPlaying || (llmAvailable && (voiceChat.voiceState === 'speaking' || voiceChat.isPlayingAudio))}
+                onStopSpeaking={() => {
+                  // Stop typed input audio if playing
+                  if (typedAudioRef.current) {
+                    typedAudioRef.current.pause()
+                    typedAudioRef.current = null
+                    setIsTypedAudioPlaying(false)
+                  }
+                  // Also stop voiceChat audio
+                  voiceChat.interrupt()
+                }}
+                isThinking={isWaitingForLLM || voiceChat.voiceState === 'processing'}
+                isSynthesizingTTS={isSynthesizingTypedTTS}
                 className="flex-1"
               />
             </div>
@@ -1407,12 +1570,13 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
           <div className="flex-shrink-0 p-3 border-t border-border bg-background/60">
             <div className="flex items-center gap-2">
               {/* Recording mode: full-width waveform with stop button on right */}
-              {recordingState === 'recording' && activeStream ? (
+              {/* Check both local state and voiceChat state to handle race conditions */}
+              {(recordingState === 'recording' || voiceChat.isRecording) && (activeStream || voiceChat.activeStream) ? (
                 <>
                   {/* Waveform with optional helper text for manual mode */}
                   <div className="flex-1 flex flex-col items-center justify-center gap-1">
                     <Waveform
-                      stream={activeStream}
+                      stream={activeStream || voiceChat.activeStream}
                       isActive={true}
                       height={24}
                       barCount={80}

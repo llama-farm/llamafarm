@@ -3,7 +3,7 @@ services:
   server:
     image: ghcr.io/llama-farm/llamafarm/server:${IMAGE_TAG-latest}
     ports:
-      - "8000:8000"
+      - "14345:14345"
     environment:
       - PYTHONUNBUFFERED=1
       - LF_DATA_DIR=/var/lib/llamafarm
@@ -13,7 +13,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/liveness"]
+      test: ["CMD", "curl", "-f", "http://localhost:14345/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -53,7 +53,7 @@ services:
     ports:
       - "3123:80"
     environment:
-      - VITE_APP_API_URL=http://server:8000
+      - VITE_APP_API_URL=http://server:14345
       - VITE_APP_ENV=production
     depends_on:
       server:

@@ -30,7 +30,7 @@ function resolveBaseUrl(): string {
       window.location.hostname === 'localhost'
     ) {
       // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-      base = `http://127.0.0.1:8000/${API_VERSION}`
+      base = `http://127.0.0.1:14345/${API_VERSION}`
     }
     return base
   }
@@ -41,7 +41,7 @@ function resolveBaseUrl(): string {
     window.location.hostname === 'localhost'
   ) {
     // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-    return `http://127.0.0.1:8000/${API_VERSION}`
+    return `http://127.0.0.1:14345/${API_VERSION}`
   }
 
   // 3) Default to vite proxy

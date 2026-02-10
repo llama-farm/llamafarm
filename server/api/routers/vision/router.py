@@ -163,7 +163,7 @@ async def extract_text(
 
     Example with file upload (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/ocr \\
+    curl -X POST http://localhost:14345/v1/vision/ocr \\
       -F "file=@document.pdf" \\
       -F "model=easyocr" \\
       -F "languages=en"
@@ -171,7 +171,7 @@ async def extract_text(
 
     Example with base64 images (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/ocr \\
+    curl -X POST http://localhost:14345/v1/vision/ocr \\
       -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
       -F "model=surya" \\
       -F "languages=en"
@@ -267,7 +267,7 @@ async def extract_from_documents(
 
     Example with file upload (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+    curl -X POST http://localhost:14345/v1/vision/documents/extract \\
       -F "file=@receipt.pdf" \\
       -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \\
       -F "prompts=What is the total amount?" \\
@@ -276,7 +276,7 @@ async def extract_from_documents(
 
     Example with base64 images (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+    curl -X POST http://localhost:14345/v1/vision/documents/extract \\
       -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
       -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \\
       -F "task=extraction"

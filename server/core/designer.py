@@ -16,8 +16,9 @@ def get_designer_dist_path() -> Path | None:
     Checks multiple locations in order:
     0. DESIGNER_DIST_PATH environment variable (explicit configuration)
     1. ~/.llamafarm/src/designer/dist (CLI-managed source)
-    2. ../designer/dist (relative to server directory when running from repo)
-    3. ./designer/dist (current directory)
+    2. server/designer/dist (inside server package for PyApp binaries)
+    3. ../designer/dist (relative to server directory when running from repo)
+    4. ./designer/dist (current directory)
 
     Logs the selected path or a warning if none is found.
     Result is cached to avoid repeated filesystem checks.
@@ -46,23 +47,36 @@ def get_designer_dist_path() -> Path | None:
             )
 
     # 1. CLI-managed source
-    cli_path = Path.home() / ".llamafarm" / "src" / "designer" / "dist"
+    try:
+        _home = Path.home()
+    except RuntimeError:
+        _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+        _home = Path(_fb) if _fb else Path.cwd()
+    cli_path = _home / ".llamafarm" / "src" / "designer" / "dist"
     if cli_path.exists() and cli_path.is_dir():
         logger.info(f"Using designer/dist path from CLI-managed source: {cli_path}")
         _cached_designer_dist_path = cli_path
         return cli_path
 
-    # 2. Relative to server directory (when running from repo)
+    # 2. Inside the server package (PyApp binary deployment)
+    # When packaged with PyApp, designer/dist is inside the server package
+    server_dir = Path(__file__).parent.parent
+    package_path = server_dir / "designer" / "dist"
+    if package_path.exists() and package_path.is_dir():
+        logger.info(f"Using designer/dist path from server package: {package_path}")
+        _cached_designer_dist_path = package_path
+        return package_path
+
+    # 3. Relative to server directory (when running from repo)
     # Path(__file__) in this file will be server/core/designer.py
     # So server_dir is server/
-    server_dir = Path(__file__).parent.parent
     repo_path = server_dir.parent / "designer" / "dist"
     if repo_path.exists() and repo_path.is_dir():
         logger.info(f"Using designer/dist path from repo: {repo_path}")
         _cached_designer_dist_path = repo_path
         return repo_path
 
-    # 3. Current directory
+    # 4. Current directory
     cwd_path = Path.cwd() / "designer" / "dist"
     if cwd_path.exists() and cwd_path.is_dir():
         logger.info(f"Using designer/dist path from current directory: {cwd_path}")
