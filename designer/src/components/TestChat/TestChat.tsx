@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, MicOff, Loader2, Volume2 } from 'lucide-react'
+import { Mic, MicOff, Loader2, Volume2, Download } from 'lucide-react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -25,6 +25,10 @@ import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifie
 import { Selector } from '../ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
+import { useListAddons, useInstallAddon } from '../../hooks/useAddons'
+import type { AddonInfo } from '../../types/addons'
+import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
+import { AddonInstallProgress } from '../Addons/AddonInstallProgress'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
@@ -232,6 +236,39 @@ function InferenceNoModelsState({
           className="mt-4 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
         >
           Add Inference Model
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Speech Addon Empty State - shown when speech addons (STT/TTS) are not installed
+function SpeechAddonEmptyState({
+  isLoading,
+  onInstall,
+}: {
+  isLoading: boolean
+  onInstall: () => void
+}) {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/20 border border-violet-500/30">
+          <Volume2 className="w-5 h-5 text-violet-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          Speech add-ons required
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          Install the speech-to-text and text-to-speech add-ons to enable voice features
+        </div>
+        <button
+          onClick={onInstall}
+          disabled={isLoading}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" />
+          {isLoading ? 'Checking...' : 'Install Speech Add-ons'}
         </button>
       </div>
     </div>
@@ -1798,6 +1835,82 @@ export default function TestChat({
   // Speech mode - clear function ref and message tracking
   const speechClearRef = useRef<(() => void) | null>(null)
   const [speechHasMessages, setSpeechHasMessages] = useState(false)
+
+  // ============================================================================
+  // Speech Add-on Detection & Installation
+  // ============================================================================
+
+  // Fetch addon list only when speech mode is active
+  const { data: addonsData, isLoading: isLoadingAddons } = useListAddons({
+    enabled: modelType === 'speech',
+    staleTime: 0, // Always refetch to avoid stale cache issues
+  })
+
+  // Check if speech addons (stt and tts) are installed
+  const speechAddonsInstalled = useMemo(() => {
+    if (!addonsData) return null // Still loading or error
+    const stt = addonsData.find((a: AddonInfo) => a.name === 'stt')
+    const tts = addonsData.find((a: AddonInfo) => a.name === 'tts')
+    return {
+      stt: Boolean(stt?.installed),
+      tts: Boolean(tts?.installed),
+      any: Boolean(stt?.installed || tts?.installed),
+      both: Boolean(stt?.installed && tts?.installed)
+    }
+  }, [addonsData])
+
+  // Get uninstalled speech addons (including dependencies) for the side pane
+  const uninstalledSpeechAddons = useMemo(() => {
+    if (!addonsData) return []
+    return addonsData.filter(
+      (a: AddonInfo) =>
+        !a.installed && (a.name === 'stt' || a.name === 'tts' || a.name === 'onnxruntime')
+    )
+  }, [addonsData])
+
+  // Side pane and installation tracking state
+  const [showAddonSidePane, setShowAddonSidePane] = useState(false)
+  const [addonInstallTaskId, setAddonInstallTaskId] = useState<string | null>(null)
+  const [addonInstallName, setAddonInstallName] = useState<string>('')
+
+  const installAddonMutation = useInstallAddon()
+
+  // Handle install confirmation from side pane
+  const handleAddonInstallConfirm = useCallback((selectedAddons: string[]) => {
+    setShowAddonSidePane(false)
+    if (selectedAddons.length === 0) return
+
+    // Get the first addon to use for display name
+    const firstAddon = uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))
+    const displayName = selectedAddons.length === 1
+      ? firstAddon?.display_name || 'Add-on'
+      : `${selectedAddons.length} add-ons`
+
+    // Install all selected addons (backend handles dependencies)
+    // We'll just trigger installation for the first one and let the backend handle the rest
+    installAddonMutation.mutate(
+      { name: selectedAddons[0], restart_service: true },
+      {
+        onSuccess: (response) => {
+          setAddonInstallTaskId(response.task_id)
+          setAddonInstallName(displayName)
+        },
+      }
+    )
+  }, [uninstalledSpeechAddons, installAddonMutation])
+
+  // Handle install completion - refresh addon list
+  const handleAddonInstallComplete = useCallback(() => {
+    setAddonInstallTaskId(null)
+    setAddonInstallName('')
+    // The addon list will be invalidated automatically by the hook's onSuccess
+  }, [])
+
+  // Handle install cancel/dismiss
+  const handleAddonInstallCancel = useCallback(() => {
+    setAddonInstallTaskId(null)
+    setAddonInstallName('')
+  }, [])
 
   // ============================================================================
   // Voice Input for Text Generation (Mic button in input area)
@@ -3960,11 +4073,21 @@ export default function TestChat({
         ) : modelType === 'speech' ? (
           /* Speech: Full speech test panel with STT, TTS, and voice cloning */
           <div className="absolute inset-0 overflow-hidden">
-            <SpeechTestPanel
-              className="h-full"
-              clearRef={speechClearRef}
-              onMessagesChange={setSpeechHasMessages}
-            />
+            {!speechAddonsInstalled || !speechAddonsInstalled.any ? (
+              <SpeechAddonEmptyState
+                isLoading={isLoadingAddons}
+                onInstall={() => setShowAddonSidePane(true)}
+              />
+            ) : (
+              <SpeechTestPanel
+                sttInstalled={speechAddonsInstalled.stt}
+                ttsInstalled={speechAddonsInstalled.tts}
+                onInstallAddon={() => setShowAddonSidePane(true)}
+                className="h-full"
+                clearRef={speechClearRef}
+                onMessagesChange={setSpeechHasMessages}
+              />
+            )}
           </div>
         ) : (
           /* Encoder: Embedding similarity or Reranking */
@@ -4594,6 +4717,24 @@ export default function TestChat({
           </>
         )}
       </div>
+      )}
+
+      {/* Speech addon installation side pane */}
+      <AddonInstallSidePane
+        open={showAddonSidePane}
+        onOpenChange={setShowAddonSidePane}
+        addons={uninstalledSpeechAddons}
+        onConfirm={handleAddonInstallConfirm}
+      />
+
+      {/* Speech addon installation progress */}
+      {addonInstallTaskId && (
+        <AddonInstallProgress
+          taskId={addonInstallTaskId}
+          addonName={addonInstallName}
+          onComplete={handleAddonInstallComplete}
+          onCancel={handleAddonInstallCancel}
+        />
       )}
     </div>
   )
