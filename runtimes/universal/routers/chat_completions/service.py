@@ -463,6 +463,18 @@ class ChatCompletionsService:
                     f"Streaming chat completions for model: {chat_request.model}"
                 )
 
+                (
+                    model,
+                    is_gguf,
+                    prepared_messages,
+                    use_native_audio,
+                    audio_bytes,
+                    audio_format,
+                    total_max_tokens,
+                    thinking_tokens,
+                    _,
+                ) = await prepare_generation()
+
                 # Return SSE stream
                 async def generate_sse():
                     completion_id = f"chatcmpl-{os.urandom(16).hex()}"
@@ -485,18 +497,6 @@ class ChatCompletionsService:
                     yield f"data: {initial_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
                     # Force an immediate flush before any model loading.
                     await asyncio.sleep(0)
-
-                    (
-                        model,
-                        is_gguf,
-                        prepared_messages,
-                        use_native_audio,
-                        audio_bytes,
-                        audio_format,
-                        total_max_tokens,
-                        thinking_tokens,
-                        _,
-                    ) = await prepare_generation()
 
                     # Stream tokens - use native audio if supported, otherwise text
                     if use_native_audio and audio_bytes:
