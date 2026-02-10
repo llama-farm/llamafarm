@@ -114,49 +114,42 @@ jobs:
       contents: write
     secrets: inherit
 
+  # Generate the upload matrix dynamically from platforms.yaml and addon registry
+  # so it matches exactly what build-addon-wheels produced
+  setup-upload-matrix:
+    name: Setup Upload Matrix
+    if: github.event.inputs.build_addons == 'true'
+    needs: build-addon-wheels
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - id: set-matrix
+        run: |
+          MATRIX=$(python tools/generate_platform_matrix.py)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
   upload-to-snapshot:
     name: Upload Wheels to Snapshot
     if: github.event.inputs.build_addons == 'true'
-    needs: [create-snapshot-release, build-addon-wheels]
+    needs: [create-snapshot-release, setup-upload-matrix]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
-      matrix:
-        include:
-          # STT addon - all platforms
-          - platform: macos-arm64
-            addon: stt
-          - platform: macos-x86_64
-            addon: stt
-          - platform: linux-x86_64
-            addon: stt
-          - platform: linux-aarch64
-            addon: stt
-          - platform: windows-x86_64
-            addon: stt
-          # TTS addon - all platforms
-          - platform: macos-arm64
-            addon: tts
-          - platform: macos-x86_64
-            addon: tts
-          - platform: linux-x86_64
-            addon: tts
-          - platform: linux-aarch64
-            addon: tts
-          - platform: windows-x86_64
-            addon: tts
-          # ONNX Runtime addon - all platforms
-          - platform: macos-arm64
-            addon: onnxruntime
-          - platform: macos-x86_64
-            addon: onnxruntime
-          - platform: linux-x86_64
-            addon: onnxruntime
-          - platform: linux-aarch64
-            addon: onnxruntime
-          - platform: windows-x86_64
-            addon: onnxruntime
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-upload-matrix.outputs.matrix) }}
 
     steps:
       - name: Download artifact
