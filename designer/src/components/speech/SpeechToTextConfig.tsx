@@ -3,6 +3,7 @@ import { Selector } from '../ui/selector'
 import { Checkbox } from '../ui/checkbox'
 import { STT_MODELS, STT_LANGUAGES } from '../../types/ml'
 import type { STTModel } from '../../types/ml'
+import { AddonsLink } from './AddonsLink'
 
 interface SpeechToTextConfigProps {
   enabled: boolean
@@ -45,6 +46,7 @@ export function SpeechToTextConfig({
           <span className="text-xs text-muted-foreground">
             {enabled ? 'Enabled' : 'Disabled'}
           </span>
+          <AddonsLink />
         </div>
       </div>
 

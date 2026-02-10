@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { TTS_MODELS, getVoicesForModel } from '../../types/ml'
 import type { TTSModel, VoiceClone } from '../../types/ml'
 import { synthesizeSpeech } from '../../api/voiceService'
+import { AddonsLink } from './AddonsLink'
 
 interface TextToSpeechConfigProps {
   enabled: boolean
@@ -144,6 +145,7 @@ export function TextToSpeechConfig({
           <span className="text-xs text-muted-foreground">
             {enabled ? 'Enabled' : 'Disabled'}
           </span>
+          <AddonsLink />
         </div>
       </div>
 
