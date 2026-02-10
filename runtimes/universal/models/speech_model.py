@@ -133,6 +133,10 @@ class SpeechModel(BaseModel):
 
     async def load(self) -> None:
         """Load the Whisper model."""
+        # Re-create executor if it was destroyed by unload()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
+
         try:
             from faster_whisper import WhisperModel
         except ImportError as e:

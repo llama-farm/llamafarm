@@ -2,12 +2,14 @@
 
 import asyncio
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
+from core.settings import settings
 
 from .registry import get_addon_registry
 from .types import AddonInfo, AddonTaskStatus
@@ -24,7 +26,7 @@ class AddonService:
     def __init__(self):
         self.task_statuses: dict[str, AddonTaskStatus] = {}
         self.task_status_lock = asyncio.Lock()
-        self.state_file = Path.home() / ".llamafarm" / "addons.json"
+        self.state_file = Path(settings.lf_data_dir) / "addons.json"
 
     def _validate_addon_name(self, name: str) -> None:
         """Validate addon name to prevent injection attacks."""
@@ -171,10 +173,10 @@ class AddonService:
         if result.returncode == 0:
             return result.stdout.strip()
 
-        # Check ~/.llamafarm/bin/
-        home_bin = Path.home() / ".llamafarm" / "bin" / "lf"
-        if home_bin.exists():
-            return str(home_bin)
+        # Check LF_DATA_DIR/bin/ (respects LF_DATA_DIR env var)
+        data_dir_bin = Path(settings.lf_data_dir) / "bin" / "lf"
+        if data_dir_bin.exists():
+            return str(data_dir_bin)
 
         raise FileNotFoundError("CLI binary 'lf' not found")
 

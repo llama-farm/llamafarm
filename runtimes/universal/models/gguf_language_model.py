@@ -228,6 +228,11 @@ class GGUFLanguageModel(BaseModel):
             Exception: If model loading fails
         """
 
+        # Re-create executor if it was destroyed by unload()
+        # CRITICAL: Single-threaded executor prevents concurrent access to non-thread-safe llama.cpp
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1)
+
         logger.info(f"Loading GGUF model: {self.model_id}")
 
         # Get path to .gguf file in HF cache
