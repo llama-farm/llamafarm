@@ -143,7 +143,6 @@ class LFAgentClientOpenAI(LFAgentClient):
             structured_response = await instructor_client.chat.completions.create(
                 messages=messages,
                 model=self._model_config.model,
-                tools=openai_tools,
                 **api_params,
                 extra_body=extra_body_params,
                 stream=stream_param,
