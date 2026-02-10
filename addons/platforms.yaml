@@ -14,7 +14,7 @@ platforms:
     runner: ubuntu-latest
     enabled: true
 
-  - name: linux-aarch64
+  - name: linux-arm64
     runner: ubuntu-24.04-arm
     enabled: true
 

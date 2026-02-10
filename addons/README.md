@@ -301,7 +301,7 @@ Packages listed in `packages` must meet these criteria:
    - `package>=1.0.0,<2.0.0` - Version range
 3. **Platform Compatibility**: Must work on all target platforms:
    - macOS (ARM64, x86_64)
-   - Linux (x86_64, aarch64)
+   - Linux (x86_64, arm64)
    - Windows (x86_64)
 
 If a package doesn't have binary wheels, either:

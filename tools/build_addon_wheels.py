@@ -78,8 +78,8 @@ def get_host_platform() -> str:
         arch = "arm64" if machine == "arm64" else "x86_64"
         return f"macos-{arch}"
     elif sys.platform == "linux":
-        if machine == "aarch64":
-            arch = "aarch64"
+        if machine in ("aarch64", "arm64"):
+            arch = "arm64"
         elif machine in ("x86_64", "amd64"):
             arch = "x86_64"
         else:

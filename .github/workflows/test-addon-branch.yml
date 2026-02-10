@@ -33,7 +33,7 @@ on:
           - macos-arm64
           - macos-x86_64
           - linux-x86_64
-          - linux-aarch64
+          - linux-arm64
           - windows-x86_64
           - all
       create_release:
@@ -63,7 +63,7 @@ jobs:
             {"platform":"macos-arm64","runner":"macos-latest"},
             {"platform":"macos-x86_64","runner":"macos-13"},
             {"platform":"linux-x86_64","runner":"ubuntu-latest"},
-            {"platform":"linux-aarch64","runner":"ubuntu-24.04-arm"},
+            {"platform":"linux-arm64","runner":"ubuntu-24.04-arm"},
             {"platform":"windows-x86_64","runner":"windows-latest"}
           ]'
 
