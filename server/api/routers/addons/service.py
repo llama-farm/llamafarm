@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -147,9 +148,9 @@ class AddonService:
     def _find_cli_binary(self) -> str:
         """Find the CLI binary path."""
         # Check PATH first
-        result = subprocess.run(["which", "lf"], capture_output=True, text=True)
-        if result.returncode == 0:
-            return result.stdout.strip()
+        cli_path = shutil.which("lf")
+        if cli_path:
+            return cli_path
 
         # Check LF_DATA_DIR/bin/ (respects LF_DATA_DIR env var)
         data_dir_bin = Path(settings.lf_data_dir) / "bin" / "lf"

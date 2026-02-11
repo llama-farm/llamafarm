@@ -315,14 +315,40 @@ func (d *AddonDownloader) extractWheel(wheelPath, destDir string) error {
 func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefinition) error {
 	// Extract primary package names from the addon's package list
 	// e.g., "faster-whisper>=1.0.0" -> "faster_whisper"
+	// or "https://.../.../en_core_web_sm-3.7.1-py3-none-any.whl" -> "en_core_web_sm"
 	keepPackages := make(map[string]bool)
 	for _, pkg := range addon.Packages {
-		// Extract package name before version specifiers
-		pkgName := strings.Split(pkg, ">=")[0]
-		pkgName = strings.Split(pkgName, "==")[0]
-		pkgName = strings.Split(pkgName, "<")[0]
-		pkgName = strings.Split(pkgName, ">")[0]
-		pkgName = strings.TrimSpace(pkgName)
+		var pkgName string
+
+		// Check if this is a URL-based package spec
+		if strings.HasPrefix(pkg, "http://") || strings.HasPrefix(pkg, "https://") {
+			// Extract package name from wheel filename
+			// URL format: https://.../package_name-version-py-abi-platform.whl
+			lastSlash := strings.LastIndex(pkg, "/")
+			if lastSlash != -1 && strings.HasSuffix(pkg, ".whl") {
+				filename := pkg[lastSlash+1:]
+				// Remove .whl extension
+				filename = strings.TrimSuffix(filename, ".whl")
+				// Extract package name (first component before hyphen-version)
+				// e.g., "en_core_web_sm-3.7.1-py3-none-any" -> "en_core_web_sm"
+				parts := strings.Split(filename, "-")
+				if len(parts) > 0 {
+					pkgName = parts[0]
+				}
+			}
+			if pkgName == "" {
+				utils.LogDebug(fmt.Sprintf("Warning: could not extract package name from URL: %s", pkg))
+				continue
+			}
+		} else {
+			// Extract package name before version specifiers
+			pkgName = strings.Split(pkg, ">=")[0]
+			pkgName = strings.Split(pkgName, "==")[0]
+			pkgName = strings.Split(pkgName, "<")[0]
+			pkgName = strings.Split(pkgName, ">")[0]
+			pkgName = strings.TrimSpace(pkgName)
+		}
+
 		// Convert to module name format (hyphens to underscores)
 		pkgName = strings.ReplaceAll(pkgName, "-", "_")
 		keepPackages[pkgName] = true
@@ -399,6 +425,14 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 			parts := strings.Split(baseName, "-")
 			if len(parts) > 0 {
 				pkgName := parts[0]
+				// Convert to module name format (hyphens to underscores) to match keepPackages format
+				normalizedPkgName := strings.ReplaceAll(pkgName, "-", "_")
+
+				// Don't remove metadata for packages we want to keep
+				if keepPackages[normalizedPkgName] {
+					continue
+				}
+
 				// Check if this is a removed package
 				for _, pattern := range removePatterns {
 					if pkgName == pattern || strings.HasPrefix(pkgName, pattern+"_") {
@@ -416,6 +450,14 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 			// Check if it's a removed package file
 			baseName := strings.TrimSuffix(name, ".py")
 			baseName = strings.TrimSuffix(baseName, ".pth")
+			// Convert to module name format (hyphens to underscores) to match keepPackages format
+			normalizedBaseName := strings.ReplaceAll(baseName, "-", "_")
+
+			// Don't remove files for packages we want to keep
+			if keepPackages[normalizedBaseName] {
+				continue
+			}
+
 			for _, pattern := range removePatterns {
 				if baseName == pattern || strings.HasPrefix(baseName, pattern+"_") {
 					filePath := filepath.Join(addonDir, name)
