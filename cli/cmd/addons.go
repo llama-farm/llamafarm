@@ -262,6 +262,26 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 		servicesToRestart[installAddon.Component] = true
 	}
 
+	// Track whether services were stopped
+	servicesStopped := false
+
+	// Ensure services are restarted even if installation fails
+	defer func() {
+		if servicesStopped && len(servicesToRestart) > 0 {
+			fmt.Println()
+			utils.OutputInfo("Restarting services (this may take up to 30 seconds)...\n")
+			for service := range servicesToRestart {
+				utils.OutputInfo("  Starting %s...\n", service)
+				if err := sm.EnsureService(service); err != nil {
+					utils.OutputError("Failed to start service %s: %v\n", service, err)
+					utils.OutputInfo("You can manually start it with: lf services start %s\n", service)
+				} else {
+					utils.OutputSuccess("  %s started and health check passed\n", service)
+				}
+			}
+		}
+	}()
+
 	// Stop all affected services once before installing
 	if len(servicesToRestart) > 0 {
 		utils.OutputInfo("\nStopping affected services...\n")
@@ -272,6 +292,7 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 				os.Exit(1)
 			}
 		}
+		servicesStopped = true
 	}
 
 	// Install each addon
@@ -292,6 +313,7 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 		if len(installAddon.Packages) > 0 {
 			if err := downloader.DownloadAndInstallAddon(installAddon); err != nil {
 				utils.OutputError("Installation failed: %v\n", err)
+				// Don't call os.Exit directly - let defer restart services
 				os.Exit(1)
 			}
 		} else {
@@ -307,19 +329,9 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 		utils.OutputSuccess("Addon '%s' installed successfully!\n", installAddon.DisplayName)
 	}
 
-	// Restart all affected services once after installation
+	// Mark installation as successful
 	fmt.Println()
 	utils.OutputSuccess("All addons installed successfully!\n")
-	utils.OutputInfo("\nRestarting services (this may take up to 30 seconds)...\n")
-	for service := range servicesToRestart {
-		utils.OutputInfo("  Starting %s...\n", service)
-		if err := sm.EnsureService(service); err != nil {
-			utils.OutputError("Failed to start service %s: %v\n", service, err)
-			utils.OutputInfo("You can manually start it with: lf services start %s\n", service)
-		} else {
-			utils.OutputSuccess("  %s started and health check passed\n", service)
-		}
-	}
 }
 
 func runAddonsUninstall(cmd *cobra.Command, args []string) {
@@ -398,10 +410,28 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Track whether service was stopped successfully
+	serviceStopped := false
+
+	// Ensure service is restarted even if uninstall fails
+	defer func() {
+		if serviceStopped {
+			utils.OutputInfo("Restarting %s service...\n", addon.Component)
+			if err := sm.EnsureService(addon.Component); err != nil {
+				utils.OutputError("Failed to start service %s: %v\n", addon.Component, err)
+				utils.OutputInfo("You can manually start it with: lf services start %s\n", addon.Component)
+			} else {
+				utils.OutputSuccess("%s service restarted\n", addon.Component)
+			}
+		}
+	}()
+
 	utils.OutputInfo("Stopping %s service...\n", addon.Component)
 	if err := sm.StopServices(addon.Component); err != nil {
 		utils.OutputWarning("Warning: Failed to stop service: %v\n", err)
 		// Continue anyway - user can manually stop it
+	} else {
+		serviceStopped = true
 	}
 
 	// Remove addon files
@@ -409,6 +439,7 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	if err := os.RemoveAll(addonPath); err != nil {
 		utils.OutputError("Failed to remove addon files: %v\n", err)
 		utils.OutputInfo("You may need to manually remove: %s\n", addonPath)
+		// Don't call os.Exit directly - let defer restart service
 		os.Exit(1)
 	}
 
@@ -416,9 +447,9 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	state.MarkUninstalled(addonName)
 	if err := SaveAddonsState(state); err != nil {
 		utils.OutputError("Failed to save state: %v\n", err)
+		// Don't call os.Exit directly - let defer restart service
 		os.Exit(1)
 	}
 
 	utils.OutputSuccess("Addon '%s' uninstalled successfully.\n", addon.DisplayName)
-	utils.OutputInfo("Restart the service: lf services start %s\n", addon.Component)
 }

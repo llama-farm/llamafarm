@@ -25,17 +25,18 @@ on:
           - onnxruntime
           - all
       platform:
-        description: "Platform to build for (or 'all' for all platforms)"
+        description: "Platform to build for (or 'all' for enabled platforms only)"
         required: true
         default: "macos-arm64"
         type: choice
         options:
           - macos-arm64
-          - macos-x86_64
           - linux-x86_64
           - linux-arm64
-          - windows-x86_64
           - all
+          # Disabled platforms (see addons/platforms.yaml):
+          # - macos-x86_64 (runner unavailable)
+          # - windows-x86_64 (file locking issues)
       create_release:
         description: "Create a snapshot release with the wheels"
         required: true
@@ -55,17 +56,24 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
       - id: set-matrix
         shell: bash
         run: |
-          # Platform configurations
-          ALL_PLATFORMS='[
-            {"platform":"macos-arm64","runner":"macos-latest"},
-            {"platform":"macos-x86_64","runner":"macos-13"},
-            {"platform":"linux-x86_64","runner":"ubuntu-latest"},
-            {"platform":"linux-arm64","runner":"ubuntu-24.04-arm"},
-            {"platform":"windows-x86_64","runner":"windows-latest"}
-          ]'
+          # Read enabled platforms from platforms.yaml (single source of truth)
+          ALL_PLATFORMS=$(yq eval '.platforms[] | select(.enabled == true) | {"platform": .name, "runner": .runner}' addons/platforms.yaml -o=json | jq -s '.')
+
+          echo "Enabled platforms from platforms.yaml:"
+          echo "$ALL_PLATFORMS" | jq .
 
           ADDON="${{ github.event.inputs.addon }}"
           PLATFORM="${{ github.event.inputs.platform }}"
@@ -81,7 +89,12 @@ jobs:
           if [[ "$PLATFORM" == "all" ]]; then
             PLATFORMS="$ALL_PLATFORMS"
           else
+            # Check if the requested platform is enabled
             PLATFORMS=$(echo "$ALL_PLATFORMS" | jq --arg p "$PLATFORM" '[.[] | select(.platform == $p)]')
+            if [[ $(echo "$PLATFORMS" | jq 'length') -eq 0 ]]; then
+              echo "Error: Platform '$PLATFORM' is not enabled in addons/platforms.yaml"
+              exit 1
+            fi
           fi
 
           # Build the matrix JSON: cross-product of platforms x addons

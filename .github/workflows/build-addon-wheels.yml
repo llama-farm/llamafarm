@@ -18,17 +18,18 @@ on:
           - onnxruntime
           - all
       platform:
-        description: "Platform to build for"
+        description: "Platform to build for (or 'all' for enabled platforms only)"
         required: true
         default: "all"
         type: choice
         options:
           - macos-arm64
-          - macos-x86_64
           - linux-x86_64
           - linux-arm64
-          - windows-x86_64
           - all
+          # Disabled platforms (see addons/platforms.yaml):
+          # - macos-x86_64 (runner unavailable)
+          # - windows-x86_64 (file locking issues)
       branch:
         description: "Branch to build from (leave empty for default branch)"
         required: false

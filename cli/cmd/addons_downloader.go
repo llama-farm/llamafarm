@@ -291,14 +291,20 @@ func (d *AddonDownloader) extractWheel(wheelPath, destDir string) error {
 
 			rc, err := zipFile.Open()
 			if err != nil {
-				outFile.Close()
+				// Handle close error to prevent silent data loss
+				if closeErr := outFile.Close(); closeErr != nil {
+					return fmt.Errorf("failed to open zip entry: %w; close also failed: %v", err, closeErr)
+				}
 				return err
 			}
 
 			_, err = io.Copy(outFile, rc)
 			rc.Close()
 			if err != nil {
-				outFile.Close()
+				// Handle close error to prevent silent data loss
+				if closeErr := outFile.Close(); closeErr != nil {
+					return fmt.Errorf("copy failed: %w; close also failed: %v", err, closeErr)
+				}
 				return err
 			}
 			if err := outFile.Close(); err != nil {
@@ -534,7 +540,10 @@ func (d *AddonDownloader) extractTarGz(tarGzPath, destDir string) error {
 				return err
 			}
 			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
+				// Handle close error to prevent silent data loss
+				if closeErr := f.Close(); closeErr != nil {
+					return fmt.Errorf("copy failed: %w; close also failed: %v", err, closeErr)
+				}
 				return err
 			}
 			if err := f.Close(); err != nil {
