@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -155,15 +156,26 @@ class AddonService:
                 task_id, "in_progress", progress, f"Installing {package}..."
             )
 
-            await asyncio.to_thread(
+            # Clear VIRTUAL_ENV to prevent uv from targeting wrong environment
+            env = dict(os.environ)
+            env.pop("VIRTUAL_ENV", None)
+
+            result = await asyncio.to_thread(
                 subprocess.run,
                 ["uv", "add", package],
                 cwd=component_dir,
+                env=env,
                 check=True,
                 capture_output=True,
                 text=True,
                 timeout=180,  # 3 minute timeout per package
             )
+
+            # Log output for debugging
+            if result.stdout:
+                logger.info(f"uv add {package} stdout: {result.stdout}")
+            if result.stderr:
+                logger.warning(f"uv add {package} stderr: {result.stderr}")
 
         # Mark addon as installed in state
         await self._mark_installed(addon_name)
@@ -284,15 +296,30 @@ class AddonService:
                 continue
 
             try:
-                await asyncio.to_thread(
+                # Clear VIRTUAL_ENV to prevent uv from targeting wrong environment
+                env = dict(os.environ)
+                env.pop("VIRTUAL_ENV", None)
+
+                result = await asyncio.to_thread(
                     subprocess.run,
                     ["uv", "remove", package_name],
                     cwd=component_dir,
+                    env=env,
                     check=True,
+                    capture_output=True,
+                    text=True,
                     timeout=60,
                 )
+
+                # Log output for debugging
+                if result.stdout:
+                    logger.info(f"uv remove {package_name} stdout: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"uv remove {package_name} stderr: {result.stderr}")
+
             except subprocess.CalledProcessError as e:
-                logger.warning(f"Failed to remove package {package_name}: {e}")
+                error_msg = e.stderr if e.stderr else str(e)
+                logger.warning(f"Failed to remove package {package_name}: {error_msg}")
 
         # Mark as uninstalled
         await self._mark_uninstalled(addon_name)
