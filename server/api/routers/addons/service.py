@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 import re
 import subprocess
 from datetime import datetime
@@ -69,7 +68,12 @@ class AddonService:
         return name in registry
 
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
-        """Background task to install an addon."""
+        """Background task to install an addon.
+
+        Note: The CLI 'addons install' command already handles service restarts,
+        so we don't need to manually restart services here. The restart parameter
+        is kept for API compatibility but is no longer used.
+        """
         try:
             # Validate addon name before using it
             self._validate_addon_name(addon_name)
@@ -81,9 +85,9 @@ class AddonService:
             # Find CLI binary
             cli_path = self._find_cli_binary()
 
-            # Run CLI install command
+            # Run CLI install command (already handles service restart)
             await self._update_task_status_async(
-                task_id, "in_progress", 50, "Installing addon..."
+                task_id, "in_progress", 50, "Installing addon and restarting service..."
             )
             await asyncio.to_thread(
                 subprocess.run,
@@ -93,32 +97,6 @@ class AddonService:
                 text=True,
                 timeout=300,  # 5 minute timeout
             )
-
-            # Restart service if requested
-            if restart:
-                await self._update_task_status_async(
-                    task_id, "in_progress", 90, "Restarting service..."
-                )
-                registry = get_addon_registry()
-                addon = registry[addon_name]
-                component = addon["component"]
-
-                # Validate component name as well
-                if not ADDON_NAME_PATTERN.match(component):
-                    raise ValueError(f"Invalid component name: {component}")
-
-                await asyncio.to_thread(
-                    subprocess.run,
-                    [cli_path, "services", "stop", component],
-                    check=True,
-                    timeout=60,
-                )
-                await asyncio.to_thread(
-                    subprocess.run,
-                    [cli_path, "services", "start", component],
-                    check=True,
-                    timeout=60,
-                )
 
             await self._update_task_status_async(
                 task_id, "completed", 100, "Installation complete"

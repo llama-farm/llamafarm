@@ -420,42 +420,8 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
-	// Inject addon paths into PYTHONPATH (same logic as binary mode)
-	addonPaths, err := sm.getAddonPythonPaths(serviceDef.Name)
-	if err != nil {
-		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
-	} else if len(addonPaths) > 0 {
-		// Get existing PYTHONPATH from environment and remove it from env slice
-		var existingPath string
-		foundInEnv := false
-		filteredEnv := make([]string, 0, len(env))
-		for _, envVar := range env {
-			if strings.HasPrefix(envVar, "PYTHONPATH=") {
-				existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
-				foundInEnv = true
-				// Skip this entry - we'll add the combined path below
-			} else {
-				filteredEnv = append(filteredEnv, envVar)
-			}
-		}
-		env = filteredEnv
-
-		// Only fall back to OS environment if PYTHONPATH was not explicitly set
-		if !foundInEnv {
-			existingPath = os.Getenv("PYTHONPATH")
-		}
-
-		// Build new PYTHONPATH (existing first, then addon paths)
-		// Put addons last so venv packages take precedence and avoid conflicts
-		var allPaths []string
-		if existingPath != "" {
-			allPaths = append(allPaths, existingPath)
-		}
-		allPaths = append(allPaths, addonPaths...)
-		newPath := strings.Join(allPaths, string(os.PathListSeparator))
-		env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
-		utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
-	}
+	// Inject addon paths into PYTHONPATH
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
 
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
 }
@@ -512,6 +478,53 @@ func (sm *ServiceManager) getAddonPythonPaths(serviceName string) ([]string, err
 	return paths, nil
 }
 
+// injectAddonPythonPath injects addon paths into PYTHONPATH for a service.
+// Returns the updated environment slice with PYTHONPATH set.
+func (sm *ServiceManager) injectAddonPythonPath(serviceName string, env []string) []string {
+	addonPaths, err := sm.getAddonPythonPaths(serviceName)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
+		return env
+	}
+
+	if len(addonPaths) == 0 {
+		return env
+	}
+
+	// Get existing PYTHONPATH from environment and remove it from env slice
+	var existingPath string
+	foundInEnv := false
+	filteredEnv := make([]string, 0, len(env))
+	for _, envVar := range env {
+		if strings.HasPrefix(envVar, "PYTHONPATH=") {
+			existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+			foundInEnv = true
+			// Skip this entry - we'll add the combined path below
+		} else {
+			filteredEnv = append(filteredEnv, envVar)
+		}
+	}
+	env = filteredEnv
+
+	// Only fall back to OS environment if PYTHONPATH was not explicitly set
+	if !foundInEnv {
+		existingPath = os.Getenv("PYTHONPATH")
+	}
+
+	// Build new PYTHONPATH (existing first, then addon paths)
+	// Put addons last so venv packages take precedence and avoid conflicts
+	var allPaths []string
+	if existingPath != "" {
+		allPaths = append(allPaths, existingPath)
+	}
+	allPaths = append(allPaths, addonPaths...)
+	newPath := strings.Join(allPaths, string(os.PathListSeparator))
+	env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
+	utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
+
+	return env
+}
+
 // startServiceBinary starts a service from a pre-built PyApp binary.
 func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) error {
 	binaryPath, err := ResolveBinaryPath(serviceDef.Name)
@@ -535,41 +548,7 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 	env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDir))
 
 	// Inject addon paths into PYTHONPATH
-	addonPaths, err := sm.getAddonPythonPaths(serviceDef.Name)
-	if err != nil {
-		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
-	} else if len(addonPaths) > 0 {
-		// Get existing PYTHONPATH from environment and remove it from env slice
-		var existingPath string
-		foundInEnv := false
-		filteredEnv := make([]string, 0, len(env))
-		for _, envVar := range env {
-			if strings.HasPrefix(envVar, "PYTHONPATH=") {
-				existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
-				foundInEnv = true
-				// Skip this entry - we'll add the combined path below
-			} else {
-				filteredEnv = append(filteredEnv, envVar)
-			}
-		}
-		env = filteredEnv
-
-		// Only fall back to OS environment if PYTHONPATH was not explicitly set
-		if !foundInEnv {
-			existingPath = os.Getenv("PYTHONPATH")
-		}
-
-		// Build new PYTHONPATH (existing first, then addon paths)
-		// Put addons last so venv packages take precedence and avoid conflicts
-		var allPaths []string
-		if existingPath != "" {
-			allPaths = append(allPaths, existingPath)
-		}
-		allPaths = append(allPaths, addonPaths...)
-		newPath := strings.Join(allPaths, string(os.PathListSeparator))
-		env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
-		utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
-	}
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
 
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }
