@@ -313,8 +313,8 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 		if len(installAddon.Packages) > 0 {
 			if err := downloader.DownloadAndInstallAddon(installAddon); err != nil {
 				utils.OutputError("Installation failed: %v\n", err)
-				// Don't call os.Exit directly - let defer restart services
-				os.Exit(1)
+				// Return instead of os.Exit to let defer restart services
+				return
 			}
 		} else {
 			utils.OutputInfo("Meta-addon (no packages to install)\n")
@@ -439,16 +439,16 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	if err := os.RemoveAll(addonPath); err != nil {
 		utils.OutputError("Failed to remove addon files: %v\n", err)
 		utils.OutputInfo("You may need to manually remove: %s\n", addonPath)
-		// Don't call os.Exit directly - let defer restart service
-		os.Exit(1)
+		// Return instead of os.Exit to let defer restart service
+		return
 	}
 
 	// Remove from state
 	state.MarkUninstalled(addonName)
 	if err := SaveAddonsState(state); err != nil {
 		utils.OutputError("Failed to save state: %v\n", err)
-		// Don't call os.Exit directly - let defer restart service
-		os.Exit(1)
+		// Return instead of os.Exit to let defer restart service
+		return
 	}
 
 	utils.OutputSuccess("Addon '%s' uninstalled successfully.\n", addon.DisplayName)
