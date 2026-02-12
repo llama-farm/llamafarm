@@ -398,7 +398,14 @@ class LFAgentClientOpenAI(LFAgentClient):
 
     def _wrap_with_instructor(self, client: AsyncOpenAI) -> Any:
         if self._model_config.instructor_mode:
-            mode = getattr(instructor.Mode, self._model_config.instructor_mode.upper())
+            mode_name = self._model_config.instructor_mode.upper()
+            mode = getattr(instructor.Mode, mode_name, None)
+            if mode is None:
+                valid_modes = ", ".join(sorted(m.name.lower() for m in instructor.Mode))
+                raise ValueError(
+                    f"Invalid instructor_mode '{self._model_config.instructor_mode}'. "
+                    f"Valid modes: {valid_modes}"
+                )
             return instructor.from_openai(client, mode=mode)
         return instructor.from_openai(client)
 

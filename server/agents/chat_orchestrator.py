@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import json
 import os
 import time
@@ -169,9 +170,18 @@ class ChatOrchestratorAgent(LFAgent):
             raise ValueError(f"Could not load schema module from {module_path}")
 
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load schema module {module_path}: {e}"
+            ) from e
 
-        response_model = getattr(module, class_name)
+        response_model = getattr(module, class_name, None)
+        if response_model is None or not inspect.isclass(response_model):
+            raise ValueError(
+                f"Schema reference '{class_name}' is not a valid class in {module_path}"
+            )
 
         # Security: Verify it's actually a BaseModel
         if not isinstance(response_model, type) or not issubclass(

@@ -249,3 +249,10 @@ class TestLFAgentClientOpenAI:
         kwargs = mock_instructor.chat.completions.create.call_args.kwargs
         assert kwargs["response_model"] is StructuredResponse
         assert "tools" not in kwargs
+
+    def test_wrap_with_instructor_invalid_mode_has_clear_error(self, model_config):
+        model_config.instructor_mode = "foo"
+        client = LFAgentClientOpenAI(model_config=model_config)
+
+        with pytest.raises(ValueError, match="Invalid instructor_mode 'foo'"):
+            client._wrap_with_instructor(MagicMock())
