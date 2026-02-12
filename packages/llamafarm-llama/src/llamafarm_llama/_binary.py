@@ -427,7 +427,7 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
     # If we couldn't resolve the symlink chain (e.g., 0-byte file on CI),
     # search for the versioned library directly
     if not current.exists() or current.stat().st_size < 1000:
-        logger.debug(f"Symlink resolution failed, searching for versioned library")
+        logger.debug("Symlink resolution failed, searching for versioned library")
         # Look for versioned files like libllama.so.0.0.7694 or libllama.0.0.7694.dylib
         if lib_name.endswith(".so"):
             # Linux: libllama.so.X.Y.Z (e.g., libllama.so.0.0.7694)

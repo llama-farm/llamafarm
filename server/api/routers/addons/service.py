@@ -18,7 +18,7 @@ import json
 import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
@@ -116,7 +116,6 @@ class AddonService:
             )
 
             if result.returncode != 0:
-                error_output = result.stderr.strip() or result.stdout.strip() or "Unknown error"
                 raise subprocess.CalledProcessError(
                     result.returncode, result.args, result.stdout, result.stderr
                 )
@@ -300,18 +299,32 @@ class AddonService:
             task_file = self.tasks_dir / f"{task_id}.json"
             data = {
                 **task_status.model_dump(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
             task_file.write_text(json.dumps(data))
         except Exception as e:
             logger.warning(f"Failed to persist task status {task_id}: {e}")
 
     def _recover_persisted_tasks(self):
-        """Load terminal task statuses from disk (from a previous server lifetime)."""
+        """Load terminal task statuses from disk (from a previous server lifetime).
+
+        Prunes task files older than 24 hours to prevent unbounded accumulation.
+        """
+        max_age = 24 * 60 * 60  # 24 hours in seconds
+        now = datetime.now(UTC)
         try:
             for task_file in self.tasks_dir.glob("*.json"):
                 try:
                     data = json.loads(task_file.read_text())
+
+                    # Prune old task files
+                    updated_at = data.get("updated_at")
+                    if updated_at:
+                        age = (now - datetime.fromisoformat(updated_at)).total_seconds()
+                        if age > max_age:
+                            task_file.unlink(missing_ok=True)
+                            continue
+
                     task_id = task_file.stem
                     self.task_statuses[task_id] = AddonTaskStatus(
                         status=data["status"],

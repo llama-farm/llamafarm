@@ -27,7 +27,7 @@ from pathlib import Path
 # Add the runtime to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "runtimes" / "universal"))
 
-from models.streaming_anomaly import StreamingAnomalyDetector, DetectorStatus
+from models.streaming_anomaly import DetectorStatus, StreamingAnomalyDetector
 
 
 async def simulate_sensor(
@@ -104,7 +104,7 @@ async def main():
         threshold=0.7,  # Higher threshold = fewer false positives
     )
 
-    print(f"Detector Config:")
+    print("Detector Config:")
     print(f"  Backend: {detector.backend}")
     print(f"  Min samples for warm-up: {detector.min_samples}")
     print(f"  Retrain interval: {detector.retrain_interval}")
@@ -132,11 +132,11 @@ async def main():
         lag_periods=[1, 2],  # t-1 and t-2 values
     )
 
-    print(f"Detector Config (with rolling features):")
+    print("Detector Config (with rolling features):")
     print(f"  Backend: {detector_with_features.backend}")
     print(f"  Rolling windows: {detector_with_features.rolling_windows}")
     print(f"  Lag periods: {detector_with_features.lag_periods}")
-    print(f"  This captures temporal patterns like sudden changes!")
+    print("  This captures temporal patterns like sudden changes!")
 
     random.seed(123)
     await simulate_sensor(detector_with_features, "HVAC-Unit-042", duration_samples=100)

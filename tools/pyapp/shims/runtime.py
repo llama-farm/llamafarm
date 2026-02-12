@@ -26,7 +26,7 @@ os.environ["LLAMAFARM_PYAPP"] = "1"
 
 # Import server module — this executes module-level setup
 # (logging, device detection, model loaders, FastAPI app creation)
-from runtime import server  # noqa: F401
+from runtime import server  # noqa: E402, F401
 
 if __name__ == '__main__':
     import uvicorn

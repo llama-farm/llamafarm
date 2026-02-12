@@ -13,11 +13,13 @@ Prerequisites:
 - LlamaFarm servers running (nx start universal-runtime && nx start server)
 """
 
-import json
 import asyncio
+import json
 import os
-import httpx
 from pathlib import Path
+
+import httpx
+
 
 # Configuration - uses environment variable or .env file, falls back to default
 def get_llamafarm_url():
@@ -114,7 +116,7 @@ async def train_model():
 
         if save_response.status_code == 200:
             save_result = save_response.json()
-            print(f"✅ Model saved!")
+            print("✅ Model saved!")
             print(f"   Path: {save_result.get('path', 'N/A')}")
         else:
             print(f"⚠️  Save failed: {save_response.text}")
@@ -143,7 +145,7 @@ async def train_model():
 
         if load_response.status_code == 200:
             load_result = load_response.json()
-            print(f"✅ Model loaded successfully!")
+            print("✅ Model loaded successfully!")
             print(f"   Status: {load_result['status']}")
         else:
             print(f"⚠️  Load failed: {load_response.text}")
@@ -176,7 +178,7 @@ async def train_model():
         if score_response.status_code == 200:
             scores = score_response.json()
             print("Test results:")
-            for i, (data, score) in enumerate(zip(test_data, scores["data"])):
+            for i, (data, score) in enumerate(zip(test_data, scores["data"], strict=False)):
                 status = "🚨 ANOMALY" if score["is_anomaly"] else "✅ NORMAL"
                 print(f"   {i+1}. temp={data['temperature']}, rpm={data['motor_rpm']} -> "
                       f"score={score['score']:.3f} {status}")

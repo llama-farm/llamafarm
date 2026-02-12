@@ -379,25 +379,26 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 			continue
 		}
 		name := file.Name()
+		normalized := normalizePackageName(name)
 
 		if strings.HasSuffix(name, ".dist-info") || strings.HasSuffix(name, ".data") {
 			continue
 		}
 
-		if keepPackages[name] {
+		if keepPackages[normalized] {
 			continue
 		}
-		if otherAddonPackages[name] {
+		if otherAddonPackages[normalized] {
 			utils.LogDebug(fmt.Sprintf("Keeping %s (provided by another addon)", name))
 			continue
 		}
-		if venvPackages[name] {
+		if venvPackages[normalized] {
 			dirPath := filepath.Join(addonDir, name)
 			utils.LogDebug(fmt.Sprintf("Removing %s (already in venv)", name))
 			if err := os.RemoveAll(dirPath); err != nil {
 				utils.LogDebug(fmt.Sprintf("Warning: failed to remove %s: %v", name, err))
 			}
-			removed[name] = true
+			removed[normalized] = true
 		}
 	}
 

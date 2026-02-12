@@ -12,8 +12,9 @@ Usage:
 
 import argparse
 import json
-import yaml
 from pathlib import Path
+
+import yaml
 
 
 def load_platforms():
@@ -55,10 +56,7 @@ def generate_matrix(addons=None, platforms=None):
         all_platforms = [p for p in all_platforms if p["name"] in platform_names]
 
     # Discover addons from registry if not specified
-    if not addons:
-        addons = discover_addons()
-    else:
-        addons = addons.split(",")
+    addons = discover_addons() if not addons else addons.split(",")
 
     # Build matrix
     matrix = {
