@@ -71,6 +71,15 @@ export function AddonInstallSidePane({
     return isDependency
   })
 
+  // Get dependencies only for selected addons
+  const selectedDependencies = dependencyAddons.filter(dep => {
+    // Include dependency if any selected addon depends on it
+    return Array.from(selectedAddons).some(selectedName => {
+      const selectedAddon = addons.find(a => a.name === selectedName)
+      return selectedAddon?.dependencies.includes(dep.name)
+    })
+  })
+
   // Calculate size based on selected addons + their dependencies
   const estimatedSize = (() => {
     const sizes: Record<string, number> = {
@@ -84,8 +93,8 @@ export function AddonInstallSidePane({
     selectedAddons.forEach(name => {
       total += sizes[name] || 50
     })
-    // Add dependencies that will be auto-installed
-    dependencyAddons.forEach(dep => {
+    // Add dependencies that will be auto-installed (only for selected addons)
+    selectedDependencies.forEach(dep => {
       total += sizes[dep.name] || 50
     })
     return total
@@ -102,13 +111,13 @@ export function AddonInstallSidePane({
     setSelectedAddons(newSelected)
   }
 
-  // Determine which addons to install (selected + all dependencies)
+  // Determine which addons to install (selected + their dependencies)
   const getAddonsToInstall = (): string[] => {
     const toInstall: string[] = []
     // Add selected primary addons
     selectedAddons.forEach(name => toInstall.push(name))
-    // Add all dependencies (they're automatically included)
-    dependencyAddons.forEach(dep => toInstall.push(dep.name))
+    // Add dependencies for selected addons only
+    selectedDependencies.forEach(dep => toInstall.push(dep.name))
     return toInstall
   }
 
@@ -221,12 +230,12 @@ export function AddonInstallSidePane({
             )}
 
             {/* Auto-included Dependencies */}
-            {dependencyAddons.length > 0 && selectedAddons.size > 0 && (
+            {selectedDependencies.length > 0 && selectedAddons.size > 0 && (
               <div className="space-y-2.5">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Required Dependencies
                 </div>
-                {dependencyAddons.map(addon => (
+                {selectedDependencies.map(addon => (
                   <div
                     key={addon.name}
                     className="flex items-start gap-3 p-4 rounded-lg border border-border/50 bg-muted/30"

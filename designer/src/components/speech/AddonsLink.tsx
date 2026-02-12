@@ -23,6 +23,7 @@ export function AddonsLink({ className = '' }: AddonsLinkProps) {
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            type="button"
             onClick={() => navigate('/addons')}
             className={`text-muted-foreground hover:text-foreground transition-colors ${className}`}
             aria-label="Manage add-ons"

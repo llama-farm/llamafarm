@@ -158,6 +158,20 @@ export function SpeechTestPanel({
     }
   }, [availableLLMModels, selectedLLMModel])
 
+  // Sync STT enabled state with installation status
+  useEffect(() => {
+    if (!sttInstalled && sttEnabled) {
+      setSttEnabled(false)
+    }
+  }, [sttInstalled, sttEnabled])
+
+  // Sync TTS enabled state with installation status
+  useEffect(() => {
+    if (!ttsInstalled && ttsEnabled) {
+      setTtsEnabled(false)
+    }
+  }, [ttsInstalled, ttsEnabled])
+
   // Determine which mode we're in (calculated early for hook config)
   // If LLM is enabled, always use conversation mode (supports typed input with LLM responses)
   // Otherwise, use STT-only or TTS-only mode based on what's enabled

@@ -2374,6 +2374,11 @@ export default function TestChat({
       // Stop recording and transcribe
       await voiceInput.stopRecording()
     } else if (voiceInput.recordingState === 'idle') {
+      // Wait for addons to load before checking installation status
+      if (!addonsData) {
+        // Addons list still loading, don't proceed
+        return
+      }
       // Check if STT is installed before starting recording
       if (!isSttInstalled) {
         // Show addon installation modal
