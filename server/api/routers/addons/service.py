@@ -4,11 +4,13 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
+from core.settings import settings
 
 from .registry import get_addon_registry
 from .types import AddonInfo, AddonTaskStatus
@@ -25,7 +27,7 @@ class AddonService:
     def __init__(self):
         self.task_statuses: dict[str, AddonTaskStatus] = {}
         self.task_status_lock = asyncio.Lock()
-        self.state_file = Path.home() / ".llamafarm" / "addons.json"
+        self.state_file = Path(settings.lf_data_dir) / "addons.json"
 
     def _validate_addon_name(self, name: str) -> None:
         """Validate addon name to prevent injection attacks."""
@@ -182,7 +184,12 @@ class AddonService:
         logger.info(f"Successfully installed {addon_name}")
 
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
-        """Background task to install an addon."""
+        """Background task to install an addon.
+
+        Note: The CLI 'addons install' command already handles service restarts,
+        so we don't need to manually restart services here. The restart parameter
+        is kept for API compatibility but is no longer used.
+        """
         try:
             # Validate addon name before using it
             self._validate_addon_name(addon_name)
@@ -205,40 +212,22 @@ class AddonService:
 
             addon = registry[addon_name]
 
+            # Run CLI install command (already handles service restart)
             await self._update_task_status_async(
-                task_id, "in_progress", 90, "Installation complete"
+                task_id, "in_progress", 50, "Installing addon and restarting service..."
             )
 
-            # Restart the service if requested
-            if restart:
-                component = addon["component"]
-                logger.info(f"Restarting {component} service...")
+            # Find CLI binary
+            cli_path = shutil.which("lf") or str(Path.home() / ".llamafarm" / "bin" / "lf")
 
-                await self._update_task_status_async(
-                    task_id, "in_progress", 95, "Restarting service..."
-                )
-
-                # Run the restart script in the background (fire and forget)
-                # This script will kill the process on port 11540 and restart it
-                script_path = Path(__file__).parent.parent.parent.parent / "restart_runtime.sh"
-
-                try:
-                    # Use Popen with start_new_session to run in background
-                    await asyncio.to_thread(
-                        subprocess.Popen,
-                        [str(script_path)],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        start_new_session=True,
-                    )
-                    logger.info(f"Restart script launched for {component}")
-                except Exception as e:
-                    logger.error(f"Failed to launch restart script: {e}")
-                    # Don't fail the installation if restart fails
-                    await self._update_task_status_async(
-                        task_id, "completed", 100, "Installation complete! Service restart may have failed - please check."
-                    )
-                    return
+            await asyncio.to_thread(
+                subprocess.run,
+                [cli_path, "addons", "install", addon_name],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+            )
 
             await self._update_task_status_async(
                 task_id, "completed", 100, "Installation complete! Service restarting..."
@@ -336,14 +325,14 @@ class AddonService:
     def _find_cli_binary(self) -> str:
         """Find the CLI binary path."""
         # Check PATH first
-        result = subprocess.run(["which", "lf"], capture_output=True, text=True)
-        if result.returncode == 0:
-            return result.stdout.strip()
+        cli_path = shutil.which("lf")
+        if cli_path:
+            return cli_path
 
-        # Check ~/.llamafarm/bin/
-        home_bin = Path.home() / ".llamafarm" / "bin" / "lf"
-        if home_bin.exists():
-            return str(home_bin)
+        # Check LF_DATA_DIR/bin/ (respects LF_DATA_DIR env var)
+        data_dir_bin = Path(settings.lf_data_dir) / "bin" / "lf"
+        if data_dir_bin.exists():
+            return str(data_dir_bin)
 
         raise FileNotFoundError("CLI binary 'lf' not found")
 
