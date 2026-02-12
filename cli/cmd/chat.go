@@ -1,19 +1,14 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-
-	toml "github.com/pelletier/go-toml/v2"
 
 	"github.com/llamafarm/cli/cmd/config"
 	"github.com/llamafarm/cli/cmd/orchestrator"
 	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -150,7 +145,7 @@ Examples:
 		proj = serverCfg.Project
 
 		if runStructured {
-			schemaRef, err := loadSchemaRef(cwd)
+			schemaRef, err := config.LoadSchemaRef(cwd)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -236,54 +231,4 @@ func init() {
 	chatCmd.Flags().BoolVar(&runStructured, "structured", false, "Use configured schema for structured output (non-streaming)")
 
 	rootCmd.AddCommand(chatCmd)
-}
-
-func loadSchemaRef(projectDir string) (string, error) {
-	configPath, err := config.FindConfigFile(projectDir)
-	if err != nil || configPath == "" {
-		return "", fmt.Errorf("no llamafarm config found in %s", projectDir)
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read config: %w", err)
-	}
-
-	ext := strings.ToLower(filepath.Ext(configPath))
-	switch ext {
-	case ".yaml", ".yml":
-		var raw map[interface{}]interface{}
-		if err := yaml.Unmarshal(data, &raw); err != nil {
-			return "", fmt.Errorf("failed to parse YAML config: %w", err)
-		}
-		if value, ok := raw["schema"]; ok {
-			if schemaRef, ok := value.(string); ok {
-				return schemaRef, nil
-			}
-		}
-	case ".json":
-		var raw map[string]interface{}
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return "", fmt.Errorf("failed to parse JSON config: %w", err)
-		}
-		if value, ok := raw["schema"]; ok {
-			if schemaRef, ok := value.(string); ok {
-				return schemaRef, nil
-			}
-		}
-	case ".toml":
-		var raw map[string]interface{}
-		if err := toml.Unmarshal(data, &raw); err != nil {
-			return "", fmt.Errorf("failed to parse TOML config: %w", err)
-		}
-		if value, ok := raw["schema"]; ok {
-			if schemaRef, ok := value.(string); ok {
-				return schemaRef, nil
-			}
-		}
-	default:
-		return "", fmt.Errorf("unsupported config format: %s", ext)
-	}
-
-	return "", nil
 }
