@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Manual script to generate and update changelog documentation
 #
-# This script creates individual changelog files per release and updates
-# the changelog index. Use this if the automated workflow fails or for
-# backfilling historical releases.
+# This script generates prose release notes and adds them as accordion
+# sections in the changelog index. Use this if the automated workflow
+# fails or for backfilling historical releases.
 #
 # Usage:
 #   ./scripts/update-changelog-docs.sh                    # Latest version
@@ -45,12 +45,6 @@ generate_changelog_for_version() {
     if ! grep -q "## \[${version}\]" "$CHANGELOG_FILE"; then
         log_error "Version ${version} not found in CHANGELOG.md"
         return 1
-    fi
-
-    # Check if file already exists
-    if [[ -f "$DOCS_CHANGELOG_DIR/v${version}.md" ]]; then
-        log_warn "v${version}.md already exists, skipping"
-        return 0
     fi
 
     # Extract release date

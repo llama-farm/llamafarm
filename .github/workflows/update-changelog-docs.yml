@@ -5,6 +5,8 @@ on:
     types: [opened, synchronize, reopened]
     branches:
       - main
+    paths:
+      - 'CHANGELOG.md'
   workflow_dispatch:
     inputs:
       pr_number:
@@ -32,6 +34,10 @@ jobs:
       startsWith(github.event.pull_request.title, 'chore: release')
 
     runs-on: gpu-med
+
+    concurrency:
+      group: changelog-docs-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
     steps:
       - name: Get PR branch for workflow_dispatch
@@ -111,33 +117,36 @@ jobs:
         run: |
           INDEX_FILE="docs/website/docs/changelog/index.md"
 
-          # Create new accordion section for the release
-          # Use unquoted EOF delimiter to allow variable expansion (handles multi-line prose)
-          cat > /tmp/new-release.md <<EOF
+          # Build new accordion section safely — use quoted heredoc for template
+          # to prevent shell expansion of AI-generated prose (backticks, $, etc.)
+          cat > /tmp/new-release.md <<'TEMPLATE'
           <details open>
-          <summary><strong>v${VERSION}</strong> — ${DATE}</summary>
+          <summary><strong>REPLACE_VERSION</strong> — REPLACE_DATE</summary>
+          TEMPLATE
 
-          ${PROSE_CHANGELOG}
+          # Append prose content safely via echo (no shell interpretation)
+          echo "$PROSE_CHANGELOG" >> /tmp/new-release.md
 
-          **[Full Changelog →](https://github.com/llama-farm/llamafarm/blob/main/CHANGELOG.md#${VERSION//./})**
+          cat >> /tmp/new-release.md <<'TEMPLATE'
+
+          **[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/vREPLACE_VERSION)**
 
           </details>
-          EOF
+          TEMPLATE
 
-          # Move current "Latest Release" to "Recent Releases" section
-          # 1. Remove 'open' from old latest
+          # Substitute placeholders (VERSION/DATE are safe — controlled by workflow)
+          sed -i "s/REPLACE_VERSION/${VERSION}/g" /tmp/new-release.md
+          sed -i "s/REPLACE_DATE/${DATE}/g" /tmp/new-release.md
+
+          # Close the currently open accordion (remove 'open' attribute)
           sed -i 's/<details open>/<details>/g' "$INDEX_FILE"
 
-          # 2. Insert new release after "## Latest Release" heading
-          # Use getline to read file content safely (avoids shell escaping issues)
-          awk '
+          # Insert new release after "## Latest Release" heading
+          awk -v newrelease="$(cat /tmp/new-release.md)" '
             /^## Latest Release$/ {
               print
               print ""
-              while ((getline line < "/tmp/new-release.md") > 0) {
-                print line
-              }
-              close("/tmp/new-release.md")
+              print newrelease
               next
             }
             { print }

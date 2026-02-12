@@ -8,13 +8,12 @@ This directory contains human-readable release notes for LlamaFarm, automaticall
 
 When a release PR is created by release-please:
 
-1. **Workflow triggers** - [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml) detects the release PR
+1. **Workflow triggers** - [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml) detects the release PR (filtered by `CHANGELOG.md` changes)
 2. **Extracts version** - Reads the latest version from CHANGELOG.md
 3. **Generates prose** - Uses LlamaFarm AI to transform conventional commits into narrative release notes
-4. **Creates individual file** - Writes `v{version}.md` to this directory
-5. **Updates index** - Adds a new row to the changelog index table
-6. **Commits to PR** - Pushes the changelog docs back to the release PR
-7. **Posts comment** - Adds a comment with status (success/failure)
+4. **Updates index** - Adds a new `<details>` accordion section to `index.md`
+5. **Commits to PR** - Pushes the changelog docs back to the release PR
+6. **Posts comment** - Adds a comment with status (success/failure)
 
 ### Manual Fallback (Backup Method)
 
@@ -41,14 +40,10 @@ If the automated workflow fails or you need to backfill historical releases:
 ```
 docs/website/docs/changelog/
 ├── README.md              # This file (developer documentation)
-├── index.md               # Changelog landing page with release table
-├── v0.0.26.md            # Release notes for v0.0.26
-├── v0.0.25.md            # Release notes for v0.0.25
-├── v0.0.24.md            # Release notes for v0.0.24
-└── ...                    # More release versions
+└── index.md               # Changelog page with expandable accordion sections per release
 ```
 
-Each release has its own dedicated page. The index page shows a table with links to all releases.
+All releases live in a single `index.md` file as `<details>` accordion sections. The latest release is expanded by default (`<details open>`), while older releases are collapsed.
 
 ## Testing the System
 
@@ -98,26 +93,21 @@ The human-readable release notes are generated using:
 ## Docusaurus Integration
 
 Release notes appear under the "Changelog" section in the docs sidebar:
-- Landing page: https://docs.llamafarm.dev/docs/changelog
-- Individual releases: https://docs.llamafarm.dev/docs/changelog/v0.0.26
+- Changelog page: https://docs.llamafarm.dev/docs/changelog
 
 ### Sidebar Configuration
 
-The sidebar in [sidebars.ts](../../sidebars.ts) includes the changelog category:
+The sidebar in [sidebars.ts](../../sidebars.ts) links to the single changelog page:
 
 ```typescript
 {
-  type: 'category',
+  type: 'doc',
+  id: 'changelog/index',
   label: 'Changelog',
-  link: { type: 'doc', id: 'changelog/index' },
-  items: [
-    { type: 'doc', id: 'changelog/v0.0.26', label: 'v0.0.26' },
-    // ... more versions
-  ],
 }
 ```
 
-**Note:** New releases need to be manually added to the sidebar items. Consider using auto-generated sidebars in the future.
+New releases are automatically added as accordion sections — no sidebar changes needed.
 
 ## Troubleshooting
 
@@ -134,9 +124,9 @@ Check the workflow logs for errors. Common issues:
    - Check GH_RELEASE_TOKEN permissions
    - Verify bot has write access to the repo
 
-3. **File already exists**
-   - The workflow skips if the version file already exists
-   - Delete the file if you want to regenerate
+3. **Version already exists**
+   - The workflow skips if the version accordion already exists in `index.md`
+   - Remove the `<details>` section from `index.md` if you want to regenerate
 
 ### Manual Script Failed
 
@@ -159,12 +149,11 @@ Check the workflow logs for errors. Common issues:
 
 If you need to add a release without the AI generation:
 
-1. Create `docs/website/docs/changelog/v{version}.md` with frontmatter
-2. Add a row to the table in `index.md`
-3. Add an entry to `sidebars.ts` (optional but recommended)
+1. Add a `<details>` accordion section to `index.md` under `## Latest Release`
+2. Close the previous latest by removing the `open` attribute from its `<details>` tag
 
 ## Questions or Issues?
 
 - **Workflow issues**: Check [.github/workflows/update-changelog-docs.yml](../../../../.github/workflows/update-changelog-docs.yml)
 - **Generation issues**: Check [.github/actions/prose-changelog/](../../../../.github/actions/prose-changelog/)
-- **Docs issues**: Check individual version files and `index.md`
+- **Docs issues**: Check `index.md` accordion sections
