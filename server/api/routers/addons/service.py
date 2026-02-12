@@ -187,9 +187,8 @@ class AddonService:
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
         """Background task to install an addon.
 
-        Note: The CLI 'addons install' command already handles service restarts,
-        so we don't need to manually restart services here. The restart parameter
-        is kept for API compatibility but is no longer used.
+        Note: Service restart is handled manually by the user after installation.
+        The restart parameter is kept for API compatibility but is not used.
         """
         try:
             # Validate addon name before using it
@@ -211,25 +210,8 @@ class AddonService:
             # Install the addon itself
             await self._install_single_addon(task_id, addon_name, restart=False)
 
-            # Run CLI install command (already handles service restart)
             await self._update_task_status_async(
-                task_id, "in_progress", 50, "Installing addon and restarting service..."
-            )
-
-            # Find CLI binary
-            cli_path = shutil.which("lf") or str(Path.home() / ".llamafarm" / "bin" / "lf")
-
-            await asyncio.to_thread(
-                subprocess.run,
-                [cli_path, "addons", "install", addon_name],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout
-            )
-
-            await self._update_task_status_async(
-                task_id, "completed", 100, "Installation complete! Service restarting..."
+                task_id, "completed", 100, "Installation complete! Restart universal-runtime to use the addon."
             )
 
         except ValueError as e:
@@ -237,16 +219,16 @@ class AddonService:
             await self._update_task_status_async(
                 task_id, "failed", 0, "Validation failed", str(e)
             )
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"Timeout installing addon {addon_name}: {e}")
-            await self._update_task_status_async(
-                task_id, "failed", 0, "Installation timeout", str(e)
-            )
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
             logger.error(f"Failed to install addon {addon_name}: {error_msg}")
             await self._update_task_status_async(
                 task_id, "failed", 0, "Installation failed", error_msg
+            )
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"Timeout installing addon {addon_name}: {e}")
+            await self._update_task_status_async(
+                task_id, "failed", 0, "Installation timeout", str(e)
             )
         except Exception as e:
             logger.error(f"Unexpected error installing addon {addon_name}: {e}")

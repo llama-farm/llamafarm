@@ -48,6 +48,12 @@ dependencies = [
   "en-core-web-sm",
   "onnxruntime>=1.20.0",
   "faster-whisper>=1.0.0,<2.0.0",
+  "kokoro>=0.9.0,<1.0.0",
+  "misaki>=0.9.0,<1.0.0",
+  "pocket-tts>=0.1.0",
+  "spacy>=3.7.0,<4.0.0",
+  "pydub>=0.25.0,<1.0.0",
+  "av>=12.0.0,<13.0.0",
 ]
 
 [dependency-groups]
