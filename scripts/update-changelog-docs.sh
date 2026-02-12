@@ -47,6 +47,14 @@ generate_changelog_for_version() {
         return 1
     fi
 
+    # Check if version already exists in index before expensive AI generation
+    local version_regex
+    version_regex=$(echo "$version" | sed 's/\./\\./g')
+    if grep -qE "<strong>v${version_regex}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
+        log_warn "v${version} already in index.md, skipping"
+        return 0
+    fi
+
     # Extract release date
     local date
     date=$(grep -m1 "## \[${version}\]" "$CHANGELOG_FILE" | sed 's/.*(\([0-9-]*\)).*/\1/')
@@ -67,13 +75,6 @@ generate_changelog_for_version() {
     if [[ -z "$prose_content" ]]; then
         log_error "Failed to generate prose changelog for version ${version}"
         return 1
-    fi
-
-    # Check if version already exists in index (escape dots for regex)
-    version_regex=$(echo "$version" | sed 's/\./\\./g')
-    if grep -qE "<strong>v${version_regex}</strong>" "$DOCS_CHANGELOG_DIR/index.md"; then
-        log_warn "v${version} already in index.md, skipping"
-        return 0
     fi
 
     log_info "Adding v${version} as accordion to index.md..."

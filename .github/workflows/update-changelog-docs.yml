@@ -45,8 +45,9 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.pr_number
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          BRANCH=$(gh pr view ${{ inputs.pr_number }} --json headRefName --jq '.headRefName')
+          BRANCH=$(gh pr view "$INPUT_PR_NUMBER" --json headRefName --jq '.headRefName')
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "Found PR branch: $BRANCH"
 
@@ -59,9 +60,11 @@ jobs:
 
       - name: Detect version from CHANGELOG.md
         id: detect-version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
-            VERSION="${{ inputs.version }}"
+          if [[ -n "$INPUT_VERSION" ]]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION=$(grep -m1 '## \[' CHANGELOG.md | sed 's/.*\[\([^]]*\)\].*/\1/')
           fi
@@ -121,7 +124,7 @@ jobs:
           # to prevent shell expansion of AI-generated prose (backticks, $, etc.)
           cat > /tmp/new-release.md <<'TEMPLATE'
           <details open>
-          <summary><strong>REPLACE_VERSION</strong> — REPLACE_DATE</summary>
+          <summary><strong>vREPLACE_VERSION</strong> — REPLACE_DATE</summary>
           TEMPLATE
 
           # Append prose content safely via echo (no shell interpretation)
@@ -142,11 +145,15 @@ jobs:
           sed -i 's/<details open>/<details>/g' "$INDEX_FILE"
 
           # Insert new release after "## Latest Release" heading
-          awk -v newrelease="$(cat /tmp/new-release.md)" '
+          # Use getline to read file content (avoids awk -v backslash interpretation)
+          awk '
             /^## Latest Release$/ {
               print
               print ""
-              print newrelease
+              while ((getline line < "/tmp/new-release.md") > 0) {
+                print line
+              }
+              close("/tmp/new-release.md")
               next
             }
             { print }
