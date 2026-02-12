@@ -388,7 +388,7 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 		if keepPackages[normalized] {
 			continue
 		}
-		if otherAddonPackages[normalized] {
+		if otherAddonPackages[name] || otherAddonPackages[normalized] {
 			utils.LogDebug(fmt.Sprintf("Keeping %s (provided by another addon)", name))
 			continue
 		}
