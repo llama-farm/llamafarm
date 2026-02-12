@@ -63,15 +63,19 @@ export function ManageAddons() {
     const availableFiltered = filtered.filter(a => {
       if (a.installed) return false
 
-      // If addon has dependencies, check if ALL of them are installed
-      if (a.dependencies.length > 0) {
+      // Only hide meta/composite addons (no packages, only dependencies)
+      // Regular addons should always show when uninstalled, even if dependencies are satisfied
+      const isMetaAddon = a.dependencies.length > 0 && (!a.packages || a.packages.length === 0)
+
+      if (isMetaAddon) {
+        // Check if ALL dependencies are installed
         const allDepsInstalled = a.dependencies.every(depName => {
           const depAddon = addons.find(addon => addon.name === depName)
           return depAddon?.installed === true
         })
 
-        // Hide composite add-ons where all dependencies are already installed
-        if (allDepsInstalled && a.dependencies.length > 0) {
+        // Hide meta add-ons where all dependencies are already installed
+        if (allDepsInstalled) {
           return false
         }
       }

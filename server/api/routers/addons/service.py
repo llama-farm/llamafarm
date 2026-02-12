@@ -55,6 +55,7 @@ class AddonService:
                     component=addon["component"],
                     version=addon["version"],
                     dependencies=addon.get("dependencies", []),
+                    packages=addon.get("packages", []),
                     installed=installed_info is not None,
                     installed_at=datetime.fromisoformat(installed_info["installed_at"])
                     if installed_info
@@ -209,8 +210,6 @@ class AddonService:
 
             # Install the addon itself
             await self._install_single_addon(task_id, addon_name, restart=False)
-
-            addon = registry[addon_name]
 
             # Run CLI install command (already handles service restart)
             await self._update_task_status_async(

@@ -20,6 +20,8 @@ export interface AddonInfo {
   version: string
   /** List of addon dependencies (other addon names) */
   dependencies: string[]
+  /** List of Python packages to install (empty for meta addons) */
+  packages: string[]
   /** Whether the addon is currently installed */
   installed: boolean
   /** ISO timestamp when installed, null if not installed */

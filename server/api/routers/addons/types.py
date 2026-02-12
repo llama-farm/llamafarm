@@ -14,6 +14,7 @@ class AddonInfo(BaseModel):
     component: str
     version: str
     dependencies: list[str] = []
+    packages: list[str] = []  # List of Python packages to install (empty for meta addons)
     installed: bool = False
     installed_at: datetime | None = None
 
