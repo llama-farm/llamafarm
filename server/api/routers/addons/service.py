@@ -1,18 +1,30 @@
-"""Addon service implementation."""
+"""Addon service implementation.
+
+Architecture note: The server delegates addon install/uninstall to the CLI
+binary via subprocess. The CLI handles wheel download, extraction, and
+dependency cleanup. Service restart is handled separately to avoid the CLI
+stopping the server process that spawned it.
+
+The --no-restart flag tells the CLI to skip its stop/restart cycle. After the
+CLI finishes, this service restarts only the affected component (never the
+server itself) via a second CLI call.
+
+Task status is persisted to disk so that if the server restarts mid-install,
+the client can poll the final status once the server is back up.
+"""
 
 import asyncio
 import json
-import os
 import re
 import shutil
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-from .registry import get_addon_registry
+from .registry import get_addon_registry, reload_addon_registry
 from .types import AddonInfo, AddonTaskStatus
 
 logger = FastAPIStructLogger()
@@ -28,6 +40,11 @@ class AddonService:
         self.task_statuses: dict[str, AddonTaskStatus] = {}
         self.task_status_lock = asyncio.Lock()
         self.state_file = Path(settings.lf_data_dir) / "addons.json"
+        self.tasks_dir = Path(settings.lf_data_dir) / "addon-tasks"
+        self.tasks_dir.mkdir(parents=True, exist_ok=True)
+
+        # Recover any persisted task statuses from a previous server lifetime
+        self._recover_persisted_tasks()
 
     def _validate_addon_name(self, name: str) -> None:
         """Validate addon name to prevent injection attacks."""
@@ -70,148 +87,85 @@ class AddonService:
         registry = get_addon_registry()
         return name in registry
 
-    async def _install_dependencies(
-        self, task_id: str, addon_name: str, installing_chain: set[str]
-    ) -> None:
-        """
-        Recursively install dependencies for an addon.
-
-        Args:
-            task_id: Task ID for status updates
-            addon_name: Name of the addon whose dependencies to install
-            installing_chain: Set of addon names currently being installed (prevents circular deps)
-        """
-        registry = get_addon_registry()
-        state = self._load_state()
-
-        addon = registry.get(addon_name)
-        if not addon:
-            return
-
-        dependencies = addon.get("dependencies", [])
-        if not dependencies:
-            return
-
-        for dep_name in dependencies:
-            # Skip if already in installation chain (circular dependency)
-            if dep_name in installing_chain:
-                logger.warning(f"Circular dependency detected: {dep_name} already in chain")
-                continue
-
-            # Skip if already installed
-            if dep_name in state.get("installed_addons", {}):
-                logger.info(f"Dependency {dep_name} already installed, skipping")
-                continue
-
-            # Validate dependency exists
-            if dep_name not in registry:
-                raise ValueError(f"Dependency not found: {dep_name}")
-
-            logger.info(f"Installing dependency: {dep_name} for {addon_name}")
-            await self._update_task_status_async(
-                task_id, "in_progress", 10, f"Installing dependency: {dep_name}..."
-            )
-
-            # Add to chain before recursing
-            installing_chain.add(dep_name)
-
-            # Recursively install dependencies of this dependency
-            await self._install_dependencies(task_id, dep_name, installing_chain)
-
-            # Install this dependency
-            await self._install_single_addon(task_id, dep_name, restart=False)
-
-            # Remove from chain after installation
-            installing_chain.discard(dep_name)
-
-    async def _install_single_addon(
-        self, task_id: str, addon_name: str, restart: bool
-    ) -> None:
-        """Install a single addon without dependencies."""
-        registry = get_addon_registry()
-        addon = registry[addon_name]
-        packages = addon.get("packages", [])
-
-        if not packages:
-            # Meta-addon with no packages (only dependencies)
-            logger.info(f"Addon {addon_name} has no packages (meta-addon)")
-            await self._mark_installed(addon_name)
-            return
-
-        # Determine the component directory to install packages into
-        component = addon["component"]
-        if component == "universal-runtime":
-            component_dir = Path(__file__).parent.parent.parent.parent.parent / "runtimes" / "universal"
-        else:
-            raise ValueError(f"Unsupported component: {component}")
-
-        if not component_dir.exists():
-            raise ValueError(f"Component directory not found: {component_dir}")
-
-        # Install packages using uv
-        await self._update_task_status_async(
-            task_id, "in_progress", 20, f"Installing {len(packages)} package(s) for {addon_name}..."
-        )
-
-        for i, package in enumerate(packages):
-            progress = 20 + int((i / len(packages)) * 50)
-            await self._update_task_status_async(
-                task_id, "in_progress", progress, f"Installing {package}..."
-            )
-
-            # Clear VIRTUAL_ENV to prevent uv from targeting wrong environment
-            env = dict(os.environ)
-            env.pop("VIRTUAL_ENV", None)
-
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["uv", "add", package],
-                cwd=component_dir,
-                env=env,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=180,  # 3 minute timeout per package
-            )
-
-            # Log output for debugging
-            if result.stdout:
-                logger.info(f"uv add {package} stdout: {result.stdout}")
-            if result.stderr:
-                logger.warning(f"uv add {package} stderr: {result.stderr}")
-
-        # Mark addon as installed in state
-        await self._mark_installed(addon_name)
-        logger.info(f"Successfully installed {addon_name}")
-
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
         """Background task to install an addon.
 
-        Note: Service restart is handled manually by the user after installation.
-        The restart parameter is kept for API compatibility but is not used.
+        Uses --no-restart so the CLI never stops/starts services. After the
+        CLI finishes, we restart only the affected component (not the server).
         """
         try:
-            # Validate addon name before using it
             self._validate_addon_name(addon_name)
 
             await self._update_task_status_async(
                 task_id, "in_progress", 0, "Starting installation..."
             )
 
-            # Get addon info from registry
-            registry = get_addon_registry()
-            if addon_name not in registry:
-                raise ValueError(f"Addon not found: {addon_name}")
+            cli_path = self._find_cli_binary()
 
-            # Install dependencies first (recursively)
-            installing_chain: set[str] = {addon_name}
-            await self._install_dependencies(task_id, addon_name, installing_chain)
+            # Use --no-restart so the CLI only downloads and extracts.
+            # This avoids the CLI stopping the server process that spawned it.
+            await self._update_task_status_async(
+                task_id, "in_progress", 10, "Downloading and installing addon packages..."
+            )
 
-            # Install the addon itself
-            await self._install_single_addon(task_id, addon_name, restart=False)
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [cli_path, "addons", "install", "--no-restart", addon_name],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode, result.args, result.stdout, result.stderr
+                )
+
+            # Surface CLI output in progress message
+            install_output = result.stdout.strip()
+            await self._update_task_status_async(
+                task_id, "in_progress", 70, f"Addon installed. {self._summarize_output(install_output)}"
+            )
+
+            # Restart the affected component (not the server)
+            if restart:
+                registry = get_addon_registry()
+                addon_def = registry.get(addon_name, {})
+                component = addon_def.get("component", "")
+
+                if component and component != "server":
+                    await self._update_task_status_async(
+                        task_id, "in_progress", 80, f"Restarting {component}..."
+                    )
+                    restart_result = await asyncio.to_thread(
+                        subprocess.run,
+                        [cli_path, "services", "start", component],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if restart_result.returncode != 0:
+                        logger.warning(
+                            f"Failed to restart {component}: {restart_result.stderr}"
+                        )
+                        await self._update_task_status_async(
+                            task_id,
+                            "completed",
+                            100,
+                            f"Addon installed but {component} restart failed. "
+                            f"Run 'lf services start {component}' manually.",
+                        )
+                        return
+                elif component == "server":
+                    logger.warning(
+                        "Addon targets server component; skipping automatic restart "
+                        "to avoid self-termination. Manual restart required."
+                    )
+
+            reload_addon_registry()
 
             await self._update_task_status_async(
-                task_id, "completed", 100, "Installation complete! Restart universal-runtime to use the addon."
+                task_id, "completed", 100, "Installation complete"
             )
 
         except ValueError as e:
@@ -219,16 +173,16 @@ class AddonService:
             await self._update_task_status_async(
                 task_id, "failed", 0, "Validation failed", str(e)
             )
-        except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
-            logger.error(f"Failed to install addon {addon_name}: {error_msg}")
-            await self._update_task_status_async(
-                task_id, "failed", 0, "Installation failed", error_msg
-            )
         except subprocess.TimeoutExpired as e:
             logger.error(f"Timeout installing addon {addon_name}: {e}")
             await self._update_task_status_async(
-                task_id, "failed", 0, "Installation timeout", str(e)
+                task_id, "failed", 0, "Installation timed out after 5 minutes", str(e)
+            )
+        except subprocess.CalledProcessError as e:
+            error_msg = (e.stderr or e.stdout or str(e)).strip()
+            logger.error(f"Failed to install addon {addon_name}: {error_msg}")
+            await self._update_task_status_async(
+                task_id, "failed", 0, "Installation failed", error_msg
             )
         except Exception as e:
             logger.error(f"Unexpected error installing addon {addon_name}: {e}")
@@ -237,85 +191,69 @@ class AddonService:
             )
 
     async def uninstall_addon(self, addon_name: str):
-        """Uninstall an addon."""
+        """Uninstall an addon.
+
+        Uses --no-restart so the CLI never stops/starts services. Restarts the
+        affected component afterward (unless it targets the server).
+        """
         self._validate_addon_name(addon_name)
+        cli_path = self._find_cli_binary()
 
-        # Get addon info from registry
+        # Look up component before uninstall (state is cleared after)
         registry = get_addon_registry()
-        if addon_name not in registry:
-            raise ValueError(f"Addon not found: {addon_name}")
+        addon_def = registry.get(addon_name, {})
+        component = addon_def.get("component", "")
 
-        addon = registry[addon_name]
-        packages = addon.get("packages", [])
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [cli_path, "addons", "uninstall", "--no-restart", addon_name],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
-        # Determine the component directory
-        component = addon["component"]
-        if component == "universal-runtime":
-            component_dir = Path(__file__).parent.parent.parent.parent.parent / "runtimes" / "universal"
-        else:
-            raise ValueError(f"Unsupported component: {component}")
+        if result.returncode != 0:
+            error_msg = (result.stderr or result.stdout or "Unknown error").strip()
+            raise RuntimeError(f"Uninstall failed: {error_msg}")
 
-        # Remove packages using uv
-        for package in packages:
-            # Extract package name from version specifier (e.g., "faster-whisper>=1.0.0" -> "faster-whisper")
-            package_name = package.split(">=")[0].split("==")[0].split("<")[0].split(">")[0].strip()
+        reload_addon_registry()
 
-            # Skip URL packages for now
-            if package.startswith("http"):
-                logger.warning(f"Skipping URL package removal: {package}")
-                continue
+        # Restart the affected component (not the server)
+        if component and component != "server":
+            restart_result = await asyncio.to_thread(
+                subprocess.run,
+                [cli_path, "services", "start", component],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if restart_result.returncode != 0:
+                logger.warning(f"Failed to restart {component} after uninstall: {restart_result.stderr}")
 
-            try:
-                # Clear VIRTUAL_ENV to prevent uv from targeting wrong environment
-                env = dict(os.environ)
-                env.pop("VIRTUAL_ENV", None)
-
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    ["uv", "remove", package_name],
-                    cwd=component_dir,
-                    env=env,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-
-                # Log output for debugging
-                if result.stdout:
-                    logger.info(f"uv remove {package_name} stdout: {result.stdout}")
-                if result.stderr:
-                    logger.warning(f"uv remove {package_name} stderr: {result.stderr}")
-
-            except subprocess.CalledProcessError as e:
-                error_msg = e.stderr if e.stderr else str(e)
-                logger.warning(f"Failed to remove package {package_name}: {error_msg}")
-
-        # Mark as uninstalled
-        await self._mark_uninstalled(addon_name)
-
-    async def get_task_status_async(self, task_id: str) -> AddonTaskStatus | None:
-        """Get the status of a task (thread-safe)."""
+    async def get_task_status(self, task_id: str) -> AddonTaskStatus | None:
+        """Get the status of a task (holds lock for consistency with updates)."""
         async with self.task_status_lock:
             return self.task_statuses.get(task_id)
 
-    def get_task_status(self, task_id: str) -> AddonTaskStatus | None:
-        """Get the status of a task (synchronous version)."""
-        return self.task_statuses.get(task_id)
-
     def _find_cli_binary(self) -> str:
-        """Find the CLI binary path."""
-        # Check PATH first
+        """Find the CLI binary path.
+
+        Search order:
+        1. PATH (works when CLI is installed normally)
+        2. LF_DATA_DIR/bin/lf (works in containers/systemd where PATH is minimal)
+        """
         cli_path = shutil.which("lf")
         if cli_path:
             return cli_path
 
-        # Check LF_DATA_DIR/bin/ (respects LF_DATA_DIR env var)
         data_dir_bin = Path(settings.lf_data_dir) / "bin" / "lf"
         if data_dir_bin.exists():
             return str(data_dir_bin)
 
-        raise FileNotFoundError("CLI binary 'lf' not found")
+        raise FileNotFoundError(
+            f"CLI binary 'lf' not found on PATH or at {data_dir_bin}. "
+            f"Ensure the CLI is installed and accessible."
+        )
 
     def _load_state(self) -> dict:
         """Load addon state from file."""
@@ -325,30 +263,17 @@ class AddonService:
         with open(self.state_file) as f:
             return json.load(f)
 
-    async def _mark_installed(self, addon_name: str):
-        """Mark an addon as installed in the state file."""
-        # Ensure directory exists
-        self.state_file.parent.mkdir(parents=True, exist_ok=True)
-
-        state = self._load_state()
-        if "installed_addons" not in state:
-            state["installed_addons"] = {}
-
-        state["installed_addons"][addon_name] = {
-            "installed_at": datetime.now().isoformat()
-        }
-
-        with open(self.state_file, "w") as f:
-            json.dump(state, f, indent=2)
-
-    async def _mark_uninstalled(self, addon_name: str):
-        """Mark an addon as uninstalled in the state file."""
-        state = self._load_state()
-        if "installed_addons" in state and addon_name in state["installed_addons"]:
-            del state["installed_addons"][addon_name]
-
-            with open(self.state_file, "w") as f:
-                json.dump(state, f, indent=2)
+    @staticmethod
+    def _summarize_output(output: str) -> str:
+        """Extract the last meaningful line from CLI output for the progress message."""
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if not lines:
+            return ""
+        # Return the last line, truncated to a reasonable length
+        last = lines[-1]
+        if len(last) > 120:
+            return last[:117] + "..."
+        return last
 
     async def _update_task_status_async(
         self,
@@ -358,21 +283,57 @@ class AddonService:
         message: str,
         error: str | None = None,
     ):
-        """Update task status (thread-safe async version)."""
-        async with self.task_status_lock:
-            self.task_statuses[task_id] = AddonTaskStatus(
-                status=status, progress=progress, message=message, error=error
-            )
-
-    def _update_task_status(
-        self,
-        task_id: str,
-        status: str,
-        progress: int,
-        message: str,
-        error: str | None = None,
-    ):
-        """Update task status (synchronous version - use async version when possible)."""
-        self.task_statuses[task_id] = AddonTaskStatus(
+        """Update task status in memory and persist to disk."""
+        task_status = AddonTaskStatus(
             status=status, progress=progress, message=message, error=error
         )
+        async with self.task_status_lock:
+            self.task_statuses[task_id] = task_status
+
+        # Persist terminal states to disk so they survive server restarts
+        if status in ("completed", "failed"):
+            self._persist_task_status(task_id, task_status)
+
+    def _persist_task_status(self, task_id: str, task_status: AddonTaskStatus):
+        """Write task status to disk so it survives server restarts."""
+        try:
+            task_file = self.tasks_dir / f"{task_id}.json"
+            data = {
+                **task_status.model_dump(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+            task_file.write_text(json.dumps(data))
+        except Exception as e:
+            logger.warning(f"Failed to persist task status {task_id}: {e}")
+
+    def _recover_persisted_tasks(self):
+        """Load terminal task statuses from disk (from a previous server lifetime).
+
+        Prunes task files older than 24 hours to prevent unbounded accumulation.
+        """
+        max_age = 24 * 60 * 60  # 24 hours in seconds
+        now = datetime.now(UTC)
+        try:
+            for task_file in self.tasks_dir.glob("*.json"):
+                try:
+                    data = json.loads(task_file.read_text())
+
+                    # Prune old task files
+                    updated_at = data.get("updated_at")
+                    if updated_at:
+                        age = (now - datetime.fromisoformat(updated_at)).total_seconds()
+                        if age > max_age:
+                            task_file.unlink(missing_ok=True)
+                            continue
+
+                    task_id = task_file.stem
+                    self.task_statuses[task_id] = AddonTaskStatus(
+                        status=data["status"],
+                        progress=data["progress"],
+                        message=data["message"],
+                        error=data.get("error"),
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to recover task {task_file.name}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to recover persisted tasks: {e}")

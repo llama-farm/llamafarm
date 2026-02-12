@@ -15,8 +15,9 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 
 def load_addon_specs() -> dict:
@@ -192,11 +193,11 @@ def main():
     # Build all combinations
     failures = 0
     for addon in addons:
-        for platform in platforms:
+        for plat in platforms:
             try:
-                build_addon_wheels(addon, platform, output_dir)
+                build_addon_wheels(addon, plat, output_dir)
             except Exception as e:
-                print(f"✗ Failed to build {addon} for {platform}: {e}")
+                print(f"✗ Failed to build {addon} for {plat}: {e}")
                 failures += 1
 
     if failures:

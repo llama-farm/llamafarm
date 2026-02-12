@@ -53,3 +53,10 @@ def get_addon_registry() -> dict[str, dict[str, Any]]:
     if _ADDON_REGISTRY is None:
         _ADDON_REGISTRY = load_addon_registry()
     return _ADDON_REGISTRY
+
+
+def reload_addon_registry() -> dict[str, dict[str, Any]]:
+    """Reload the addon registry from disk, replacing the cached instance."""
+    global _ADDON_REGISTRY
+    _ADDON_REGISTRY = load_addon_registry()
+    return _ADDON_REGISTRY

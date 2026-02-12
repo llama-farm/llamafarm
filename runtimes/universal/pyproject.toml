@@ -27,14 +27,14 @@ dependencies = [
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
   "protobuf>=5.29.3",
   "sentencepiece>=0.2.1",
-  "cachetools>=6.0.0", # TTL-based model caching
-  "jinja2>=3.0.0", # For tool-aware chat template rendering
+  "cachetools>=6.0.0",    # TTL-based model caching
+  "jinja2>=3.0.0",        # For tool-aware chat template rendering
   # Anomaly detection
   "scikit-learn>=1.3.0",
-  "pyod>=1.1.0", # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
-  "numba>=0.60.0", # Explicit pin for Python 3.12 compatibility (pyod -> numba -> llvmlite)
+  "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
+  "numba>=0.60.0",  # Explicit pin for Python 3.12 compatibility (pyod -> numba -> llvmlite)
   # High-performance data processing for streaming ML
-  "polars>=1.0.0", # Fast DataFrame library for rolling windows and feature engineering
+  "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
   # Text classification (few-shot learning with SetFit)
   "setfit>=1.1.0",
   "sentence-transformers>=3.0.0",
@@ -43,17 +43,6 @@ dependencies = [
   "easyocr>=1.7.0",
   "opencv-python-headless>=4.8.0",
   "pytesseract>=0.3.10",
-  # Speech packages moved to optional [speech] and [tts] extras
-  # These are now installed as add-ons via the Designer
-  "en-core-web-sm",
-  "onnxruntime>=1.20.0",
-  "faster-whisper>=1.0.0,<2.0.0",
-  "kokoro>=0.9.0,<1.0.0",
-  "misaki>=0.9.0,<1.0.0",
-  "pocket-tts>=0.1.0",
-  "spacy>=3.7.0,<4.0.0",
-  "pydub>=0.25.0,<1.0.0",
-  "av>=12.0.0,<13.0.0",
 ]
 
 [dependency-groups]
@@ -106,21 +95,22 @@ anomaly = ["scikit-learn>=1.3.0"]
 classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 
 # Speech-to-text with faster-whisper
-# Usage: uv add faster-whisper (installed as add-on via Designer)
+# Usage: uv pip install "universal-runtime[speech]"
 speech = [
-  "faster-whisper>=1.0.0,<2.0.0",
-  "av>=12.0.0,<13.0.0",    # PyAV for efficient compressed audio decoding (WebM/Opus)
+  "faster-whisper>=1.0.0",
+  "webrtcvad>=2.0.10",     # Voice activity detection for streaming
+  "av>=12.0.0",            # PyAV for efficient compressed audio decoding (WebM/Opus)
 ]
 
-# Text-to-speech with Kokoro and Pocket TTS
-# Usage: uv add kokoro pocket-tts (installed as add-on via Designer)
+# Text-to-speech with Kokoro
+# Usage: uv pip install "universal-runtime[tts]"
 tts = [
-  "kokoro>=0.9.0,<1.0.0",     # High-quality neural TTS (~82M params)
-  "misaki>=0.9.0,<1.0.0",     # G2P for English (kokoro dependency)
-  "spacy>=3.7.0,<4.0.0",      # NLP for G2P
-  "pydub>=0.25.0,<1.0.0",     # Audio format conversion (MP3, FLAC)
-  "av>=12.0.0,<13.0.0",       # PyAV for Opus/AAC encoding
-  "pocket-tts>=0.1.0",
+  "kokoro>=0.9.4",     # High-quality neural TTS (~82M params)
+  "misaki>=0.9.0",     # G2P for English (kokoro dependency) - no [en] extra to avoid conflicts
+  "spacy>=3.8.11",     # NLP for G2P
+  "pydub>=0.25.0",     # Audio format conversion (MP3, FLAC)
+  "av>=12.0.0",        # PyAV for Opus/AAC encoding
+  "pocket-tts>=1.0.3",
 ]
 
 # Text-to-speech with Kokoro MLX (Apple Silicon optimized)
@@ -188,7 +178,6 @@ override-dependencies = [
 [tool.uv.sources]
 llamafarm-common = { path = "../../common", editable = true }
 llamafarm-llama = { path = "../../packages/llamafarm-llama", editable = true }
-en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 # Ruff configuration is shared across all Python components
 # See ../../ruff.toml for the actual configuration

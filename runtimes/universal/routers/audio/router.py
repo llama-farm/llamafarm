@@ -615,7 +615,7 @@ async def websocket_transcription(
                             f"Transcription error (may be silence): {transcribe_err}"
                         )
                         # Try to send empty segment, but ignore if client disconnected
-                        with suppress(Exception):
+                        with suppress(WebSocketDisconnect, RuntimeError):
                             await websocket.send_json(
                                 {
                                     "type": "segment",
@@ -663,7 +663,7 @@ async def websocket_transcription(
                             f"Final transcription error (may be silence): {transcribe_err}"
                         )
                         # Try to send empty segment, but ignore if client disconnected
-                        with suppress(Exception):
+                        with suppress(WebSocketDisconnect, RuntimeError):
                             await websocket.send_json(
                                 {
                                     "type": "segment",
@@ -674,15 +674,12 @@ async def websocket_transcription(
                                 }
                             )
 
-                    finally:
-                        pass
-
                 # Signal completion
-                with suppress(Exception):
+                with suppress(WebSocketDisconnect, RuntimeError):
                     await websocket.send_json({"type": "done"})
                 break
 
-        with suppress(Exception):
+        with suppress(WebSocketDisconnect, RuntimeError):
             await websocket.close()
 
     except WebSocketDisconnect:

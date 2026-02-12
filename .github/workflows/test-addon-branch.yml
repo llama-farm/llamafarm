@@ -80,7 +80,15 @@ jobs:
 
           # Determine addons to build
           if [[ "$ADDON" == "all" ]]; then
-            ADDONS='["stt","tts","onnxruntime"]'
+            # Auto-discover addons that have packages (need wheel builds),
+            # matching the same logic as tools/generate_platform_matrix.py
+            ADDONS=$(for f in addons/registry/*.yaml; do
+              NAME=$(yq eval '.name' "$f")
+              PKG_COUNT=$(yq eval '.packages | length' "$f")
+              if [[ -n "$NAME" && "$PKG_COUNT" -gt 0 ]]; then
+                echo "\"$NAME\""
+              fi
+            done | jq -s '.')
           else
             ADDONS="[\"$ADDON\"]"
           fi

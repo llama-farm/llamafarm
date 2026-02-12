@@ -34,31 +34,29 @@ func TestValidateAddonName(t *testing.T) {
 }
 
 func TestResolveDependencies(t *testing.T) {
-	// Save and restore the global registry to avoid leaking test state
-	origRegistry := AddonRegistry
-	t.Cleanup(func() { AddonRegistry = origRegistry })
-
-	// Setup test registry
-	AddonRegistry = map[string]*AddonDefinition{
-		"base": {
-			Name:         "base",
-			Dependencies: []string{},
-		},
-		"mid": {
-			Name:         "mid",
-			Dependencies: []string{"base"},
-		},
-		"top": {
-			Name:         "top",
-			Dependencies: []string{"mid"},
-		},
-		"circular1": {
-			Name:         "circular1",
-			Dependencies: []string{"circular2"},
-		},
-		"circular2": {
-			Name:         "circular2",
-			Dependencies: []string{"circular1"},
+	// Build an in-memory registry for testing (no global state needed)
+	registry := &AddonRegistryStore{
+		addons: map[string]*AddonDefinition{
+			"base": {
+				Name:         "base",
+				Dependencies: []string{},
+			},
+			"mid": {
+				Name:         "mid",
+				Dependencies: []string{"base"},
+			},
+			"top": {
+				Name:         "top",
+				Dependencies: []string{"mid"},
+			},
+			"circular1": {
+				Name:         "circular1",
+				Dependencies: []string{"circular2"},
+			},
+			"circular2": {
+				Name:         "circular2",
+				Dependencies: []string{"circular1"},
+			},
 		},
 	}
 
@@ -134,6 +132,7 @@ func TestResolveDependencies(t *testing.T) {
 
 			// Run test
 			order, err := resolveDependencies(
+				registry,
 				tt.addonName,
 				state,
 				make(map[string]bool),

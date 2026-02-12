@@ -44,7 +44,7 @@ async def install_addon(request: AddonInstallRequest, background_tasks: Backgrou
 @router.get("/tasks/{task_id}", response_model=AddonTaskStatus)
 async def get_task_status(task_id: str):
     """Get the status of an addon installation task."""
-    status = addon_service.get_task_status(task_id)
+    status = await addon_service.get_task_status(task_id)
     if not status:
         raise HTTPException(404, f"Task '{task_id}' not found")
     return status

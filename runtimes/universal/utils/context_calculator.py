@@ -118,9 +118,11 @@ def compute_kv_bytes_per_token(
 
 
 # Fallback estimate when GGUF architecture metadata isn't available.
-# 256 bytes/token is conservative enough to prevent OOM for most models
-# (actual values range from ~16 KB/token for small models to ~512 KB/token for large ones).
-_FALLBACK_BYTES_PER_TOKEN = 256
+# Deliberately conservative (overestimates cost) to prevent OOM.
+# Actual KV cache costs range from ~18 KB/token (1.5B) to ~320 KB/token (70B).
+# 256 KB covers most 7B+ models safely; smaller models just get less context than
+# they could handle, which is preferable to OOM.
+_FALLBACK_BYTES_PER_TOKEN = 256 * 1024  # 256 KB
 
 
 def compute_max_context(

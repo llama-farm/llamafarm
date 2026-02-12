@@ -9,9 +9,6 @@ description: High-quality neural TTS with Kokoro
 component: universal-runtime
 version: "1.0.0"
 
-dependencies:
-  - onnxruntime
-
 packages:
   - kokoro>=0.9.0,<1.0.0
   - misaki>=0.9.0,<1.0.0
