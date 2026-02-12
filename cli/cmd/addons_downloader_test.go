@@ -113,6 +113,77 @@ func TestExtractTarGz_SymlinksIgnored(t *testing.T) {
 	}
 }
 
+func TestGithubSlugPattern(t *testing.T) {
+	tests := []struct {
+		name  string
+		slug  string
+		valid bool
+	}{
+		{"simple owner", "llama-farm", true},
+		{"simple repo", "llamafarm", true},
+		{"tag with version", "v0.0.27-snapshot", true},
+		{"tag with dots", "v1.2.3", true},
+		{"underscores", "my_repo", true},
+		{"path traversal", "../evil", false},
+		{"slash", "owner/repo", false},
+		{"url chars", "foo%2F..%2Fbar", false},
+		{"spaces", "my repo", false},
+		{"empty", "", false},
+		{"query string", "v1?foo=bar", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := githubSlugPattern.MatchString(tt.slug)
+			if got != tt.valid {
+				t.Errorf("githubSlugPattern.MatchString(%q) = %v, want %v", tt.slug, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestBuildDownloadURL_EnvOverrides(t *testing.T) {
+	d := &AddonDownloader{version: "1.0.0"}
+
+	// Clean env state after test
+	defer os.Unsetenv("LF_ADDON_REPO_OWNER")
+	defer os.Unsetenv("LF_ADDON_REPO_NAME")
+	defer os.Unsetenv("LF_ADDON_RELEASE_TAG")
+
+	// Valid overrides
+	os.Setenv("LF_ADDON_REPO_OWNER", "my-org")
+	os.Setenv("LF_ADDON_REPO_NAME", "my-repo")
+	os.Setenv("LF_ADDON_RELEASE_TAG", "v2.0.0")
+
+	url := d.buildDownloadURL("test.tar.gz")
+	expected := "https://github.com/my-org/my-repo/releases/download/v2.0.0/test.tar.gz"
+	if url != expected {
+		t.Errorf("buildDownloadURL() = %s, want %s", url, expected)
+	}
+
+	// Invalid owner falls back to default
+	os.Setenv("LF_ADDON_REPO_OWNER", "../evil")
+	os.Unsetenv("LF_ADDON_RELEASE_TAG")
+
+	url = d.buildDownloadURL("test.tar.gz")
+	if !strings.Contains(url, "llama-farm/my-repo") {
+		t.Errorf("buildDownloadURL() should fall back to default owner, got: %s", url)
+	}
+
+	// Invalid tag is ignored (falls through to version-based URL)
+	os.Unsetenv("LF_ADDON_REPO_OWNER")
+	os.Unsetenv("LF_ADDON_REPO_NAME")
+	os.Setenv("LF_ADDON_RELEASE_TAG", "v1/../../../etc/passwd")
+
+	url = d.buildDownloadURL("test.tar.gz")
+	if strings.Contains(url, "passwd") {
+		t.Errorf("buildDownloadURL() should reject malicious tag, got: %s", url)
+	}
+	if !strings.Contains(url, "/releases/download/v1.0.0/") {
+		t.Errorf("buildDownloadURL() should fall back to version URL, got: %s", url)
+	}
+}
+
 // Helper functions to create test archives
 
 func createMaliciousTarGz(path string) error {

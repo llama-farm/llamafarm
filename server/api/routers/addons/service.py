@@ -1,17 +1,30 @@
-"""Addon service implementation."""
+"""Addon service implementation.
+
+Architecture note: The server delegates addon install/uninstall to the CLI
+binary via subprocess. The CLI handles wheel download, extraction, and
+dependency cleanup. Service restart is handled separately to avoid the CLI
+stopping the server process that spawned it.
+
+The --no-restart flag tells the CLI to skip its stop/restart cycle. After the
+CLI finishes, this service restarts only the affected component (never the
+server itself) via a second CLI call.
+
+Task status is persisted to disk so that if the server restarts mid-install,
+the client can poll the final status once the server is back up.
+"""
 
 import asyncio
 import json
 import re
 import shutil
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-from .registry import get_addon_registry
+from .registry import get_addon_registry, reload_addon_registry
 from .types import AddonInfo, AddonTaskStatus
 
 logger = FastAPIStructLogger()
@@ -27,6 +40,11 @@ class AddonService:
         self.task_statuses: dict[str, AddonTaskStatus] = {}
         self.task_status_lock = asyncio.Lock()
         self.state_file = Path(settings.lf_data_dir) / "addons.json"
+        self.tasks_dir = Path(settings.lf_data_dir) / "addon-tasks"
+        self.tasks_dir.mkdir(parents=True, exist_ok=True)
+
+        # Recover any persisted task statuses from a previous server lifetime
+        self._recover_persisted_tasks()
 
     def _validate_addon_name(self, name: str) -> None:
         """Validate addon name to prevent injection attacks."""
@@ -71,33 +89,80 @@ class AddonService:
     async def install_addon_task(self, task_id: str, addon_name: str, restart: bool):
         """Background task to install an addon.
 
-        Note: The CLI 'addons install' command already handles service restarts,
-        so we don't need to manually restart services here. The restart parameter
-        is kept for API compatibility but is no longer used.
+        Uses --no-restart so the CLI never stops/starts services. After the
+        CLI finishes, we restart only the affected component (not the server).
         """
         try:
-            # Validate addon name before using it
             self._validate_addon_name(addon_name)
 
             await self._update_task_status_async(
                 task_id, "in_progress", 0, "Starting installation..."
             )
 
-            # Find CLI binary
             cli_path = self._find_cli_binary()
 
-            # Run CLI install command (already handles service restart)
+            # Use --no-restart so the CLI only downloads and extracts.
+            # This avoids the CLI stopping the server process that spawned it.
             await self._update_task_status_async(
-                task_id, "in_progress", 50, "Installing addon and restarting service..."
+                task_id, "in_progress", 10, "Downloading and installing addon packages..."
             )
-            await asyncio.to_thread(
+
+            result = await asyncio.to_thread(
                 subprocess.run,
-                [cli_path, "addons", "install", addon_name],
-                check=True,
+                [cli_path, "addons", "install", "--no-restart", addon_name],
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 minute timeout
+                timeout=300,
             )
+
+            if result.returncode != 0:
+                error_output = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                raise subprocess.CalledProcessError(
+                    result.returncode, result.args, result.stdout, result.stderr
+                )
+
+            # Surface CLI output in progress message
+            install_output = result.stdout.strip()
+            await self._update_task_status_async(
+                task_id, "in_progress", 70, f"Addon installed. {self._summarize_output(install_output)}"
+            )
+
+            # Restart the affected component (not the server)
+            if restart:
+                registry = get_addon_registry()
+                addon_def = registry.get(addon_name, {})
+                component = addon_def.get("component", "")
+
+                if component and component != "server":
+                    await self._update_task_status_async(
+                        task_id, "in_progress", 80, f"Restarting {component}..."
+                    )
+                    restart_result = await asyncio.to_thread(
+                        subprocess.run,
+                        [cli_path, "services", "start", component],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                    if restart_result.returncode != 0:
+                        logger.warning(
+                            f"Failed to restart {component}: {restart_result.stderr}"
+                        )
+                        await self._update_task_status_async(
+                            task_id,
+                            "completed",
+                            100,
+                            f"Addon installed but {component} restart failed. "
+                            f"Run 'lf services start {component}' manually.",
+                        )
+                        return
+                elif component == "server":
+                    logger.warning(
+                        "Addon targets server component; skipping automatic restart "
+                        "to avoid self-termination. Manual restart required."
+                    )
+
+            reload_addon_registry()
 
             await self._update_task_status_async(
                 task_id, "completed", 100, "Installation complete"
@@ -111,10 +176,10 @@ class AddonService:
         except subprocess.TimeoutExpired as e:
             logger.error(f"Timeout installing addon {addon_name}: {e}")
             await self._update_task_status_async(
-                task_id, "failed", 0, "Installation timeout", str(e)
+                task_id, "failed", 0, "Installation timed out after 5 minutes", str(e)
             )
         except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
+            error_msg = (e.stderr or e.stdout or str(e)).strip()
             logger.error(f"Failed to install addon {addon_name}: {error_msg}")
             await self._update_task_status_async(
                 task_id, "failed", 0, "Installation failed", error_msg
@@ -126,38 +191,69 @@ class AddonService:
             )
 
     async def uninstall_addon(self, addon_name: str):
-        """Uninstall an addon."""
+        """Uninstall an addon.
+
+        Uses --no-restart so the CLI never stops/starts services. Restarts the
+        affected component afterward (unless it targets the server).
+        """
         self._validate_addon_name(addon_name)
         cli_path = self._find_cli_binary()
-        await asyncio.to_thread(
+
+        # Look up component before uninstall (state is cleared after)
+        registry = get_addon_registry()
+        addon_def = registry.get(addon_name, {})
+        component = addon_def.get("component", "")
+
+        result = await asyncio.to_thread(
             subprocess.run,
-            [cli_path, "addons", "uninstall", addon_name],
-            check=True,
+            [cli_path, "addons", "uninstall", "--no-restart", addon_name],
+            capture_output=True,
+            text=True,
             timeout=60,
         )
 
-    async def get_task_status_async(self, task_id: str) -> AddonTaskStatus | None:
-        """Get the status of a task (thread-safe)."""
+        if result.returncode != 0:
+            error_msg = (result.stderr or result.stdout or "Unknown error").strip()
+            raise RuntimeError(f"Uninstall failed: {error_msg}")
+
+        reload_addon_registry()
+
+        # Restart the affected component (not the server)
+        if component and component != "server":
+            restart_result = await asyncio.to_thread(
+                subprocess.run,
+                [cli_path, "services", "start", component],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if restart_result.returncode != 0:
+                logger.warning(f"Failed to restart {component} after uninstall: {restart_result.stderr}")
+
+    async def get_task_status(self, task_id: str) -> AddonTaskStatus | None:
+        """Get the status of a task (holds lock for consistency with updates)."""
         async with self.task_status_lock:
             return self.task_statuses.get(task_id)
 
-    def get_task_status(self, task_id: str) -> AddonTaskStatus | None:
-        """Get the status of a task (synchronous version)."""
-        return self.task_statuses.get(task_id)
-
     def _find_cli_binary(self) -> str:
-        """Find the CLI binary path."""
-        # Check PATH first
+        """Find the CLI binary path.
+
+        Search order:
+        1. PATH (works when CLI is installed normally)
+        2. LF_DATA_DIR/bin/lf (works in containers/systemd where PATH is minimal)
+        """
         cli_path = shutil.which("lf")
         if cli_path:
             return cli_path
 
-        # Check LF_DATA_DIR/bin/ (respects LF_DATA_DIR env var)
         data_dir_bin = Path(settings.lf_data_dir) / "bin" / "lf"
         if data_dir_bin.exists():
             return str(data_dir_bin)
 
-        raise FileNotFoundError("CLI binary 'lf' not found")
+        raise FileNotFoundError(
+            f"CLI binary 'lf' not found on PATH or at {data_dir_bin}. "
+            f"Ensure the CLI is installed and accessible."
+        )
 
     def _load_state(self) -> dict:
         """Load addon state from file."""
@@ -167,6 +263,18 @@ class AddonService:
         with open(self.state_file) as f:
             return json.load(f)
 
+    @staticmethod
+    def _summarize_output(output: str) -> str:
+        """Extract the last meaningful line from CLI output for the progress message."""
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if not lines:
+            return ""
+        # Return the last line, truncated to a reasonable length
+        last = lines[-1]
+        if len(last) > 120:
+            return last[:117] + "..."
+        return last
+
     async def _update_task_status_async(
         self,
         task_id: str,
@@ -175,21 +283,43 @@ class AddonService:
         message: str,
         error: str | None = None,
     ):
-        """Update task status (thread-safe async version)."""
-        async with self.task_status_lock:
-            self.task_statuses[task_id] = AddonTaskStatus(
-                status=status, progress=progress, message=message, error=error
-            )
-
-    def _update_task_status(
-        self,
-        task_id: str,
-        status: str,
-        progress: int,
-        message: str,
-        error: str | None = None,
-    ):
-        """Update task status (synchronous version - use async version when possible)."""
-        self.task_statuses[task_id] = AddonTaskStatus(
+        """Update task status in memory and persist to disk."""
+        task_status = AddonTaskStatus(
             status=status, progress=progress, message=message, error=error
         )
+        async with self.task_status_lock:
+            self.task_statuses[task_id] = task_status
+
+        # Persist terminal states to disk so they survive server restarts
+        if status in ("completed", "failed"):
+            self._persist_task_status(task_id, task_status)
+
+    def _persist_task_status(self, task_id: str, task_status: AddonTaskStatus):
+        """Write task status to disk so it survives server restarts."""
+        try:
+            task_file = self.tasks_dir / f"{task_id}.json"
+            data = {
+                **task_status.model_dump(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            task_file.write_text(json.dumps(data))
+        except Exception as e:
+            logger.warning(f"Failed to persist task status {task_id}: {e}")
+
+    def _recover_persisted_tasks(self):
+        """Load terminal task statuses from disk (from a previous server lifetime)."""
+        try:
+            for task_file in self.tasks_dir.glob("*.json"):
+                try:
+                    data = json.loads(task_file.read_text())
+                    task_id = task_file.stem
+                    self.task_statuses[task_id] = AddonTaskStatus(
+                        status=data["status"],
+                        progress=data["progress"],
+                        message=data["message"],
+                        error=data.get("error"),
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to recover task {task_file.name}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to recover persisted tasks: {e}")

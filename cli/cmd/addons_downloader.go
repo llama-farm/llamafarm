@@ -11,12 +11,17 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/llamafarm/cli/cmd/utils"
 	"github.com/llamafarm/cli/internal/buildinfo"
 )
+
+// githubSlugPattern validates GitHub owner, repo, and tag segments.
+// Allows alphanumeric, hyphens, underscores, and dots (standard GitHub naming).
+var githubSlugPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 type AddonDownloader struct {
 	version string // LlamaFarm version for downloading wheels
@@ -59,6 +64,7 @@ func (d *AddonDownloader) DownloadAndInstallAddon(addon *AddonDefinition) error 
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
+	// LIFO order: Close runs first, then Remove (so the file is closed before deletion).
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
@@ -114,18 +120,28 @@ func (d *AddonDownloader) buildDownloadURL(filename string) string {
 	owner := os.Getenv("LF_ADDON_REPO_OWNER")
 	if owner == "" {
 		owner = "llama-farm"
+	} else if !githubSlugPattern.MatchString(owner) {
+		utils.OutputError("Invalid LF_ADDON_REPO_OWNER: %q (must be alphanumeric, hyphens, underscores, dots)\n", owner)
+		owner = "llama-farm"
 	}
 
 	repo := os.Getenv("LF_ADDON_REPO_NAME")
 	if repo == "" {
+		repo = "llamafarm"
+	} else if !githubSlugPattern.MatchString(repo) {
+		utils.OutputError("Invalid LF_ADDON_REPO_NAME: %q (must be alphanumeric, hyphens, underscores, dots)\n", repo)
 		repo = "llamafarm"
 	}
 
 	// Allow overriding via environment variable for testing
 	// LF_ADDON_RELEASE_TAG=v0.0.27-snapshot lf addons install stt
 	if envTag := os.Getenv("LF_ADDON_RELEASE_TAG"); envTag != "" {
-		utils.LogDebug(fmt.Sprintf("Using addon release tag from LF_ADDON_RELEASE_TAG: %s", envTag))
-		return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, envTag, filename)
+		if !githubSlugPattern.MatchString(envTag) {
+			utils.OutputError("Invalid LF_ADDON_RELEASE_TAG: %q (must be alphanumeric, hyphens, underscores, dots)\n", envTag)
+		} else {
+			utils.LogDebug(fmt.Sprintf("Using addon release tag from LF_ADDON_RELEASE_TAG: %s", envTag))
+			return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", owner, repo, envTag, filename)
+		}
 	}
 
 	if d.version == "latest" {
@@ -316,27 +332,133 @@ func (d *AddonDownloader) extractWheel(wheelPath, destDir string) error {
 	return nil
 }
 
-// removeCommonPackages removes packages that are likely already in the venv and would cause conflicts
-// Keeps only the core addon packages specified in the addon definition
+// removeCommonPackages removes packages from the extracted addon directory that
+// are already present in the component's venv. This prevents PYTHONPATH conflicts
+// at runtime while keeping addon-specific transitive dependencies.
+//
+// The decision of what to remove is based on dynamic venv introspection rather
+// than a hardcoded list, so it stays in sync automatically as venv dependencies
+// change across releases.
 func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefinition) error {
-	// Extract primary package names from the addon's package list
-	// e.g., "faster-whisper>=1.0.0" -> "faster_whisper"
-	// or "https://.../.../en_core_web_sm-3.7.1-py3-none-any.whl" -> "en_core_web_sm"
+	// 1. Build the set of packages that must always be kept.
+	keepPackages := extractAddonPackageNames(addon)
+
+	// 2. Also keep any packages explicitly listed in keep_packages YAML field.
+	//    This covers transitive dependencies the addon author knows are required
+	//    and might not be in the venv (e.g., ctranslate2 for faster-whisper).
+	for _, pkg := range addon.KeepPackages {
+		normalized := normalizePackageName(pkg)
+		keepPackages[normalized] = true
+		utils.LogDebug(fmt.Sprintf("Keeping package (via keep_packages): %s", normalized))
+	}
+
+	// 3. Discover what's already installed in the component's venv.
+	//    If the venv doesn't exist yet, this returns an empty map and we
+	//    conservatively keep everything.
+	venvPackages := getVenvPackageNames(addon.Component)
+
+	// 4. Discover packages provided by other installed addons so we don't
+	//    remove something a sibling addon depends on.
+	otherAddonPackages := getInstalledAddonPackageNames(addon.Name)
+
+	if len(venvPackages) == 0 {
+		utils.LogDebug("Venv package list empty; skipping cleanup (conservative)")
+		return nil
+	}
+
+	// 5. First pass: remove package directories that are already in the venv.
+	files, err := os.ReadDir(addonDir)
+	if err != nil {
+		return err
+	}
+
+	removed := make(map[string]bool) // track removals for metadata cleanup
+
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		name := file.Name()
+
+		if strings.HasSuffix(name, ".dist-info") || strings.HasSuffix(name, ".data") {
+			continue
+		}
+
+		if keepPackages[name] {
+			continue
+		}
+		if otherAddonPackages[name] {
+			utils.LogDebug(fmt.Sprintf("Keeping %s (provided by another addon)", name))
+			continue
+		}
+		if venvPackages[name] {
+			dirPath := filepath.Join(addonDir, name)
+			utils.LogDebug(fmt.Sprintf("Removing %s (already in venv)", name))
+			if err := os.RemoveAll(dirPath); err != nil {
+				utils.LogDebug(fmt.Sprintf("Warning: failed to remove %s: %v", name, err))
+			}
+			removed[name] = true
+		}
+	}
+
+	// 6. Second pass: clean up .dist-info, .data dirs and standalone files
+	//    for packages that were removed above.
+	files2, _ := os.ReadDir(addonDir)
+	for _, file := range files2 {
+		name := file.Name()
+
+		if strings.HasSuffix(name, ".dist-info") || strings.HasSuffix(name, ".data") {
+			suffix := ".dist-info"
+			if strings.HasSuffix(name, ".data") {
+				suffix = ".data"
+			}
+			baseName := strings.TrimSuffix(name, suffix)
+			parts := strings.SplitN(baseName, "-", 2)
+			if len(parts) > 0 {
+				pkgName := normalizePackageName(parts[0])
+				if keepPackages[pkgName] || otherAddonPackages[pkgName] {
+					continue
+				}
+				if venvPackages[pkgName] {
+					dirPath := filepath.Join(addonDir, name)
+					utils.LogDebug(fmt.Sprintf("Removing metadata: %s", name))
+					os.RemoveAll(dirPath)
+				}
+			}
+			continue
+		}
+
+		// Standalone .py / .pth files
+		if !file.IsDir() && (strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".pth")) {
+			baseName := strings.TrimSuffix(strings.TrimSuffix(name, ".py"), ".pth")
+			normalized := normalizePackageName(baseName)
+			if keepPackages[normalized] || otherAddonPackages[normalized] {
+				continue
+			}
+			if venvPackages[normalized] {
+				filePath := filepath.Join(addonDir, name)
+				utils.LogDebug(fmt.Sprintf("Removing file: %s", name))
+				os.Remove(filePath)
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractAddonPackageNames builds the set of normalized Python module names
+// from an addon's Packages list (direct dependencies only).
+func extractAddonPackageNames(addon *AddonDefinition) map[string]bool {
 	keepPackages := make(map[string]bool)
+
 	for _, pkg := range addon.Packages {
 		var pkgName string
 
-		// Check if this is a URL-based package spec
 		if strings.HasPrefix(pkg, "http://") || strings.HasPrefix(pkg, "https://") {
-			// Extract package name from wheel filename
-			// URL format: https://.../package_name-version-py-abi-platform.whl
+			// URL-based package spec: extract name from wheel filename
 			lastSlash := strings.LastIndex(pkg, "/")
 			if lastSlash != -1 && strings.HasSuffix(pkg, ".whl") {
-				filename := pkg[lastSlash+1:]
-				// Remove .whl extension
-				filename = strings.TrimSuffix(filename, ".whl")
-				// Extract package name (first component before hyphen-version)
-				// e.g., "en_core_web_sm-3.7.1-py3-none-any" -> "en_core_web_sm"
+				filename := strings.TrimSuffix(pkg[lastSlash+1:], ".whl")
 				parts := strings.Split(filename, "-")
 				if len(parts) > 0 {
 					pkgName = parts[0]
@@ -347,7 +469,7 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 				continue
 			}
 		} else {
-			// Extract package name before version specifiers
+			// Strip version specifiers
 			pkgName = strings.Split(pkg, ">=")[0]
 			pkgName = strings.Split(pkgName, "==")[0]
 			pkgName = strings.Split(pkgName, "<")[0]
@@ -355,127 +477,12 @@ func (d *AddonDownloader) removeCommonPackages(addonDir string, addon *AddonDefi
 			pkgName = strings.TrimSpace(pkgName)
 		}
 
-		// Convert to module name format (hyphens to underscores)
-		pkgName = strings.ReplaceAll(pkgName, "-", "_")
+		pkgName = normalizePackageName(pkgName)
 		keepPackages[pkgName] = true
 		utils.LogDebug(fmt.Sprintf("Keeping addon package: %s", pkgName))
 	}
 
-	// Also keep packages that are direct dependencies of the main packages
-	// For faster-whisper, we need ctranslate2 which might not be in the venv
-	keepPackages["ctranslate2"] = true
-
-	// List of common packages to remove (already in venv)
-	removePatterns := []string{
-		"huggingface_hub", "numpy", "torch", "transformers",
-		"tokenizers", "packaging", "filelock", "typing_extensions",
-		"certifi", "idna", "charset_normalizer", "urllib3",
-		"requests", "tqdm", "pyyaml", "click", "setuptools",
-		"sympy", "mpmath", "onnxruntime", "protobuf",
-		"h11", "httpcore", "httpx", "anyio", "sniffio",
-		"coloredlogs", "humanfriendly", "flatbuffers",
-		"fsspec", "shellingham", "typer", "hf_xet",
-		"google", "yaml", "_yaml", "_distutils_hack",
-		"pkg_resources",
-	}
-
-	files, err := os.ReadDir(addonDir)
-	if err != nil {
-		return err
-	}
-
-	for _, file := range files {
-		if !file.IsDir() {
-			continue
-		}
-
-		// Skip .dist-info directories
-		if strings.HasSuffix(file.Name(), ".dist-info") || strings.HasSuffix(file.Name(), ".data") {
-			continue
-		}
-
-		// Check if this package should be kept
-		shouldKeep := keepPackages[file.Name()]
-		if shouldKeep {
-			continue
-		}
-
-		// Check if it matches a remove pattern
-		shouldRemove := false
-		for _, pattern := range removePatterns {
-			if file.Name() == pattern || strings.HasPrefix(file.Name(), pattern+"_") {
-				shouldRemove = true
-				break
-			}
-		}
-
-		if shouldRemove {
-			dirPath := filepath.Join(addonDir, file.Name())
-			utils.LogDebug(fmt.Sprintf("Removing common package: %s", file.Name()))
-			if err := os.RemoveAll(dirPath); err != nil {
-				utils.LogDebug(fmt.Sprintf("Warning: failed to remove %s: %v", file.Name(), err))
-			}
-		}
-	}
-
-	// Also remove .dist-info, .data directories, and standalone files for removed packages
-	files2, _ := os.ReadDir(addonDir)
-	for _, file := range files2 {
-		name := file.Name()
-
-		// Remove .dist-info and .data directories for common packages
-		if strings.HasSuffix(name, ".dist-info") || strings.HasSuffix(name, ".data") {
-			baseName := strings.TrimSuffix(name, ".dist-info")
-			baseName = strings.TrimSuffix(baseName, ".data")
-			// Extract package name from dist-info (e.g., "numpy-2.4.2.dist-info" -> "numpy")
-			parts := strings.Split(baseName, "-")
-			if len(parts) > 0 {
-				pkgName := parts[0]
-				// Convert to module name format (hyphens to underscores) to match keepPackages format
-				normalizedPkgName := strings.ReplaceAll(pkgName, "-", "_")
-
-				// Don't remove metadata for packages we want to keep
-				if keepPackages[normalizedPkgName] {
-					continue
-				}
-
-				// Check if this is a removed package
-				for _, pattern := range removePatterns {
-					if pkgName == pattern || strings.HasPrefix(pkgName, pattern+"_") {
-						dirPath := filepath.Join(addonDir, name)
-						utils.LogDebug(fmt.Sprintf("Removing metadata: %s", name))
-						os.RemoveAll(dirPath)
-						break
-					}
-				}
-			}
-		}
-
-		// Remove standalone files (.py, .pth)
-		if !file.IsDir() && (strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".pth")) {
-			// Check if it's a removed package file
-			baseName := strings.TrimSuffix(name, ".py")
-			baseName = strings.TrimSuffix(baseName, ".pth")
-			// Convert to module name format (hyphens to underscores) to match keepPackages format
-			normalizedBaseName := strings.ReplaceAll(baseName, "-", "_")
-
-			// Don't remove files for packages we want to keep
-			if keepPackages[normalizedBaseName] {
-				continue
-			}
-
-			for _, pattern := range removePatterns {
-				if baseName == pattern || strings.HasPrefix(baseName, pattern+"_") {
-					filePath := filepath.Join(addonDir, name)
-					utils.LogDebug(fmt.Sprintf("Removing file: %s", name))
-					os.Remove(filePath)
-					break
-				}
-			}
-		}
-	}
-
-	return nil
+	return keepPackages
 }
 
 func (d *AddonDownloader) extractTarGz(tarGzPath, destDir string) error {

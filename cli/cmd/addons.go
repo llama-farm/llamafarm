@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -74,15 +73,23 @@ var addonsUninstallCmd = &cobra.Command{
 	Run:   runAddonsUninstall,
 }
 
+// noRestart skips service stop/restart during install/uninstall.
+// Used by the server API to avoid restarting itself mid-request.
+var noRestart bool
+
 func init() {
 	rootCmd.AddCommand(addonsCmd)
 	addonsCmd.AddCommand(addonsListCmd)
 	addonsCmd.AddCommand(addonsInstallCmd)
 	addonsCmd.AddCommand(addonsUninstallCmd)
+
+	addonsInstallCmd.Flags().BoolVar(&noRestart, "no-restart", false, "Skip stopping/restarting services (caller manages services)")
+	addonsUninstallCmd.Flags().BoolVar(&noRestart, "no-restart", false, "Skip stopping/restarting services (caller manages services)")
 }
 
 func runAddonsList(cmd *cobra.Command, args []string) {
-	if err := LoadAddonRegistry(); err != nil {
+	registry, err := NewAddonRegistryStore()
+	if err != nil {
 		utils.OutputError("Failed to load addon registry: %v\n", err)
 		os.Exit(1)
 	}
@@ -98,15 +105,8 @@ func runAddonsList(cmd *cobra.Command, args []string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tDESCRIPTION\tCOMPONENT\tSTATUS")
 
-	// Sort addons
-	names := make([]string, 0, len(AddonRegistry))
-	for name := range AddonRegistry {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		addon := AddonRegistry[name]
+	for _, name := range registry.SortedNames() {
+		addon, _ := registry.Get(name)
 		status := "Not installed"
 
 		if installed, ok := state.InstalledAddons[name]; ok {
@@ -120,7 +120,7 @@ func runAddonsList(cmd *cobra.Command, args []string) {
 }
 
 // resolveDependencies returns the list of addons to install in order (dependencies first)
-func resolveDependencies(addonName string, state *AddonsState, visited map[string]bool, stack map[string]bool) ([]string, error) {
+func resolveDependencies(registry *AddonRegistryStore, addonName string, state *AddonsState, visited map[string]bool, stack map[string]bool) ([]string, error) {
 	// Check for circular dependency
 	if stack[addonName] {
 		return nil, fmt.Errorf("circular dependency detected: %s", addonName)
@@ -132,7 +132,7 @@ func resolveDependencies(addonName string, state *AddonsState, visited map[strin
 	}
 
 	// Validate addon exists
-	addon, ok := AddonRegistry[addonName]
+	addon, ok := registry.Get(addonName)
 	if !ok {
 		return nil, fmt.Errorf("unknown addon: %s", addonName)
 	}
@@ -145,7 +145,7 @@ func resolveDependencies(addonName string, state *AddonsState, visited map[strin
 
 	// Process dependencies first
 	for _, dep := range addon.Dependencies {
-		deps, err := resolveDependencies(dep, state, visited, stack)
+		deps, err := resolveDependencies(registry, dep, state, visited, stack)
 		if err != nil {
 			return nil, err
 		}
@@ -164,6 +164,14 @@ func resolveDependencies(addonName string, state *AddonsState, visited map[strin
 }
 
 func runAddonsInstall(cmd *cobra.Command, args []string) {
+	// Track failure so we can exit non-zero after deferred service restarts
+	var failed bool
+	defer func() {
+		if failed {
+			os.Exit(1)
+		}
+	}()
+
 	// Acquire global install lock to prevent concurrent installations
 	lfDir, err := utils.GetLFDataDir()
 	if err != nil {
@@ -189,7 +197,8 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	}
 	defer installLock.Unlock()
 
-	if err := LoadAddonRegistry(); err != nil {
+	registry, err := NewAddonRegistryStore()
+	if err != nil {
 		utils.OutputError("Failed to load addon registry: %v\n", err)
 		os.Exit(1)
 	}
@@ -203,7 +212,7 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	}
 
 	// Validate addon exists
-	addon, ok := AddonRegistry[addonName]
+	addon, ok := registry.Get(addonName)
 	if !ok {
 		utils.OutputError("Unknown addon: %s\n", addonName)
 		utils.OutputInfo("Run 'lf addons list' to see available addons.\n")
@@ -224,7 +233,7 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	}
 
 	// Resolve dependencies
-	installOrder, err := resolveDependencies(addonName, state, make(map[string]bool), make(map[string]bool))
+	installOrder, err := resolveDependencies(registry, addonName, state, make(map[string]bool), make(map[string]bool))
 	if err != nil {
 		utils.OutputError("Dependency resolution failed: %v\n", err)
 		os.Exit(1)
@@ -234,7 +243,8 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	if len(installOrder) > 1 {
 		utils.OutputInfo("Installing %s and its dependencies:\n", addon.DisplayName)
 		for _, name := range installOrder {
-			utils.OutputInfo("  - %s\n", AddonRegistry[name].DisplayName)
+			depAddon, _ := registry.Get(name)
+			utils.OutputInfo("  - %s\n", depAddon.DisplayName)
 		}
 		fmt.Println()
 	}
@@ -243,56 +253,58 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	hardware := orchestrator.DetectHardware()
 	utils.OutputInfo("Detected hardware: %s\n", hardware)
 
-	// Get server URL for service management
-	serverURLToUse := serverURL
-	if serverURLToUse == "" {
-		serverURLToUse = "http://localhost:14345"
-	}
-
-	sm, err := orchestrator.NewServiceManager(serverURLToUse)
-	if err != nil {
-		utils.OutputError("Failed to initialize service manager: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Collect all services that need to be stopped
+	// Service stop/restart handling (skipped with --no-restart)
+	var sm *orchestrator.ServiceManager
 	servicesToRestart := make(map[string]bool)
-	for _, installName := range installOrder {
-		installAddon := AddonRegistry[installName]
-		servicesToRestart[installAddon.Component] = true
-	}
-
-	// Track whether services were stopped
 	servicesStopped := false
 
-	// Ensure services are restarted even if installation fails
-	defer func() {
-		if servicesStopped && len(servicesToRestart) > 0 {
-			fmt.Println()
-			utils.OutputInfo("Restarting services (this may take up to 30 seconds)...\n")
-			for service := range servicesToRestart {
-				utils.OutputInfo("  Starting %s...\n", service)
-				if err := sm.EnsureService(service); err != nil {
-					utils.OutputError("Failed to start service %s: %v\n", service, err)
-					utils.OutputInfo("You can manually start it with: lf services start %s\n", service)
-				} else {
-					utils.OutputSuccess("  %s started and health check passed\n", service)
+	if !noRestart {
+		serverURLToUse := serverURL
+		if serverURLToUse == "" {
+			serverURLToUse = "http://localhost:14345"
+		}
+
+		sm, err = orchestrator.NewServiceManager(serverURLToUse)
+		if err != nil {
+			utils.OutputError("Failed to initialize service manager: %v\n", err)
+			os.Exit(1)
+		}
+
+		for _, installName := range installOrder {
+			installAddon, _ := registry.Get(installName)
+			servicesToRestart[installAddon.Component] = true
+		}
+
+		// Ensure services are restarted even if installation fails
+		defer func() {
+			if servicesStopped && len(servicesToRestart) > 0 {
+				fmt.Println()
+				utils.OutputInfo("Restarting services (this may take up to 30 seconds)...\n")
+				for service := range servicesToRestart {
+					utils.OutputInfo("  Starting %s...\n", service)
+					if err := sm.EnsureService(service); err != nil {
+						utils.OutputError("Failed to start service %s: %v\n", service, err)
+						utils.OutputInfo("You can manually start it with: lf services start %s\n", service)
+					} else {
+						utils.OutputSuccess("  %s started and health check passed\n", service)
+					}
 				}
 			}
-		}
-	}()
+		}()
 
-	// Stop all affected services once before installing
-	if len(servicesToRestart) > 0 {
-		utils.OutputInfo("\nStopping affected services...\n")
-		for service := range servicesToRestart {
-			utils.OutputInfo("  Stopping %s...\n", service)
-			if err := sm.StopServices(service); err != nil {
-				utils.OutputError("Failed to stop service %s: %v\n", service, err)
-				os.Exit(1)
+		// Stop all affected services once before installing
+		if len(servicesToRestart) > 0 {
+			utils.OutputInfo("\nStopping affected services...\n")
+			for service := range servicesToRestart {
+				utils.OutputInfo("  Stopping %s...\n", service)
+				if err := sm.StopServices(service); err != nil {
+					utils.OutputError("Failed to stop service %s: %v\n", service, err)
+					failed = true
+					return
+				}
+				servicesStopped = true
 			}
 		}
-		servicesStopped = true
 	}
 
 	// Install each addon
@@ -300,7 +312,7 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 	platform := getPlatformString()
 
 	for _, installName := range installOrder {
-		installAddon := AddonRegistry[installName]
+		installAddon, _ := registry.Get(installName)
 
 		utils.OutputInfo("\nInstalling %s...\n", installAddon.DisplayName)
 
@@ -313,7 +325,8 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 		if len(installAddon.Packages) > 0 {
 			if err := downloader.DownloadAndInstallAddon(installAddon); err != nil {
 				utils.OutputError("Installation failed: %v\n", err)
-				// Return instead of os.Exit to let defer restart services
+				// Return to let defer restart services; failed flag triggers os.Exit(1) after
+				failed = true
 				return
 			}
 		} else {
@@ -335,6 +348,14 @@ func runAddonsInstall(cmd *cobra.Command, args []string) {
 }
 
 func runAddonsUninstall(cmd *cobra.Command, args []string) {
+	// Track failure so we can exit non-zero after deferred service restart
+	var failed bool
+	defer func() {
+		if failed {
+			os.Exit(1)
+		}
+	}()
+
 	// Acquire global install lock to prevent concurrent install/uninstall races
 	lfDir, err := utils.GetLFDataDir()
 	if err != nil {
@@ -359,7 +380,8 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	}
 	defer uninstallLock.Unlock()
 
-	if err := LoadAddonRegistry(); err != nil {
+	registry, err := NewAddonRegistryStore()
+	if err != nil {
 		utils.OutputError("Failed to load addon registry: %v\n", err)
 		os.Exit(1)
 	}
@@ -372,7 +394,7 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	addon, ok := AddonRegistry[addonName]
+	addon, ok := registry.Get(addonName)
 	if !ok {
 		utils.OutputError("Unknown addon: %s\n", addonName)
 		os.Exit(1)
@@ -398,40 +420,40 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 
 	addonPath := filepath.Join(addonsDir, addonName)
 
-	// Stop the affected service first
-	serverURLToUse := serverURL
-	if serverURLToUse == "" {
-		serverURLToUse = "http://localhost:14345"
-	}
-
-	sm, err := orchestrator.NewServiceManager(serverURLToUse)
-	if err != nil {
-		utils.OutputError("Failed to initialize service manager: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Track whether service was stopped successfully
+	// Service stop/restart handling (skipped with --no-restart)
 	serviceStopped := false
 
-	// Ensure service is restarted even if uninstall fails
-	defer func() {
-		if serviceStopped {
-			utils.OutputInfo("Restarting %s service...\n", addon.Component)
-			if err := sm.EnsureService(addon.Component); err != nil {
-				utils.OutputError("Failed to start service %s: %v\n", addon.Component, err)
-				utils.OutputInfo("You can manually start it with: lf services start %s\n", addon.Component)
-			} else {
-				utils.OutputSuccess("%s service restarted\n", addon.Component)
-			}
+	if !noRestart {
+		serverURLToUse := serverURL
+		if serverURLToUse == "" {
+			serverURLToUse = "http://localhost:14345"
 		}
-	}()
 
-	utils.OutputInfo("Stopping %s service...\n", addon.Component)
-	if err := sm.StopServices(addon.Component); err != nil {
-		utils.OutputWarning("Warning: Failed to stop service: %v\n", err)
-		// Continue anyway - user can manually stop it
-	} else {
-		serviceStopped = true
+		sm, err := orchestrator.NewServiceManager(serverURLToUse)
+		if err != nil {
+			utils.OutputError("Failed to initialize service manager: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Ensure service is restarted even if uninstall fails
+		defer func() {
+			if serviceStopped {
+				utils.OutputInfo("Restarting %s service...\n", addon.Component)
+				if err := sm.EnsureService(addon.Component); err != nil {
+					utils.OutputError("Failed to start service %s: %v\n", addon.Component, err)
+					utils.OutputInfo("You can manually start it with: lf services start %s\n", addon.Component)
+				} else {
+					utils.OutputSuccess("%s service restarted\n", addon.Component)
+				}
+			}
+		}()
+
+		utils.OutputInfo("Stopping %s service...\n", addon.Component)
+		if err := sm.StopServices(addon.Component); err != nil {
+			utils.OutputWarning("Warning: Failed to stop service: %v\n", err)
+		} else {
+			serviceStopped = true
+		}
 	}
 
 	// Remove addon files
@@ -439,7 +461,8 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	if err := os.RemoveAll(addonPath); err != nil {
 		utils.OutputError("Failed to remove addon files: %v\n", err)
 		utils.OutputInfo("You may need to manually remove: %s\n", addonPath)
-		// Return instead of os.Exit to let defer restart service
+		// Return to let defer restart service; failed flag triggers os.Exit(1) after
+		failed = true
 		return
 	}
 
@@ -447,7 +470,8 @@ func runAddonsUninstall(cmd *cobra.Command, args []string) {
 	state.MarkUninstalled(addonName)
 	if err := SaveAddonsState(state); err != nil {
 		utils.OutputError("Failed to save state: %v\n", err)
-		// Return instead of os.Exit to let defer restart service
+		// Return to let defer restart service; failed flag triggers os.Exit(1) after
+		failed = true
 		return
 	}
 

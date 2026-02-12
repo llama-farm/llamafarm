@@ -18,6 +18,9 @@ packages:
   # Note: webrtcvad>=2.0.10 omitted - no binary wheels available
   # Users can install separately if needed for voice activity detection
 
+keep_packages:
+  - ctranslate2  # Required by faster-whisper at runtime
+
 hardware_notes:
   cuda: CUDA provides 10-50x faster transcription
   metal: MPS not supported by faster-whisper, falls back to CPU
