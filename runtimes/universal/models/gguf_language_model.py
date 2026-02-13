@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.context_manager import ContextBudget, ContextManager, ContextUsage
+from utils.gpu_allocator import InsufficientVRAMError, get_llama_gpu_params
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
 from utils.model_format import get_gguf_file_path
 from utils.token_counter import TokenCounter
 
@@ -278,6 +280,54 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers = get_gguf_gpu_layers()
             logger.info(f"Auto-detected n_gpu_layers: {n_gpu_layers}")
 
+        # GPU allocation: select optimal GPU(s) based on free VRAM
+        # This prevents OOM crashes on multi-GPU systems by routing models
+        # to the GPU with the most free VRAM (split_mode=NONE) instead of
+        # splitting across all GPUs (llama.cpp's default split_mode=LAYER)
+        gpu_params = {}
+        try:
+            metadata = get_gguf_metadata_cached(gguf_path)
+            gpu_params = get_llama_gpu_params(
+                model_size_bytes=metadata.file_size_bytes,
+                n_ctx=self.actual_n_ctx,
+                n_gpu_layers=n_gpu_layers,
+                total_layers=metadata.n_layer,
+                n_layer=metadata.n_layer,
+                n_head_kv=metadata.n_head_kv,
+                head_k_size=metadata.head_k_size,
+                head_v_size=metadata.head_v_size,
+            )
+            if gpu_params:
+                gpu_idx = gpu_params.get("gpu_index")
+                logger.info(
+                    f"GPU allocation: main_gpu={gpu_params.get('main_gpu')}, "
+                    f"split_mode={gpu_params.get('split_mode')}, "
+                    f"gpu_index={gpu_idx}"
+                )
+                # Re-compute context size using the allocated GPU's actual free memory
+                if gpu_idx is not None:
+                    new_n_ctx, new_warnings = get_default_context_size(
+                        model_id=self.model_id,
+                        gguf_path=gguf_path,
+                        device=self.device,
+                        config_n_ctx=self.requested_n_ctx,
+                        gpu_index=gpu_idx,
+                    )
+                    if new_n_ctx != self.actual_n_ctx:
+                        logger.info(
+                            f"Context size adjusted for GPU {gpu_idx}: "
+                            f"{self.actual_n_ctx} -> {new_n_ctx}"
+                        )
+                        self.actual_n_ctx = new_n_ctx
+                        for w in new_warnings:
+                            logger.warning(w)
+            else:
+                logger.debug("No CUDA GPUs detected, using default GPU allocation")
+        except InsufficientVRAMError as e:
+            raise RuntimeError(str(e)) from e
+        except Exception as e:
+            logger.warning(f"GPU allocation failed, using defaults: {e}")
+
         # Configure batch size (critical for memory on constrained devices)
         # Default 2048 for fast prompt processing, but lower values reduce memory
         n_batch = self.requested_n_batch if self.requested_n_batch is not None else 2048
@@ -363,6 +413,15 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
 
             try:
+                # Build GPU-specific kwargs from allocation
+                gpu_kwargs = {}
+                if gpu_params.get("main_gpu") is not None:
+                    gpu_kwargs["main_gpu"] = gpu_params["main_gpu"]
+                if gpu_params.get("split_mode") is not None:
+                    gpu_kwargs["split_mode"] = gpu_params["split_mode"]
+                if gpu_params.get("tensor_split") is not None:
+                    gpu_kwargs["tensor_split"] = gpu_params["tensor_split"]
+
                 return Llama(
                     model_path=gguf_path,
                     mmproj_path=mmproj_path,  # Multimodal projector for audio/vision
@@ -377,6 +436,7 @@ class GGUFLanguageModel(BaseModel):
                     cache_type_v=cache_type_v,  # KV cache value quantization
                     verbose=False,  # Disable verbose logging (managed by ggml_logging)
                     seed=-1,  # Random seed (-1 = random)
+                    **gpu_kwargs,
                 )
             except ValueError as e:
                 # Provide more helpful error message for common issues

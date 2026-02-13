@@ -124,13 +124,33 @@ def get_device_info() -> dict:
 
     if torch is not None:
         if device == "cuda":
+            gpu_count = torch.cuda.device_count()
+            # Primary GPU info (backward compatible)
+            free_0, total_0 = torch.cuda.mem_get_info(0)
             info.update(
                 {
                     "gpu_name": torch.cuda.get_device_name(0),
-                    "gpu_memory_total": torch.cuda.get_device_properties(0).total_memory,
+                    "gpu_memory_total": total_0,
+                    "gpu_memory_free": free_0,
                     "gpu_memory_allocated": torch.cuda.memory_allocated(0),
+                    "gpu_count": gpu_count,
                 }
             )
+            # Per-GPU details for multi-GPU systems
+            if gpu_count > 1:
+                gpus = []
+                for i in range(gpu_count):
+                    free, total = torch.cuda.mem_get_info(i)
+                    gpus.append(
+                        {
+                            "index": i,
+                            "name": torch.cuda.get_device_name(i),
+                            "memory_total": total,
+                            "memory_free": free,
+                            "memory_allocated": torch.cuda.memory_allocated(i),
+                        }
+                    )
+                info["gpus"] = gpus
         elif device == "mps":
             info.update(
                 {

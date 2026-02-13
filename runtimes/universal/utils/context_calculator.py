@@ -57,25 +57,29 @@ def get_gguf_metadata(gguf_path: str) -> dict:
     }
 
 
-def get_available_memory(device: str) -> int:
+def get_available_memory(device: str, gpu_index: int | None = None) -> int:
     """Get available memory in bytes for the device.
 
     Args:
         device: Target device ("cuda", "mps", or "cpu")
+        gpu_index: Specific CUDA GPU index. If None, uses GPU 0.
 
     Returns:
         Available memory in bytes
 
     Notes:
-        - For CUDA: Returns total GPU memory (not available, as model will allocate what it needs)
+        - For CUDA: Returns free GPU memory on the specified device
         - For MPS/CPU: Returns available system RAM
     """
     try:
         if device == "cuda" and torch.cuda.is_available():
-            # Get total GPU memory (in bytes)
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory
-            logger.debug(f"CUDA total memory: {gpu_memory / (1024**3):.2f} GB")
-            return gpu_memory
+            idx = gpu_index if gpu_index is not None else 0
+            free, total = torch.cuda.mem_get_info(idx)
+            logger.debug(
+                f"CUDA GPU {idx} memory: {free / (1024**3):.2f} GB free / "
+                f"{total / (1024**3):.2f} GB total"
+            )
+            return free
         else:
             # For CPU and MPS, use system RAM
             # Get available (not total) to be conservative
@@ -303,6 +307,7 @@ def get_default_context_size(
     gguf_path: str,
     device: str,
     config_n_ctx: int | None = None,
+    gpu_index: int | None = None,
 ) -> tuple[int, list[str]]:
     """Determine context size with four-tier priority system.
 
@@ -320,6 +325,7 @@ def get_default_context_size(
         gguf_path: Path to GGUF file
         device: Target device ("cuda", "mps", "cpu")
         config_n_ctx: Optional explicit context size from config
+        gpu_index: Specific CUDA GPU index for memory queries. If None, uses GPU 0.
 
     Returns:
         tuple of (final_n_ctx, warnings_list)
@@ -345,7 +351,7 @@ def get_default_context_size(
 
         # Get model metadata and compute memory constraints
         metadata = get_gguf_metadata(gguf_path)
-        available_memory = get_available_memory(device)
+        available_memory = get_available_memory(device, gpu_index=gpu_index)
         max_context_from_memory = compute_max_context(
             metadata["file_size_bytes"],
             available_memory,
