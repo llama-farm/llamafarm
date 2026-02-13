@@ -192,6 +192,47 @@ def test_schema_field_is_preserved_and_applied(monkeypatch):
     assert client.response_model is Person
 
 
+def test_apply_response_model_falls_back_to_response_model_attr(monkeypatch):
+    cfg = make_config()
+    config_payload = cfg.model_dump(mode="python", by_alias=True)
+    config_payload["schema"] = "schemas/person.py::Person"
+    config_with_schema = LlamaFarmConfig.model_validate(config_payload)
+
+    class Person(BaseModel):
+        name: str
+
+    class LegacyClient:
+        def __init__(self):
+            self.response_model = None
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_config = config_with_schema
+    monkeypatch.setattr(agent, "_load_response_model", lambda _: Person)
+    client = LegacyClient()
+    agent._apply_response_model(client)
+    assert client.response_model is Person
+
+
+def test_apply_response_model_raises_for_unsupported_client(monkeypatch):
+    cfg = make_config()
+    config_payload = cfg.model_dump(mode="python", by_alias=True)
+    config_payload["schema"] = "schemas/person.py::Person"
+    config_with_schema = LlamaFarmConfig.model_validate(config_payload)
+
+    class Person(BaseModel):
+        name: str
+
+    class UnsupportedClient:
+        pass
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_config = config_with_schema
+    monkeypatch.setattr(agent, "_load_response_model", lambda _: Person)
+
+    with pytest.raises(TypeError, match="does not support structured output"):
+        agent._apply_response_model(UnsupportedClient())
+
+
 def test_load_response_model_missing_class_has_clear_error(tmp_path: Path):
     schemas_dir = tmp_path / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)

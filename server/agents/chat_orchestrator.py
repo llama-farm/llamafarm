@@ -118,7 +118,12 @@ class ChatOrchestratorAgent(LFAgent):
         if hasattr(client, "set_response_model"):
             client.set_response_model(response_model)
             return
-        client.response_model = response_model
+        if hasattr(client, "response_model"):
+            client.response_model = response_model
+            return
+        raise TypeError(
+            f"Client {type(client).__name__} does not support structured output"
+        )
 
     def _load_response_model(self, schema_ref: str) -> type[BaseModel]:
         """Load a Pydantic model from a user schema file.
