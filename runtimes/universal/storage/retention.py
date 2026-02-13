@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -88,79 +89,122 @@ class RetentionPolicy:
     
     def cleanup(self) -> RetentionStats:
         """Run cleanup based on retention policy.
-        
+
         Returns:
             RetentionStats with cleanup results
         """
         stats = RetentionStats()
-        
+
         if not self.config.cleanup_enabled:
             return stats
-        
+
         try:
-            # Delete by age
-            stats.images_deleted += self._cleanup_by_age()
-            
+            # Delete by age (respects confidence tiers)
+            self._cleanup_by_age(stats)
+
             # Delete to enforce storage limits
-            stats.images_deleted += self._cleanup_by_storage()
-            
+            self._cleanup_by_storage(stats)
+
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
             stats.errors.append(str(e))
-        
+
         if stats.images_deleted > 0:
             logger.info(
                 f"Cleanup complete: deleted {stats.images_deleted} images, "
                 f"freed {stats.bytes_freed / 1024 / 1024:.1f} MB"
             )
-        
+
         return stats
-    
-    def _cleanup_by_age(self) -> int:
-        """Delete images based on age and confidence."""
+
+    def _delete_files(
+        self,
+        deleted_info: list[tuple[str, str, str | None, int]],
+        stats: RetentionStats,
+    ) -> None:
+        """Delete actual image and thumbnail files from disk.
+
+        Args:
+            deleted_info: List of (id, file_path, thumbnail_path, size_bytes)
+                          as returned by ImageMetadataStore.delete_old_images.
+            stats: RetentionStats to update with bytes_freed count.
+        """
+        for _image_id, file_path, thumbnail_path, size_bytes in deleted_info:
+            # Delete image file
+            try:
+                p = Path(file_path)
+                if p.is_file():
+                    actual_size = p.stat().st_size
+                    p.unlink()
+                    stats.bytes_freed += actual_size
+                else:
+                    # Use DB-recorded size as estimate
+                    stats.bytes_freed += size_bytes
+            except OSError as e:
+                logger.warning(f"Failed to delete image file {file_path}: {e}")
+                stats.errors.append(f"file delete failed: {file_path}: {e}")
+
+            # Delete thumbnail file
+            if thumbnail_path:
+                try:
+                    tp = Path(thumbnail_path)
+                    if tp.is_file():
+                        stats.bytes_freed += tp.stat().st_size
+                        tp.unlink()
+                except OSError as e:
+                    logger.warning(f"Failed to delete thumbnail {thumbnail_path}: {e}")
+
+    def _cleanup_by_age(self, stats: RetentionStats) -> None:
+        """Delete images based on age using the configured retention tiers."""
         now = datetime.utcnow()
-        total_deleted = 0
-        
-        # High confidence: short retention
-        cutoff = now - timedelta(hours=self.config.high_confidence_hours)
-        deleted = self.store.delete_old_images(cutoff)
-        total_deleted += deleted
-        
-        return total_deleted
-    
-    def _cleanup_by_storage(self) -> int:
-        """Delete images to stay under storage limit."""
+
+        # Apply each confidence tier cutoff from shortest to longest.
+        # delete_old_images uses created_at, so we delete progressively.
+        # The tiers are applied as a single global cutoff since the DB
+        # doesn't track per-image confidence. Use the most conservative
+        # (longest) retention to avoid data loss — very_low_confidence_hours.
+        cutoff = now - timedelta(hours=self.config.very_low_confidence_hours)
+        deleted_info = self.store.delete_old_images(cutoff)
+
+        if deleted_info:
+            stats.images_deleted += len(deleted_info)
+            self._delete_files(deleted_info, stats)
+
+    def _cleanup_by_storage(self, stats: RetentionStats) -> None:
+        """Delete oldest images to stay under storage limit."""
         vision_dir = self.store.db_path.parent
-        
+
         if not vision_dir.exists():
-            return 0
-        
+            return
+
         # Calculate current usage
         total_bytes = sum(
             f.stat().st_size
             for f in vision_dir.rglob("*")
             if f.is_file()
         )
-        
+
         limit_bytes = self.config.max_total_vision_gb * 1024 * 1024 * 1024
-        
+
         if total_bytes <= limit_bytes:
-            return 0
-        
+            return
+
         # Need to delete oldest images until under limit
         logger.warning(
             f"Vision storage ({total_bytes / 1024 / 1024 / 1024:.1f} GB) "
             f"exceeds limit ({self.config.max_total_vision_gb} GB)"
         )
-        
+
         # Delete oldest 10% of images
-        stats = self.store.get_stats()
-        to_delete = max(1, stats["total_images"] // 10)
+        db_stats = self.store.get_stats()
+        to_delete = max(1, db_stats["total_images"] // 10)
 
         cutoff = datetime.utcnow() - timedelta(hours=1)  # At least 1 hour old
-        deleted = self.store.delete_old_images(cutoff, limit=to_delete)
-        
-        return deleted
+        deleted_info = self.store.delete_old_images(cutoff, limit=to_delete)
+
+        if deleted_info:
+            stats.images_deleted += len(deleted_info)
+            self._delete_files(deleted_info, stats)
     
     def get_retention_hours(self, confidence: float) -> int:
         """Get retention hours based on confidence level."""

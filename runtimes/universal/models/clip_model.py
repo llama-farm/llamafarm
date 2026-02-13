@@ -10,6 +10,7 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Literal
@@ -25,7 +26,7 @@ from .vision_base import (
 
 if TYPE_CHECKING:
     import torch
-    from transformers import CLIPModel, CLIPProcessor
+    from transformers import AutoModel, AutoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +82,8 @@ class CLIPClassifier(ClassificationModel):
         """
         super().__init__(model_id, device, token)
         self.prompt_template = prompt_template
-        self.clip_model: CLIPModel | None = None
-        self.processor: CLIPProcessor | None = None
+        self.clip_model: AutoModel | None = None
+        self.processor: AutoProcessor | None = None
         self._class_embeddings: torch.Tensor | None = None
         self._embedding_dim: int = 0
 
@@ -92,7 +93,7 @@ class CLIPClassifier(ClassificationModel):
             logger.debug(f"CLIP model {self.model_id} already loaded")
             return
 
-        from transformers import CLIPModel, CLIPProcessor
+        from transformers import AutoModel, AutoProcessor
 
         # Resolve device
         self.device = self._resolve_device(self.device)
@@ -103,19 +104,22 @@ class CLIPClassifier(ClassificationModel):
         # Resolve model ID
         hf_model_id = CLIP_VARIANTS.get(self.model_id, self.model_id)
 
-        # Load model and processor
-        self.clip_model = CLIPModel.from_pretrained(
-            hf_model_id,
-            token=self.token,
-        )
-        self.processor = CLIPProcessor.from_pretrained(
-            hf_model_id,
-            token=self.token,
-        )
+        def _load_model():
+            # Load model and processor (AutoModel/AutoProcessor handle both CLIP and SigLIP)
+            model = AutoModel.from_pretrained(
+                hf_model_id,
+                token=self.token,
+            )
+            processor = AutoProcessor.from_pretrained(
+                hf_model_id,
+                token=self.token,
+            )
+            # Move to device
+            model = model.to(self.device)
+            model.eval()
+            return model, processor
 
-        # Move to device
-        self.clip_model = self.clip_model.to(self.device)
-        self.clip_model.eval()
+        self.clip_model, self.processor = await asyncio.to_thread(_load_model)
 
         # Get embedding dimension
         self._embedding_dim = self.clip_model.config.projection_dim
@@ -154,18 +158,21 @@ class CLIPClassifier(ClassificationModel):
         # Create prompts from class names
         prompts = [self.prompt_template.format(name) for name in class_names]
 
-        # Encode text
-        text_inputs = self.processor(
-            text=prompts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        ).to(self.device)
+        def _encode_classes():
+            # Encode text
+            text_inputs = self.processor(
+                text=prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            ).to(self.device)
 
-        with torch.no_grad():
-            text_features = self.clip_model.get_text_features(**text_inputs)
-            # Normalize embeddings
-            self._class_embeddings = text_features / text_features.norm(dim=-1, keepdim=True)
+            with torch.no_grad():
+                text_features = self.clip_model.get_text_features(**text_inputs)
+                # Normalize embeddings
+                return text_features / text_features.norm(dim=-1, keepdim=True)
+
+        self._class_embeddings = await asyncio.to_thread(_encode_classes)
 
         logger.debug(f"Pre-computed embeddings for {len(class_names)} classes")
 
@@ -200,26 +207,34 @@ class CLIPClassifier(ClassificationModel):
 
         # Process image
         pil_image = self._image_to_pil(image)
-        image_inputs = self.processor(
-            images=pil_image,
-            return_tensors="pt",
-        ).to(self.device)
 
-        # Get image embedding
-        with torch.no_grad():
-            image_features = self.clip_model.get_image_features(**image_inputs)
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        def _run_inference():
+            image_inputs = self.processor(
+                images=pil_image,
+                return_tensors="pt",
+            ).to(self.device)
 
-            # Compute similarity with class embeddings
-            similarity = (image_features @ self._class_embeddings.T).squeeze()
+            # Get image embedding
+            with torch.no_grad():
+                image_features = self.clip_model.get_image_features(**image_inputs)
+                image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-            # Convert to probabilities
-            probs = similarity.softmax(dim=-1)
+                # Use trained classifier head if available, otherwise zero-shot
+                if hasattr(self, "_classifier_head") and self._classifier_head is not None:
+                    logits = self._classifier_head(image_features).squeeze()
+                    probs = logits.softmax(dim=-1)
+                else:
+                    # Zero-shot: compute similarity with class embeddings
+                    similarity = (image_features @ self._class_embeddings.T).squeeze()
+                    probs = similarity.softmax(dim=-1)
+
+            return probs.cpu().numpy()
+
+        probs_np = await asyncio.to_thread(_run_inference)
 
         inference_time = (time.perf_counter() - start_time) * 1000
 
         # Get top predictions
-        probs_np = probs.cpu().numpy()
         top_indices = np.argsort(probs_np)[::-1][:top_k]
 
         best_idx = int(top_indices[0])
@@ -275,46 +290,53 @@ class CLIPClassifier(ClassificationModel):
         label_to_idx = {label: i for i, label in enumerate(unique_labels)}
         self.class_names = unique_labels
 
-        # Extract embeddings for all images
-        embeddings = []
-        for img in images:
-            pil_image = self._image_to_pil(img)
-            inputs = self.processor(images=pil_image, return_tensors="pt").to(self.device)
+        # Convert images to PIL upfront (lightweight)
+        pil_images = [self._image_to_pil(img) for img in images]
 
+        def _train():
+            # Extract embeddings for all images
+            embeddings = []
+            for pil_image in pil_images:
+                inputs = self.processor(images=pil_image, return_tensors="pt").to(self.device)
+
+                with torch.no_grad():
+                    features = self.clip_model.get_image_features(**inputs)
+                    features = features / features.norm(dim=-1, keepdim=True)
+                    embeddings.append(features)
+
+            embeddings = torch.cat(embeddings, dim=0)
+            targets = torch.tensor([label_to_idx[l] for l in labels], device=self.device)
+
+            # Simple classifier head
+            classifier = nn.Linear(self._embedding_dim, len(unique_labels)).to(self.device)
+            optimizer = AdamW(classifier.parameters(), lr=learning_rate)
+            criterion = nn.CrossEntropyLoss()
+
+            # Training loop
+            classifier.train()
+            losses = []
+
+            for epoch in range(epochs):
+                optimizer.zero_grad()
+                logits = classifier(embeddings)
+                loss = criterion(logits, targets)
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.item())
+
+                if (epoch + 1) % max(1, epochs // 5) == 0:
+                    logger.debug(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.4f}")
+
+            # Compute final accuracy
+            classifier.eval()
             with torch.no_grad():
-                features = self.clip_model.get_image_features(**inputs)
-                features = features / features.norm(dim=-1, keepdim=True)
-                embeddings.append(features)
+                logits = classifier(embeddings)
+                preds = logits.argmax(dim=-1)
+                accuracy = (preds == targets).float().mean().item()
 
-        embeddings = torch.cat(embeddings, dim=0)
-        targets = torch.tensor([label_to_idx[l] for l in labels], device=self.device)
+            return classifier, losses, accuracy
 
-        # Simple classifier head
-        classifier = nn.Linear(self._embedding_dim, len(unique_labels)).to(self.device)
-        optimizer = AdamW(classifier.parameters(), lr=learning_rate)
-        criterion = nn.CrossEntropyLoss()
-
-        # Training loop
-        classifier.train()
-        losses = []
-
-        for epoch in range(epochs):
-            optimizer.zero_grad()
-            logits = classifier(embeddings)
-            loss = criterion(logits, targets)
-            loss.backward()
-            optimizer.step()
-            losses.append(loss.item())
-
-            if (epoch + 1) % max(1, epochs // 5) == 0:
-                logger.debug(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.4f}")
-
-        # Compute final accuracy
-        classifier.eval()
-        with torch.no_grad():
-            logits = classifier(embeddings)
-            preds = logits.argmax(dim=-1)
-            accuracy = (preds == targets).float().mean().item()
+        classifier, losses, accuracy = await asyncio.to_thread(_train)
 
         # Store classifier for inference
         self._classifier_head = classifier
@@ -375,15 +397,15 @@ class CLIPEmbedder(EmbeddingModel):
             token: HuggingFace token for gated models
         """
         super().__init__(model_id, device, token)
-        self.clip_model: CLIPModel | None = None
-        self.processor: CLIPProcessor | None = None
+        self.clip_model: AutoModel | None = None
+        self.processor: AutoProcessor | None = None
 
     async def load(self) -> None:
         """Load the CLIP model and processor."""
         if self._loaded:
             return
 
-        from transformers import CLIPModel, CLIPProcessor
+        from transformers import AutoModel, AutoProcessor
 
         self.device = self._resolve_device(self.device)
         logger.info(f"Loading CLIP embedder {self.model_id} on {self.device}")
@@ -392,11 +414,15 @@ class CLIPEmbedder(EmbeddingModel):
 
         hf_model_id = CLIP_VARIANTS.get(self.model_id, self.model_id)
 
-        self.clip_model = CLIPModel.from_pretrained(hf_model_id, token=self.token)
-        self.processor = CLIPProcessor.from_pretrained(hf_model_id, token=self.token)
+        def _load_model():
+            # AutoModel/AutoProcessor handle both CLIP and SigLIP architectures
+            model = AutoModel.from_pretrained(hf_model_id, token=self.token)
+            processor = AutoProcessor.from_pretrained(hf_model_id, token=self.token)
+            model = model.to(self.device)
+            model.eval()
+            return model, processor
 
-        self.clip_model = self.clip_model.to(self.device)
-        self.clip_model.eval()
+        self.clip_model, self.processor = await asyncio.to_thread(_load_model)
 
         self.embedding_dim = self.clip_model.config.projection_dim
 
@@ -432,15 +458,19 @@ class CLIPEmbedder(EmbeddingModel):
 
         # Process all images
         pil_images = [self._image_to_pil(img) for img in images]
-        inputs = self.processor(images=pil_images, return_tensors="pt").to(self.device)
 
-        # Get embeddings
-        with torch.no_grad():
-            features = self.clip_model.get_image_features(**inputs)
-            # Normalize
-            features = features / features.norm(dim=-1, keepdim=True)
+        def _embed():
+            inputs = self.processor(images=pil_images, return_tensors="pt").to(self.device)
 
-        embeddings = features.cpu().numpy().tolist()
+            # Get embeddings
+            with torch.no_grad():
+                features = self.clip_model.get_image_features(**inputs)
+                # Normalize
+                features = features / features.norm(dim=-1, keepdim=True)
+
+            return features.cpu().numpy().tolist()
+
+        embeddings = await asyncio.to_thread(_embed)
         inference_time = (time.perf_counter() - start_time) * 1000
 
         return EmbeddingResult(
@@ -470,20 +500,23 @@ class CLIPEmbedder(EmbeddingModel):
 
         start_time = time.perf_counter()
 
-        # Process texts
-        inputs = self.processor(
-            text=texts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        ).to(self.device)
+        def _embed():
+            # Process texts
+            inputs = self.processor(
+                text=texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            ).to(self.device)
 
-        # Get embeddings
-        with torch.no_grad():
-            features = self.clip_model.get_text_features(**inputs)
-            features = features / features.norm(dim=-1, keepdim=True)
+            # Get embeddings
+            with torch.no_grad():
+                features = self.clip_model.get_text_features(**inputs)
+                features = features / features.norm(dim=-1, keepdim=True)
 
-        embeddings = features.cpu().numpy().tolist()
+            return features.cpu().numpy().tolist()
+
+        embeddings = await asyncio.to_thread(_embed)
         inference_time = (time.perf_counter() - start_time) * 1000
 
         return EmbeddingResult(
@@ -517,7 +550,13 @@ class CLIPEmbedder(EmbeddingModel):
 
         from pathlib import Path
 
-        from optimum.onnxruntime import ORTModelForFeatureExtraction
+        try:
+            from optimum.onnxruntime import ORTModelForFeatureExtraction
+        except ImportError:
+            raise ImportError(
+                "ONNX export requires the 'optimum' package with ONNX Runtime support. "
+                "Install it with: pip install optimum[onnxruntime]"
+            ) from None
         from transformers import AutoTokenizer
 
         output_dir = Path(output_path)

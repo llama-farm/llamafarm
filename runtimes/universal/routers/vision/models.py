@@ -71,6 +71,8 @@ def _validate_task(task: str) -> str:
 def _get_model_path(model_name: str, task: str = "detection") -> Path:
     """Get the path for a vision model directory."""
     safe_name = sanitize_model_name(model_name)
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid model name")
     safe_task = _validate_task(task)
     return _get_models_dir() / safe_task / safe_name
 

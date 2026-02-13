@@ -407,6 +407,13 @@ class ValidationGate:
         Returns:
             ModelVersion for the promoted model
         """
+        # Check that candidate file exists before proceeding
+        src = Path(candidate_path)
+        if not src.exists():
+            raise FileNotFoundError(
+                f"Candidate weights file not found: {candidate_path}"
+            )
+
         model_dir = self._models_dir / model_id
         model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -427,10 +434,8 @@ class ValidationGate:
                     v.is_rollback = True
                     v.model_path = str(backup_path)
 
-        # Copy candidate to current
-        src = Path(candidate_path)
-        if src.exists():
-            shutil.copy2(str(src), str(current_path))
+        # Copy candidate to current (existence already validated above)
+        shutil.copy2(str(src), str(current_path))
 
         # Create version record
         version = ModelVersion(

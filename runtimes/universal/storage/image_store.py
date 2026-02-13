@@ -484,7 +484,11 @@ class ImageMetadataStore:
             
             return stats
     
-    def delete_old_images(self, before: datetime, limit: int | None = None) -> int:
+    def delete_old_images(
+        self,
+        before: datetime,
+        limit: int | None = None,
+    ) -> list[tuple[str, str, str | None, int]]:
         """Delete images older than the given timestamp.
 
         Args:
@@ -492,30 +496,37 @@ class ImageMetadataStore:
             limit: Max number of images to delete (oldest first)
 
         Returns:
-            Number of images deleted
+            List of (id, file_path, thumbnail_path, size_bytes) for each deleted record.
+            Callers are responsible for deleting the actual files.
         """
         with sqlite3.connect(self.db_path) as conn:
-            # Get IDs to delete
-            query = "SELECT id FROM images WHERE created_at < ? ORDER BY created_at ASC"
+            # Get IDs and file info for deletion
+            query = (
+                "SELECT id, file_path, thumbnail_path, size_bytes "
+                "FROM images WHERE created_at < ? ORDER BY created_at ASC"
+            )
             params: list[Any] = [before]
             if limit is not None:
                 query += " LIMIT ?"
                 params.append(limit)
             rows = conn.execute(query, params).fetchall()
-            
+
+            if not rows:
+                return []
+
+            deleted_info = [
+                (row[0], row[1], row[2], row[3] or 0) for row in rows
+            ]
             ids = [row[0] for row in rows]
-            
-            if not ids:
-                return 0
-            
+
             # Delete in order (labels, detection_history, detections, images)
             placeholders = ",".join("?" * len(ids))
             conn.execute(f"DELETE FROM labels WHERE image_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM detection_history WHERE image_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM detections WHERE image_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM images WHERE id IN ({placeholders})", ids)
-            
-            return len(ids)
+
+            return deleted_info
     
     @staticmethod
     def _row_to_image_record(row: sqlite3.Row) -> ImageRecord:

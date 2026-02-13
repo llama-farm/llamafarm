@@ -26,10 +26,17 @@ def mock_export_model():
 def export_app(mock_export_model, tmp_path):
     """FastAPI app with the models router wired up."""
     from routers.vision.models import (
+        _load_model_fn,
+        _VISION_MODELS_DIR,
         router,
         set_model_export_loader,
         set_vision_models_dir,
     )
+
+    # Save original global state
+    import routers.vision.models as _models_mod
+    original_loader = _models_mod._load_model_fn
+    original_models_dir = _models_mod._VISION_MODELS_DIR
 
     async def mock_loader(model_id: str):
         return mock_export_model
@@ -39,7 +46,11 @@ def export_app(mock_export_model, tmp_path):
 
     app = FastAPI()
     app.include_router(router)
-    return app
+    yield app
+
+    # Restore original global state
+    _models_mod._load_model_fn = original_loader
+    _models_mod._VISION_MODELS_DIR = original_models_dir
 
 
 @pytest.fixture

@@ -219,8 +219,11 @@ class IncrementalTrainer:
             train_kwargs["use_ewc"] = True
             train_kwargs["ewc_lambda"] = config.ewc_lambda
 
-        # Use YOLO's built-in training
-        metrics = await model.train(**train_kwargs)
+        # Use YOLO's built-in training (synchronous — run in thread to avoid blocking)
+        if asyncio.iscoroutinefunction(getattr(model, "train", None)):
+            metrics = await model.train(**train_kwargs)
+        else:
+            metrics = await asyncio.to_thread(model.train, **train_kwargs)
 
         # Update progress
         job.progress = 1.0

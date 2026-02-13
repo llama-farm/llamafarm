@@ -981,15 +981,15 @@ from models.streaming_vision import (
 set_streaming_model_loader(load_detection)
 
 # Wire up replay buffer and image store for the cascade learning loop
-from storage.image_store import ImageMetadataStore
+from storage.image_store import ImageStore
 from vision_training.replay_buffer import ReplayBuffer
 
 _vision_replay_buffer = ReplayBuffer(
     max_size=1000,
     storage_dir=_LF_DATA_DIR / "vision" / "replay_buffer",
 )
-_vision_image_store = ImageMetadataStore(
-    db_path=_LF_DATA_DIR / "vision" / "metadata.db",
+_vision_image_store = ImageStore(
+    data_dir=_LF_DATA_DIR / "vision",
 )
 set_streaming_replay_buffer(_vision_replay_buffer)
 set_streaming_image_store(_vision_image_store)

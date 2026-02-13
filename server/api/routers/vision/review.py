@@ -65,7 +65,14 @@ async def submit_review(
             corrections_list = json.loads(corrections)
         except json.JSONDecodeError:
             raise HTTPException(400, "Invalid corrections JSON")
-    
+
+    # Validate: "adjusted" requires non-empty corrections
+    if decision == "adjusted" and not corrections_list:
+        raise HTTPException(
+            400,
+            "Decision 'adjusted' requires non-empty corrections",
+        )
+
     return await VisionReviewService.submit_review(
         image_id=image_id,
         decision=decision,

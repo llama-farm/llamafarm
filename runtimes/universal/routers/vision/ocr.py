@@ -52,12 +52,18 @@ async def ocr_image(request: OCRRequest) -> OCRResponse:
     loader = _get_loader()
     model = await loader(request.model)
 
+    # TODO: file_id needs image store integration to resolve uploaded files
     results = []
+
+    # Build predict kwargs — pass languages if the model supports it
+    predict_kwargs: dict[str, Any] = {}
+    if request.languages:
+        predict_kwargs["languages"] = request.languages
 
     if request.images:
         for i, img_str in enumerate(request.images):
             img_bytes = decode_base64_image(img_str)
-            ocr_result = await model.predict(img_bytes)
+            ocr_result = await model.predict(img_bytes, **predict_kwargs)
 
             api_boxes = []
             if request.return_boxes and ocr_result.boxes:

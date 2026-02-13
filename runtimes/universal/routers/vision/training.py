@@ -60,6 +60,7 @@ async def start_training(request: TrainRequest) -> TrainResponse:
         ewc_lambda=request.config.ewc_lambda,
         use_replay=request.config.use_replay,
         replay_ratio=request.config.replay_ratio,
+        validation_split=request.config.validation_split,
     )
     
     job = await trainer.start_training(

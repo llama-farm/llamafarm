@@ -14,6 +14,11 @@ def decode_base64_image(image_str: str) -> bytes:
         HTTPException: If the base64 data is malformed.
     """
     if image_str.startswith("data:"):
+        if "," not in image_str:
+            raise HTTPException(
+                status_code=400,
+                detail="Malformed data URI: missing comma separator",
+            )
         _, base64_data = image_str.split(",", 1)
     else:
         base64_data = image_str

@@ -111,6 +111,7 @@ class AutoTrainer:
         self._validation_gate = validation_gate
         self._state = AutoTrainState()
         self._monitor_task: asyncio.Task | None = None
+        self._background_task: asyncio.Task | None = None
         self._on_training_complete: Callable[[dict], Any] | None = None
     
     def set_on_training_complete(self, callback: Callable[[dict], Any]) -> None:
@@ -215,9 +216,11 @@ class AutoTrainer:
             )
             
             self._state.current_job_id = job.job_id
-            
-            # Wait for completion in background
-            asyncio.create_task(self._wait_for_completion(job.job_id, len(samples)))
+
+            # Wait for completion in background (store reference so task stays alive)
+            self._background_task = asyncio.create_task(
+                self._wait_for_completion(job.job_id, len(samples))
+            )
             
             return True
             
@@ -468,7 +471,7 @@ class AutoTrainer:
         logger.info(f"Auto-training monitor started (interval: {check_interval_minutes}m)")
     
     async def stop(self) -> None:
-        """Stop background monitoring."""
+        """Stop background monitoring and cancel any in-progress training task."""
         if self._monitor_task:
             self._monitor_task.cancel()
             try:
@@ -476,6 +479,13 @@ class AutoTrainer:
             except asyncio.CancelledError:
                 pass
             self._monitor_task = None
+        if self._background_task and not self._background_task.done():
+            self._background_task.cancel()
+            try:
+                await self._background_task
+            except asyncio.CancelledError:
+                pass
+            self._background_task = None
         logger.info("Auto-training monitor stopped")
     
     async def _monitor_loop(self, interval_minutes: float) -> None:

@@ -246,7 +246,9 @@ class TestImageMetadataStore:
         cutoff = datetime.utcnow() - timedelta(hours=24)
         deleted = store.delete_old_images(cutoff)
 
-        assert deleted == 1
+        assert len(deleted) == 1
+        assert deleted[0][0] == "old_img"  # id
+        assert deleted[0][1] == "/tmp/images/old_img.jpg"  # file_path
         assert store.get_image("old_img") is None
 
     def test_delete_old_cascades_detections(self, store):
@@ -424,13 +426,13 @@ class TestRetentionPolicy:
         return ids
 
     def test_cleanup_by_age(self, store, policy):
-        """Test cleanup removes old images."""
+        """Test cleanup removes old images past the very_low_confidence retention."""
         import sqlite3
 
         self._add_images(store, 3)
 
-        # Backdate all images using datetime object
-        old_time = datetime.utcnow() - timedelta(hours=2)
+        # Backdate all images beyond very_low_confidence_hours (720h default)
+        old_time = datetime.utcnow() - timedelta(hours=800)
         with sqlite3.connect(store.db_path) as conn:
             conn.execute("UPDATE images SET created_at = ?", (old_time,))
 

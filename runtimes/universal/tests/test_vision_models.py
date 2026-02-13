@@ -5,7 +5,6 @@ Tests all model classes with mocking to avoid downloading real models.
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -47,7 +46,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_load_model(self, mock_yolo):
         """Test loading YOLO model."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu")
@@ -59,7 +58,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_detect_basic(self, mock_yolo):
         """Test basic object detection."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu")
@@ -80,7 +79,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_detect_with_class_filter(self, mock_yolo):
         """Test detection with class filtering."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu")
@@ -97,7 +96,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_detect_confidence_threshold(self, mock_yolo):
         """Test confidence threshold filtering."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu", confidence_threshold=0.99)
@@ -113,7 +112,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_unload_model(self, mock_yolo):
         """Test unloading model releases resources."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu")
@@ -127,7 +126,7 @@ class TestYOLOModel:
     @pytest.mark.asyncio
     async def test_model_info(self, mock_yolo):
         """Test get_model_info returns correct metadata."""
-        with patch("models.yolo_model.YOLO", return_value=mock_yolo):
+        with patch("ultralytics.YOLO", return_value=mock_yolo):
             from models.yolo_model import YOLOModel
             
             model = YOLOModel("yolov8n", device="cpu")
@@ -192,8 +191,8 @@ class TestCLIPClassifier:
         """Test loading CLIP classifier."""
         mock_model, mock_processor = mock_clip
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -210,8 +209,8 @@ class TestCLIPClassifier:
         """Test zero-shot classification."""
         mock_model, mock_processor = mock_clip
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -237,8 +236,8 @@ class TestCLIPClassifier:
         """Test that set_classes pre-computes text embeddings."""
         mock_model, mock_processor = mock_clip
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -257,8 +256,8 @@ class TestCLIPClassifier:
         """Test that classify raises error without classes."""
         mock_model, mock_processor = mock_clip
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -322,8 +321,8 @@ class TestCLIPEmbedder:
         """Test embedding images."""
         mock_model, mock_processor = mock_embedder
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -348,8 +347,8 @@ class TestCLIPEmbedder:
         """Test embedding texts."""
         mock_model, mock_processor = mock_embedder
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -370,8 +369,8 @@ class TestCLIPEmbedder:
         """Test that embeddings are normalized."""
         mock_model, mock_processor = mock_embedder
         
-        with patch("models.clip_model.CLIPModel") as MockCLIP, \
-             patch("models.clip_model.CLIPProcessor") as MockProcessor:
+        with patch("transformers.CLIPModel") as MockCLIP, \
+             patch("transformers.CLIPProcessor") as MockProcessor:
             MockCLIP.from_pretrained.return_value = mock_model
             MockProcessor.from_pretrained.return_value = mock_processor
             
@@ -451,18 +450,21 @@ class TestStreamingVisionDetector:
         from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
-        detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
-        
+        async def _load_model(m):
+            return mock_detector_model
+
+        detector.set_model_loader(_load_model)
+
         session = await detector.start_session(
             config=StreamingConfig(
                 confidence_threshold=0.7,
                 action_classes=["person"]
             )
         )
-        
+
         test_frame = b"fake_image_bytes"
         result = await detector.process_frame(session.session_id, test_frame)
-        
+
         assert result.status == "action"
         assert len(result.detections) == 1
         assert result.detections[0].class_name == "person"
@@ -473,8 +475,11 @@ class TestStreamingVisionDetector:
         from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
-        detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
-        
+        async def _load_model(m):
+            return mock_detector_model
+
+        detector.set_model_loader(_load_model)
+
         session = await detector.start_session(
             config=StreamingConfig(
                 confidence_threshold=0.7,
@@ -500,8 +505,11 @@ class TestStreamingVisionDetector:
         from models.streaming_vision import StreamingConfig, StreamingVisionDetector
         
         detector = StreamingVisionDetector()
-        detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
-        
+        async def _load_model(m):
+            return mock_detector_model
+
+        detector.set_model_loader(_load_model)
+
         session = await detector.start_session(config=StreamingConfig())
         
         # Process some frames
@@ -531,8 +539,11 @@ class TestStreamingVisionDetector:
         from models.streaming_vision import StreamingVisionDetector
         
         detector = StreamingVisionDetector()
-        detector.set_model_loader(lambda m: asyncio.coroutine(lambda: mock_detector_model)())
-        
+        async def _load_model(m):
+            return mock_detector_model
+
+        detector.set_model_loader(_load_model)
+
         session1 = await detector.start_session()
         session2 = await detector.start_session()
         

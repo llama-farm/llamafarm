@@ -79,7 +79,7 @@ class CreatePackageRequest(BaseModel):
 
 
 class ImportPackageRequest(BaseModel):
-    source: str = Field(..., description="File path, URL, or peer name")
+    source: str = Field(..., description="Local file path to a model package archive")
     model_id: str = ""
 
 
@@ -198,8 +198,20 @@ async def list_packages() -> list[dict[str, Any]]:
 
 
 @router.post("/packages")
-async def create_package(request: CreatePackageRequest) -> dict[str, Any]:
+def create_package(request: CreatePackageRequest) -> dict[str, Any]:
     """Create a model package from a trained model."""
+    from pathlib import Path
+
+    from .models import _get_models_dir
+
+    # Validate model_path is within the models directory
+    models_dir = _get_models_dir()
+    resolved = Path(request.model_path).resolve()
+    if not str(resolved).startswith(str(models_dir.resolve())):
+        raise HTTPException(
+            status_code=400, detail="Model path must be within the models directory"
+        )
+
     try:
         from vision_training.model_package import ModelPackager, PackageMetadata
 
@@ -226,8 +238,8 @@ async def create_package(request: CreatePackageRequest) -> dict[str, Any]:
 
 
 @router.post("/packages/import")
-async def import_package(request: ImportPackageRequest) -> dict[str, Any]:
-    """Import a model package from a file path, URL, or peer."""
+def import_package(request: ImportPackageRequest) -> dict[str, Any]:
+    """Import a model package from a local file path."""
     try:
         from vision_training.model_package import ModelPackager
 

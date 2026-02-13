@@ -453,10 +453,10 @@ class TestCombinedVisionRouter:
     def test_router_includes_all_subrouters(self):
         """Test that vision_router includes all expected routes."""
         from routers.vision import vision_router
-        
+
         # Get all route paths
         routes = [r.path for r in vision_router.routes]
-        
+
         # Check detection route exists
         assert any("/detect" in r for r in routes)
         # Check classification route exists
@@ -465,6 +465,14 @@ class TestCombinedVisionRouter:
         assert any("/embed" in r for r in routes)
         # Check streaming routes exist
         assert any("/stream" in r for r in routes)
+        # Check OCR route exists
+        assert any("/ocr" in r for r in routes)
+        # Check segmentation route exists
+        assert any("/segment" in r for r in routes)
+        # Check models route exists
+        assert any("/models" in r for r in routes)
+        # Check federation route exists
+        assert any("/federation" in r for r in routes)
 
     def test_loader_setters_exist(self):
         """Test that all loader setters are exported."""

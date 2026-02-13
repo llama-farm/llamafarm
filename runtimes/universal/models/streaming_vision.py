@@ -484,7 +484,10 @@ class StreamingVisionDetector:
             # Check if we should trigger training
             buffer_size = len(self._replay_buffer)
             if self._on_replay_buffer_threshold:
-                await self._on_replay_buffer_threshold(buffer_size)
+                if asyncio.iscoroutinefunction(self._on_replay_buffer_threshold):
+                    await self._on_replay_buffer_threshold(buffer_size)
+                else:
+                    self._on_replay_buffer_threshold(buffer_size)
 
             logger.info(f"Added to replay buffer: {sample_id} (buffer size: {buffer_size})")
             return True
@@ -863,7 +866,10 @@ class StreamingVisionDetector:
             # Check training trigger
             buffer_size = len(self._replay_buffer)
             if self._on_replay_buffer_threshold:
-                await self._on_replay_buffer_threshold(buffer_size)
+                if asyncio.iscoroutinefunction(self._on_replay_buffer_threshold):
+                    await self._on_replay_buffer_threshold(buffer_size)
+                else:
+                    self._on_replay_buffer_threshold(buffer_size)
             
             logger.info(f"Correction added: {image_id} → {corrected_class}")
             return True
