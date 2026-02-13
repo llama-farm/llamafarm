@@ -358,6 +358,27 @@ class GGUFLanguageModel(BaseModel):
                     self.actual_n_ctx = new_n_ctx
                     for w in new_warnings:
                         logger.warning(w)
+
+                    # Context changed — re-run allocation so tensor_split
+                    # and per-device feasibility reflect the actual KV
+                    # cache size.  Without this the stale split computed
+                    # for the old n_ctx can OOM on a weaker GPU.
+                    if split_mode == SPLIT_MODE_LAYER:
+                        gpu_params = get_llama_gpu_params(
+                            model_size_bytes=metadata.file_size_bytes,
+                            n_ctx=self.actual_n_ctx,
+                            n_gpu_layers=n_gpu_layers,
+                            total_layers=metadata.n_layer,
+                            n_layer=metadata.n_layer,
+                            n_head_kv=metadata.n_head_kv,
+                            head_k_size=metadata.head_k_size,
+                            head_v_size=metadata.head_v_size,
+                        )
+                        logger.info(
+                            "Re-allocated GPUs for updated context: "
+                            f"split_mode={gpu_params.get('split_mode')}, "
+                            f"main_gpu={gpu_params.get('main_gpu')}"
+                        )
             else:
                 logger.debug("No CUDA GPUs detected, using default GPU allocation")
         except InsufficientVRAMError as e:
