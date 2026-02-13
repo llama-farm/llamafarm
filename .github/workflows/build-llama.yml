@@ -11,10 +11,15 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   build-llama-cpp:
     name: Build llama.cpp
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
     steps:
       - name: Checkout LlamaFarm (for version file)
         uses: actions/checkout@v4

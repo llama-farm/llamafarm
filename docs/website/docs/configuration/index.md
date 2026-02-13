@@ -101,6 +101,33 @@ runtime:
 | `encoder_config`       | object                                | Optional                                                                   | Configuration for BERT-style encoder models (Universal runtime only)                                                   |
 | `tool_call_strategy`   | enum                                  | `native_api`                                                               | `native_api` or `prompt_based` for tool calling strategy                                                               |
 | `mcp_servers`          | array                                 | Optional                                                                   | List of MCP server names to use (omit for all, empty for none)                                                         |
+| `rag_enabled`          | boolean                               | Optional                                                                   | Default RAG behavior for this model. Overridden by request-level `rag_enabled`                                         |
+| `target_database`      | string                                | Optional                                                                   | Default RAG database for this model. Overridden by request-level `database`                                            |
+
+**Per-model RAG defaults:**
+
+You can set per-model RAG defaults so that specific models always (or never) use RAG, and optionally target a specific database. These are defaults that can be overridden per-request.
+
+```yaml
+runtime:
+  models:
+    - name: rag-assistant
+      provider: ollama
+      model: llama3.1:8b
+      rag_enabled: true
+      target_database: knowledge_base
+
+    - name: code-helper
+      provider: ollama
+      model: codellama:7b
+      rag_enabled: false  # Never use RAG for code tasks
+```
+
+The resolution priority for RAG parameters is:
+
+1. **Request parameters** (highest priority) — `rag_enabled`, `database` in the API call
+2. **Model defaults** — `rag_enabled`, `target_database` on the model config
+3. **Project defaults** — `rag.default_database`, or first database when databases exist
 
 **extra_body fields (Universal runtime):**
 

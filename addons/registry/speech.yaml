@@ -1,0 +1,23 @@
+# Speech Processing Addon (Composite)
+#
+# Meta-addon that installs both speech-to-text and text-to-speech capabilities.
+# This is a convenience addon that depends on both stt and tts.
+
+name: speech
+display_name: Speech Processing
+description: Full speech processing with STT and TTS
+component: universal-runtime
+version: "1.0.0"
+
+# Dependencies on other addons
+dependencies:
+  - stt
+  - tts
+
+# No direct packages - this is a meta-addon
+packages: []
+
+hardware_notes:
+  cuda: CUDA acceleration benefits both STT and TTS
+  metal: MPS acceleration available for TTS, STT falls back to CPU
+  cpu: CPU works but is slower for both components

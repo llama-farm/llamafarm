@@ -1,0 +1,18 @@
+# ONNX Runtime Addon
+#
+# Provides ONNX Runtime for model inference acceleration.
+# Required by various ML/AI addons for optimized inference.
+
+name: onnxruntime
+display_name: ONNX Runtime
+description: ONNX Runtime for optimized ML inference
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - onnxruntime>=1.20.0
+
+hardware_notes:
+  cuda: Use onnxruntime-gpu for CUDA acceleration
+  metal: Core ML acceleration available on macOS
+  cpu: CPU inference supported

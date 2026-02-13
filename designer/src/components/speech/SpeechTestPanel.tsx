@@ -44,6 +44,12 @@ interface SpeechTestPanelProps {
   clearRef?: React.MutableRefObject<(() => void) | null>
   /** Callback when messages change (for parent to track if clear should be enabled) */
   onMessagesChange?: (hasMessages: boolean) => void
+  /** Whether STT addon is installed */
+  sttInstalled?: boolean
+  /** Whether TTS addon is installed */
+  ttsInstalled?: boolean
+  /** Callback to trigger addon installation */
+  onInstallAddon?: () => void
 }
 
 /** History item for TTS-only mode */
@@ -54,7 +60,14 @@ interface TTSHistoryItem {
   timestamp: Date
 }
 
-export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: SpeechTestPanelProps) {
+export function SpeechTestPanel({
+  className = '',
+  clearRef,
+  onMessagesChange,
+  sttInstalled = true,
+  ttsInstalled = true,
+  onInstallAddon
+}: SpeechTestPanelProps) {
   // STT Config State
   const [sttEnabled, setSttEnabled] = useState(true)
   const [sttModel, setSttModel] = useState('base')
@@ -144,6 +157,20 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
       setSelectedLLMModel(defaultModel?.name || availableLLMModels[0].name)
     }
   }, [availableLLMModels, selectedLLMModel])
+
+  // Sync STT enabled state with installation status
+  useEffect(() => {
+    if (!sttInstalled && sttEnabled) {
+      setSttEnabled(false)
+    }
+  }, [sttInstalled, sttEnabled])
+
+  // Sync TTS enabled state with installation status
+  useEffect(() => {
+    if (!ttsInstalled && ttsEnabled) {
+      setTtsEnabled(false)
+    }
+  }, [ttsInstalled, ttsEnabled])
 
   // Determine which mode we're in (calculated early for hook config)
   // If LLM is enabled, always use conversation mode (supports typed input with LLM responses)
@@ -1218,52 +1245,84 @@ export function SpeechTestPanel({ className = '', clearRef, onMessagesChange }: 
         {configExpanded && (
           <div className="px-4 pb-3 space-y-3">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <SpeechToTextConfig
-                enabled={sttEnabled}
-                onEnabledChange={handleSttEnabledChange}
-                selectedModel={sttModel}
-                onModelChange={setSttModel}
-                selectedLanguage={sttLanguage}
-                onLanguageChange={setSttLanguage}
-                wordTimestamps={wordTimestamps}
-                onWordTimestampsChange={setWordTimestamps}
-                models={STT_MODELS}
-              />
+              {/* Speech-to-Text Section */}
+              <div className="border border-border rounded-lg overflow-hidden">
+                {!sttInstalled && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
+                    <span className="text-sm font-medium text-foreground">Speech-to-Text</span>
+                    <button
+                      onClick={onInstallAddon}
+                      className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Install Add-on
+                    </button>
+                  </div>
+                )}
+                <div className={!sttInstalled ? 'opacity-40 pointer-events-none' : ''}>
+                  <SpeechToTextConfig
+                    enabled={sttInstalled ? sttEnabled : false}
+                    onEnabledChange={sttInstalled ? handleSttEnabledChange : () => {}}
+                    selectedModel={sttModel}
+                    onModelChange={sttInstalled ? setSttModel : () => {}}
+                    selectedLanguage={sttLanguage}
+                    onLanguageChange={sttInstalled ? setSttLanguage : () => {}}
+                    wordTimestamps={wordTimestamps}
+                    onWordTimestampsChange={sttInstalled ? setWordTimestamps : () => {}}
+                    models={STT_MODELS}
+                  />
+                </div>
+              </div>
 
-              <TextToSpeechConfig
-                enabled={ttsEnabled}
-                onEnabledChange={handleTtsEnabledChange}
-                selectedModel={ttsModel}
-                onModelChange={(model) => {
-                  setTtsModel(model)
-                  // Reset voice to first available for new model
-                  const modelVoices = getVoicesForModel(model)
-                  const newVoice = modelVoices[0]?.id || 'af_heart'
-                  setTtsVoice(newVoice)
-                  // Update the connected session if already connected
-                  if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ ttsModel: model, ttsVoice: newVoice })
-                  }
-                }}
-                selectedVoice={ttsVoice}
-                onVoiceChange={(voice) => {
-                  setTtsVoice(voice)
-                  // Update the connected session if already connected
-                  if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ ttsVoice: voice })
-                  }
-                }}
-                speed={ttsSpeed}
-                onSpeedChange={(speed) => {
-                  setTtsSpeed(speed)
-                  // Update the connected session if already connected
-                  if (voiceChat.isConnected) {
-                    voiceChat.updateConfig({ speed })
-                  }
-                }}
-                models={TTS_MODELS}
-                customVoices={customVoices}
-              />
+              {/* Text-to-Speech Section */}
+              <div className="border border-border rounded-lg overflow-hidden">
+                {!ttsInstalled && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b border-border">
+                    <span className="text-sm font-medium text-foreground">Text-to-Speech</span>
+                    <button
+                      onClick={onInstallAddon}
+                      className="px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Install Add-on
+                    </button>
+                  </div>
+                )}
+                <div className={!ttsInstalled ? 'opacity-40 pointer-events-none' : ''}>
+                  <TextToSpeechConfig
+                    enabled={ttsInstalled ? ttsEnabled : false}
+                    onEnabledChange={ttsInstalled ? handleTtsEnabledChange : () => {}}
+                    selectedModel={ttsModel}
+                    onModelChange={ttsInstalled ? (model) => {
+                      setTtsModel(model)
+                      // Reset voice to first available for new model
+                      const modelVoices = getVoicesForModel(model)
+                      const newVoice = modelVoices[0]?.id || 'af_heart'
+                      setTtsVoice(newVoice)
+                      // Update the connected session if already connected
+                    if (voiceChat.isConnected) {
+                      voiceChat.updateConfig({ ttsModel: model, ttsVoice: newVoice })
+                    }
+                  } : () => {}}
+                  selectedVoice={ttsVoice}
+                  onVoiceChange={ttsInstalled ? (voice) => {
+                    setTtsVoice(voice)
+                    // Update the connected session if already connected
+                    if (voiceChat.isConnected) {
+                      voiceChat.updateConfig({ ttsVoice: voice })
+                    }
+                  } : () => {}}
+                    speed={ttsSpeed}
+                    onSpeedChange={ttsInstalled ? (speed) => {
+                      setTtsSpeed(speed)
+                      // Update the connected session if already connected
+                      if (voiceChat.isConnected) {
+                        voiceChat.updateConfig({ speed })
+                      }
+                    } : () => {}}
+                    models={TTS_MODELS}
+                    customVoices={customVoices}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Only show voice cloning if the selected TTS model supports it */}

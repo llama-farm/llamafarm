@@ -27,7 +27,7 @@ Example (vLLM running with OpenAI-compatible API):
 runtime:
   provider: openai
   model: mistral-small
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-test
 ```
 

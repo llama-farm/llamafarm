@@ -273,6 +273,104 @@ class TestProjectChatService:
         # Should disable RAG when no strategies available
         assert not params.rag_enabled
 
+    def test_resolve_rag_model_config_enables_rag(self, config_with_rag):
+        """Model rag_enabled=True enables RAG when request omits it."""
+        model_cfg = Model(
+            name="rag-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            rag_enabled=True,
+            target_database="main_db",
+        )
+        service = ProjectChatService()
+        params = service._resolve_rag_parameters(
+            project_config=config_with_rag,
+            model_config=model_cfg,
+            rag_enabled=None,  # not specified by request
+        )
+        assert params.rag_enabled
+        assert params.database == "main_db"
+
+    def test_resolve_rag_model_config_disables_rag(self, config_with_rag):
+        """Model rag_enabled=False disables RAG."""
+        model_cfg = Model(
+            name="no-rag-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            rag_enabled=False,
+        )
+        service = ProjectChatService()
+        params = service._resolve_rag_parameters(
+            project_config=config_with_rag,
+            model_config=model_cfg,
+            rag_enabled=None,
+        )
+        assert not params.rag_enabled
+
+    def test_resolve_rag_request_overrides_model(self, config_with_rag):
+        """Request rag_enabled overrides model-level."""
+        model_cfg = Model(
+            name="rag-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            rag_enabled=False,  # model says no
+        )
+        service = ProjectChatService()
+        params = service._resolve_rag_parameters(
+            project_config=config_with_rag,
+            model_config=model_cfg,
+            rag_enabled=True,  # request says yes
+        )
+        assert params.rag_enabled
+
+    def test_resolve_rag_model_target_database(self, config_with_rag):
+        """Model target_database overrides project default."""
+        model_cfg = Model(
+            name="rag-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            rag_enabled=True,
+            target_database="main_db",
+        )
+        service = ProjectChatService()
+        params = service._resolve_rag_parameters(
+            project_config=config_with_rag,
+            model_config=model_cfg,
+            rag_enabled=None,
+            database=None,  # not specified by request
+        )
+        assert params.database == "main_db"
+
+    def test_resolve_rag_request_database_overrides_model(self, config_with_rag):
+        """Request database overrides model target_database."""
+        model_cfg = Model(
+            name="rag-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            target_database="other_db",  # model says other_db
+        )
+        service = ProjectChatService()
+        params = service._resolve_rag_parameters(
+            project_config=config_with_rag,
+            model_config=model_cfg,
+            rag_enabled=True,
+            database="main_db",  # request says main_db
+        )
+        assert params.database == "main_db"
+
+    def test_find_model_config(self, config_with_rag):
+        """Test _find_model_config looks up model by name."""
+        service = ProjectChatService()
+        result = service._find_model_config(config_with_rag, "default")
+        assert result is not None
+        assert result.name == "default"
+
+    def test_find_model_config_not_found(self, config_with_rag):
+        """Test _find_model_config returns None for unknown model."""
+        service = ProjectChatService()
+        result = service._find_model_config(config_with_rag, "nonexistent")
+        assert result is None
+
     @pytest.mark.asyncio
     @patch("services.project_chat_service.search_with_rag")
     async def test_chat_without_rag(self, mock_search, base_config):

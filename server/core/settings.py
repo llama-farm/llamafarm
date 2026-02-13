@@ -6,17 +6,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
-try:
-    default_data_dir = str(Path.home() / ".llamafarm")
-except RuntimeError:
-    # Path.home() fails in PyApp-embedded Python on Windows when
-    # HOME/USERPROFILE env vars are absent during bootstrap.
-    _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+
+def _get_default_data_dir() -> str:
+    """Get the default LF data directory, respecting LF_DATA_DIR env var."""
+    # Check LF_DATA_DIR first (set by CLI orchestrator)
+    lf_data_dir = os.getenv("LF_DATA_DIR")
+    if lf_data_dir:
+        return lf_data_dir
+
+    # Fall back to ~/.llamafarm
     try:
-        _fallback = Path(_fb) if _fb else Path.cwd()
-    except OSError:
-        _fallback = Path(".")
-    default_data_dir = str(_fallback / ".llamafarm")
+        return str(Path.home() / ".llamafarm")
+    except RuntimeError:
+        # Path.home() fails in PyApp-embedded Python on Windows when
+        # HOME/USERPROFILE env vars are absent during bootstrap.
+        _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+        try:
+            _fallback = Path(_fb) if _fb else Path.cwd()
+        except OSError:
+            _fallback = Path(".")
+        return str(_fallback / ".llamafarm")
+
+
+default_data_dir = _get_default_data_dir()
 
 
 class Settings(BaseSettings):
