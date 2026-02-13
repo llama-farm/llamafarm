@@ -210,6 +210,15 @@ Common HTTP status codes:
 - `POST /v1/ml/polars/features` - Compute rolling features
 - `GET /v1/ml/polars/buffers/{buffer_id}/data` - Get raw buffer data
 
+### Audio (Text-to-Speech)
+
+- `POST /v1/{namespace}/{project}/audio/speech` - Generate speech from text (OpenAI-compatible)
+- `GET /v1/{namespace}/{project}/audio/voices` - List available TTS voices
+
+### Voice Chat (Real-time Voice Assistant)
+
+- `WebSocket /v1/{namespace}/{project}/voice/chat` - Real-time voice chat
+
 ### Universal Runtime ML Endpoints (port 11540)
 
 **Time-Series Forecasting:**
@@ -1871,6 +1880,353 @@ curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
 
 ---
 
+## Audio API (Text-to-Speech)
+
+The Audio API provides OpenAI-compatible text-to-speech endpoints for generating speech from text.
+
+### Generate Speech
+
+`POST /v1/{namespace}/{project}/audio/speech`
+
+Generate audio from input text using the specified TTS model and voice.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace (e.g., "default") |
+| `project` | string | Project name |
+
+**Request Body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `input` | string | *required* | Text to synthesize (max 4096 characters) |
+| `model` | string | `"kokoro"` | TTS model ID |
+| `voice` | string | `"af_heart"` | Voice ID (see available voices below) |
+| `response_format` | string | `"mp3"` | Audio format: mp3, opus, aac, flac, wav, pcm |
+| `speed` | float | `1.0` | Speed multiplier (0.25 to 4.0) |
+
+**Available Voices:**
+
+| Voice ID | Description | Language |
+|----------|-------------|----------|
+| `af_heart` | Female, warm and friendly | English (US) |
+| `af_bella` | Female, professional | English (US) |
+| `af_nicole` | Female, conversational | English (US) |
+| `af_sarah` | Female, clear and articulate | English (US) |
+| `af_sky` | Female, youthful | English (US) |
+| `am_adam` | Male, professional | English (US) |
+| `am_michael` | Male, conversational | English (US) |
+| `bf_emma` | Female, British accent | English (UK) |
+| `bf_isabella` | Female, British accent | English (UK) |
+| `bm_george` | Male, British accent | English (UK) |
+| `bm_lewis` | Male, British accent | English (UK) |
+
+**Response:**
+
+Returns audio file in the requested format with appropriate Content-Type header.
+
+**Example:**
+
+```bash
+# Generate speech and save to file
+curl -X POST "http://localhost:14345/v1/default/my-project/audio/speech" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Hello! Welcome to LlamaFarm.",
+    "voice": "af_heart",
+    "response_format": "mp3"
+  }' \
+  --output speech.mp3
+
+# Generate with different voice and speed
+curl -X POST "http://localhost:14345/v1/default/my-project/audio/speech" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "This is a test of text to speech.",
+    "voice": "am_adam",
+    "speed": 1.2,
+    "response_format": "wav"
+  }' \
+  --output speech.wav
+```
+
+**Python Example:**
+
+```python
+import asyncio
+import httpx
+
+async def generate_speech(text: str, voice: str = "af_heart") -> bytes:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:14345/v1/default/my-project/audio/speech",
+            json={
+                "input": text,
+                "voice": voice,
+                "response_format": "mp3",
+            },
+        )
+        response.raise_for_status()
+        return response.content
+
+async def main():
+    audio = await generate_speech("Hello, world!")
+    with open("speech.mp3", "wb") as f:
+        f.write(audio)
+
+asyncio.run(main())
+```
+
+### List Voices
+
+`GET /v1/{namespace}/{project}/audio/voices`
+
+List available TTS voices.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace |
+| `project` | string | Project name |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *none* | Filter by model ID (optional) |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "af_heart",
+      "name": "Heart",
+      "language": "en-US",
+      "model": "kokoro",
+      "preview_url": null
+    },
+    {
+      "id": "af_bella",
+      "name": "Bella",
+      "language": "en-US",
+      "model": "kokoro",
+      "preview_url": null
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+# List all voices
+curl "http://localhost:14345/v1/default/my-project/audio/voices"
+
+# Filter by model
+curl "http://localhost:14345/v1/default/my-project/audio/voices?model=kokoro"
+```
+
+---
+
+## Voice Chat API
+
+The Voice Chat API provides a full-duplex WebSocket endpoint for real-time voice assistant functionality. It orchestrates Speech-to-Text (STT), LLM inference, and Text-to-Speech (TTS) into a seamless voice conversation pipeline.
+
+### Configuration (llamafarm.yaml)
+
+Voice settings can be configured in your project's `llamafarm.yaml` file. Query parameters override config defaults.
+
+```yaml
+# Voice chat configuration
+voice:
+  enabled: true                    # Enable/disable voice chat (default: true)
+  llm_model: chat-model            # Reference to runtime.models[].name
+
+  tts:
+    model: kokoro                  # TTS model ID
+    voice: af_heart                # Voice ID (see available voices below)
+    speed: 1.0                     # Speed multiplier (0.5-2.0)
+
+  stt:
+    model: base                    # Whisper model (tiny/base/small/medium/large-v3)
+    language: en                   # Language code
+
+# The llm_model references a model in runtime.models[]
+# Prompts attached to that model apply to voice conversations
+runtime:
+  models:
+    - name: chat-model
+      provider: universal
+      model: unsloth/Qwen3-4B-GGUF:Q4_K_M
+      prompts: [voice_assistant]   # System prompts apply to voice chat
+
+prompts:
+  - name: voice_assistant
+    messages:
+      - role: system
+        content: |
+          You are a friendly voice assistant. Keep responses concise
+          and conversational for spoken output.
+```
+
+**Available TTS Voices:**
+
+| Voice ID | Description |
+|----------|-------------|
+| `af_heart` | Heart (American Female) - default |
+| `af_bella`, `af_nicole`, `af_sarah`, `af_sky` | American Female voices |
+| `am_adam`, `am_michael` | American Male voices |
+| `bf_emma`, `bf_isabella` | British Female voices |
+| `bm_george`, `bm_lewis` | British Male voices |
+
+**STT Model Sizes:**
+
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| `tiny` | 39M | Fastest | Lower |
+| `base` | 74M | Fast | Good (default) |
+| `small` | 244M | Medium | Better |
+| `medium` | 769M | Slower | High |
+| `large-v3` | 1.5B | Slowest | Highest |
+
+### Voice Chat WebSocket
+
+Real-time voice chat with stateful conversation sessions.
+
+**Endpoint:** `WebSocket /v1/{namespace}/{project}/voice/chat`
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace |
+| `project` | string | Project name |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `session_id` | string | auto | Resume existing session (optional) |
+| `stt_model` | string | `"base"` | Whisper model size (overrides config) |
+| `tts_model` | string | `"kokoro"` | TTS model ID (overrides config) |
+| `tts_voice` | string | `"af_heart"` | TTS voice ID (overrides config) |
+| `llm_model` | string | from config | LLM model ID (required if not in config) |
+| `language` | string | `"en"` | STT language code (overrides config) |
+| `speed` | float | `1.0` | TTS speed multiplier (overrides config) |
+| `system_prompt` | string | none | System prompt for LLM (optional) |
+
+**Client → Server Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Audio | Binary | PCM 16kHz 16-bit mono, or WebM/Opus |
+| Interrupt | `{"type": "interrupt"}` | Stop current TTS playback (barge-in) |
+| End | `{"type": "end"}` | Process accumulated audio |
+| Config | `{"type": "config", ...}` | Update session settings |
+
+**Server → Client Messages:**
+
+| Type | Format | Description |
+|------|--------|-------------|
+| Session Info | `{"type": "session_info", "session_id": "..."}` | Session created/resumed |
+| Transcription | `{"type": "transcription", "text": "...", "is_final": bool}` | STT result |
+| LLM Text | `{"type": "llm_text", "text": "...", "is_final": bool}` | LLM response phrase (for display) |
+| TTS Audio | Binary | PCM 24kHz 16-bit mono audio chunks |
+| TTS Start | `{"type": "tts_start", "phrase_index": N}` | Phrase synthesis starting |
+| TTS Done | `{"type": "tts_done", "phrase_index": N, "duration": N}` | Phrase synthesis complete |
+| Status | `{"type": "status", "state": "..."}` | Pipeline state change |
+| Error | `{"type": "error", "message": "..."}` | Error occurred |
+| Closed | `{"type": "closed"}` | Session ended |
+
+**Pipeline States:**
+
+- `idle` - Waiting for input
+- `listening` - Receiving audio input
+- `processing` - STT + LLM in progress
+- `speaking` - TTS output playing
+- `interrupted` - Barge-in occurred
+
+**Example (JavaScript):**
+
+```javascript
+// Connect using project config (voice settings from llamafarm.yaml)
+const ws = new WebSocket(
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat'
+);
+
+// Override specific settings via query params
+const ws2 = new WebSocket(
+  'ws://localhost:14345/v1/default/my-voice-app/voice/chat?' +
+  'tts_voice=am_adam&' +  // Override voice from config
+  'speed=1.2'             // Override speed from config
+);
+
+// Handle session info
+ws.onopen = () => console.log('Connected');
+
+// Handle messages
+ws.onmessage = (event) => {
+  if (event.data instanceof Blob) {
+    // Binary TTS audio chunk - play it
+    playAudioChunk(event.data);
+  } else {
+    const msg = JSON.parse(event.data);
+    switch (msg.type) {
+      case 'session_info':
+        console.log('Session:', msg.session_id);
+        break;
+      case 'transcription':
+        console.log('You said:', msg.text);
+        break;
+      case 'llm_text':
+        console.log('Assistant:', msg.text);
+        break;
+      case 'status':
+        console.log('State:', msg.state);
+        break;
+      case 'error':
+        console.error('Error:', msg.message);
+        break;
+    }
+  }
+};
+
+// Send audio from microphone
+navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+  const mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
+  mediaRecorder.ondataavailable = (e) => ws.send(e.data);
+  mediaRecorder.start(100); // Send chunks every 100ms
+});
+
+// Signal end of speech (triggers processing)
+function endSpeech() {
+  ws.send(JSON.stringify({type: 'end'}));
+}
+
+// Barge-in: interrupt current TTS
+function interrupt() {
+  ws.send(JSON.stringify({type: 'interrupt'}));
+}
+```
+
+**Features:**
+
+- **Config-Driven**: Define voice settings in `llamafarm.yaml` for reproducible deployments
+- **Stateful Sessions**: Conversation history is maintained across turns
+- **Barge-in Support**: User can interrupt TTS playback to speak
+- **Low-Latency Streaming**: TTS starts as soon as LLM generates complete phrases
+- **Phrase Boundary Detection**: Natural speech pacing with intelligent text segmentation
+- **Session Resume**: Reconnect with `session_id` to continue conversations
+- **Prompt Inheritance**: System prompts from the LLM model config apply to voice chat
+
+---
+
 ## Health API
 
 ### Overall Health Check
@@ -3276,6 +3632,10 @@ For OCR and document extraction, you can use either:
 - **Universal Runtime** (`/v1/ocr`, `/v1/documents/extract`) - Accepts base64 images or file IDs
 :::
 
+:::tip Using Text-to-Speech APIs
+For text-to-speech, prefer the **LlamaFarm API** (`/v1/{namespace}/{project}/audio/speech`) which provides project-scoped access. The Universal Runtime endpoints (`/v1/audio/speech`, `/v1/audio/voices`) are also available for direct access.
+:::
+
 ### Starting the Universal Runtime
 
 ```bash
@@ -3328,6 +3688,9 @@ nx start universal-runtime
 | **CatBoost** | `POST /v1/catboost/predict` | Make predictions |
 | **CatBoost** | `POST /v1/catboost/update` | Incremental update |
 | **CatBoost** | `GET /v1/catboost/{model}/importance` | Feature importance |
+| **TTS** | `POST /v1/audio/speech` | Generate speech from text (OpenAI-compatible) |
+| **TTS** | `GET /v1/audio/voices` | List available TTS voices |
+| **TTS** | `WebSocket /v1/audio/speech/stream` | Real-time TTS streaming |
 
 :::info Classification Endpoints
 - **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.

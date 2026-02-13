@@ -34,7 +34,7 @@ on:
       - published
 
 permissions:
-  contents: read  # Default to read-only, write permission granted per-job
+  contents: read # Default to read-only, write permission granted per-job
 
 env:
   PYTHON_VERSION: "3.12"
@@ -121,28 +121,9 @@ jobs:
           restore-keys: |
             cargo-pyapp-${{ matrix.os }}-
 
-      - name: Install build dependencies
+      - name: Install config dependencies and generate types
         run: |
-          uv pip install --system -e ./config -e ./common
-
-      - name: Install server dependencies
-        if: matrix.component == 'server'
-        run: |
-          uv pip install --system -e ./server
-
-      - name: Install rag dependencies
-        if: matrix.component == 'rag'
-        run: |
-          uv pip install --system -e ./rag
-
-      - name: Install runtime dependencies
-        if: matrix.component == 'runtime'
-        run: |
-          uv pip install --system -e ./packages/llamafarm-llama -e "./runtimes/universal"
-
-      - name: Generate config types
-        run: |
-          cd config && python generate_types.py
+          cd config && uv sync --frozen && uv run python generate_types.py
 
       - name: Build designer (for server component)
         if: matrix.component == 'server'
@@ -251,7 +232,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: llamafarm-${{ matrix.component }}-pyapp-${{ matrix.os }}
-          path: dist/
+          path: dist/pyapp/
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2

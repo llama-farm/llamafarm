@@ -17,10 +17,28 @@ Run:
     uv run python examples/anomaly/02_fraud_detection.py
 """
 
+import os
 import random
+from pathlib import Path
+
 import httpx
 
-BASE_URL = "http://localhost:11540"
+
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/")
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
+    return "http://localhost:14345"
+
+BASE_URL = get_llamafarm_url()
 client = httpx.Client(timeout=60)
 
 
@@ -78,7 +96,7 @@ def main():
     print("Step 1: Generating 500 normal transactions for training...")
     random.seed(42)
     training_data = generate_normal_transactions(500)
-    print(f"  Features: [amount, hour_of_day, merchant_risk_score]")
+    print("  Features: [amount, hour_of_day, merchant_risk_score]")
     print(f"  Sample: {training_data[0]}")
     print()
 
@@ -108,7 +126,7 @@ def main():
 
     # Remember which are actual frauds (last 5 before shuffle, but we shuffled)
     # For demo, we'll just look at detection results
-    print(f"  Generated 45 normal + 5 fraudulent transactions")
+    print("  Generated 45 normal + 5 fraudulent transactions")
     print()
 
     # Step 4: Score transactions in real-time
@@ -165,7 +183,7 @@ def main():
     )
     iforest_result = response.json()
 
-    print(f"\n  Backend Comparison:")
+    print("\n  Backend Comparison:")
     print(f"  {'Backend':<20} {'Anomalies':<12} {'Rate':<10} {'Train Time'}")
     print("  " + "-" * 56)
     print(f"  {'ECOD':<20} {score_result['summary']['anomaly_count']:<12} "

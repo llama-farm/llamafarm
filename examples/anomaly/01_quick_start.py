@@ -12,7 +12,27 @@ Run:
     uv run python ../../examples/anomaly/01_quick_start.py
 """
 
+import os
+from pathlib import Path
+
 import httpx
+
+
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/")
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    return line.split("=", 1)[1].strip().strip('"\'').rstrip("/")
+    return "http://localhost:14345"
+
+BASE_URL = get_llamafarm_url()
 
 # Training data - normal examples
 train_data = [

@@ -1,4 +1,6 @@
+from .addons import router as addons_router
 from .adtk import router as adtk_router
+from .audio import audio_router
 from .catboost import router as catboost_router
 from .datasets import router as datasets_router
 from .drift import router as drift_router
@@ -17,7 +19,9 @@ from .vision import vision_router
 from .voice import voice_router
 
 __all__ = [
+    "addons_router",
     "adtk_router",
+    "audio_router",
     "catboost_router",
     "datasets_router",
     "drift_router",

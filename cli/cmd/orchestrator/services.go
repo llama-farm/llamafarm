@@ -420,7 +420,109 @@ func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) erro
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
+	// Inject addon paths into PYTHONPATH
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
+
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
+}
+
+// getAddonPythonPaths returns PYTHONPATH entries for installed addons that apply to this service.
+func (sm *ServiceManager) getAddonPythonPaths(serviceName string) ([]string, error) {
+	// Load addon state from ~/.llamafarm/addons.json
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return nil, err
+	}
+
+	statePath := filepath.Join(lfDir, "addons.json")
+
+	// If state file doesn't exist, no addons are installed
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	// Read and parse state file
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		// Return error instead of silently failing
+		return nil, fmt.Errorf("failed to read addons state: %w", err)
+	}
+
+	var state struct {
+		Version         string `json:"version"`
+		InstalledAddons map[string]struct {
+			Name      string `json:"name"`
+			Component string `json:"component"`
+		} `json:"installed_addons"`
+	}
+
+	if err := json.Unmarshal(data, &state); err != nil {
+		// Return error instead of silently failing - corrupted state is a real problem
+		return nil, fmt.Errorf("failed to parse addons state (file may be corrupted): %w", err)
+	}
+
+	// Collect paths for addons that apply to this service
+	addonsDir := filepath.Join(lfDir, "addons")
+	var paths []string
+
+	for addonName, installed := range state.InstalledAddons {
+		// Check if this addon applies to this service
+		if installed.Component == serviceName {
+			addonPath := filepath.Join(addonsDir, addonName)
+			if _, err := os.Stat(addonPath); err == nil {
+				paths = append(paths, addonPath)
+			}
+		}
+	}
+
+	return paths, nil
+}
+
+// injectAddonPythonPath injects addon paths into PYTHONPATH for a service.
+// Returns the updated environment slice with PYTHONPATH set.
+func (sm *ServiceManager) injectAddonPythonPath(serviceName string, env []string) []string {
+	addonPaths, err := sm.getAddonPythonPaths(serviceName)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
+		return env
+	}
+
+	if len(addonPaths) == 0 {
+		return env
+	}
+
+	// Get existing PYTHONPATH from environment and remove it from env slice
+	var existingPath string
+	foundInEnv := false
+	filteredEnv := make([]string, 0, len(env))
+	for _, envVar := range env {
+		if strings.HasPrefix(envVar, "PYTHONPATH=") {
+			existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+			foundInEnv = true
+			// Skip this entry - we'll add the combined path below
+		} else {
+			filteredEnv = append(filteredEnv, envVar)
+		}
+	}
+	env = filteredEnv
+
+	// Only fall back to OS environment if PYTHONPATH was not explicitly set
+	if !foundInEnv {
+		existingPath = os.Getenv("PYTHONPATH")
+	}
+
+	// Build new PYTHONPATH (existing first, then addon paths)
+	// Put addons last so venv packages take precedence and avoid conflicts
+	var allPaths []string
+	if existingPath != "" {
+		allPaths = append(allPaths, existingPath)
+	}
+	allPaths = append(allPaths, addonPaths...)
+	newPath := strings.Join(allPaths, string(os.PathListSeparator))
+	env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
+	utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
+
+	return env
 }
 
 // startServiceBinary starts a service from a pre-built PyApp binary.
@@ -444,6 +546,9 @@ func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) erro
 	// This prevents path mismatches when Path.home() fails inside PyApp (e.g., on
 	// Windows where USERPROFILE may not be inherited).
 	env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDir))
+
+	// Inject addon paths into PYTHONPATH
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
 
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }

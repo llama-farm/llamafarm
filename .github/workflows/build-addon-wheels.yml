@@ -1,0 +1,191 @@
+name: Build Addon Wheels
+
+# Build platform-specific wheel bundles for LlamaFarm addons.
+# These bundles contain pre-compiled Python packages that get extracted
+# to ~/.llamafarm/addons/ and injected into PYTHONPATH at service startup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      addon:
+        description: "Addon to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - stt
+          - tts
+          - onnxruntime
+          - all
+      platform:
+        description: "Platform to build for (or 'all' for enabled platforms only)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - macos-arm64
+          - linux-x86_64
+          - linux-arm64
+          - all
+          # Disabled platforms (see addons/platforms.yaml):
+          # - macos-x86_64 (runner unavailable)
+          # - windows-x86_64 (file locking issues)
+      branch:
+        description: "Branch to build from (leave empty for default branch)"
+        required: false
+        type: string
+  workflow_call: {}
+  pull_request:
+    paths:
+      - "tools/build_addon_wheels.py"
+      - ".github/workflows/build-addon-wheels.yml"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read  # Default to read-only, write permission granted per-job
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Generate the build matrix based on selected addon/platform
+  # Matrix is generated from addons/platforms.yaml (single source of truth)
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - id: set-matrix
+        shell: bash
+        run: |
+          ADDON="${{ github.event.inputs.addon }}"
+          PLATFORM="${{ github.event.inputs.platform }}"
+
+          # Build args for matrix generator
+          # Omit --addons to auto-discover all addons with packages from registry
+          ADDON_ARGS=""
+          if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.event_name }}" != "release" && "${{ github.event_name }}" != "workflow_call" && "$ADDON" != "all" && -n "$ADDON" ]]; then
+            ADDON_ARGS="--addons $ADDON"
+          fi
+
+          PLATFORM_ARGS=""
+          if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.event_name }}" != "release" && "${{ github.event_name }}" != "workflow_call" && "$PLATFORM" != "all" && -n "$PLATFORM" ]]; then
+            PLATFORM_ARGS="--platforms $PLATFORM"
+          fi
+
+          # Generate matrix using Python script (reads from addons/platforms.yaml and registry)
+          MATRIX=$(python tools/generate_platform_matrix.py $ADDON_ARGS $PLATFORM_ARGS)
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  build:
+    name: Build ${{ matrix.addon }} wheels for ${{ matrix.platform }}
+    needs: setup
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pip
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Build addon wheels
+        shell: bash
+        run: |
+          python tools/build_addon_wheels.py \
+            --addon ${{ matrix.addon }} \
+            --platform ${{ matrix.platform }} \
+            --output dist/addons
+
+      - name: List build output
+        shell: bash
+        run: |
+          echo "Build output:"
+          ls -lh dist/addons/ || echo "No output found"
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist/addons
+          # Use shasum on macOS (sha256sum not available by default)
+          if command -v sha256sum &> /dev/null; then
+            HASH_CMD="sha256sum"
+          else
+            HASH_CMD="shasum -a 256"
+          fi
+          for file in ${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz; do
+            if [ -f "$file" ]; then
+              $HASH_CMD "$file" > "$file.sha256"
+              echo "SHA256: $(cat $file.sha256)"
+            fi
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}
+          path: |
+            dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz
+            dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  # Upload wheel bundles to GitHub release when triggered by a release event
+  upload-release:
+    name: Upload Addon Wheels to Release (${{ matrix.addon }}, ${{ matrix.platform }})
+    if: github.event_name == 'release'
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}
+          path: dist/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz
+            dist/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz.sha256
+          fail_on_unmatched_files: true

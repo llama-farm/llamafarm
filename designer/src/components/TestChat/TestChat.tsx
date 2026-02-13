@@ -2467,7 +2467,9 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
-      let currentSources: RAGSource[] = []
+      // Initialize as undefined - will be set to [] or [...] when sources event received
+      // This distinguishes "no sources requested" from "RAG found nothing"
+      let currentSources: RAGSource[] | undefined = undefined
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -2583,7 +2585,7 @@ export default function TestChat({
                   currentSources
                 )
               }
-              currentSources = []
+              currentSources = undefined
               setStreamingMessage(null)
             },
           },
@@ -2642,6 +2644,7 @@ export default function TestChat({
     ragTopK,
     ragScoreThreshold,
     selectedStrategy,
+    showReferences,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -2765,7 +2768,9 @@ export default function TestChat({
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
-        let testSources: RAGSource[] = []
+        // Initialize as undefined - will be set to [] or [...] when sources event received
+        // This distinguishes "no sources requested" from "RAG found nothing"
+        let testSources: RAGSource[] | undefined = undefined
         const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
@@ -2856,7 +2861,7 @@ export default function TestChat({
                   testSources
                 )
               }
-              testSources = []
+              testSources = undefined
               setStreamingMessage(null)
             },
           },
@@ -2909,6 +2914,7 @@ export default function TestChat({
     setStreamingMessage,
     projectChatStreamingSession.sessionId,
     projectChatStreamingSession.setSessionId,
+    showReferences,
   ])
 
   // ============================================================================
@@ -3691,8 +3697,8 @@ export default function TestChat({
                   <TestChatMessage
                     key={m.id}
                     message={m}
-                    showReferences={showReferences}
                     allowRanking={allowRanking}
+                    showReferences={showReferences}
                     showPrompts={showPrompts}
                     showThinking={showThinking}
                     lastUserInput={lastUserInputRef.current}
@@ -4601,8 +4607,8 @@ export default function TestChat({
 
 interface TestChatMessageProps {
   message: ChatboxMessage
-  showReferences: boolean
   allowRanking: boolean
+  showReferences?: boolean
   showPrompts?: boolean
   showThinking?: boolean
   lastUserInput?: string
@@ -4611,8 +4617,8 @@ interface TestChatMessageProps {
 
 export function TestChatMessage({
   message,
-  showReferences,
   allowRanking,
+  showReferences,
   showPrompts,
   // showThinking - no longer used here; thinking is always shown if present in message
   lastUserInput,
@@ -4811,6 +4817,13 @@ export function TestChatMessage({
         )}
       </div>
 
+      {/* References - show when showReferences is enabled and RAG was enabled (sources array exists, even if empty) */}
+      {showReferences &&
+        isAssistant &&
+        !message.isStreaming &&
+        !message.isLoading &&
+        Array.isArray(message.sources) && <References sources={message.sources} />}
+
       {/* Assistant footer actions - hidden during streaming */}
       {isAssistant && !message.isStreaming && !message.isLoading && (
         <div className="mt-2 flex items-center gap-3 text-muted-foreground">
@@ -4897,11 +4910,6 @@ export function TestChatMessage({
           )
         })()}
 
-      {/* References */}
-      {showReferences &&
-        isAssistant &&
-        Array.isArray(message.sources) &&
-        message.sources.length > 0 && <References sources={message.sources} />}
 
       {/* Test result block */}
       {isAssistant && message.metadata?.testResult && (
@@ -5126,11 +5134,11 @@ function References({ sources }: { sources: any[] }) {
   }
 
   return (
-    <div className="mt-2 rounded-md border border-border bg-card/40">
+    <div className="mt-2 mb-1 rounded-md border border-border bg-card/40">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-accent/40 rounded-t-md focus:outline-none focus:ring-2 focus:ring-primary/60"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-accent/40 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/60"
         aria-expanded={open}
         aria-controls={`references-panel`}
       >
@@ -5139,6 +5147,11 @@ function References({ sources }: { sources: any[] }) {
       </button>
       {open && (
         <div id="references-panel" className="divide-y divide-border">
+          {count === 0 && (
+            <div className="px-3 py-3 text-sm text-muted-foreground italic">
+              No chunks were referenced to generate this response.
+            </div>
+          )}
           {sources.map((s, idx) => {
             const content =
               typeof s.content === 'string' ? s.content : String(s.content ?? '')
@@ -5183,12 +5196,17 @@ function References({ sources }: { sources: any[] }) {
                     }
                     aria-expanded={isLong ? isExpanded : undefined}
                   >
-                    {isLong && (
-                      <span className="mr-1 text-xs text-muted-foreground">
-                        {isExpanded ? '▼' : '▶'}
-                      </span>
-                    )}
-                    {displayContent}
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="flex-1">{displayContent}</span>
+                      {isLong && (
+                        <FontIcon
+                          type="chevron-down"
+                          className={`w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">

@@ -13,13 +13,30 @@ Prerequisites:
 - LlamaFarm servers running (nx start universal-runtime && nx start server)
 """
 
-import json
 import asyncio
-import httpx
+import json
+import os
 from pathlib import Path
 
-# Configuration
-LLAMAFARM_URL = "http://localhost:14345/v1/ml"
+import httpx
+
+
+# Configuration - uses environment variable or .env file, falls back to default
+def get_llamafarm_url():
+    """Get LlamaFarm server URL from environment or .env file."""
+    if url := os.environ.get("LLAMAFARM_URL"):
+        return url.rstrip("/") + "/v1/ml"
+    env_file = Path(__file__).parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("LLAMAFARM_URL="):
+                    url = line.split("=", 1)[1].strip().strip('"\'')
+                    return url.rstrip("/") + "/v1/ml"
+    return "http://localhost:14345/v1/ml"
+
+LLAMAFARM_URL = get_llamafarm_url()
 MODEL_NAME = "factory-sensors"
 BACKEND = "ecod"  # Try: isolation_forest, hbos, loda, autoencoder
 
@@ -94,7 +111,7 @@ async def train_model():
 
         if save_response.status_code == 200:
             save_result = save_response.json()
-            print(f"✅ Model saved!")
+            print("✅ Model saved!")
             print(f"   Path: {save_result.get('path', 'N/A')}")
         else:
             print(f"⚠️  Save failed: {save_response.text}")
@@ -123,7 +140,7 @@ async def train_model():
 
         if load_response.status_code == 200:
             load_result = load_response.json()
-            print(f"✅ Model loaded successfully!")
+            print("✅ Model loaded successfully!")
             print(f"   Status: {load_result['status']}")
         else:
             print(f"⚠️  Load failed: {load_response.text}")
@@ -156,7 +173,7 @@ async def train_model():
         if score_response.status_code == 200:
             scores = score_response.json()
             print("Test results:")
-            for i, (data, score) in enumerate(zip(test_data, scores["data"])):
+            for i, (data, score) in enumerate(zip(test_data, scores["data"], strict=False)):
                 status = "🚨 ANOMALY" if score["is_anomaly"] else "✅ NORMAL"
                 print(f"   {i+1}. temp={data['temperature']}, rpm={data['motor_rpm']} -> "
                       f"score={score['score']:.3f} {status}")

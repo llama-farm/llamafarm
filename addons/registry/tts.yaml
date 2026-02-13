@@ -1,0 +1,19 @@
+# Text-to-Speech Addon
+#
+# Provides high-quality neural text-to-speech using Kokoro.
+# Supports multiple voices and languages.
+
+name: tts
+display_name: Text-to-Speech
+description: High-quality neural TTS with Kokoro
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - kokoro>=0.9.0,<1.0.0
+  - misaki>=0.9.0,<1.0.0
+  - pocket-tts>=0.1.0
+  - spacy>=3.7.0,<4.0.0
+  - pydub>=0.25.0,<1.0.0
+  - av>=12.0.0,<13.0.0
+  - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
