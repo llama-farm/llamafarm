@@ -21,13 +21,13 @@ Environment Variables:
 
 import asyncio
 import os
+import warnings
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.logging import UniversalRuntimeLogger, setup_logging
-from utils.safe_home import get_data_dir
 from models import (
     AnomalyModel,
     BaseModel,
@@ -79,6 +79,7 @@ from routers.health import (
 )
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
+from routers.polars import router as polars_router
 from routers.vision import (
     router as vision_router,
 )
@@ -92,6 +93,17 @@ from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
+from utils.safe_home import get_data_dir
+
+# Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
+# CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
+# released before interpreter shutdown. The OS kernel cleans these up on process exit —
+# no resources are actually leaked. See: https://github.com/SYSTRAN/faster-whisper/issues/1057
+warnings.filterwarnings(
+    "ignore",
+    message=r"resource_tracker: There appear to be \d+ leaked semaphore",
+    category=UserWarning,
+)
 
 # Configure logging FIRST, before anything else
 log_file = os.getenv("LOG_FILE", "")
@@ -301,6 +313,7 @@ app.include_router(classifier_router)
 app.include_router(files_router)
 app.include_router(health_router)
 app.include_router(nlp_router)
+app.include_router(polars_router)
 app.include_router(vision_router)
 
 # Model unload timeout configuration (in seconds)

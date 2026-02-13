@@ -133,6 +133,10 @@ class SpeechModel(BaseModel):
 
     async def load(self) -> None:
         """Load the Whisper model."""
+        # Re-create executor if it was destroyed by unload()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
+
         try:
             from faster_whisper import WhisperModel
         except ImportError as e:
@@ -175,7 +179,8 @@ class SpeechModel(BaseModel):
 
     async def transcribe(
         self,
-        audio_path: str | Path,
+        audio_path: str | Path | None = None,
+        audio_array: "np.ndarray | None" = None,
         language: str | None = None,
         task: Literal["transcribe", "translate"] = "transcribe",
         word_timestamps: bool = False,
@@ -185,10 +190,11 @@ class SpeechModel(BaseModel):
         best_of: int = 1,
         temperature: float | list[float] | None = None,
     ) -> TranscriptionResult:
-        """Transcribe an audio file.
+        """Transcribe audio from file or numpy array.
 
         Args:
             audio_path: Path to audio file (supports mp3, wav, m4a, webm, etc.)
+            audio_array: Audio as numpy array (float32, normalized to [-1.0, 1.0])
             language: Language code (e.g., "en", "es", "fr"). If None, auto-detected.
             task: "transcribe" for same-language output, "translate" for English output
             word_timestamps: Whether to include word-level timestamps
@@ -205,13 +211,22 @@ class SpeechModel(BaseModel):
         if self._whisper_model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
+        if audio_path is None and audio_array is None:
+            raise ValueError("Either audio_path or audio_array must be provided")
+
+        if audio_path is not None and audio_array is not None:
+            raise ValueError("Only one of audio_path or audio_array can be provided")
+
         if temperature is None:
             temperature = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+        # Use audio_array if provided, otherwise use audio_path
+        audio_input = audio_array if audio_array is not None else str(audio_path)
 
         def _sync_transcribe():
             """Run transcription synchronously in thread pool."""
             segments_generator, info = self._whisper_model.transcribe(
-                str(audio_path),
+                audio_input,
                 language=language,
                 task=task,
                 word_timestamps=word_timestamps,

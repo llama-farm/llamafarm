@@ -293,6 +293,10 @@ class KokoroBackend(TTSBackend):
 
     async def load(self, device: str) -> None:
         """Load Kokoro TTS model."""
+        # Re-create executor if it was destroyed by shutdown()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
+
         try:
             from kokoro import KPipeline
         except ImportError as e:
@@ -481,6 +485,10 @@ class KokoroMLXBackend(TTSBackend):
     async def load(self, device: str) -> None:
         """Load Kokoro TTS model using MLX."""
         del device  # MLX handles device placement automatically
+
+        # Re-create executor if it was destroyed by shutdown()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
 
         try:
             from mlx_audio.tts.utils import load_model
@@ -707,6 +715,10 @@ class ChatterboxTurboBackend(TTSBackend):
 
     async def load(self, device: str) -> None:
         """Load Chatterbox Turbo model."""
+        # Re-create executor if it was destroyed by shutdown()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
+
         try:
             from chatterbox.tts_turbo import ChatterboxTurboTTS
         except ImportError as e:
@@ -929,6 +941,11 @@ class PocketTTSBackend(TTSBackend):
         The device parameter is ignored.
         """
         del device  # Pocket TTS is CPU-only
+
+        # Re-create executor if it was destroyed by shutdown()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=2)
+
         try:
             from pocket_tts import TTSModel as PocketModel
         except ImportError as e:

@@ -33,6 +33,7 @@ import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
 import SampleProjects from './components/Samples/SampleProjects'
+import { ManageAddons } from './pages/ManageAddons'
 // @ts-ignore - component is TSX local file
 import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 // Removed legacy per-strategy pages in favor of unified StrategyView
@@ -157,6 +158,7 @@ function AppContent() {
                       {/* Redirect '/projects' to Home; Home will scroll to projects */}
                       <Route path="/projects" element={<Home />} />
                       <Route path="/samples" element={<SampleProjects />} />
+                      <Route path="/addons" element={<ManageAddons />} />
                       <Route path="/chat" element={<Chat />}>
                         <Route
                           index

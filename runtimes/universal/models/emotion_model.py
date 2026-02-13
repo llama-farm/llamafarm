@@ -109,6 +109,10 @@ class EmotionModel(BaseModel):
 
     async def load(self) -> None:
         """Load the emotion recognition model."""
+        # Re-create executor if it was destroyed by unload()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1)
+
         try:
             from transformers import (
                 AutoFeatureExtractor,

@@ -84,6 +84,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     # Register global exception handlers
     register_exception_handlers(app)
 
+    app.include_router(routers.addons_router)
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
@@ -95,6 +96,8 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.ml_router, prefix=API_PREFIX)
     app.include_router(routers.nlp_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
+    # Audio TTS endpoints - project-scoped (path already includes /v1)
+    app.include_router(routers.audio_router, prefix=API_PREFIX)
     # Voice chat WebSocket - no prefix needed (path already includes /v1)
     app.include_router(routers.voice_router)
     # Health endpoints are exposed at the root (no version prefix)
@@ -123,6 +126,11 @@ def llama_farm_api() -> fastapi.FastAPI:
         # Registered last so API routes take precedence
         @app.get("/{path:path}", include_in_schema=False)
         async def serve_designer_spa(path: str):
+            # Skip WebSocket paths (they won't be caught by GET routes normally,
+            # but we need to exclude them explicitly to avoid issues)
+            if "/voice/chat" in path:
+                raise fastapi.HTTPException(status_code=404, detail="Not found")
+
             # API routes are already registered and will match first
             # This handler only runs if no API route matched
 

@@ -34,7 +34,8 @@ Get started instantly — no command line required:
 |-----------|-------------|
 | **RAG (Retrieval-Augmented Generation)** | Ingest PDFs, docs, CSVs and query them with AI |
 | **Custom Classifiers** | Train text classifiers with 8-16 examples using SetFit |
-| **Anomaly Detection** | Detect outliers in logs, metrics, or transactions |
+| **Anomaly Detection** | 12+ algorithms for batch and streaming anomaly detection |
+| **Tool Calling (MCP)** | Connect models to external tools via Model Context Protocol |
 | **OCR & Document Extraction** | Extract text and structured data from images and PDFs |
 | **Named Entity Recognition** | Find people, organizations, and locations |
 | **Multi-Model Runtime** | Switch between Ollama, OpenAI, vLLM, or local GGUF models |
@@ -204,10 +205,15 @@ lf rag query --database main_db "What are the key findings?"
 
 The Designer at `http://localhost:14345` provides:
 
-- Visual dataset management with drag-and-drop uploads
-- Interactive configuration editor with live validation
-- Integrated chat with RAG context
-- Switch between visual and YAML editing modes
+- **Project management** with briefs and quick actions
+- **Visual dataset management** with drag-and-drop uploads
+- **Database & RAG configuration** with built-in query testing
+- **Prompt engineering** with template variables and testing
+- **Interactive chat** with RAG toggle and retrieved context display
+- **Config editor** with syntax highlighting, validation, and auto-completion
+- Switch between visual Designer and raw YAML modes in any section
+
+See the [Designer Features Guide](docs/website/docs/designer/features.md) for details.
 
 ---
 
@@ -343,21 +349,53 @@ curl -X POST http://localhost:14345/v1/vision/ocr \
 
 ### Anomaly Detection
 
+LlamaFarm supports 12+ anomaly detection algorithms via PyOD, with both batch and streaming modes.
+
 ```bash
 # Train on normal data
 curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
-  -d '{"model": "sensor-detector", "backend": "isolation_forest", "data": [[22.1], [23.5], ...]}'
+  -d '{"model": "sensor-detector", "backend": "ecod", "data": [[22.1], [23.5], ...]}'
 
 # Detect anomalies
 curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{"model": "sensor-detector", "data": [[22.0], [100.0], [23.0]], "threshold": 0.5}'
+
+# Streaming detection (handles cold start, auto-retraining, sliding windows)
+curl -X POST http://localhost:14345/v1/ml/anomaly/stream \
+  -H "Content-Type: application/json" \
+  -d '{"model": "live-sensor", "data": {"temperature": 72.5}, "backend": "ecod"}'
 ```
+
+**Available backends:** `ecod` (recommended), `isolation_forest`, `one_class_svm`, `local_outlier_factor`, `autoencoder`, `hbos`, `copod`, `knn`, `mcd`, `cblof`, `suod`, `loda`
 
 ### Text Classification & NER
 
 See the [Models Guide](docs/website/docs/models/index.md) for complete documentation.
+
+### Tool Calling (MCP)
+
+Give models access to external tools via the Model Context Protocol:
+
+```yaml
+# In llamafarm.yaml
+mcp:
+  servers:
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/data']
+
+runtime:
+  models:
+    - name: assistant
+      provider: ollama
+      model: llama3.1:8b
+      mcp_servers: [filesystem]
+```
+
+LlamaFarm also exposes its own API as MCP tools for use with Claude Desktop, Cursor, and other MCP clients. See the [Tool Calling Guide](docs/website/docs/mcp/index.md).
 
 ---
 
@@ -365,9 +403,31 @@ See the [Models Guide](docs/website/docs/models/index.md) for complete documenta
 
 | Example | Description | Location |
 |---------|-------------|----------|
-| FDA Letters Assistant | Multi-PDF ingestion, regulatory queries | `examples/fda_rag/` |
-| Raleigh Planning Helper | Large ordinance documents, geospatial queries | `examples/gov_rag/` |
-| OCR & Document Processing | Image text extraction, form parsing | `examples/ocr_and_document/` |
+| **RAG Examples** | | |
+| Large Complex PDFs | Multi-megabyte planning ordinances | `examples/large_complex_rag/` |
+| Many Small Files | FDA correspondence letters | `examples/many_small_file_rag/` |
+| Mixed Formats | PDF, Markdown, HTML, text, and code | `examples/mixed_format_rag/` |
+| Quick Notes | Rapid smoke tests with small files | `examples/quick_rag/` |
+| **Anomaly Detection** | | |
+| Quick Start | Simplest anomaly detection example | `examples/anomaly/01_quick_start.py` |
+| Fraud Detection | Training, saving, loading models | `examples/anomaly/02_fraud_detection.py` |
+| Streaming Sensors | IoT monitoring with rolling features | `examples/anomaly/03_streaming_sensors.py` |
+| Backend Comparison | Compare all 12 algorithms | `examples/anomaly/04_backend_comparison.py` |
+| **Use Cases** | | |
+| FDA Letters Assistant | Regulatory document analysis | `examples/fda_rag/` |
+| Government Planning | Large ordinance documents | `examples/gov_rag/` |
+
+See [`examples/README.md`](examples/README.md) for setup instructions and the full list.
+
+---
+
+## Industry Use Cases
+
+LlamaFarm is used across industries for document analysis, monitoring, and fraud detection:
+
+- **[Pharmaceutical & Therapeutics](docs/website/docs/use-cases/pharmaceutical-fda.md)** — Analyze FDA correspondence, track regulatory questions
+- **[IoT Sensor Monitoring](docs/website/docs/use-cases/iot-sensor-monitoring.md)** — Real-time streaming anomaly detection with automatic retraining
+- **[Financial Fraud Detection](docs/website/docs/use-cases/financial-fraud-detection.md)** — Multi-stage fraud detection with velocity and behavioral patterns
 
 ---
 

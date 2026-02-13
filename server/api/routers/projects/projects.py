@@ -616,6 +616,18 @@ async def chat(
             max_tokens=request.max_tokens,
         )
     except Exception as e:
+        error_msg = str(e)
+
+        # Detect HuggingFace gated model authentication errors
+        if "gated repo" in error_msg.lower() or "401 client error" in error_msg.lower():
+            # Extract model name if present
+            model_name = agent.model if agent and hasattr(agent, 'model') else "this model"
+            raise HTTPException(
+                status_code=401,
+                detail=f"Model '{model_name}' requires authentication. Please authenticate with HuggingFace using 'huggingface-cli login' or select a different model in Models & Settings.",
+            ) from e
+
+        # Generic error fallback
         raise HTTPException(
             status_code=500,
             detail=f"Chat service failed to generate a response: {e}",

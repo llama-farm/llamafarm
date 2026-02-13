@@ -50,6 +50,10 @@ def get_gguf_metadata(gguf_path: str) -> dict:
         "file_size_bytes": cached.file_size_bytes,
         "file_size_mb": cached.file_size_mb,
         "n_ctx_train": cached.n_ctx_train,
+        "n_layer": cached.n_layer,
+        "n_head_kv": cached.n_head_kv,
+        "head_k_size": cached.head_k_size,
+        "head_v_size": cached.head_v_size,
     }
 
 
@@ -88,19 +92,53 @@ def get_available_memory(device: str) -> int:
         return 4 * 1024 * 1024 * 1024
 
 
+def compute_kv_bytes_per_token(
+    n_layer: int,
+    n_head_kv: int,
+    head_k_size: int,
+    head_v_size: int,
+) -> int:
+    """Compute exact KV cache bytes per token from model architecture.
+
+    The KV cache stores key and value tensors for every layer, using f16 precision
+    (2 bytes per element). This is the dominant memory cost that scales with context.
+
+    Args:
+        n_layer: Number of transformer layers (block_count)
+        n_head_kv: Number of key-value attention heads
+        head_k_size: Dimension of each key head
+        head_v_size: Dimension of each value head
+
+    Returns:
+        Bytes of KV cache needed per token of context
+    """
+    # K cache per token: n_layer * n_head_kv * head_k_size * sizeof(f16)
+    # V cache per token: n_layer * n_head_kv * head_v_size * sizeof(f16)
+    return n_layer * n_head_kv * (head_k_size + head_v_size) * 2
+
+
+# Fallback estimate when GGUF architecture metadata isn't available.
+# Deliberately conservative (overestimates cost) to prevent OOM.
+# Actual KV cache costs range from ~18 KB/token (1.5B) to ~320 KB/token (70B).
+# 256 KB covers most 7B+ models safely; smaller models just get less context than
+# they could handle, which is preferable to OOM.
+_FALLBACK_BYTES_PER_TOKEN = 256 * 1024  # 256 KB
+
+
 def compute_max_context(
     model_size_bytes: int,
     available_memory_bytes: int,
     memory_factor: float = 0.8,
     max_context_cap: int = 131072,
+    n_layer: int | None = None,
+    n_head_kv: int | None = None,
+    head_k_size: int | None = None,
+    head_v_size: int | None = None,
 ) -> int:
     """Compute maximum safe context size based on available memory.
 
-    Uses an aggressive formula that allocates most available memory
-    to context, accounting for:
-    - Model weight storage
-    - KV cache (primary memory consumer for context)
-    - Overhead for activation tensors and buffers
+    Uses model architecture metadata (when available) to compute the exact
+    KV cache cost per token, rather than relying on a fixed estimate.
 
     Args:
         model_size_bytes: Size of model file in bytes
@@ -109,15 +147,13 @@ def compute_max_context(
         max_context_cap: Hard upper limit for context size (default 131072/128K).
             Most models don't support more than 128K context even with
             sufficient memory.
+        n_layer: Number of transformer layers (from GGUF metadata)
+        n_head_kv: Number of key-value attention heads (from GGUF metadata)
+        head_k_size: Dimension of each key head (from GGUF metadata)
+        head_v_size: Dimension of each value head (from GGUF metadata)
 
     Returns:
         Maximum safe context size (number of tokens)
-
-    Formula:
-        usable_memory = (available_memory * factor) - model_size
-        bytes_per_token ≈ 2-4 bytes for quantized models (Q4/Q8)
-        context_overhead = 4 (conservative multiplier for KV cache + buffers)
-        n_ctx_max = usable_memory / (bytes_per_token * context_overhead)
     """
     # Calculate usable memory after loading model
     usable_memory = (available_memory_bytes * memory_factor) - model_size_bytes
@@ -129,13 +165,26 @@ def compute_max_context(
         )
         return 512  # Minimal context
 
-    # Estimate bytes per token for quantized GGUF models
-    # Q4: ~0.5 bytes per param, Q8: ~1 byte per param
-    # For KV cache: typically 2-4 bytes per token depending on precision
-    bytes_per_token = 4  # Conservative estimate for KV cache
-    context_overhead = 4  # Account for both K and V caches plus buffers
+    # Compute per-token memory cost
+    has_arch_params = all(v is not None for v in [n_layer, n_head_kv, head_k_size, head_v_size])
+    if has_arch_params:
+        kv_bytes = compute_kv_bytes_per_token(n_layer, n_head_kv, head_k_size, head_v_size)
+        # Add 30% overhead for compute buffers and activation tensors
+        bytes_per_token = int(kv_bytes * 1.3)
+        logger.debug(
+            f"KV cache from architecture: {kv_bytes} bytes/token "
+            f"(n_layer={n_layer}, n_head_kv={n_head_kv}, "
+            f"head_k={head_k_size}, head_v={head_v_size}), "
+            f"with overhead: {bytes_per_token} bytes/token"
+        )
+    else:
+        bytes_per_token = _FALLBACK_BYTES_PER_TOKEN
+        logger.debug(
+            f"Architecture metadata unavailable, using fallback: "
+            f"{bytes_per_token} bytes/token"
+        )
 
-    max_context = int(usable_memory / (bytes_per_token * context_overhead))
+    max_context = int(usable_memory / bytes_per_token)
 
     # Apply hard cap - most models don't support extremely large contexts
     # even if memory would allow it
@@ -155,6 +204,7 @@ def compute_max_context(
         f"Memory calculation: available={available_memory_bytes / (1024**3):.2f}GB, "
         f"model={model_size_bytes / (1024**3):.2f}GB, "
         f"usable={usable_memory / (1024**3):.2f}GB, "
+        f"bytes_per_token={bytes_per_token}, "
         f"max_ctx_computed={max_context}, "
         f"max_ctx_aligned={power_of_2}"
     )
@@ -297,7 +347,13 @@ def get_default_context_size(
         metadata = get_gguf_metadata(gguf_path)
         available_memory = get_available_memory(device)
         max_context_from_memory = compute_max_context(
-            metadata["file_size_bytes"], available_memory, memory_factor
+            metadata["file_size_bytes"],
+            available_memory,
+            memory_factor,
+            n_layer=metadata.get("n_layer"),
+            n_head_kv=metadata.get("n_head_kv"),
+            head_k_size=metadata.get("head_k_size"),
+            head_v_size=metadata.get("head_v_size"),
         )
 
         logger.info(

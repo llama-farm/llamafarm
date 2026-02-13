@@ -1,0 +1,27 @@
+# Speech-to-Text Addon
+#
+# Provides audio transcription capabilities using Whisper models via faster-whisper.
+# Uses hardware acceleration when available (CUDA, Metal fallback to CPU).
+
+name: stt
+display_name: Speech-to-Text
+description: Transcribe audio using Whisper models (faster-whisper)
+component: universal-runtime
+version: "1.0.0"
+
+dependencies:
+  - onnxruntime
+
+packages:
+  - faster-whisper>=1.0.0,<2.0.0
+  - av>=12.0.0,<13.0.0
+  # Note: webrtcvad>=2.0.10 omitted - no binary wheels available
+  # Users can install separately if needed for voice activity detection
+
+keep_packages:
+  - ctranslate2  # Required by faster-whisper at runtime
+
+hardware_notes:
+  cuda: CUDA provides 10-50x faster transcription
+  metal: MPS not supported by faster-whisper, falls back to CPU
+  cpu: CPU works but is slower

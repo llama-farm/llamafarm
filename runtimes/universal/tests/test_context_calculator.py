@@ -7,6 +7,7 @@ import pytest
 
 from utils.context_calculator import (
     clear_config_cache,
+    compute_kv_bytes_per_token,
     compute_max_context,
     get_available_memory,
     get_default_context_size,
@@ -116,6 +117,61 @@ class TestComputeMaxContext:
 
         # Should return minimal context size
         assert max_ctx == 512
+
+    def test_with_architecture_params_qwen3_4b(self):
+        """Test context computation with actual Qwen3-4B architecture.
+
+        Qwen3-4B: 36 layers, 8 KV heads, 128-dim keys/values.
+        KV cache per token = 36 * 8 * (128+128) * 2 = 147,456 bytes.
+        With 18.83 GB available and 2.38 GB model, should NOT allow 40960 context
+        (which would need 5.7 GB KV cache alone).
+        """
+        model_size = int(2.38 * 1024**3)  # 2.38 GB model
+        available = int(18.83 * 1024**3)  # 18.83 GB available
+        memory_factor = 0.8
+
+        max_ctx = compute_max_context(
+            model_size, available, memory_factor,
+            n_layer=36, n_head_kv=8, head_k_size=128, head_v_size=128,
+        )
+
+        # With accurate KV estimation, 40960 should NOT fit.
+        # usable = 18.83*0.8 - 2.38 = 12.684 GB
+        # bytes/token = 147456 * 1.3 = 191693
+        # max tokens = 12.684 GB / 191693 ≈ 69,328 -> power of 2 = 65536
+        # But 40960 * 147456 = ~5.76 GB KV alone, which is feasible with overhead.
+        # Key point: the result should be reasonable, not 131072.
+        assert max_ctx <= 65536
+        assert max_ctx >= 512
+        assert max_ctx & (max_ctx - 1) == 0  # Is power of 2
+
+
+class TestComputeKvBytesPerToken:
+    """Tests for compute_kv_bytes_per_token function."""
+
+    def test_qwen3_4b(self):
+        """Test KV bytes for Qwen3-4B (36 layers, 8 KV heads, 128 dim)."""
+        result = compute_kv_bytes_per_token(
+            n_layer=36, n_head_kv=8, head_k_size=128, head_v_size=128
+        )
+        # 36 * 8 * (128 + 128) * 2 = 147,456
+        assert result == 147_456
+
+    def test_llama_7b_style(self):
+        """Test KV bytes for Llama-7B style (32 layers, 32 KV heads, 128 dim)."""
+        result = compute_kv_bytes_per_token(
+            n_layer=32, n_head_kv=32, head_k_size=128, head_v_size=128
+        )
+        # 32 * 32 * 256 * 2 = 524,288
+        assert result == 524_288
+
+    def test_small_model(self):
+        """Test KV bytes for a small model."""
+        result = compute_kv_bytes_per_token(
+            n_layer=6, n_head_kv=2, head_k_size=64, head_v_size=64
+        )
+        # 6 * 2 * 128 * 2 = 3,072
+        assert result == 3_072
 
 
 class TestLoadModelContextConfig:

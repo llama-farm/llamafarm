@@ -1,6 +1,6 @@
 # Industry Use Cases
 
-LlamaFarm is designed to solve real-world problems across various industries. This section showcases how organizations are using LlamaFarm to streamline workflows, analyze complex documents, and extract actionable insights from their data.
+LlamaFarm is designed to solve real-world problems across various industries. This section showcases how organizations are using LlamaFarm to streamline workflows, analyze complex documents, detect anomalies, and extract actionable insights from their data.
 
 ## Featured Use Cases
 
@@ -13,6 +13,26 @@ Learn how pharmaceutical and therapeutics companies use LlamaFarm to analyze FDA
 - Cross-reference answers against existing correspondence databases
 - Confidence scoring for answer validation
 - Significant time savings in regulatory compliance workflows
+
+### [IoT Sensor Monitoring](./iot-sensor-monitoring.md)
+
+Build a real-time IoT monitoring system that detects equipment malfunctions, handles concept drift, and alerts operators within seconds.
+
+**Key Benefits:**
+- Real-time streaming anomaly detection with automatic retraining
+- Rolling features for trend and volatility detection
+- Edge-device optimized with minimal resource usage
+- Automatic handling of seasonal drift and calibration changes
+
+### [Financial Fraud Detection](./financial-fraud-detection.md)
+
+Implement a production-ready fraud detection pipeline that processes thousands of transactions per second with multi-stage analysis.
+
+**Key Benefits:**
+- Real-time pre-screening with sub-10ms latency
+- Rich feature engineering with Polars buffers
+- Ensemble models for high-accuracy fraud detection
+- Velocity, geographic, and behavioral pattern detection
 
 ---
 

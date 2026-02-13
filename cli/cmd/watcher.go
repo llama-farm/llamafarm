@@ -248,10 +248,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	cwd := utils.GetEffectiveCWD()
 
 	// Find config files in both locations
-	cwdConfigPath, err := config.FindConfigFile(cwd)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: No llamafarm config file found in current directory: %v\n", err)
-	}
+	cwdConfigPath, _ := config.FindConfigFile(cwd)
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
