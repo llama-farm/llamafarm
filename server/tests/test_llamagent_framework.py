@@ -718,6 +718,46 @@ class TestSystemPromptOverride:
             for m in msgs
         )
 
+    @pytest.mark.asyncio
+    async def test_override_persists_across_tool_loop_calls(
+        self, agent_with_config_prompt
+    ):
+        """System prompt override survives messages=None in tool loops."""
+        agent, client = agent_with_config_prompt
+
+        # First call sets the override
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "Tool loop prompt"},
+                {"role": "user", "content": "Use a tool"},
+            ]
+        )
+        assert "Tool loop prompt" in client.last_messages[0]["content"]
+
+        # Subsequent call with messages=None (tool iteration)
+        await agent.run_async(messages=None)
+        assert "Tool loop prompt" in client.last_messages[0]["content"]
+        assert "Config system prompt" not in str(client.last_messages)
+
+    @pytest.mark.asyncio
+    async def test_none_content_not_stringified(
+        self, agent_with_config_prompt
+    ):
+        """None content should not become the string 'None'."""
+        agent, client = agent_with_config_prompt
+
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": None},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+
+        msgs = client.last_messages
+        # Should use empty string, not "None"
+        assert msgs[0]["role"] == "system"
+        assert "None" not in msgs[0]["content"]
+
 
 class TestToolCallRequest:
     """Test suite for ToolCallRequest."""

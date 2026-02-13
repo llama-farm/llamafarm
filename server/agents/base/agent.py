@@ -56,12 +56,13 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> LFChatCompletion:
-        self._request_system_prompt = None
-        if messages:
+        if messages is not None:
+            self._request_system_prompt = None
             for message in messages:
                 if message.get("role") == "system":
-                    self._request_system_prompt = str(
-                        message.get("content", "")
+                    content = message.get("content")
+                    self._request_system_prompt = (
+                        content if isinstance(content, str) else ""
                     )
                 else:
                     self.history.add_message(message)
@@ -82,12 +83,13 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        self._request_system_prompt = None
-        if messages:
+        if messages is not None:
+            self._request_system_prompt = None
             for message in messages:
                 if message.get("role") == "system":
-                    self._request_system_prompt = str(
-                        message.get("content", "")
+                    content = message.get("content")
+                    self._request_system_prompt = (
+                        content if isinstance(content, str) else ""
                     )
                 else:
                     self.history.add_message(message)
