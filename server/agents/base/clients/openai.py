@@ -139,6 +139,10 @@ class LFAgentClientOpenAI(LFAgentClient):
         stream_param: Literal[False] = False
 
         if self._response_model:
+            logger.debug(
+                "Using structured output path",
+                response_model=self._response_model.__name__,
+            )
             instructor_client = self._wrap_with_instructor(client)
             structured_response = await instructor_client.chat.completions.create(
                 messages=messages,
