@@ -194,19 +194,31 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
         )
 
     # Strategy 2: Multi-GPU split
-    total_free = sum(g.free_vram for g in gpus)
-    if total_free >= required:
-        # Compute proportional split based on free VRAM
-        tensor_split = [float(g.free_vram) for g in sorted(gpus, key=lambda g: g.index)]
-        total = sum(tensor_split)
-        tensor_split = [v / total for v in tensor_split]
+    # Exclude GPUs with too little free VRAM to carry their share of
+    # non-splittable overhead (compute buffers, scratch space). A GPU
+    # needs at least 512 MiB free to participate usefully in a split.
+    min_participation = 512 * 1024**2  # 512 MiB
+    viable_gpus = [g for g in gpus if g.free_vram >= min_participation]
+    total_free = sum(g.free_vram for g in viable_gpus)
+
+    if total_free >= required and len(viable_gpus) > 1:
+        # Build split proportions only for viable GPUs, zero out excluded ones
+        by_index = sorted(gpus, key=lambda g: g.index)
+        viable_indices = {g.index for g in viable_gpus}
+        raw_split = [
+            float(g.free_vram) if g.index in viable_indices else 0.0
+            for g in by_index
+        ]
+        total = sum(raw_split)
+        tensor_split = [v / total for v in raw_split]
 
         gpu_desc = ", ".join(
             f"GPU {g.index} ({g.name}): {g.free_vram / (1024**3):.2f} GiB free"
-            for g in sorted_gpus
+            for g in viable_gpus
         )
         logger.info(
-            f"Model requires multi-GPU split: {estimated_vram / (1024**3):.2f} GiB needed, "
+            f"Model requires multi-GPU split: "
+            f"{estimated_vram / (1024**3):.2f} GiB needed, "
             f"no single GPU has enough. Splitting across: {gpu_desc}"
         )
         return GPUAllocation(

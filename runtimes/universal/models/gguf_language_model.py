@@ -18,7 +18,11 @@ from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.context_manager import ContextBudget, ContextManager, ContextUsage
-from utils.gpu_allocator import InsufficientVRAMError, get_llama_gpu_params
+from utils.gpu_allocator import (
+    SPLIT_MODE_NONE,
+    InsufficientVRAMError,
+    get_llama_gpu_params,
+)
 from utils.gguf_metadata_cache import get_gguf_metadata_cached
 from utils.model_format import get_gguf_file_path
 from utils.token_counter import TokenCounter
@@ -304,8 +308,14 @@ class GGUFLanguageModel(BaseModel):
                     f"split_mode={gpu_params.get('split_mode')}, "
                     f"gpu_index={gpu_idx}"
                 )
-                # Re-compute context size using the allocated GPU's actual free memory
-                if gpu_idx is not None:
+                # Re-compute context size using the allocated GPU's actual free
+                # memory, but only for single-GPU placement. For multi-GPU splits,
+                # memory is distributed across devices so single-GPU free VRAM
+                # doesn't represent the real constraint.
+                if (
+                    gpu_idx is not None
+                    and gpu_params.get("split_mode") == SPLIT_MODE_NONE
+                ):
                     new_n_ctx, new_warnings = get_default_context_size(
                         model_id=self.model_id,
                         gguf_path=gguf_path,
@@ -324,7 +334,13 @@ class GGUFLanguageModel(BaseModel):
             else:
                 logger.debug("No CUDA GPUs detected, using default GPU allocation")
         except InsufficientVRAMError as e:
-            raise RuntimeError(str(e)) from e
+            logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(
+                "Insufficient GPU memory to load model. "
+                "Consider unloading other models, reducing context size, "
+                "or using a smaller quantization. "
+                "Check logs for detailed GPU memory information."
+            ) from e
         except Exception as e:
             logger.warning(f"GPU allocation failed, using defaults: {e}")
 

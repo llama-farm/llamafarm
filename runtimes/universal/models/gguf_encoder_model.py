@@ -122,7 +122,12 @@ class GGUFEncoderModel(BaseModel):
             else:
                 logger.debug("No CUDA GPUs detected, using default GPU allocation")
         except InsufficientVRAMError as e:
-            raise RuntimeError(str(e)) from e
+            logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(
+                "Insufficient GPU memory to load model. "
+                "Consider unloading other models or using a smaller quantization. "
+                "Check logs for detailed GPU memory information."
+            ) from e
         except Exception as e:
             logger.warning(f"GPU allocation failed, using defaults: {e}")
 
@@ -151,6 +156,7 @@ class GGUFEncoderModel(BaseModel):
             return Llama(
                 model_path=gguf_path,
                 embedding=True,  # Enable embedding mode
+                n_ctx=512,  # Small context for embeddings (matches VRAM estimate)
                 n_gpu_layers=n_gpu_layers,
                 n_threads=None,  # Auto-detect optimal threads
                 verbose=False,  # Disable verbose logging
