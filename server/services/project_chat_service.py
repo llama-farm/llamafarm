@@ -69,6 +69,15 @@ class RAGParameters:
 
 
 class ProjectChatService:
+    @staticmethod
+    def _find_model_config(project_config: LlamaFarmConfig, model_name: str):
+        """Look up the Model config entry by name."""
+        if project_config.runtime and project_config.runtime.models:
+            for m in project_config.runtime.models:
+                if m.name == model_name:
+                    return m
+        return None
+
     def _extract_latest_user_message(
         self, messages: list[LFChatCompletionMessageParam]
     ) -> str:
@@ -135,6 +144,7 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         rag_queries: list[str] | None = None,
+        model_config=None,
     ) -> None:
         """
         Perform RAG search with event logging.
@@ -145,6 +155,7 @@ class ProjectChatService:
         # Resolve RAG parameters to check if RAG is enabled
         rag_params = self._resolve_rag_parameters(
             project_config,
+            model_config=model_config,
             rag_enabled=rag_enabled,
             database=database,
             retrieval_strategy=retrieval_strategy,
@@ -282,6 +293,9 @@ class ProjectChatService:
             None,
         )
 
+        # Look up per-model RAG defaults
+        model_cfg = self._find_model_config(project_config, chat_agent.model_name)
+
         if latest_user_message:
             try:
                 # Perform RAG search with event logging
@@ -297,6 +311,7 @@ class ProjectChatService:
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
                     rag_queries=rag_queries,
+                    model_config=model_cfg,
                 )
             except Exception as e:
                 self._fail_event(event_logger, str(e))
@@ -408,9 +423,13 @@ class ProjectChatService:
         event_failed = False
         first_token_logged = False
 
+        # Look up per-model RAG defaults
+        model_cfg = self._find_model_config(project_config, chat_agent.model_name)
+
         try:
             rag_params = self._resolve_rag_parameters(
                 project_config,
+                model_config=model_cfg,
                 rag_enabled=rag_enabled,
                 database=database,
                 retrieval_strategy=retrieval_strategy,
@@ -432,6 +451,7 @@ class ProjectChatService:
                     rag_top_k=rag_top_k,
                     rag_score_threshold=rag_score_threshold,
                     rag_queries=rag_queries,
+                    model_config=model_cfg,
                 )
 
             # Yield sources event before LLM stream (if requested)
@@ -528,6 +548,7 @@ class ProjectChatService:
     def _resolve_rag_parameters(
         self,
         project_config: LlamaFarmConfig,
+        model_config=None,
         rag_enabled: bool | None = None,
         database: str | None = None,
         retrieval_strategy: str | None = None,
@@ -540,15 +561,20 @@ class ProjectChatService:
 
         Priority order for each parameter:
         1. Explicit request parameters (highest priority)
-        2. Database defaults from config
-        3. Strategy defaults from config
-        4. Strategy config values (top_k, score_threshold)
-        5. Hardcoded fallbacks (lowest priority)
+        2. Model-level defaults from config (rag_enabled, target_database)
+        3. Database defaults from config
+        4. Strategy defaults from config
+        5. Strategy config values (top_k, score_threshold)
+        6. Hardcoded fallbacks (lowest priority)
 
         Returns:
             RAGParameters object with all resolved values
         """
         # Step 0: Determine if RAG is enabled
+        # Priority: request > model config > project default
+        if rag_enabled is None and model_config and getattr(model_config, "rag_enabled", None) is not None:
+            rag_enabled = model_config.rag_enabled
+            logger.info(f"RAG {'enabled' if rag_enabled else 'disabled'} by model config")
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
@@ -557,7 +583,10 @@ class ProjectChatService:
         if not rag_enabled or not project_config.rag:
             return RAGParameters(rag_enabled=False)
 
-        # Step 1: Resolve database (request > default_database > first database)
+        # Step 1: Resolve database (request > model.target_database > default_database > first database)
+        if database is None and model_config and getattr(model_config, "target_database", None):
+            database = model_config.target_database
+            logger.info(f"Using model target_database: {database}")
         if database is None:
             if project_config.rag.default_database:
                 database = str(project_config.rag.default_database)
