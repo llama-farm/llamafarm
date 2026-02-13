@@ -1,7 +1,7 @@
 """Tests for context_calculator module."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -145,8 +145,13 @@ class TestComputeMaxContext:
         memory_factor = 0.8
 
         max_ctx = compute_max_context(
-            model_size, available, memory_factor,
-            n_layer=36, n_head_kv=8, head_k_size=128, head_v_size=128,
+            model_size,
+            available,
+            memory_factor,
+            n_layer=36,
+            n_head_kv=8,
+            head_k_size=128,
+            head_v_size=128,
         )
 
         # With accurate KV estimation, 40960 should NOT fit.

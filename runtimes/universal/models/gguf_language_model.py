@@ -18,12 +18,12 @@ from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.context_manager import ContextBudget, ContextManager, ContextUsage
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
 from utils.gpu_allocator import (
     SPLIT_MODE_NONE,
     InsufficientVRAMError,
     get_llama_gpu_params,
 )
-from utils.gguf_metadata_cache import get_gguf_metadata_cached
 from utils.model_format import get_gguf_file_path
 from utils.token_counter import TokenCounter
 
@@ -167,11 +167,21 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers  # Store requested value (None = auto)
         )
         self.requested_n_threads = n_threads  # Store requested value (None = auto)
-        self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
-        self.requested_use_mmap = use_mmap  # Store requested value (None = default False)
-        self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
-        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
-        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
+        self.requested_flash_attn = (
+            flash_attn  # Store requested value (None = default True)
+        )
+        self.requested_use_mmap = (
+            use_mmap  # Store requested value (None = default False)
+        )
+        self.requested_use_mlock = (
+            use_mlock  # Store requested value (None = default False)
+        )
+        self.requested_cache_type_k = (
+            cache_type_k  # Store requested value (None = default f16)
+        )
+        self.requested_cache_type_v = (
+            cache_type_v  # Store requested value (None = default f16)
+        )
         self.preferred_quantization = preferred_quantization
         self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
         self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
@@ -375,7 +385,9 @@ class GGUFLanguageModel(BaseModel):
         # Memory mapping can cause compute graph splits on unified memory systems where CPU and GPU
         # share the same physical memory. This results in suboptimal performance. For discrete GPUs
         # with separate VRAM, mmap may be beneficial for memory-constrained scenarios.
-        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else False
+        use_mmap = (
+            self.requested_use_mmap if self.requested_use_mmap is not None else False
+        )
         logger.info(f"Using use_mmap: {use_mmap}")
 
         # Configure memory locking (default False to allow OS memory management)
@@ -474,7 +486,9 @@ class GGUFLanguageModel(BaseModel):
             # synchronously to ensure GPU context is created optimally and avoid
             # thread context switching overhead in shared memory architecture
             if _is_unified_memory_gpu():
-                logger.info("Loading model synchronously (unified memory GPU optimization)")
+                logger.info(
+                    "Loading model synchronously (unified memory GPU optimization)"
+                )
                 self.llama = _load_model()
             else:
                 self.llama = await loop.run_in_executor(self._executor, _load_model)
@@ -857,6 +871,7 @@ class GGUFLanguageModel(BaseModel):
             AssertionError: If model not loaded
         """
         import time
+
         _timing_start = time.perf_counter()
 
         assert self.llama is not None, "Model not loaded. Call load() first."
@@ -1307,7 +1322,9 @@ class GGUFLanguageModel(BaseModel):
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
-            logger.error(f"Error extracting audio completion result: {e}", exc_info=True)
+            logger.error(
+                f"Error extracting audio completion result: {e}", exc_info=True
+            )
             raise ValueError(f"Unexpected result from audio completion: {e}") from e
 
     async def generate_stream_with_audio(

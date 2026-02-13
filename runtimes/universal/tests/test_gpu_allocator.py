@@ -5,10 +5,10 @@ from unittest.mock import patch
 import pytest
 
 from utils.gpu_allocator import (
-    GPUDevice,
-    InsufficientVRAMError,
     SPLIT_MODE_LAYER,
     SPLIT_MODE_NONE,
+    GPUDevice,
+    InsufficientVRAMError,
     allocate_gpu,
     enumerate_gpus,
     estimate_model_vram,
@@ -29,7 +29,7 @@ class TestEnumerateGpus:
         mock_count.return_value = 2
         mock_mem_info.side_effect = [
             (20 * 1024**3, 24 * 1024**3),  # GPU 0: 20GB free / 24GB total
-            (6 * 1024**3, 8 * 1024**3),    # GPU 1: 6GB free / 8GB total
+            (6 * 1024**3, 8 * 1024**3),  # GPU 1: 6GB free / 8GB total
         ]
         mock_name.side_effect = [
             "NVIDIA GeForce RTX 3090",
@@ -56,12 +56,12 @@ class TestEnumerateGpus:
 
     def test_no_torch(self):
         """Test when torch is not installed."""
-        with patch.dict("sys.modules", {"torch": None}):
-            # The function catches ImportError internally
-            # We need to simulate this by patching the import inside the function
-            with patch("builtins.__import__", side_effect=ImportError("No torch")):
-                gpus = enumerate_gpus()
-                assert gpus == []
+        with (
+            patch.dict("sys.modules", {"torch": None}),
+            patch("builtins.__import__", side_effect=ImportError("No torch")),
+        ):
+            gpus = enumerate_gpus()
+            assert gpus == []
 
 
 class TestEstimateModelVram:
@@ -140,12 +140,16 @@ class TestAllocateGpu:
         """Test allocation when single GPU has enough VRAM."""
         gpus = [
             GPUDevice(
-                index=0, name="RTX 3090",
-                total_vram=24 * 1024**3, free_vram=20 * 1024**3,
+                index=0,
+                name="RTX 3090",
+                total_vram=24 * 1024**3,
+                free_vram=20 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="M4000",
-                total_vram=8 * 1024**3, free_vram=6 * 1024**3,
+                index=1,
+                name="M4000",
+                total_vram=8 * 1024**3,
+                free_vram=6 * 1024**3,
             ),
         ]
 
@@ -160,12 +164,16 @@ class TestAllocateGpu:
         """Test that the GPU with most free VRAM is selected."""
         gpus = [
             GPUDevice(
-                index=0, name="RTX 3090",
-                total_vram=24 * 1024**3, free_vram=5 * 1024**3,
+                index=0,
+                name="RTX 3090",
+                total_vram=24 * 1024**3,
+                free_vram=5 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="RTX 4090",
-                total_vram=24 * 1024**3, free_vram=20 * 1024**3,
+                index=1,
+                name="RTX 4090",
+                total_vram=24 * 1024**3,
+                free_vram=20 * 1024**3,
             ),
         ]
 
@@ -179,12 +187,16 @@ class TestAllocateGpu:
         """Test fallback to multi-GPU split when no single GPU fits."""
         gpus = [
             GPUDevice(
-                index=0, name="GPU0",
-                total_vram=12 * 1024**3, free_vram=8 * 1024**3,
+                index=0,
+                name="GPU0",
+                total_vram=12 * 1024**3,
+                free_vram=8 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="GPU1",
-                total_vram=12 * 1024**3, free_vram=8 * 1024**3,
+                index=1,
+                name="GPU1",
+                total_vram=12 * 1024**3,
+                free_vram=8 * 1024**3,
             ),
         ]
 
@@ -202,12 +214,16 @@ class TestAllocateGpu:
         """Test that multi-GPU split is proportional to free VRAM."""
         gpus = [
             GPUDevice(
-                index=0, name="GPU0",
-                total_vram=24 * 1024**3, free_vram=18 * 1024**3,
+                index=0,
+                name="GPU0",
+                total_vram=24 * 1024**3,
+                free_vram=18 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="GPU1",
-                total_vram=8 * 1024**3, free_vram=6 * 1024**3,
+                index=1,
+                name="GPU1",
+                total_vram=8 * 1024**3,
+                free_vram=6 * 1024**3,
             ),
         ]
 
@@ -223,12 +239,16 @@ class TestAllocateGpu:
         """Test InsufficientVRAMError when no config can fit the model."""
         gpus = [
             GPUDevice(
-                index=0, name="GPU0",
-                total_vram=8 * 1024**3, free_vram=4 * 1024**3,
+                index=0,
+                name="GPU0",
+                total_vram=8 * 1024**3,
+                free_vram=4 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="GPU1",
-                total_vram=4 * 1024**3, free_vram=2 * 1024**3,
+                index=1,
+                name="GPU1",
+                total_vram=4 * 1024**3,
+                free_vram=2 * 1024**3,
             ),
         ]
 
@@ -244,12 +264,16 @@ class TestAllocateGpu:
         """Test that GPUs with very little free VRAM are excluded from split."""
         gpus = [
             GPUDevice(
-                index=0, name="Big GPU",
-                total_vram=24 * 1024**3, free_vram=10 * 1024**3,
+                index=0,
+                name="Big GPU",
+                total_vram=24 * 1024**3,
+                free_vram=10 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="Tiny GPU",
-                total_vram=4 * 1024**3, free_vram=256 * 1024**2,  # 256 MiB
+                index=1,
+                name="Tiny GPU",
+                total_vram=4 * 1024**3,
+                free_vram=256 * 1024**2,  # 256 MiB
             ),
         ]
 
@@ -267,14 +291,16 @@ class TestAllocateGpu:
         """
         gpus = [
             GPUDevice(
-                index=0, name="RTX 3090",
+                index=0,
+                name="RTX 3090",
                 total_vram=int(23.69 * 1024**3),
                 free_vram=int(14.3 * 1024**3),  # After first model
             ),
             GPUDevice(
-                index=1, name="Quadro M4000",
+                index=1,
+                name="Quadro M4000",
                 total_vram=int(7.93 * 1024**3),
-                free_vram=int(3.1 * 1024**3),   # After first model
+                free_vram=int(3.1 * 1024**3),  # After first model
             ),
         ]
 
@@ -298,8 +324,10 @@ class TestGetLlamaGpuParams:
         """Test that params dict is returned for single GPU allocation."""
         mock_enumerate.return_value = [
             GPUDevice(
-                index=0, name="RTX 3090",
-                total_vram=24 * 1024**3, free_vram=20 * 1024**3,
+                index=0,
+                name="RTX 3090",
+                total_vram=24 * 1024**3,
+                free_vram=20 * 1024**3,
             ),
         ]
 
@@ -343,8 +371,10 @@ class TestGetLlamaGpuParams:
         """Test that InsufficientVRAMError propagates."""
         mock_enumerate.return_value = [
             GPUDevice(
-                index=0, name="GPU",
-                total_vram=4 * 1024**3, free_vram=2 * 1024**3,
+                index=0,
+                name="GPU",
+                total_vram=4 * 1024**3,
+                free_vram=2 * 1024**3,
             ),
         ]
 
@@ -360,12 +390,16 @@ class TestGetLlamaGpuParams:
         """Test that multi-GPU allocation includes tensor_split."""
         mock_enumerate.return_value = [
             GPUDevice(
-                index=0, name="GPU0",
-                total_vram=12 * 1024**3, free_vram=8 * 1024**3,
+                index=0,
+                name="GPU0",
+                total_vram=12 * 1024**3,
+                free_vram=8 * 1024**3,
             ),
             GPUDevice(
-                index=1, name="GPU1",
-                total_vram=12 * 1024**3, free_vram=8 * 1024**3,
+                index=1,
+                name="GPU1",
+                total_vram=12 * 1024**3,
+                free_vram=8 * 1024**3,
             ),
         ]
 

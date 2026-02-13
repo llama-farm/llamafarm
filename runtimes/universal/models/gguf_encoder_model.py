@@ -13,8 +13,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-from utils.gpu_allocator import InsufficientVRAMError, get_llama_gpu_params
 from utils.gguf_metadata_cache import get_gguf_metadata_cached
+from utils.gpu_allocator import InsufficientVRAMError, get_llama_gpu_params
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel

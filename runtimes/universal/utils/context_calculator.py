@@ -170,9 +170,13 @@ def compute_max_context(
         return 512  # Minimal context
 
     # Compute per-token memory cost
-    has_arch_params = all(v is not None for v in [n_layer, n_head_kv, head_k_size, head_v_size])
+    has_arch_params = all(
+        v is not None for v in [n_layer, n_head_kv, head_k_size, head_v_size]
+    )
     if has_arch_params:
-        kv_bytes = compute_kv_bytes_per_token(n_layer, n_head_kv, head_k_size, head_v_size)
+        kv_bytes = compute_kv_bytes_per_token(
+            n_layer, n_head_kv, head_k_size, head_v_size
+        )
         # Add 30% overhead for compute buffers and activation tensors
         bytes_per_token = int(kv_bytes * 1.3)
         logger.debug(

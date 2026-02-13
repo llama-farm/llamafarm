@@ -23,9 +23,9 @@ from utils.context_calculator import compute_kv_bytes_per_token
 logger = logging.getLogger(__name__)
 
 # Split mode constants (match llama.cpp enum llama_split_mode)
-SPLIT_MODE_NONE = 0   # Entire model on main_gpu
+SPLIT_MODE_NONE = 0  # Entire model on main_gpu
 SPLIT_MODE_LAYER = 1  # Split layers across GPUs
-SPLIT_MODE_ROW = 2    # Split rows within layers
+SPLIT_MODE_ROW = 2  # Split rows within layers
 
 
 class InsufficientVRAMError(RuntimeError):
@@ -41,18 +41,18 @@ class GPUDevice:
     index: int
     name: str
     total_vram: int  # bytes
-    free_vram: int   # bytes
+    free_vram: int  # bytes
 
 
 @dataclass
 class GPUAllocation:
     """Result of GPU allocation for a model load."""
 
-    gpu_index: int                        # Primary GPU (-1 if CPU)
-    split_mode: int                       # SPLIT_MODE_* constant
-    main_gpu: int                         # main_gpu param for llama.cpp
-    tensor_split: list[float] | None      # Proportions for multi-GPU split
-    estimated_vram: int                   # Estimated VRAM usage in bytes
+    gpu_index: int  # Primary GPU (-1 if CPU)
+    split_mode: int  # SPLIT_MODE_* constant
+    main_gpu: int  # main_gpu param for llama.cpp
+    tensor_split: list[float] | None  # Proportions for multi-GPU split
+    estimated_vram: int  # Estimated VRAM usage in bytes
 
 
 def enumerate_gpus() -> list[GPUDevice]:
@@ -74,7 +74,9 @@ def enumerate_gpus() -> list[GPUDevice]:
         for i in range(torch.cuda.device_count()):
             free, total = torch.cuda.mem_get_info(i)
             name = torch.cuda.get_device_name(i)
-            devices.append(GPUDevice(index=i, name=name, total_vram=total, free_vram=free))
+            devices.append(
+                GPUDevice(index=i, name=name, total_vram=total, free_vram=free)
+            )
             logger.debug(
                 f"GPU {i} ({name}): {free / (1024**3):.2f} GiB free / "
                 f"{total / (1024**3):.2f} GiB total"
@@ -127,7 +129,9 @@ def estimate_model_vram(
         gpu_weight_bytes = model_size_bytes
 
     # KV cache
-    has_arch = all(v is not None for v in [n_layer, n_head_kv, head_k_size, head_v_size])
+    has_arch = all(
+        v is not None for v in [n_layer, n_head_kv, head_k_size, head_v_size]
+    )
     if has_arch:
         kv_bytes_per_token = compute_kv_bytes_per_token(
             n_layer, n_head_kv, head_k_size, head_v_size
@@ -206,8 +210,7 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
         by_index = sorted(gpus, key=lambda g: g.index)
         viable_indices = {g.index for g in viable_gpus}
         raw_split = [
-            float(g.free_vram) if g.index in viable_indices else 0.0
-            for g in by_index
+            float(g.free_vram) if g.index in viable_indices else 0.0 for g in by_index
         ]
         total = sum(raw_split)
         tensor_split = [v / total for v in raw_split]
