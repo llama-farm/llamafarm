@@ -31,7 +31,8 @@ test_info() {
 # Helper function to check if a package is installed
 check_package() {
     local package=$1
-    local runtime_dir="/Users/rachelradulovich/GitHub/llamafarm-1/runtimes/universal"
+    local runtime_dir
+    runtime_dir="$(cd "$(dirname "$0")" && pwd)/runtimes/universal"
     if uv pip list --python "${runtime_dir}/.venv/bin/python" 2>/dev/null | grep -q "^${package} "; then
         return 0
     else

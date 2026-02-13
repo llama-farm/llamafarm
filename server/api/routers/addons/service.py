@@ -142,14 +142,18 @@ class AddonService:
                 await self._install_directly(task_id, addon_name)
 
             # Restart the affected component (not the server)
+            restart_set_terminal = False
             if restart:
-                await self._restart_component(task_id, addon_name)
+                restart_set_terminal = await self._restart_component(
+                    task_id, addon_name
+                )
 
             reload_addon_registry()
 
-            await self._update_task_status_async(
-                task_id, "completed", 100, "Installation complete"
-            )
+            if not restart_set_terminal:
+                await self._update_task_status_async(
+                    task_id, "completed", 100, "Installation complete"
+                )
 
         except ValueError as e:
             logger.error(f"Validation error installing addon {addon_name}: {e}")
@@ -370,8 +374,11 @@ class AddonService:
 
     # ── Component restart ───────────────────────────────────────────────
 
-    async def _restart_component(self, task_id: str, addon_name: str):
-        """Restart the component affected by an addon install."""
+    async def _restart_component(self, task_id: str, addon_name: str) -> bool:
+        """Restart the component affected by an addon install.
+
+        Returns True if it set a terminal task status (caller should not overwrite).
+        """
         registry = get_addon_registry()
         addon_def = registry.get(addon_name, {})
         component = addon_def.get("component", "")
@@ -381,10 +388,10 @@ class AddonService:
                 "Addon targets server component; skipping automatic restart "
                 "to avoid self-termination. Manual restart required."
             )
-            return
+            return False
 
         if not component:
-            return
+            return False
 
         await self._update_task_status_async(
             task_id, "in_progress", 80, f"Restarting {component}..."
@@ -410,6 +417,7 @@ class AddonService:
                     f"Addon installed but {component} restart failed. "
                     f"Run 'lf services start {component}' manually.",
                 )
+                return True
         except FileNotFoundError:
             logger.warning("CLI not found for restart, manual restart required")
             await self._update_task_status_async(
@@ -419,6 +427,9 @@ class AddonService:
                 f"Addon installed but automatic restart unavailable. "
                 f"Restart {component} manually.",
             )
+            return True
+
+        return False
 
     # ── Path resolution ─────────────────────────────────────────────────
 

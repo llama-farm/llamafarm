@@ -4,6 +4,8 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
+from core.logging import FastAPIStructLogger
+
 from .service import AddonService
 from .types import (
     AddonInfo,
@@ -11,6 +13,8 @@ from .types import (
     AddonInstallResponse,
     AddonTaskStatus,
 )
+
+logger = FastAPIStructLogger()
 
 router = APIRouter(prefix="/v1/addons", tags=["addons"])
 
@@ -57,8 +61,10 @@ async def uninstall_addon(request: AddonInstallRequest):
         await addon_service.uninstall_addon(request.name)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    except FileNotFoundError as e:
-        raise HTTPException(503, str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(500, str(e)) from e
+    except FileNotFoundError:
+        logger.exception(f"Service unavailable during uninstall of {request.name}")
+        raise HTTPException(503, "Required service component is unavailable") from None
+    except RuntimeError:
+        logger.exception(f"Uninstall failed for {request.name}")
+        raise HTTPException(500, "Addon uninstall failed") from None
     return {"status": "success"}

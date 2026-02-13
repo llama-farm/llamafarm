@@ -71,14 +71,22 @@ export function AddonInstallSidePane({
     return isDependency
   })
 
-  // Get dependencies only for selected addons
-  const selectedDependencies = dependencyAddons.filter(dep => {
-    // Include dependency if any selected addon depends on it
-    return Array.from(selectedAddons).some(selectedName => {
-      const selectedAddon = addons.find(a => a.name === selectedName)
-      return selectedAddon?.dependencies.includes(dep.name)
-    })
-  })
+  // Get full dependency closure for selected addons (includes transitive deps)
+  const selectedDependencies = (() => {
+    const needed = new Set<string>()
+    const collect = (addonName: string) => {
+      const addon = addons.find(a => a.name === addonName)
+      if (!addon) return
+      for (const depName of addon.dependencies) {
+        if (!needed.has(depName)) {
+          needed.add(depName)
+          collect(depName) // recurse for transitive deps
+        }
+      }
+    }
+    selectedAddons.forEach(name => collect(name))
+    return dependencyAddons.filter(dep => needed.has(dep.name))
+  })()
 
   // Calculate size based on selected addons + their dependencies
   const estimatedSize = (() => {
@@ -155,9 +163,7 @@ export function AddonInstallSidePane({
       {/* Side Panel */}
       <div
         className={`fixed right-0 top-0 bottom-0 w-[440px] z-[70] bg-background border-l border-border/50 shadow-2xl
-          transform transition-transform duration-300 ease-out ${
-            open ? 'translate-x-0' : 'translate-x-full'
-          }`}
+          transform transition-transform duration-300 ease-out translate-x-0`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="addon-panel-title"
