@@ -20,6 +20,7 @@ from utils.context_calculator import get_default_context_size
 from utils.context_manager import ContextBudget, ContextManager, ContextUsage
 from utils.gguf_metadata_cache import get_gguf_metadata_cached
 from utils.gpu_allocator import (
+    SPLIT_MODE_LAYER,
     SPLIT_MODE_NONE,
     InsufficientVRAMError,
     get_llama_gpu_params,
@@ -318,14 +319,14 @@ class GGUFLanguageModel(BaseModel):
                     f"split_mode={gpu_params.get('split_mode')}, "
                     f"gpu_index={gpu_idx}"
                 )
-                # Re-compute context size using the allocated GPU's actual free
-                # memory, but only for single-GPU placement. For multi-GPU splits,
-                # memory is distributed across devices so single-GPU free VRAM
-                # doesn't represent the real constraint.
-                if (
-                    gpu_idx is not None
-                    and gpu_params.get("split_mode") == SPLIT_MODE_NONE
-                ):
+                # Re-compute context size using the allocated GPU memory.
+                # - Single-GPU (SPLIT_MODE_NONE): use the specific GPU's
+                #   free VRAM via gpu_index.
+                # - Multi-GPU (SPLIT_MODE_LAYER): use the combined free VRAM
+                #   across all participating devices, since both model weights
+                #   and KV cache are distributed proportionally.
+                split_mode = gpu_params.get("split_mode")
+                if split_mode == SPLIT_MODE_NONE and gpu_idx is not None:
                     new_n_ctx, new_warnings = get_default_context_size(
                         model_id=self.model_id,
                         gguf_path=gguf_path,
@@ -333,24 +334,38 @@ class GGUFLanguageModel(BaseModel):
                         config_n_ctx=self.requested_n_ctx,
                         gpu_index=gpu_idx,
                     )
-                    if new_n_ctx != self.actual_n_ctx:
-                        logger.info(
-                            f"Context size adjusted for GPU {gpu_idx}: "
-                            f"{self.actual_n_ctx} -> {new_n_ctx}"
-                        )
-                        self.actual_n_ctx = new_n_ctx
-                        for w in new_warnings:
-                            logger.warning(w)
+                elif split_mode == SPLIT_MODE_LAYER:
+                    new_n_ctx, new_warnings = get_default_context_size(
+                        model_id=self.model_id,
+                        gguf_path=gguf_path,
+                        device=self.device,
+                        config_n_ctx=self.requested_n_ctx,
+                        available_memory_override=gpu_params["total_free_vram"],
+                    )
+                else:
+                    new_n_ctx, new_warnings = self.actual_n_ctx, []
+
+                if new_n_ctx != self.actual_n_ctx:
+                    label = (
+                        f"GPU {gpu_idx}"
+                        if split_mode == SPLIT_MODE_NONE
+                        else "multi-GPU split"
+                    )
+                    logger.info(
+                        f"Context size adjusted for {label}: "
+                        f"{self.actual_n_ctx} -> {new_n_ctx}"
+                    )
+                    self.actual_n_ctx = new_n_ctx
+                    for w in new_warnings:
+                        logger.warning(w)
             else:
                 logger.debug("No CUDA GPUs detected, using default GPU allocation")
         except InsufficientVRAMError as e:
-            logger.error(f"GPU allocation failed: {e}")
-            raise RuntimeError(
-                "Insufficient GPU memory to load model. "
-                "Consider unloading other models, reducing context size, "
-                "or using a smaller quantization. "
-                "Check logs for detailed GPU memory information."
-            ) from e
+            if e.gpu_details:
+                logger.error(f"GPU allocation failed:\n{e.gpu_details}")
+            else:
+                logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(str(e)) from e
         except Exception as e:
             logger.warning(f"GPU allocation failed, using defaults: {e}")
 

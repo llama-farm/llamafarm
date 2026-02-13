@@ -29,9 +29,16 @@ SPLIT_MODE_ROW = 2  # Split rows within layers
 
 
 class InsufficientVRAMError(RuntimeError):
-    """Raised when no GPU configuration has enough VRAM for the model."""
+    """Raised when no GPU configuration has enough VRAM for the model.
 
-    pass
+    The user-facing message is intentionally generic to avoid exposing
+    internal GPU inventory details.  Detailed diagnostics are stored in
+    ``self.gpu_details`` for server-side logging.
+    """
+
+    def __init__(self, message: str, gpu_details: str = ""):
+        super().__init__(message)
+        self.gpu_details = gpu_details
 
 
 @dataclass
@@ -53,6 +60,7 @@ class GPUAllocation:
     main_gpu: int  # main_gpu param for llama.cpp
     tensor_split: list[float] | None  # Proportions for multi-GPU split
     estimated_vram: int  # Estimated VRAM usage in bytes
+    total_free_vram: int  # Combined free VRAM across viable GPUs (bytes)
 
 
 def enumerate_gpus() -> list[GPUDevice]:
@@ -195,6 +203,7 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
             main_gpu=best.index,
             tensor_split=None,
             estimated_vram=estimated_vram,
+            total_free_vram=best.free_vram,
         )
 
     # Strategy 2: Multi-GPU split
@@ -202,7 +211,28 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
     # non-splittable overhead (compute buffers, scratch space). A GPU
     # needs at least 512 MiB free to participate usefully in a split.
     min_participation = 512 * 1024**2  # 512 MiB
+    # Per-GPU fixed overhead for compute buffers and scratch space that
+    # llama.cpp allocates on each device regardless of split fraction.
+    per_gpu_overhead = 256 * 1024**2  # 256 MiB
     viable_gpus = [g for g in gpus if g.free_vram >= min_participation]
+
+    # Iteratively prune GPUs whose free VRAM cannot cover their
+    # proportional share of the model plus per-device fixed overhead.
+    # Use estimated_vram (not required) for per-device checks — the 10%
+    # safety margin is already enforced globally via total_free >= required.
+    pruned = True
+    while pruned and len(viable_gpus) > 1:
+        pruned = False
+        total_free = sum(g.free_vram for g in viable_gpus)
+        if total_free < required:
+            break
+        for g in viable_gpus:
+            share = (g.free_vram / total_free) * estimated_vram
+            if share + per_gpu_overhead > g.free_vram:
+                viable_gpus = [v for v in viable_gpus if v.index != g.index]
+                pruned = True
+                break
+
     total_free = sum(g.free_vram for g in viable_gpus)
 
     if total_free >= required and len(viable_gpus) > 1:
@@ -230,6 +260,7 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
             main_gpu=sorted_gpus[0].index,
             tensor_split=tensor_split,
             estimated_vram=estimated_vram,
+            total_free_vram=total_free,
         )
 
     # Strategy 3: Insufficient VRAM
@@ -238,12 +269,17 @@ def allocate_gpu(estimated_vram: int, gpus: list[GPUDevice]) -> GPUAllocation:
         f"{g.total_vram / (1024**3):.2f} GiB total"
         for g in sorted_gpus
     )
-    raise InsufficientVRAMError(
-        f"Insufficient GPU memory to load model.\n"
+    details = (
         f"Estimated VRAM needed: {estimated_vram / (1024**3):.2f} GiB\n"
         f"Available GPUs:\n{gpu_desc}\n"
-        f"Combined free: {total_free / (1024**3):.2f} GiB\n"
-        f"Consider: unloading other models, reducing context size, or using a smaller quantization."
+        f"Combined free: {total_free / (1024**3):.2f} GiB"
+    )
+    logger.error(f"Insufficient GPU memory to load model.\n{details}")
+    raise InsufficientVRAMError(
+        "Insufficient GPU memory to load model. "
+        "Consider unloading other models, reducing context size, "
+        "or using a smaller quantization.",
+        gpu_details=details,
     )
 
 
@@ -305,6 +341,7 @@ def get_llama_gpu_params(
         "main_gpu": allocation.main_gpu,
         "split_mode": allocation.split_mode,
         "gpu_index": allocation.gpu_index,
+        "total_free_vram": allocation.total_free_vram,
     }
     if allocation.tensor_split is not None:
         result["tensor_split"] = allocation.tensor_split

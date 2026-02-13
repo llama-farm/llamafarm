@@ -283,6 +283,47 @@ class TestAllocateGpu:
         with pytest.raises(InsufficientVRAMError):
             allocate_gpu(estimated_vram=10 * 1024**3, gpus=gpus)
 
+    def test_multi_gpu_prunes_infeasible_device(self):
+        """Test that a GPU passing min_participation but failing per-device
+        feasibility is pruned from the split, leaving the remaining GPUs
+        to handle it.
+        """
+        gpus = [
+            GPUDevice(
+                index=0,
+                name="Big GPU A",
+                total_vram=24 * 1024**3,
+                free_vram=10 * 1024**3,
+            ),
+            GPUDevice(
+                index=1,
+                name="Big GPU B",
+                total_vram=24 * 1024**3,
+                free_vram=8 * 1024**3,
+            ),
+            GPUDevice(
+                index=2,
+                name="Near-full GPU",
+                total_vram=8 * 1024**3,
+                free_vram=700 * 1024**2,  # 700 MiB - above 512 MiB threshold
+            ),
+        ]
+
+        # 16 GiB estimated → required = 16 * 1.1 = 17.6 GiB
+        # All three combined: 10 + 8 + 0.68 = 18.68 GiB >= 17.6 ✓
+        # GPU 2's fraction: 700/(10240+8192+700) ≈ 3.7%
+        # GPU 2's share: 3.7% * 17.6 GiB ≈ 650 MiB
+        # GPU 2's share + 256 MiB overhead ≈ 906 MiB > 700 MiB → pruned
+        # After pruning: GPU 0 (10) + GPU 1 (8) = 18 GiB >= 17.6 GiB ✓
+        allocation = allocate_gpu(estimated_vram=16 * 1024**3, gpus=gpus)
+
+        assert allocation.split_mode == SPLIT_MODE_LAYER
+        # GPU 2 should be excluded (zero in tensor_split)
+        assert allocation.tensor_split[2] == 0.0
+        # GPUs 0 and 1 should have non-zero splits
+        assert allocation.tensor_split[0] > 0.0
+        assert allocation.tensor_split[1] > 0.0
+
     def test_rtx3090_m4000_scenario(self):
         """Test the exact RTX 3090 + Quadro M4000 multi-model scenario.
 

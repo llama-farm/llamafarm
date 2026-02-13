@@ -100,13 +100,18 @@ class GGUFEncoderModel(BaseModel):
 
         n_gpu_layers = get_gguf_gpu_layers()
 
+        # Embedding models use a small, fixed context window.  This value
+        # is shared between the VRAM estimator and the Llama() constructor
+        # so that the allocation decision matches actual memory usage.
+        embedding_n_ctx = 512
+
         # GPU allocation: select optimal GPU based on free VRAM
         gpu_params = {}
         try:
             metadata = get_gguf_metadata_cached(gguf_path)
             gpu_params = get_llama_gpu_params(
                 model_size_bytes=metadata.file_size_bytes,
-                n_ctx=512,  # Embedding models use small context
+                n_ctx=embedding_n_ctx,
                 n_gpu_layers=n_gpu_layers,
                 total_layers=metadata.n_layer,
                 n_layer=metadata.n_layer,
@@ -122,12 +127,11 @@ class GGUFEncoderModel(BaseModel):
             else:
                 logger.debug("No CUDA GPUs detected, using default GPU allocation")
         except InsufficientVRAMError as e:
-            logger.error(f"GPU allocation failed: {e}")
-            raise RuntimeError(
-                "Insufficient GPU memory to load model. "
-                "Consider unloading other models or using a smaller quantization. "
-                "Check logs for detailed GPU memory information."
-            ) from e
+            if e.gpu_details:
+                logger.error(f"GPU allocation failed:\n{e.gpu_details}")
+            else:
+                logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(str(e)) from e
         except Exception as e:
             logger.warning(f"GPU allocation failed, using defaults: {e}")
 
@@ -156,7 +160,7 @@ class GGUFEncoderModel(BaseModel):
             return Llama(
                 model_path=gguf_path,
                 embedding=True,  # Enable embedding mode
-                n_ctx=512,  # Small context for embeddings (matches VRAM estimate)
+                n_ctx=embedding_n_ctx,
                 n_gpu_layers=n_gpu_layers,
                 n_threads=None,  # Auto-detect optimal threads
                 verbose=False,  # Disable verbose logging

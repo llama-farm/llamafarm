@@ -312,6 +312,7 @@ def get_default_context_size(
     device: str,
     config_n_ctx: int | None = None,
     gpu_index: int | None = None,
+    available_memory_override: int | None = None,
 ) -> tuple[int, list[str]]:
     """Determine context size with four-tier priority system.
 
@@ -330,6 +331,10 @@ def get_default_context_size(
         device: Target device ("cuda", "mps", "cpu")
         config_n_ctx: Optional explicit context size from config
         gpu_index: Specific CUDA GPU index for memory queries. If None, uses GPU 0.
+        available_memory_override: Pre-computed available memory in bytes.
+            When provided, skips the ``get_available_memory()`` query.  Used
+            for multi-GPU splits where the effective memory is the combined
+            free VRAM across all participating devices.
 
     Returns:
         tuple of (final_n_ctx, warnings_list)
@@ -355,7 +360,10 @@ def get_default_context_size(
 
         # Get model metadata and compute memory constraints
         metadata = get_gguf_metadata(gguf_path)
-        available_memory = get_available_memory(device, gpu_index=gpu_index)
+        if available_memory_override is not None:
+            available_memory = available_memory_override
+        else:
+            available_memory = get_available_memory(device, gpu_index=gpu_index)
         max_context_from_memory = compute_max_context(
             metadata["file_size_bytes"],
             available_memory,
