@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AddonInfo(BaseModel):
@@ -13,8 +13,8 @@ class AddonInfo(BaseModel):
     description: str
     component: str
     version: str
-    dependencies: list[str] = []
-    packages: list[str] = []
+    dependencies: list[str] = Field(default_factory=list)
+    packages: list[str] = Field(default_factory=list)
     installed: bool = False
     installed_at: datetime | None = None
 

@@ -2,7 +2,8 @@
 # Script to restart the universal-runtime service
 # This runs in the background so it doesn't block the server
 
-RUNTIME_DIR="/Users/rachelradulovich/GitHub/llamafarm-1/runtimes/universal"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RUNTIME_DIR="${SCRIPT_DIR}/runtimes/universal"
 RUNTIME_PORT=11540
 LOG_FILE="/tmp/runtime-restart.log"
 

@@ -39,6 +39,7 @@ class AddonService:
     def __init__(self):
         self.task_statuses: dict[str, AddonTaskStatus] = {}
         self.task_status_lock = asyncio.Lock()
+        self.install_lock = asyncio.Lock()
         self.state_file = Path(settings.lf_data_dir) / "addons.json"
         self.tasks_dir = Path(settings.lf_data_dir) / "addon-tasks"
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -97,63 +98,17 @@ class AddonService:
         try:
             self._validate_addon_name(addon_name)
 
-            await self._update_task_status_async(
-                task_id, "in_progress", 0, "Starting installation..."
-            )
-
-            # Try CLI-based install first (pre-built wheel bundles from releases)
-            cli_success = False
-            try:
-                cli_path = self._find_cli_binary()
+            if self.install_lock.locked():
                 await self._update_task_status_async(
-                    task_id, "in_progress", 10, "Downloading addon packages..."
+                    task_id,
+                    "failed",
+                    0,
+                    "Another install/uninstall operation is in progress",
                 )
+                return
 
-                result = await asyncio.to_thread(
-                    subprocess.run,
-                    [cli_path, "addons", "install", "--no-restart", addon_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                )
-
-                if result.returncode == 0:
-                    cli_success = True
-                    install_output = result.stdout.strip()
-                    await self._update_task_status_async(
-                        task_id,
-                        "in_progress",
-                        70,
-                        f"Addon installed. {self._summarize_output(install_output)}",
-                    )
-                else:
-                    error_msg = (result.stderr or result.stdout or "").strip()
-                    logger.warning(
-                        f"CLI install failed for {addon_name}, "
-                        f"falling back to direct install: {error_msg}"
-                    )
-            except FileNotFoundError:
-                logger.warning("CLI binary not found, falling back to direct install")
-            except subprocess.TimeoutExpired:
-                logger.warning("CLI install timed out, falling back to direct install")
-
-            # Fall back to direct package installation via uv
-            if not cli_success:
-                await self._install_directly(task_id, addon_name)
-
-            # Restart the affected component (not the server)
-            restart_set_terminal = False
-            if restart:
-                restart_set_terminal = await self._restart_component(
-                    task_id, addon_name
-                )
-
-            reload_addon_registry()
-
-            if not restart_set_terminal:
-                await self._update_task_status_async(
-                    task_id, "completed", 100, "Installation complete"
-                )
+            async with self.install_lock:
+                await self._do_install(task_id, addon_name, restart)
 
         except ValueError as e:
             logger.error(f"Validation error installing addon {addon_name}: {e}")
@@ -166,6 +121,66 @@ class AddonService:
                 task_id, "failed", 0, "Installation failed", str(e)
             )
 
+    async def _do_install(self, task_id: str, addon_name: str, restart: bool):
+        """Inner install logic, called under install_lock."""
+        await self._update_task_status_async(
+            task_id, "in_progress", 0, "Starting installation..."
+        )
+
+        # Try CLI-based install first (pre-built wheel bundles from releases)
+        cli_success = False
+        try:
+            cli_path = self._find_cli_binary()
+            await self._update_task_status_async(
+                task_id, "in_progress", 10, "Downloading addon packages..."
+            )
+
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [cli_path, "addons", "install", "--no-restart", addon_name],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+
+            if result.returncode == 0:
+                cli_success = True
+                install_output = result.stdout.strip()
+                await self._update_task_status_async(
+                    task_id,
+                    "in_progress",
+                    70,
+                    f"Addon installed. {self._summarize_output(install_output)}",
+                )
+            else:
+                error_msg = (result.stderr or result.stdout or "").strip()
+                logger.warning(
+                    f"CLI install failed for {addon_name}, "
+                    f"falling back to direct install: {error_msg}"
+                )
+        except FileNotFoundError:
+            logger.warning("CLI binary not found, falling back to direct install")
+        except subprocess.TimeoutExpired:
+            logger.warning("CLI install timed out, falling back to direct install")
+
+        # Fall back to direct package installation via uv
+        if not cli_success:
+            await self._install_directly(task_id, addon_name)
+
+        # Restart the affected component (not the server)
+        restart_set_terminal = False
+        if restart:
+            restart_set_terminal = await self._restart_component(
+                task_id, addon_name
+            )
+
+        reload_addon_registry()
+
+        if not restart_set_terminal:
+            await self._update_task_status_async(
+                task_id, "completed", 100, "Installation complete"
+            )
+
     async def uninstall_addon(self, addon_name: str):
         """Uninstall an addon.
 
@@ -175,6 +190,11 @@ class AddonService:
         """
         self._validate_addon_name(addon_name)
 
+        async with self.install_lock:
+            await self._do_uninstall(addon_name)
+
+    async def _do_uninstall(self, addon_name: str):
+        """Inner uninstall logic, called under install_lock."""
         registry = get_addon_registry()
         addon_def = registry.get(addon_name, {})
         component = addon_def.get("component", "")
