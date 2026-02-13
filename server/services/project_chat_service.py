@@ -202,6 +202,7 @@ class ProjectChatService:
             rag_top_k=rag_top_k,
             rag_score_threshold=rag_score_threshold,
             rag_queries=rag_queries,
+            model_config=model_config,
         )
 
         # Extract results from context provider to log completion metrics
@@ -572,9 +573,14 @@ class ProjectChatService:
         """
         # Step 0: Determine if RAG is enabled
         # Priority: request > model config > project default
-        if rag_enabled is None and model_config and getattr(model_config, "rag_enabled", None) is not None:
-            rag_enabled = model_config.rag_enabled
-            logger.info(f"RAG {'enabled' if rag_enabled else 'disabled'} by model config")
+        if rag_enabled is None and model_config:
+            model_rag = getattr(model_config, "rag_enabled", None)
+            if model_rag is not None:
+                rag_enabled = model_rag
+                logger.info(
+                    "RAG %s by model config",
+                    "enabled" if rag_enabled else "disabled",
+                )
         if rag_enabled is None:
             rag_enabled = bool(project_config.rag and project_config.rag.databases)
             if rag_enabled:
@@ -583,8 +589,14 @@ class ProjectChatService:
         if not rag_enabled or not project_config.rag:
             return RAGParameters(rag_enabled=False)
 
-        # Step 1: Resolve database (request > model.target_database > default_database > first database)
-        if database is None and model_config and getattr(model_config, "target_database", None):
+        # Step 1: Resolve database
+        # request > model.target_database > default_database > first db
+        model_db = (
+            getattr(model_config, "target_database", None)
+            if model_config
+            else None
+        )
+        if database is None and model_db:
             database = model_config.target_database
             logger.info(f"Using model target_database: {database}")
         if database is None:
@@ -786,6 +798,7 @@ class ProjectChatService:
         rag_top_k: int | None = None,
         rag_score_threshold: float | None = None,
         rag_queries: list[str] | None = None,
+        model_config=None,
     ) -> None:
         self._clear_rag_context_provider(chat_agent)
         context_provider = RAGContextProvider(title="Project Chat Context")
@@ -794,6 +807,7 @@ class ProjectChatService:
         # Resolve RAG parameters using shared helper
         rag_params = self._resolve_rag_parameters(
             project_config,
+            model_config=model_config,
             rag_enabled=rag_enabled,
             database=database,
             retrieval_strategy=retrieval_strategy,

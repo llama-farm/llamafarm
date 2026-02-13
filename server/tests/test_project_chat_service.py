@@ -274,7 +274,7 @@ class TestProjectChatService:
         assert not params.rag_enabled
 
     def test_resolve_rag_model_config_enables_rag(self, config_with_rag):
-        """Test that model-level rag_enabled=True enables RAG even when request doesn't specify."""
+        """Model rag_enabled=True enables RAG when request omits it."""
         model_cfg = Model(
             name="rag-model",
             provider=Provider.openai,
@@ -292,7 +292,7 @@ class TestProjectChatService:
         assert params.database == "main_db"
 
     def test_resolve_rag_model_config_disables_rag(self, config_with_rag):
-        """Test that model-level rag_enabled=False disables RAG."""
+        """Model rag_enabled=False disables RAG."""
         model_cfg = Model(
             name="no-rag-model",
             provider=Provider.openai,
@@ -308,7 +308,7 @@ class TestProjectChatService:
         assert not params.rag_enabled
 
     def test_resolve_rag_request_overrides_model(self, config_with_rag):
-        """Test that request-level rag_enabled overrides model-level."""
+        """Request rag_enabled overrides model-level."""
         model_cfg = Model(
             name="rag-model",
             provider=Provider.openai,
@@ -324,7 +324,7 @@ class TestProjectChatService:
         assert params.rag_enabled
 
     def test_resolve_rag_model_target_database(self, config_with_rag):
-        """Test that model-level target_database overrides project default."""
+        """Model target_database overrides project default."""
         model_cfg = Model(
             name="rag-model",
             provider=Provider.openai,
@@ -342,7 +342,7 @@ class TestProjectChatService:
         assert params.database == "main_db"
 
     def test_resolve_rag_request_database_overrides_model(self, config_with_rag):
-        """Test that request-level database overrides model target_database."""
+        """Request database overrides model target_database."""
         model_cfg = Model(
             name="rag-model",
             provider=Provider.openai,
