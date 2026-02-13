@@ -11,8 +11,8 @@ dependencies = [
   "fastapi>=0.104.0",
   "uvicorn[standard]>=0.24.0",
   "pydantic>=2.0.0",
-  "pillow>=10.0.0",
-  "python-multipart",
+  "pillow>=12.1.1",
+  "python-multipart>=0.0.22",
   "einops>=0.8.1",
   "openai>=1.0.0",
   "llamafarm-common",
@@ -25,7 +25,7 @@ dependencies = [
   "pymupdf>=1.26.6", # Required for PDF file uploads
   # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
-  "protobuf>=5.29.3",
+  "protobuf>=6.33.5",
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",    # TTL-based model caching
   "jinja2>=3.0.0",        # For tool-aware chat template rendering
@@ -55,14 +55,14 @@ dev = [
   "httpx>=0.24.0",
   "numpy>=1.24.0",
   # For testing: torch will use CPU wheels via UV_EXTRA_INDEX_URL in CI
-  "torch>=2.0.0",
+  "torch>=2.6.0",
 ]
 
 [project.optional-dependencies]
 # Hardware-accelerated packages installed separately via CLI based on detected hardware
 # These are not installed during 'uv sync' to avoid compilation dependencies
 # Note: torch is now in dev group for testing
-gpu = ["torch>=2.0.0"]
+gpu = ["torch>=2.6.0"]
 # xformers is GPU-only and must be installed manually when needed:
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
@@ -166,12 +166,13 @@ index-url = "https://pypi.org/simple"
 
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
+  "pillow>=12.1.1",     # Override surya-ocr's pillow<11 cap to fix CVE-2026-25990
   "numpy>=1.24.0,<2.4", # numba (via librosa) requires numpy<2.4
   # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
-  "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-  "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
-  "torchaudio>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-  "torchaudio>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  # Note: torch >=2.6.0 required to fix CVE (torch.load RCE). Intel Mac is excluded from
+  # security override since PyTorch dropped Intel Mac support after 2.2.2.
+  "torch>=2.6.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torchaudio>=2.6.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "transformers>=4.35.0",                                                                 # chatterbox pins ==4.46.3
 ]
 
