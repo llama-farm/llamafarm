@@ -178,6 +178,7 @@ index-url = "https://pypi.org/simple"
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
   "numpy>=1.24.0,<2.4", # numba (via librosa) requires numpy<2.4
+  "numba>=0.50.0",       # alibi-detect pins <0.60 but works fine with newer; mlx-audio needs >=0.60
   # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
   "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
