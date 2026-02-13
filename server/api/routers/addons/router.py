@@ -53,5 +53,12 @@ async def get_task_status(task_id: str):
 @router.post("/uninstall")
 async def uninstall_addon(request: AddonInstallRequest):
     """Uninstall an addon."""
-    await addon_service.uninstall_addon(request.name)
+    try:
+        await addon_service.uninstall_addon(request.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(500, str(e)) from e
     return {"status": "success"}
