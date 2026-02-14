@@ -11,7 +11,7 @@ dependencies = [
   "fastapi>=0.104.0",
   "uvicorn[standard]>=0.24.0",
   "pydantic>=2.0.0",
-  "pillow>=12.1.1",
+  "pillow>=10.0.0",
   "python-multipart>=0.0.22",
   "einops>=0.8.1",
   "openai>=1.0.0",
@@ -166,7 +166,7 @@ index-url = "https://pypi.org/simple"
 
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
-  "pillow>=12.1.1",     # Override surya-ocr's pillow<11 cap to fix CVE-2026-25990
+  "pillow>=10.0.0",     # Override surya-ocr's pillow<11 cap; >=10.0.0 for PyTorch CPU index compat
   "numpy>=1.24.0,<2.4", # numba (via librosa) requires numpy<2.4
   # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
   # Note: torch >=2.6.0 required to fix CVE (torch.load RCE). Intel Mac is excluded from

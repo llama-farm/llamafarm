@@ -33,7 +33,7 @@ supported-markers = [
 [manifest]
 overrides = [
     { name = "numpy", specifier = ">=1.24.0,<2.4" },
-    { name = "pillow", specifier = ">=12.1.1" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "torch", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'", specifier = ">=2.6.0" },
     { name = "torchaudio", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'", specifier = ">=2.6.0" },
     { name = "transformers", specifier = ">=4.35.0" },
@@ -5254,7 +5254,7 @@ requires-dist = [
     { name = "opencv-python-headless", marker = "extra == 'ocr'", specifier = ">=4.8.0" },
     { name = "opencv-python-headless", marker = "extra == 'ocr-easyocr'", specifier = ">=4.8.0" },
     { name = "paddleocr", marker = "extra == 'ocr-paddleocr'", specifier = ">=2.7.0" },
-    { name = "pillow", specifier = ">=12.1.1" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "pocket-tts", marker = "extra == 'tts'", specifier = ">=1.0.3" },
     { name = "polars", specifier = ">=1.0.0" },
     { name = "protobuf", specifier = ">=6.33.5" },
