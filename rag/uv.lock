@@ -1990,7 +1990,7 @@ requires-dist = [
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "docx2txt", specifier = ">=0.9" },
     { name = "faiss-cpu", marker = "extra == 'vector-dbs'", specifier = ">=1.7.4" },
-    { name = "filelock", specifier = ">=3.20.3" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "lancedb", marker = "extra == 'vector-dbs'", specifier = ">=0.3.0" },
@@ -2099,7 +2099,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "filelock", specifier = ">=3.20.3" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "huggingface-hub", specifier = ">=0.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

@@ -52,7 +52,7 @@ dependencies = [
   "aiohttp>=3.13.3",
   "starlette>=0.49.1",
   "python-multipart>=0.0.22",  # Security fix: arbitrary file write via non-default config
-  "filelock>=3.20.3",
+  "filelock>=3.16.1",
   "virtualenv>=20.36.1",  # Security fix: TOCTOU vulnerability in directory creation
   "numpy>=1.26.0",  # Required by voice/vad.py for audio processing
 ]

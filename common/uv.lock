@@ -231,7 +231,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "filelock", specifier = ">=3.20.3" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "huggingface-hub", specifier = ">=0.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },

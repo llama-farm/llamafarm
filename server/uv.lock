@@ -812,7 +812,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "filelock", specifier = ">=3.20.3" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "hf-transfer", specifier = ">=0.1.9" },
     { name = "huggingface-hub", specifier = ">=0.24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
@@ -1707,7 +1707,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "fastapi-mcp", specifier = ">=0.4.0" },
-    { name = "filelock", specifier = ">=3.20.3" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.25.0" },
     { name = "huggingface-hub", specifier = ">=1.0.1" },
     { name = "instructor", specifier = ">=1.0.0" },
