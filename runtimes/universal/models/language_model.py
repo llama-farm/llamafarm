@@ -8,10 +8,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from threading import Thread
-from typing import TYPE_CHECKING, cast
-
-if TYPE_CHECKING:
-    pass
+from typing import cast
 
 from .base import BaseModel
 
