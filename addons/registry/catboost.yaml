@@ -1,0 +1,18 @@
+# CatBoost Gradient Boosting Addon
+#
+# Provides gradient boosting with native categorical feature support using CatBoost.
+# Supports classification and regression, incremental learning via .update(),
+# feature importance, and GPU acceleration.
+
+name: catboost
+display_name: CatBoost Gradient Boosting
+description: Gradient boosting with native categorical support and incremental learning
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - catboost>=1.2.0
+
+hardware_notes:
+  cuda: CatBoost supports native CUDA GPU acceleration for training
+  cpu: CPU training works well, especially with ordered boosting

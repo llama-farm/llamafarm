@@ -7,9 +7,13 @@ These tests verify:
 - Model save/load operations
 - Helper functions
 """
+# ruff: noqa: E402  # imports must come after pytest.importorskip
+
+import pytest
+
+alibi_detect = pytest.importorskip("alibi_detect", reason="drift addon not installed")
 
 import numpy as np
-import pytest
 
 from api_types.drift import (
     DriftDetectRequest,

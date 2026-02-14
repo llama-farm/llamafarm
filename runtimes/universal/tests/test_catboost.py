@@ -7,11 +7,15 @@ Tests CatBoost gradient boosting functionality including:
 - Model save/load
 - API types
 """
+# ruff: noqa: E402  # imports must come after pytest.importorskip
+
+import pytest
+
+catboost = pytest.importorskip("catboost", reason="catboost addon not installed")
 
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from api_types.catboost import (
     CatBoostFeatureImportance,

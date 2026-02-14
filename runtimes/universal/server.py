@@ -20,6 +20,7 @@ Environment Variables:
 """
 
 import asyncio
+import importlib.util
 import os
 import warnings
 from contextlib import asynccontextmanager, suppress
@@ -43,12 +44,6 @@ from models import (
     TTSModel,
     VoiceProfile,
 )
-from models.adtk_model import ADTKModel
-from models.catboost_model import CatBoostModel
-from models.drift_model import DriftModel
-from models.timeseries_model import TimeseriesModel
-from routers.adtk import router as adtk_router
-from routers.adtk import set_adtk_loader, set_adtk_state
 from routers.anomaly import (
     router as anomaly_router,
 )
@@ -62,8 +57,6 @@ from routers.audio import router as audio_router
 from routers.audio import set_speech_loader
 from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
-from routers.catboost import router as catboost_router
-from routers.catboost import set_catboost_state
 from routers.chat_completions import router as chat_completions_router
 from routers.classifier import (
     router as classifier_router,
@@ -77,8 +70,6 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
-from routers.drift import router as drift_router
-from routers.drift import set_drift_loader, set_drift_state
 from routers.explain import router as explain_router
 from routers.explain import set_explain_state, set_model_getter
 from routers.files import router as files_router
@@ -92,15 +83,6 @@ from routers.health import (
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
 from routers.polars import router as polars_router
-from routers.timeseries import (
-    router as timeseries_router,
-)
-from routers.timeseries import (
-    set_state as set_timeseries_state,
-)
-from routers.timeseries import (
-    set_timeseries_loader,
-)
 from routers.vision import (
     router as vision_router,
 )
@@ -115,6 +97,33 @@ from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
+
+# --- Addon-based routers (conditionally loaded) ---
+# These features are installed via `lf addon install <name>`
+_HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
+_HAS_ADTK = importlib.util.find_spec("adtk") is not None
+_HAS_DRIFT = importlib.util.find_spec("alibi_detect") is not None
+_HAS_CATBOOST = importlib.util.find_spec("catboost") is not None
+
+if _HAS_TIMESERIES:
+    from models.timeseries_model import TimeseriesModel  # noqa: E402
+    from routers.timeseries import router as timeseries_router  # noqa: E402
+    from routers.timeseries import set_state as set_timeseries_state  # noqa: E402
+    from routers.timeseries import set_timeseries_loader  # noqa: E402
+
+if _HAS_ADTK:
+    from models.adtk_model import ADTKModel  # noqa: E402
+    from routers.adtk import router as adtk_router  # noqa: E402
+    from routers.adtk import set_adtk_loader, set_adtk_state  # noqa: E402
+
+if _HAS_DRIFT:
+    from models.drift_model import DriftModel  # noqa: E402
+    from routers.drift import router as drift_router  # noqa: E402
+    from routers.drift import set_drift_loader, set_drift_state  # noqa: E402
+
+if _HAS_CATBOOST:
+    from routers.catboost import router as catboost_router  # noqa: E402
+    from routers.catboost import set_catboost_state  # noqa: E402
 
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
@@ -263,6 +272,19 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Universal Runtime")
 
+    # Log addon availability
+    _addons = {
+        "timeseries": _HAS_TIMESERIES,
+        "adtk": _HAS_ADTK,
+        "drift": _HAS_DRIFT,
+        "catboost": _HAS_CATBOOST,
+    }
+    _installed = [k for k, v in _addons.items() if v]
+    if _installed:
+        logger.info(f"Addons loaded: {', '.join(_installed)}")
+    else:
+        logger.info("No ML addons installed (install via: lf addon install <name>)")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -324,11 +346,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include all routers
-app.include_router(adtk_router)
+# Include core routers (always available)
 app.include_router(anomaly_router)
-app.include_router(catboost_router)
-app.include_router(drift_router)
 app.include_router(explain_router)
 app.include_router(audio_router)
 app.include_router(audio_speech_router)
@@ -339,8 +358,17 @@ app.include_router(files_router)
 app.include_router(health_router)
 app.include_router(nlp_router)
 app.include_router(polars_router)
-app.include_router(timeseries_router)
 app.include_router(vision_router)
+
+# Include addon routers (available when addon is installed)
+if _HAS_TIMESERIES:
+    app.include_router(timeseries_router)
+if _HAS_ADTK:
+    app.include_router(adtk_router)
+if _HAS_DRIFT:
+    app.include_router(drift_router)
+if _HAS_CATBOOST:
+    app.include_router(catboost_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -353,10 +381,6 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
-_timeseries: ModelCache["TimeseriesModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
-_adtk: ModelCache["ADTKModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
-_drift: ModelCache["DriftModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
-_catboost: ModelCache["CatBoostModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 
@@ -367,10 +391,25 @@ _cleanup_task: asyncio.Task | None = None
 # Data directories
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
-TIMESERIES_MODELS_DIR = _LF_DATA_DIR / "models" / "timeseries"
-ADTK_MODELS_DIR = _LF_DATA_DIR / "models" / "adtk"
-DRIFT_MODELS_DIR = _LF_DATA_DIR / "models" / "drift"
-CATBOOST_MODELS_DIR = _LF_DATA_DIR / "models" / "catboost"
+
+# Addon model caches and directories (only created when addon is installed)
+_timeseries: ModelCache | None = None
+_adtk: ModelCache | None = None
+_drift: ModelCache | None = None
+_catboost: ModelCache | None = None
+
+if _HAS_TIMESERIES:
+    _timeseries = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+    TIMESERIES_MODELS_DIR = _LF_DATA_DIR / "models" / "timeseries"
+if _HAS_ADTK:
+    _adtk = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+    ADTK_MODELS_DIR = _LF_DATA_DIR / "models" / "adtk"
+if _HAS_DRIFT:
+    _drift = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+    DRIFT_MODELS_DIR = _LF_DATA_DIR / "models" / "drift"
+if _HAS_CATBOOST:
+    _catboost = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+    CATBOOST_MODELS_DIR = _LF_DATA_DIR / "models" / "catboost"
 
 
 # ============================================================================
@@ -768,116 +807,106 @@ async def load_classifier(
 
 
 # ============================================================================
-# Timeseries Model Loading
+# Addon Model Loading (only defined when addon packages are installed)
 # ============================================================================
 
+if _HAS_TIMESERIES:
 
-def _make_timeseries_cache_key(model_id: str, backend: str) -> str:
-    """Create a cache key for timeseries models."""
-    return f"timeseries:{backend}:{model_id}"
+    def _make_timeseries_cache_key(model_id: str, backend: str) -> str:
+        """Create a cache key for timeseries models."""
+        return f"timeseries:{backend}:{model_id}"
 
+    async def load_timeseries(
+        model_id: str,
+        backend: str = "arima",
+        **kwargs,
+    ) -> "TimeseriesModel":
+        """Load or get cached timeseries model."""
+        cache_key = _make_timeseries_cache_key(model_id, backend)
 
-async def load_timeseries(
-    model_id: str,
-    backend: str = "arima",
-    **kwargs,
-) -> "TimeseriesModel":
-    """Load or get cached timeseries model."""
-    cache_key = _make_timeseries_cache_key(model_id, backend)
+        if cache_key not in _timeseries:
+            async with _model_load_lock:
+                if cache_key not in _timeseries:
+                    logger.info(f"Loading timeseries model ({backend}): {model_id}")
+                    device = get_device()
 
-    if cache_key not in _timeseries:
-        async with _model_load_lock:
-            if cache_key not in _timeseries:
-                logger.info(f"Loading timeseries model ({backend}): {model_id}")
-                device = get_device()
+                    model = TimeseriesModel(
+                        model_id=model_id,
+                        device=device,
+                        backend=backend,
+                        **kwargs,
+                    )
 
-                model = TimeseriesModel(
-                    model_id=model_id,
-                    device=device,
-                    backend=backend,
-                    **kwargs,
-                )
+                    await model.load()
+                    _timeseries[cache_key] = model
 
-                await model.load()
-                _timeseries[cache_key] = model
+        return _timeseries.get(cache_key)
 
-    return _timeseries.get(cache_key)
+if _HAS_ADTK:
 
+    def _make_adtk_cache_key(model_id: str, detector: str) -> str:
+        """Create a cache key for ADTK models."""
+        return f"adtk:{detector}:{model_id}"
 
-# ============================================================================
-# ADTK Model Loading
-# ============================================================================
+    async def load_adtk(
+        model_id: str,
+        detector: str = "level_shift",
+        params: dict | None = None,
+    ) -> "ADTKModel":
+        """Load or get cached ADTK model."""
+        cache_key = _make_adtk_cache_key(model_id, detector)
+        params = params or {}
 
+        if cache_key not in _adtk:
+            async with _model_load_lock:
+                if cache_key not in _adtk:
+                    logger.info(f"Loading ADTK model ({detector}): {model_id}")
+                    device = get_device()
 
-def _make_adtk_cache_key(model_id: str, detector: str) -> str:
-    """Create a cache key for ADTK models."""
-    return f"adtk:{detector}:{model_id}"
+                    model = ADTKModel(
+                        model_id=model_id,
+                        device=device,
+                        detector=detector,
+                        **params,
+                    )
 
+                    await model.load()
+                    _adtk[cache_key] = model
 
-async def load_adtk(
-    model_id: str,
-    detector: str = "level_shift",
-    params: dict | None = None,
-) -> "ADTKModel":
-    """Load or get cached ADTK model."""
-    cache_key = _make_adtk_cache_key(model_id, detector)
-    params = params or {}
+        return _adtk.get(cache_key)
 
-    if cache_key not in _adtk:
-        async with _model_load_lock:
-            if cache_key not in _adtk:
-                logger.info(f"Loading ADTK model ({detector}): {model_id}")
-                device = get_device()
+if _HAS_DRIFT:
 
-                model = ADTKModel(
-                    model_id=model_id,
-                    device=device,
-                    detector=detector,
-                    **params,
-                )
+    def _make_drift_cache_key(model_id: str, detector: str) -> str:
+        """Create a cache key for drift models."""
+        return f"drift:{detector}:{model_id}"
 
-                await model.load()
-                _adtk[cache_key] = model
+    async def load_drift(
+        model_id: str,
+        detector: str = "ks",
+        params: dict | None = None,
+    ) -> "DriftModel":
+        """Load or get cached drift model."""
+        cache_key = _make_drift_cache_key(model_id, detector)
+        params = params or {}
 
-    return _adtk.get(cache_key)
+        if cache_key not in _drift:
+            async with _model_load_lock:
+                if cache_key not in _drift:
+                    logger.info(f"Loading drift model ({detector}): {model_id}")
+                    device = get_device()
 
+                    model = DriftModel(
+                        model_id=model_id,
+                        device=device,
+                        detector=detector,
+                        **params,
+                    )
 
-# ============================================================================
-# Drift Model Loading
-# ============================================================================
+                    await model.load()
+                    _drift[cache_key] = model
 
-
-def _make_drift_cache_key(model_id: str, detector: str) -> str:
-    """Create a cache key for drift models."""
-    return f"drift:{detector}:{model_id}"
-
-
-async def load_drift(
-    model_id: str,
-    detector: str = "ks",
-    params: dict | None = None,
-) -> "DriftModel":
-    """Load or get cached drift model."""
-    cache_key = _make_drift_cache_key(model_id, detector)
-    params = params or {}
-
-    if cache_key not in _drift:
-        async with _model_load_lock:
-            if cache_key not in _drift:
-                logger.info(f"Loading drift model ({detector}): {model_id}")
-                device = get_device()
-
-                model = DriftModel(
-                    model_id=model_id,
-                    device=device,
-                    detector=detector,
-                    **params,
-                )
-
-                await model.load()
-                _drift[cache_key] = model
-
-    return _drift.get(cache_key)
+        return _drift.get(cache_key)
 
 
 # ============================================================================
@@ -1047,21 +1076,22 @@ set_classifier_loader(load_classifier)
 set_classifier_models_dir(CLASSIFIER_MODELS_DIR)
 set_classifier_state(_classifiers, _model_load_lock)
 
-# Timeseries router
-set_timeseries_loader(load_timeseries)
-set_timeseries_state(_timeseries, _model_load_lock)
+# Addon routers (only inject state when addon is installed)
+if _HAS_TIMESERIES:
+    set_timeseries_loader(load_timeseries)
+    set_timeseries_state(_timeseries, _model_load_lock)
 
-# ADTK router
-set_adtk_loader(load_adtk)
-set_adtk_state(_adtk, _model_load_lock)
+if _HAS_ADTK:
+    set_adtk_loader(load_adtk)
+    set_adtk_state(_adtk, _model_load_lock)
 
-# Drift router
-set_drift_loader(load_drift)
-set_drift_state(_drift, _model_load_lock)
+if _HAS_DRIFT:
+    set_drift_loader(load_drift)
+    set_drift_state(_drift, _model_load_lock)
 
-# CatBoost router
-CATBOOST_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-set_catboost_state(_catboost, _model_load_lock, CATBOOST_MODELS_DIR)
+if _HAS_CATBOOST:
+    CATBOOST_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    set_catboost_state(_catboost, _model_load_lock, CATBOOST_MODELS_DIR)
 
 # Explain router - model getter function
 async def get_model_for_explain(model_type: str, model_id: str):
@@ -1078,19 +1108,19 @@ async def get_model_for_explain(model_type: str, model_id: str):
         for key, model in _classifiers.items():
             if model_id in key:
                 return model
-    elif model_type == "timeseries":
+    elif model_type == "timeseries" and _timeseries is not None:
         for key, model in _timeseries.items():
             if model_id in key:
                 return model
-    elif model_type == "adtk":
+    elif model_type == "adtk" and _adtk is not None:
         for key, model in _adtk.items():
             if model_id in key:
                 return model
-    elif model_type == "drift":
+    elif model_type == "drift" and _drift is not None:
         for key, model in _drift.items():
             if model_id in key:
                 return model
-    elif model_type == "catboost":
+    elif model_type == "catboost" and _catboost is not None:
         for key, model in _catboost.items():
             if model_id in key:
                 return model

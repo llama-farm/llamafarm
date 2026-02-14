@@ -32,20 +32,13 @@ dependencies = [
   # Anomaly detection
   "scikit-learn>=1.3.0",
   "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
-  # Note: numba version is managed by pyod/alibi-detect transitive deps
+  # Note: numba version is managed by pyod transitive deps
   # High-performance data processing for streaming ML
   "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
-  # Time-series forecasting
-  "darts>=0.29.0",  # Unified forecasting framework (ARIMA, Prophet, ExponentialSmoothing)
-  "chronos-forecasting>=1.2.0",  # Amazon Chronos: Zero-shot foundation model for time-series
-  # Time-series anomaly detection
-  "adtk>=0.6.2",  # ADTK: Level shifts, seasonal anomalies, spikes
-  # Data drift monitoring
-  "alibi-detect>=0.12.0",  # Alibi Detect: KS, MMD, Chi-squared drift detectors
   # Explainability
   "shap>=0.44.0",  # SHAP: Feature importance and explanation narratives
-  # Gradient boosting with incremental learning
-  "catboost>=1.2.0",  # CatBoost: Native categorical support, GPU acceleration
+  # Note: darts, chronos-forecasting, adtk, alibi-detect, catboost moved to addons
+  # Install via: lf addon install timeseries|adtk|drift|catboost
   # Text classification (few-shot learning with SetFit)
   "setfit>=1.1.0",
   "sentence-transformers>=3.0.0",
@@ -178,7 +171,7 @@ index-url = "https://pypi.org/simple"
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
   "numpy>=1.24.0,<2.4", # numba (via librosa) requires numpy<2.4
-  "numba>=0.50.0",       # alibi-detect pins <0.60 but works fine with newer; mlx-audio needs >=0.60
+  "numba>=0.50.0",       # mlx-audio needs >=0.60; some transitive deps pin <0.60
   # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
   "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",

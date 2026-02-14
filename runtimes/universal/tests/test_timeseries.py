@@ -1,8 +1,11 @@
 """Tests for timeseries forecasting functionality."""
-
-from datetime import datetime, timedelta
+# ruff: noqa: E402  # imports must come after pytest.importorskip
 
 import pytest
+
+darts = pytest.importorskip("darts", reason="timeseries addon not installed")
+
+from datetime import datetime, timedelta
 
 from api_types.timeseries import (
     TimeseriesDataPoint,

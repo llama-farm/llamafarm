@@ -1,8 +1,11 @@
 """Tests for ADTK time-series anomaly detection functionality."""
-
-from datetime import datetime, timedelta
+# ruff: noqa: E402  # imports must come after pytest.importorskip
 
 import pytest
+
+adtk = pytest.importorskip("adtk", reason="adtk addon not installed")
+
+from datetime import datetime, timedelta
 
 from api_types.adtk import (
     ADTKDataPoint,
