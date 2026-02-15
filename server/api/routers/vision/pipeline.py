@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form
 from server.services.vision import VisionPipelineService
 
 logger = logging.getLogger(__name__)

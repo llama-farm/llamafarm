@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # =============================================================================
 # OCR Types (existing)
 # =============================================================================
@@ -30,10 +29,16 @@ class DocumentExtractRequest(BaseModel):
 # =============================================================================
 
 class BoundingBox(BaseModel):
-    x1: float; y1: float; x2: float; y2: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
 
 class DetectionItem(BaseModel):
-    box: BoundingBox; class_name: str; class_id: int; confidence: float
+    box: BoundingBox
+    class_name: str
+    class_id: int
+    confidence: float
 
 class DetectRequest(BaseModel):
     model: str = "yolov8n"
@@ -41,7 +46,9 @@ class DetectRequest(BaseModel):
     classes: list[str] | None = None
 
 class DetectResponse(BaseModel):
-    detections: list[DetectionItem]; model: str; inference_time_ms: float
+    detections: list[DetectionItem]
+    model: str
+    inference_time_ms: float
 
 
 # =============================================================================
@@ -54,8 +61,12 @@ class ClassifyRequest(BaseModel):
     top_k: int = Field(default=5, ge=1)
 
 class ClassifyResponse(BaseModel):
-    class_name: str; class_id: int; confidence: float
-    all_scores: dict[str, float]; model: str; inference_time_ms: float
+    class_name: str
+    class_id: int
+    confidence: float
+    all_scores: dict[str, float]
+    model: str
+    inference_time_ms: float
 
 
 # =============================================================================
@@ -68,12 +79,15 @@ class TrainConfigRequest(BaseModel):
     learning_rate: float = 0.001
 
 class TrainRequest(BaseModel):
-    model: str; dataset: str
+    model: str
+    dataset: str
     task: Literal["detection", "classification"] = "detection"
     config: TrainConfigRequest = Field(default_factory=TrainConfigRequest)
 
 class TrainResponse(BaseModel):
-    job_id: str; status: str; progress: float = 0.0
+    job_id: str
+    status: str
+    progress: float = 0.0
 
 
 # =============================================================================
@@ -111,8 +125,11 @@ class ModelExportRequest(BaseModel):
 # =============================================================================
 
 class ReviewItem(BaseModel):
-    image_id: str; confidence: float; class_name: str
-    source: str; status: str = "pending"
+    image_id: str
+    confidence: float
+    class_name: str
+    source: str
+    status: str = "pending"
 
 class ReviewDecision(BaseModel):
     image_id: str

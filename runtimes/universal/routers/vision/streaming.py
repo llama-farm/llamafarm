@@ -4,7 +4,6 @@ Cascade: if confidence < threshold, try next model in chain.
 Chain can include "remote:{url}" entries for Atmosphere readiness.
 """
 
-import json
 import logging
 import time
 import uuid
@@ -17,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
@@ -87,8 +87,13 @@ class StreamFrameRequest(BaseModel):
     image: str = Field(..., description="Base64-encoded image")
 
 class DetectionItem(BaseModel):
-    x1: float; y1: float; x2: float; y2: float
-    class_name: str; class_id: int; confidence: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    class_name: str
+    class_id: int
+    confidence: float
 
 class StreamFrameResponse(BaseModel):
     status: str  # "ok", "action", "escalated"
@@ -100,8 +105,11 @@ class StreamStopRequest(BaseModel):
     session_id: str
 
 class StreamStopResponse(BaseModel):
-    session_id: str; frames_processed: int; actions_triggered: int
-    escalations: int; duration_seconds: float
+    session_id: str
+    frames_processed: int
+    actions_triggered: int
+    escalations: int
+    duration_seconds: float
 
 
 # =============================================================================
@@ -239,8 +247,13 @@ async def _call_remote(url: str, image_bytes: bytes, session: StreamSession) -> 
 @dataclass
 class _RemoteBox:
     """Bounding box from a remote detection result."""
-    x1: float; y1: float; x2: float; y2: float
-    class_name: str; class_id: int; confidence: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    class_name: str
+    class_id: int
+    confidence: float
 
 
 class _RemoteResult:

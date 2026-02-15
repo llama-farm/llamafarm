@@ -951,6 +951,7 @@ set_model_export_loader(load_detection_model)
 
 # Vision training
 from vision_training.trainer import set_trainer_model_loader
+
 set_trainer_model_loader(load_detection_model)
 
 # Anomaly router

@@ -2,7 +2,6 @@
 
 import json
 import logging
-import shutil
 import time
 from collections.abc import Callable, Coroutine
 from datetime import datetime
@@ -44,7 +43,10 @@ class ModelExportRequest(BaseModel):
     quantization: Literal["fp32", "fp16", "int8"] = "fp16"
 
 class ModelExportResponse(BaseModel):
-    export_path: str; format: str; size_mb: float; export_time_seconds: float
+    export_path: str
+    format: str
+    size_mb: float
+    export_time_seconds: float
 
 
 @router.get("/v1/vision/models")

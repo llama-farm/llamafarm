@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,16 @@ def set_detection_loader(load_fn: Callable[..., Coroutine[Any, Any, Any]] | None
 
 
 class BoundingBox(BaseModel):
-    x1: float; y1: float; x2: float; y2: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
 
 class Detection(BaseModel):
-    box: BoundingBox; class_name: str; class_id: int; confidence: float
+    box: BoundingBox
+    class_name: str
+    class_id: int
+    confidence: float
 
 class DetectRequest(BaseModel):
     image: str = Field(..., description="Base64-encoded image")
@@ -35,7 +42,9 @@ class DetectRequest(BaseModel):
     classes: list[str] | None = None
 
 class DetectResponse(BaseModel):
-    detections: list[Detection]; model: str; inference_time_ms: float
+    detections: list[Detection]
+    model: str
+    inference_time_ms: float
 
 
 @router.post("/v1/vision/detect", response_model=DetectResponse)

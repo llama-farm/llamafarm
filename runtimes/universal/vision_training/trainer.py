@@ -83,12 +83,42 @@ class IncrementalTrainer:
             if self._model_loader is None:
                 raise RuntimeError("Model loader not configured")
 
-            model = await self._model_loader(base_model or job.model_id)
-            metrics = await model.train(
-                dataset_path=job.dataset_path,
-                epochs=job.config.epochs,
-                batch_size=job.config.batch_size,
-            )
+            # Load a FRESH model for training — don't corrupt inference cache
+            from ultralytics import YOLO
+            model_id = base_model or job.model_id
+            model_path = model_id  # Could be a path or a variant name
+            device = 'cpu'
+            
+            # Try to get model path from cached model's info
+            try:
+                cached = await self._model_loader(model_id)
+                if hasattr(cached, '_model_path') and cached._model_path:
+                    model_path = cached._model_path
+                device = cached.device if hasattr(cached, 'device') else 'cpu'
+            except Exception:
+                pass
+
+            training_yolo = YOLO(model_path)
+            
+            # Train using the fresh YOLO instance
+            logger.info(f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}")
+            train_args = {
+                "data": job.dataset_path,
+                "epochs": job.config.epochs,
+                "batch": job.config.batch_size,
+                "device": device if device != "auto" else None,
+                "imgsz": 640,
+                "patience": 50,
+                "save": True,
+                "verbose": True,
+            }
+            results = await asyncio.to_thread(training_yolo.train, **train_args)
+            
+            metrics = {}
+            if hasattr(results, "results_dict"):
+                metrics = results.results_dict
+            metrics["model_path"] = str(results.save_dir) if hasattr(results, "save_dir") else None
+            metrics["epochs"] = job.config.epochs
 
             job.metrics = metrics
             job.progress = 1.0
@@ -97,7 +127,7 @@ class IncrementalTrainer:
             job.completed_at = datetime.utcnow()
 
             # Save versioned model and auto-export ONNX
-            await self._save_versioned(job, model)
+            await self._save_versioned(job, training_yolo)
             logger.info(f"Training job {job.job_id} completed")
 
         except Exception as e:

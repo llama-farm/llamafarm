@@ -10,14 +10,13 @@ All endpoints accept multipart form data with either:
 - images: Base64-encoded image data URIs (comma-separated or JSON array)
 """
 
-import base64
 import json
 import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from server.services.universal_runtime_service import UniversalRuntimeService
-from server.services.vision import VisionDetectionService, VisionClassificationService
+from server.services.vision import VisionClassificationService, VisionDetectionService
 
 logger = logging.getLogger(__name__)
 

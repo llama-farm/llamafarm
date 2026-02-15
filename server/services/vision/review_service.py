@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from server.services.universal_runtime_service import UniversalRuntimeService
-
 
 class VisionReviewService:
     """Review queue operations via runtime proxy."""

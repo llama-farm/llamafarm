@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.error_handler import handle_endpoint_errors
+
 from .utils import decode_base64_image
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,12 @@ class ClassifyRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=100)
 
 class ClassifyResponse(BaseModel):
-    class_name: str; class_id: int; confidence: float
-    all_scores: dict[str, float]; model: str; inference_time_ms: float
+    class_name: str
+    class_id: int
+    confidence: float
+    all_scores: dict[str, float]
+    model: str
+    inference_time_ms: float
 
 
 @router.post("/v1/vision/classify", response_model=ClassifyResponse)

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services.error_handler import handle_endpoint_errors
-from vision_training.trainer import TrainingConfig, TrainingStatus, get_trainer
+from vision_training.trainer import TrainingConfig, get_trainer
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["vision-training"])
@@ -26,12 +26,19 @@ class TrainRequest(BaseModel):
     base_model: str | None = None
 
 class TrainResponse(BaseModel):
-    job_id: str; status: str; progress: float = 0.0; metrics: dict | None = None
+    job_id: str
+    status: str
+    progress: float = 0.0
+    metrics: dict | None = None
 
 class TrainStatusResponse(BaseModel):
-    job_id: str; status: str; progress: float
-    current_epoch: int | None = None; total_epochs: int | None = None
-    metrics: dict | None = None; error: str | None = None
+    job_id: str
+    status: str
+    progress: float
+    current_epoch: int | None = None
+    total_epochs: int | None = None
+    metrics: dict | None = None
+    error: str | None = None
 
 
 @router.post("/v1/vision/train", response_model=TrainResponse)

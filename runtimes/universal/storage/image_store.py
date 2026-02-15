@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +35,7 @@ class ImageStore:
 
     def _init_db(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS images (
                     id TEXT PRIMARY KEY,

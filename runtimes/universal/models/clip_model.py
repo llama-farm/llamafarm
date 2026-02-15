@@ -36,6 +36,7 @@ class CLIPModel(ClassificationModel):
         self.processor: AutoProcessor | None = None
         self._class_embeddings: torch.Tensor | None = None
         self._embedding_dim: int = 0
+        self._cached_class_key: tuple | None = None
 
     async def load(self) -> None:
         if self._loaded:
@@ -56,7 +57,7 @@ class CLIPModel(ClassificationModel):
             return model, proc
 
         self.clip_model, self.processor = await asyncio.to_thread(_load)
-        self._embedding_dim = self.clip_model.config.projection_dim
+        self._embedding_dim = getattr(self.clip_model.config, 'projection_dim', None) or getattr(self.clip_model.config, 'hidden_size', 512)
         self._loaded = True
         logger.info(f"CLIP loaded in {(time.perf_counter() - start) * 1000:.0f}ms (dim={self._embedding_dim})")
 
@@ -70,6 +71,11 @@ class CLIPModel(ClassificationModel):
     async def _encode_classes(self, class_names: list[str]) -> None:
         """Pre-compute text embeddings for class names."""
         import torch
+        class_key = tuple(class_names)
+        # Cache check: skip re-encoding if same classes
+        if class_key == self._cached_class_key:
+            return
+        
         self.class_names = class_names
         prompts = [self.prompt_template.format(n) for n in class_names]
 
@@ -81,6 +87,7 @@ class CLIPModel(ClassificationModel):
                 return feats / feats.norm(dim=-1, keepdim=True)
 
         self._class_embeddings = await asyncio.to_thread(_encode)
+        self._cached_class_key = class_key
 
     async def classify(self, image: bytes | np.ndarray,
                        classes: list[str] | None = None,
@@ -103,6 +110,8 @@ class CLIPModel(ClassificationModel):
                 feats = self.clip_model.get_image_features(**inputs)
                 feats = feats / feats.norm(dim=-1, keepdim=True)
                 sim = (feats @ self._class_embeddings.T).squeeze()
+                if sim.ndim == 0:
+                    sim = sim.unsqueeze(0)
                 return sim.softmax(dim=-1).cpu().numpy()
 
         probs = await asyncio.to_thread(_infer)

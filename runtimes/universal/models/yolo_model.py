@@ -73,7 +73,7 @@ class YOLOModel(DetectionModel):
         start = time.perf_counter()
         img_array = self._image_to_numpy(image)
         height, width = img_array.shape[:2]
-        conf = confidence_threshold or self.confidence_threshold
+        conf = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
 
         class_indices = None
         if classes:
