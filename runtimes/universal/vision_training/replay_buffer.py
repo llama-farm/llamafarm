@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import random
@@ -114,10 +115,8 @@ class ReplayBuffer:
                     pass
                 created_at = datetime.utcnow()
                 if row["created_at"]:
-                    try:
+                    with contextlib.suppress(ValueError):
                         created_at = datetime.fromisoformat(row["created_at"])
-                    except ValueError:
-                        pass
                 self._samples[row["id"]] = ReplaySample(
                     id=row["id"], image_path=row["image_path"],
                     label=row["label"], source=row["source"],

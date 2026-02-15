@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -25,10 +26,19 @@ router = APIRouter(tags=["vision-streaming"])
 # Dependency injection
 _load_detection_fn: Callable[..., Coroutine[Any, Any, Any]] | None = None
 
+# SSRF protection: allowlist of remote hosts for cascade
+_ALLOWED_REMOTE_HOSTS: set[str] = set()
+
 
 def set_streaming_detection_loader(fn: Callable[..., Coroutine[Any, Any, Any]] | None) -> None:
     global _load_detection_fn
     _load_detection_fn = fn
+
+
+def set_allowed_remote_hosts(hosts: set[str]) -> None:
+    """Set allowlist of remote hosts for cascade (SSRF mitigation)."""
+    global _ALLOWED_REMOTE_HOSTS
+    _ALLOWED_REMOTE_HOSTS = hosts
 
 
 # =============================================================================
@@ -227,8 +237,29 @@ def _build_response(det_result: Any, model_ref: str, escalated: bool,
 
 
 async def _call_remote(url: str, image_bytes: bytes, session: StreamSession) -> Any | None:
-    """Call a remote vision detection endpoint."""
+    """Call a remote vision detection endpoint.
+    
+    SSRF Protection: Only calls URLs with hosts in the allowlist.
+    If allowlist is empty, all remote calls are rejected.
+    """
     import base64
+    
+    # Validate URL against allowlist
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            logger.warning(f"Invalid scheme in remote URL: {url}")
+            return None
+        if not _ALLOWED_REMOTE_HOSTS:
+            logger.warning("Remote cascade disabled: no allowed hosts configured")
+            raise HTTPException(status_code=403, detail="Remote cascade not allowed")
+        if parsed.hostname not in _ALLOWED_REMOTE_HOSTS:
+            logger.warning(f"Remote host {parsed.hostname} not in allowlist")
+            raise HTTPException(status_code=403, detail=f"Remote host not allowed: {parsed.hostname}")
+    except ValueError as e:
+        logger.warning(f"Malformed remote URL: {url} - {e}")
+        return None
+    
     try:
         client = _get_http_client()
         resp = await client.post(url, json={

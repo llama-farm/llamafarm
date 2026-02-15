@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import re
 import shutil
 import uuid
 from collections.abc import Callable
@@ -143,7 +145,12 @@ class IncrementalTrainer:
 
         # Find next version
         existing = list(model_dir.glob("v*.pt"))
-        version = len(existing) + 1
+        versions = []
+        for p in existing:
+            m = re.match(r'v(\d+)\.pt$', p.name)
+            if m:
+                versions.append(int(m.group(1)))
+        version = max(versions, default=0) + 1
         dst = model_dir / f"v{version}.pt"
 
         # Find trained weights
@@ -201,10 +208,8 @@ class IncrementalTrainer:
     async def wait_for_job(self, job_id: str, timeout: float | None = None) -> TrainingJob | None:
         task = self._tasks.get(job_id)
         if task:
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(task, timeout=timeout)
-            except asyncio.TimeoutError:
-                pass
         return self._jobs.get(job_id)
 
 

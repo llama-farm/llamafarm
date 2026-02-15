@@ -100,6 +100,7 @@ from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
+from vision_training.trainer import set_trainer_model_loader
 
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
@@ -950,8 +951,6 @@ set_vision_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
 
 # Vision training
-from vision_training.trainer import set_trainer_model_loader
-
 set_trainer_model_loader(load_detection_model)
 
 # Anomaly router

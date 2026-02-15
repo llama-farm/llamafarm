@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sqlite3
 from dataclasses import dataclass
@@ -106,10 +107,8 @@ class ImageStore:
     def _to_record(self, row: sqlite3.Row) -> ImageRecord:
         created = None
         if row["created_at"]:
-            try:
+            with contextlib.suppress(ValueError):
                 created = datetime.fromisoformat(str(row["created_at"]))
-            except ValueError:
-                pass
         return ImageRecord(
             id=row["id"], file_path=row["file_path"], source=row["source"],
             class_name=row["class_name"], confidence=row["confidence"],
