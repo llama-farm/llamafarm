@@ -92,6 +92,30 @@ try:
 except ImportError:
     _HAS_DRIFT_TYPES = False
 
+# Conditional import for CatBoost (requires catboost package)
+try:
+    from .catboost import (
+        CatBoostDeleteResponse,
+        CatBoostFeatureImportance,
+        CatBoostFeatureImportanceResponse,
+        CatBoostFitRequest,
+        CatBoostFitResponse,
+        CatBoostInfoResponse,
+        CatBoostLoadRequest,
+        CatBoostLoadResponse,
+        CatBoostModelInfo,
+        CatBoostModelsResponse,
+        CatBoostPrediction,
+        CatBoostPredictRequest,
+        CatBoostPredictResponse,
+        CatBoostUpdateRequest,
+        CatBoostUpdateResponse,
+    )
+
+    _HAS_CATBOOST_TYPES = True
+except ImportError:
+    _HAS_CATBOOST_TYPES = False
+
 from .classifier import (
     ClassifierDeleteResponse,
     ClassifierFitRequest,
@@ -250,5 +274,27 @@ if _HAS_DRIFT_TYPES:
             "DriftDeleteResponse",
             "DriftResetResponse",
             "DriftStatusResponse",
+        ]
+    )
+
+# Add CatBoost types to __all__ if available
+if _HAS_CATBOOST_TYPES:
+    __all__.extend(
+        [
+            "CatBoostFitRequest",
+            "CatBoostPredictRequest",
+            "CatBoostUpdateRequest",
+            "CatBoostLoadRequest",
+            "CatBoostPrediction",
+            "CatBoostPredictResponse",
+            "CatBoostFitResponse",
+            "CatBoostUpdateResponse",
+            "CatBoostLoadResponse",
+            "CatBoostModelInfo",
+            "CatBoostModelsResponse",
+            "CatBoostDeleteResponse",
+            "CatBoostInfoResponse",
+            "CatBoostFeatureImportance",
+            "CatBoostFeatureImportanceResponse",
         ]
     )

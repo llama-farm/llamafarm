@@ -120,6 +120,13 @@ if _HAS_DRIFT:
     from routers.drift import set_drift_loader
     from routers.drift import set_state as set_drift_state
 
+# Conditional import for CatBoost addon (requires catboost package)
+_HAS_CATBOOST = importlib.util.find_spec("catboost") is not None
+if _HAS_CATBOOST:
+    from models.catboost_model import CatBoostModel
+    from routers.catboost import router as catboost_router
+    from routers.catboost import set_catboost_state
+
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
 # released before interpreter shutdown. The OS kernel cleans these up on process exit —
@@ -282,6 +289,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Drift Detection addon unavailable (alibi_detect not installed)")
 
+    if _HAS_CATBOOST:
+        logger.info("CatBoost addon available (catboost installed)")
+    else:
+        logger.info("CatBoost addon unavailable (catboost not installed)")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -363,6 +375,8 @@ if _HAS_ADTK:
     app.include_router(adtk_router)
 if _HAS_DRIFT:
     app.include_router(drift_router)
+if _HAS_CATBOOST:
+    app.include_router(catboost_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -385,6 +399,7 @@ _cleanup_task: asyncio.Task | None = None
 # Data directories
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
+CATBOOST_MODELS_DIR = _LF_DATA_DIR / "models" / "catboost"
 
 # Timeseries model cache (conditional on darts availability)
 if _HAS_TIMESERIES:
@@ -403,6 +418,12 @@ if _HAS_DRIFT:
     _drift: ModelCache["DriftModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 else:
     _drift = None
+
+# CatBoost model cache (conditional on catboost availability)
+if _HAS_CATBOOST:
+    _catboost: ModelCache["CatBoostModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+else:
+    _catboost = None
 
 
 # ============================================================================
@@ -436,6 +457,8 @@ async def _cleanup_idle_models() -> None:
                 caches_to_clean.append((_adtk, "adtk"))
             if _HAS_DRIFT and _drift is not None:
                 caches_to_clean.append((_drift, "drift"))
+            if _HAS_CATBOOST and _catboost is not None:
+                caches_to_clean.append((_catboost, "catboost"))
 
             for cache, cache_name in caches_to_clean:
                 expired_items = cache.pop_expired()
@@ -1136,6 +1159,10 @@ if _HAS_ADTK:
 if _HAS_DRIFT:
     set_drift_loader(load_drift)
     set_drift_state(_drift, _model_load_lock)
+
+# CatBoost router (conditional)
+if _HAS_CATBOOST:
+    set_catboost_state(_catboost, _model_load_lock, CATBOOST_MODELS_DIR)
 
 
 # ============================================================================

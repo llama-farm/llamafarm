@@ -610,6 +610,50 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/drift/models/{model_name}")
 
     # =========================================================================
+    # CatBoost Gradient Boosting
+    # =========================================================================
+
+    @classmethod
+    async def catboost_info(cls) -> dict[str, Any]:
+        """Get CatBoost availability and capabilities."""
+        return await cls._make_request("GET", "/v1/catboost/info")
+
+    @classmethod
+    async def catboost_list_models(cls) -> dict[str, Any]:
+        """List saved CatBoost models."""
+        return await cls._make_request("GET", "/v1/catboost/models")
+
+    @classmethod
+    async def catboost_fit(cls, request: dict) -> dict[str, Any]:
+        """Train a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/fit", json=request)
+
+    @classmethod
+    async def catboost_predict(cls, request: dict) -> dict[str, Any]:
+        """Make predictions with a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/predict", json=request)
+
+    @classmethod
+    async def catboost_update(cls, request: dict) -> dict[str, Any]:
+        """Incrementally update a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/update", json=request)
+
+    @classmethod
+    async def catboost_load(cls, request: dict) -> dict[str, Any]:
+        """Load a CatBoost model from disk."""
+        return await cls._make_request("POST", "/v1/catboost/load", json=request)
+
+    @classmethod
+    async def catboost_delete(cls, model_id: str) -> dict[str, Any]:
+        """Delete a CatBoost model."""
+        return await cls._make_request("DELETE", f"/v1/catboost/{model_id}")
+
+    @classmethod
+    async def catboost_importance(cls, model_id: str) -> dict[str, Any]:
+        """Get feature importance for a CatBoost model."""
+        return await cls._make_request("GET", f"/v1/catboost/{model_id}/importance")
+
+    # =========================================================================
     # Anomaly Detection
     # =========================================================================
 
