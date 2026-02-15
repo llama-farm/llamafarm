@@ -10,12 +10,14 @@ All endpoints accept multipart form data with either:
 - images: Base64-encoded image data URIs (comma-separated or JSON array)
 """
 
+import base64
 import json
 import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from server.services.universal_runtime_service import UniversalRuntimeService
+from server.services.vision import VisionDetectionService, VisionClassificationService
 
 logger = logging.getLogger(__name__)
 
@@ -319,4 +321,56 @@ async def extract_from_documents(
         images=image_list,
         prompts=prompt_list,
         task=task,  # type: ignore
+    )
+
+
+# =============================================================================
+# Detection Endpoint
+# =============================================================================
+
+
+@router.post("/detect")
+async def detect_objects(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(default=None),
+    model: str = Form(default="yolov8n"),
+    confidence_threshold: float = Form(default=0.5),
+    classes: str | None = Form(default=None),
+) -> dict[str, Any]:
+    """Detect objects in an image. Accepts file upload or base64."""
+    image_list = await _get_images_from_input(file, images)
+    class_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+
+    return await VisionDetectionService.detect(
+        image=image_list[0],
+        model=model,
+        confidence_threshold=confidence_threshold,
+        classes=class_list,
+    )
+
+
+# =============================================================================
+# Classification Endpoint
+# =============================================================================
+
+
+@router.post("/classify")
+async def classify_image(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(default=None),
+    model: str = Form(default="clip-vit-base"),
+    classes: str = Form(..., description="Comma-separated class names"),
+    top_k: int = Form(default=5),
+) -> dict[str, Any]:
+    """Classify an image using CLIP. Accepts file upload or base64."""
+    image_list = await _get_images_from_input(file, images)
+    class_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not class_list:
+        raise HTTPException(status_code=400, detail="At least one class required")
+
+    return await VisionClassificationService.classify(
+        image=image_list[0],
+        classes=class_list,
+        model=model,
+        top_k=top_k,
     )
