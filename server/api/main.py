@@ -95,6 +95,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.models_router, prefix=API_PREFIX)
     app.include_router(routers.ml_router, prefix=API_PREFIX)
     app.include_router(routers.nlp_router, prefix=API_PREFIX)
+    app.include_router(routers.timeseries_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
     # Audio TTS endpoints - project-scoped (path already includes /v1)
     app.include_router(routers.audio_router, prefix=API_PREFIX)

@@ -20,6 +20,7 @@ Environment Variables:
 """
 
 import asyncio
+import importlib.util
 import os
 import warnings
 from contextlib import asynccontextmanager, suppress
@@ -94,6 +95,14 @@ from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
+
+# Conditional import for timeseries addon (requires darts package)
+_HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
+if _HAS_TIMESERIES:
+    from models.timeseries_model import TimeseriesModel
+    from routers.timeseries import router as timeseries_router
+    from routers.timeseries import set_state as set_timeseries_state
+    from routers.timeseries import set_timeseries_loader
 
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
@@ -241,6 +250,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Universal Runtime")
 
+    # Log addon availability
+    if _HAS_TIMESERIES:
+        logger.info("Timeseries addon available (darts installed)")
+    else:
+        logger.info("Timeseries addon unavailable (darts not installed)")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -315,6 +330,10 @@ app.include_router(nlp_router)
 app.include_router(polars_router)
 app.include_router(vision_router)
 
+# Conditional addon routers
+if _HAS_TIMESERIES:
+    app.include_router(timeseries_router)
+
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
 MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
@@ -337,6 +356,12 @@ _cleanup_task: asyncio.Task | None = None
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 
+# Timeseries model cache (conditional on darts availability)
+if _HAS_TIMESERIES:
+    _timeseries: ModelCache["TimeseriesModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+else:
+    _timeseries = None
+
 
 # ============================================================================
 # Language Model Loading (for chat_completions router)
@@ -358,11 +383,15 @@ async def _cleanup_idle_models() -> None:
         try:
             await asyncio.sleep(CLEANUP_CHECK_INTERVAL)
 
-            # Cleanup expired models from both caches
-            for cache, cache_name in [
+            # Cleanup expired models from all caches
+            caches_to_clean = [
                 (_models, "models"),
                 (_classifiers, "classifiers"),
-            ]:
+            ]
+            if _HAS_TIMESERIES and _timeseries is not None:
+                caches_to_clean.append((_timeseries, "timeseries"))
+
+            for cache, cache_name in caches_to_clean:
                 expired_items = cache.pop_expired()
                 if expired_items:
                     logger.info(f"Unloading {len(expired_items)} idle {cache_name}")
@@ -729,6 +758,51 @@ async def load_classifier(
 
 
 # ============================================================================
+# Timeseries Model Loading
+# ============================================================================
+
+if _HAS_TIMESERIES:
+
+    def _make_timeseries_cache_key(model_name: str) -> str:
+        """Create a cache key for timeseries models."""
+        return f"timeseries:{model_name}"
+
+    async def load_timeseries(
+        model_id: str,
+        backend: str = "chronos",
+    ) -> "TimeseriesModel":
+        """Load or get cached timeseries model."""
+        cache_key = _make_timeseries_cache_key(model_id)
+
+        # Evict cached model if backend changed
+        cached = _timeseries.get(cache_key) if cache_key in _timeseries else None
+        if cached is not None and getattr(cached, "backend", None) != backend:
+            logger.info(
+                f"Evicting timeseries model '{model_id}': backend changed "
+                f"({cached.backend} -> {backend})"
+            )
+            _timeseries.pop(cache_key, None)
+            await cached.unload()
+
+        if cache_key not in _timeseries:
+            async with _model_load_lock:
+                if cache_key not in _timeseries:
+                    logger.info(f"Loading timeseries model: {model_id} (backend: {backend})")
+                    device = get_device()
+
+                    model = TimeseriesModel(
+                        model_id=model_id,
+                        device=device,
+                        backend=backend,
+                    )
+
+                    await model.load()
+                    _timeseries[cache_key] = model
+
+        return _timeseries.get(cache_key)
+
+
+# ============================================================================
 # Speech Model Loading
 # ============================================================================
 
@@ -911,6 +985,11 @@ set_classifier_state(_classifiers, _model_load_lock)
 
 # Audio router
 set_speech_loader(load_speech)
+
+# Timeseries router (conditional)
+if _HAS_TIMESERIES:
+    set_timeseries_loader(load_timeseries)
+    set_timeseries_state(_timeseries, _model_load_lock)
 
 
 # ============================================================================

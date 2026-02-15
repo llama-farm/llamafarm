@@ -420,6 +420,118 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/classifier/models/{model_name}")
 
     # =========================================================================
+    # Timeseries Forecasting
+    # =========================================================================
+
+    @classmethod
+    async def timeseries_list_backends(cls) -> dict[str, Any]:
+        """List available timeseries forecasting backends."""
+        return await cls._make_request("GET", "/v1/timeseries/backends")
+
+    @classmethod
+    async def timeseries_fit(
+        cls,
+        model: str,
+        backend: str,
+        data: list[dict],
+        frequency: str | None = None,
+        overwrite: bool = True,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Fit a timeseries forecasting model.
+
+        Args:
+            model: Model name (auto-generated if not provided)
+            backend: Forecasting algorithm (arima, exponential_smoothing, etc.)
+            data: Training data as list of {timestamp, value} dicts
+            frequency: Time frequency (D, H, M, etc.)
+            overwrite: If True, overwrite existing model
+            description: Optional model description
+
+        Returns:
+            Fit result with model info and saved path
+        """
+        payload = {
+            "model": model,
+            "backend": backend,
+            "data": data,
+            "overwrite": overwrite,
+        }
+        if frequency:
+            payload["frequency"] = frequency
+        if description:
+            payload["description"] = description
+
+        return await cls._make_request("POST", "/v1/timeseries/fit", json=payload)
+
+    @classmethod
+    async def timeseries_predict(
+        cls,
+        model: str,
+        horizon: int,
+        confidence_level: float = 0.95,
+        data: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Generate timeseries forecasts.
+
+        Args:
+            model: Model name
+            horizon: Number of periods to forecast
+            confidence_level: Confidence level for prediction intervals
+            data: Historical data (required for zero-shot backends)
+
+        Returns:
+            Predictions with confidence intervals
+        """
+        payload = {
+            "model": model,
+            "horizon": horizon,
+            "confidence_level": confidence_level,
+        }
+        if data:
+            payload["data"] = data
+
+        return await cls._make_request("POST", "/v1/timeseries/predict", json=payload)
+
+    @classmethod
+    async def timeseries_load(
+        cls,
+        model: str,
+        backend: str | None = None,
+    ) -> dict[str, Any]:
+        """Load a saved timeseries model.
+
+        Args:
+            model: Model name (supports '-latest' suffix)
+            backend: Backend hint for file matching
+
+        Returns:
+            Model info
+        """
+        payload = {"model": model}
+        if backend:
+            payload["backend"] = backend
+
+        return await cls._make_request("POST", "/v1/timeseries/load", json=payload)
+
+    @classmethod
+    async def timeseries_list_models(cls) -> dict[str, Any]:
+        """List all saved timeseries models."""
+        return await cls._make_request("GET", "/v1/timeseries/models")
+
+    @classmethod
+    async def timeseries_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete a saved timeseries model.
+
+        Args:
+            model_name: Model name to delete
+
+        Returns:
+            Delete result
+        """
+        return await cls._make_request("DELETE", f"/v1/timeseries/models/{model_name}")
+
+    # =========================================================================
     # Anomaly Detection
     # =========================================================================
 

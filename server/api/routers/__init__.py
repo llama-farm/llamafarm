@@ -10,6 +10,7 @@ from .nlp import router as nlp_router
 from .projects import router as projects_router
 from .rag import router as rag_router
 from .system import disk_router, upgrades_router
+from .timeseries import timeseries_router
 from .vision import vision_router
 from .voice import voice_router
 
@@ -27,6 +28,7 @@ __all__ = [
     "models_router",
     "ml_router",
     "nlp_router",
+    "timeseries_router",
     "vision_router",
     "voice_router",
 ]

@@ -28,6 +28,28 @@ from .audio import (
     TranslationRequest,
     TranslationResponse,
 )
+
+# Conditional import for timeseries (requires darts package)
+try:
+    from .timeseries import (
+        TimeseriesDeleteResponse,
+        TimeseriesFitRequest,
+        TimeseriesFitResponse,
+        TimeseriesForecastRequest,
+        TimeseriesForecastResponse,
+        TimeseriesLoadRequest,
+        TimeseriesLoadResponse,
+        TimeseriesModelInfo,
+        TimeseriesModelsResponse,
+        TimeseriesPrediction,
+        TimeseriesSaveRequest,
+        TimeseriesSaveResponse,
+    )
+
+    _HAS_TIMESERIES_TYPES = True
+except ImportError:
+    _HAS_TIMESERIES_TYPES = False
+
 from .classifier import (
     ClassifierDeleteResponse,
     ClassifierFitRequest,
@@ -131,3 +153,22 @@ __all__ = [
     "TranslationRequest",
     "TranslationResponse",
 ]
+
+# Add timeseries types to __all__ if available
+if _HAS_TIMESERIES_TYPES:
+    __all__.extend(
+        [
+            "TimeseriesFitRequest",
+            "TimeseriesForecastRequest",
+            "TimeseriesSaveRequest",
+            "TimeseriesLoadRequest",
+            "TimeseriesPrediction",
+            "TimeseriesForecastResponse",
+            "TimeseriesFitResponse",
+            "TimeseriesSaveResponse",
+            "TimeseriesLoadResponse",
+            "TimeseriesModelInfo",
+            "TimeseriesModelsResponse",
+            "TimeseriesDeleteResponse",
+        ]
+    )
