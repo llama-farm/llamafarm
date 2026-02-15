@@ -21,6 +21,20 @@ _LF_DATA_DIR = get_data_dir()
 MODELS_BASE_DIR = (_LF_DATA_DIR / "models").resolve()
 ANOMALY_MODELS_DIR = (MODELS_BASE_DIR / "anomaly").resolve()
 CLASSIFIER_MODELS_DIR = (MODELS_BASE_DIR / "classifier").resolve()
+TIMESERIES_MODELS_DIR = (MODELS_BASE_DIR / "timeseries").resolve()
+ADTK_MODELS_DIR = (MODELS_BASE_DIR / "adtk").resolve()
+DRIFT_MODELS_DIR = (MODELS_BASE_DIR / "drift").resolve()
+CATBOOST_MODELS_DIR = (MODELS_BASE_DIR / "catboost").resolve()
+
+# Mapping of model types to their directories
+MODEL_TYPE_DIRS: dict[str, Path] = {
+    "anomaly": ANOMALY_MODELS_DIR,
+    "classifier": CLASSIFIER_MODELS_DIR,
+    "timeseries": TIMESERIES_MODELS_DIR,
+    "adtk": ADTK_MODELS_DIR,
+    "drift": DRIFT_MODELS_DIR,
+    "catboost": CATBOOST_MODELS_DIR,
+}
 
 
 class PathValidationError(ValueError):
@@ -106,12 +120,12 @@ def validate_model_path(model_path: Path, model_type: str) -> Path:
         ValueError: If model_type is unknown
     """
     # Determine safe directory based on model type
-    if model_type == "anomaly":
-        safe_dir = ANOMALY_MODELS_DIR
-    elif model_type == "classifier":
-        safe_dir = CLASSIFIER_MODELS_DIR
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+    if model_type not in MODEL_TYPE_DIRS:
+        raise ValueError(
+            f"Unknown model type: {model_type}. "
+            f"Valid types: {list(MODEL_TYPE_DIRS.keys())}"
+        )
+    safe_dir = MODEL_TYPE_DIRS[model_type]
 
     # Check for path traversal patterns
     path_str = str(model_path)
@@ -136,35 +150,49 @@ def validate_model_path(model_path: Path, model_type: str) -> Path:
     return resolved_path
 
 
-def get_model_path(model_name: str, backend: str, model_type: str) -> Path:
+def get_model_path(model_name: str, backend: str | None, model_type: str) -> Path:
     """Get the path for a model file based on name and backend.
 
     The path is always within the appropriate models directory - users cannot control it.
 
     Args:
         model_name: Name of the model
-        backend: Model backend (e.g., 'isolation_forest', 'setfit')
-        model_type: Type of model ('anomaly' or 'classifier')
+        backend: Model backend (e.g., 'isolation_forest', 'setfit'), or None for types that don't use it
+        model_type: Type of model ('anomaly', 'classifier', 'timeseries', 'adtk', 'drift', 'catboost')
 
     Returns:
         Path to the model file (without extension)
     """
-    safe_name = sanitize_model_name(model_name)
-    safe_backend = sanitize_model_name(backend)
+    if model_type not in MODEL_TYPE_DIRS:
+        raise ValueError(
+            f"Unknown model type: {model_type}. "
+            f"Valid types: {list(MODEL_TYPE_DIRS.keys())}"
+        )
 
-    if model_type == "anomaly":
-        filename = f"{safe_name}_{safe_backend}"
-        return ANOMALY_MODELS_DIR / filename
-    elif model_type == "classifier":
-        return CLASSIFIER_MODELS_DIR / safe_name
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+    safe_name = sanitize_model_name(model_name)
+    model_dir = MODEL_TYPE_DIRS[model_type]
+
+    # Classifier uses directory-based storage (no backend in path)
+    if model_type == "classifier":
+        return model_dir / safe_name
+
+    # CatBoost doesn't include backend
+    if model_type == "catboost":
+        return model_dir / safe_name
+
+    # Other types use {name}_{backend} pattern
+    if backend is None:
+        raise ValueError(f"Backend is required for model type '{model_type}'")
+
+    safe_backend = sanitize_model_name(backend)
+    filename = f"{safe_name}_{safe_backend}"
+    return model_dir / filename
 
 
 def ensure_model_directories() -> None:
     """Ensure all model directories exist."""
-    ANOMALY_MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    CLASSIFIER_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    for model_dir in MODEL_TYPE_DIRS.values():
+        model_dir.mkdir(parents=True, exist_ok=True)
 
 
 def is_valid_model_name(name: str) -> bool:
@@ -182,3 +210,33 @@ def is_valid_model_name(name: str) -> bool:
 
     # Must contain at least one alphanumeric character
     return bool(re.search(r"[a-zA-Z0-9]", name))
+
+
+def generate_model_name(model_type: str) -> str:
+    """Generate a unique model name for the given type.
+
+    Args:
+        model_type: Type of model
+
+    Returns:
+        Generated model name in format: {model_type}-{uuid8}
+    """
+    import uuid
+    return f"{model_type}-{uuid.uuid4().hex[:8]}"
+
+
+def get_model_dir(model_type: str) -> Path:
+    """Get the directory for a given model type.
+
+    Args:
+        model_type: Type of model
+
+    Returns:
+        Path to the model directory
+
+    Raises:
+        ValueError: If model_type is unknown
+    """
+    if model_type not in MODEL_TYPE_DIRS:
+        raise ValueError(f"Unknown model type: {model_type}. Valid types: {list(MODEL_TYPE_DIRS.keys())}")
+    return MODEL_TYPE_DIRS[model_type]
