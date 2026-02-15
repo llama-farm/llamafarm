@@ -532,6 +532,40 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/timeseries/models/{model_name}")
 
     # =========================================================================
+    # ADTK (Time-Series Anomaly Detection)
+    # =========================================================================
+
+    @classmethod
+    async def adtk_list_detectors(cls) -> dict[str, Any]:
+        """List available ADTK detectors."""
+        return await cls._make_request("GET", "/v1/adtk/detectors")
+
+    @classmethod
+    async def adtk_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit an ADTK model on time series data."""
+        return await cls._make_request("POST", "/v1/adtk/fit", json=request)
+
+    @classmethod
+    async def adtk_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect anomalies in time series data."""
+        return await cls._make_request("POST", "/v1/adtk/detect", json=request)
+
+    @classmethod
+    async def adtk_list_models(cls) -> dict[str, Any]:
+        """List saved ADTK models."""
+        return await cls._make_request("GET", "/v1/adtk/models")
+
+    @classmethod
+    async def adtk_load(cls, request: dict) -> dict[str, Any]:
+        """Load an ADTK model from disk."""
+        return await cls._make_request("POST", "/v1/adtk/load", json=request)
+
+    @classmethod
+    async def adtk_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete an ADTK model."""
+        return await cls._make_request("DELETE", f"/v1/adtk/models/{model_name}")
+
+    # =========================================================================
     # Anomaly Detection
     # =========================================================================
 

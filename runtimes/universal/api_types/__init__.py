@@ -50,6 +50,26 @@ try:
 except ImportError:
     _HAS_TIMESERIES_TYPES = False
 
+# Conditional import for ADTK (requires adtk package)
+try:
+    from .adtk import (
+        ADTKDeleteResponse,
+        ADTKDetector,
+        ADTKDetectorsResponse,
+        ADTKDetectRequest,
+        ADTKDetectResponse,
+        ADTKFitRequest,
+        ADTKFitResponse,
+        ADTKLoadRequest,
+        ADTKLoadResponse,
+        ADTKModelInfo,
+        ADTKModelsResponse,
+    )
+
+    _HAS_ADTK_TYPES = True
+except ImportError:
+    _HAS_ADTK_TYPES = False
+
 from .classifier import (
     ClassifierDeleteResponse,
     ClassifierFitRequest,
@@ -170,5 +190,23 @@ if _HAS_TIMESERIES_TYPES:
             "TimeseriesModelInfo",
             "TimeseriesModelsResponse",
             "TimeseriesDeleteResponse",
+        ]
+    )
+
+# Add ADTK types to __all__ if available
+if _HAS_ADTK_TYPES:
+    __all__.extend(
+        [
+            "ADTKFitRequest",
+            "ADTKDetectRequest",
+            "ADTKLoadRequest",
+            "ADTKDetector",
+            "ADTKDetectorsResponse",
+            "ADTKDetectResponse",
+            "ADTKFitResponse",
+            "ADTKLoadResponse",
+            "ADTKModelInfo",
+            "ADTKModelsResponse",
+            "ADTKDeleteResponse",
         ]
     )

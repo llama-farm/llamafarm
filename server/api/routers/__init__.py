@@ -1,4 +1,5 @@
 from .addons import router as addons_router
+from .adtk import adtk_router
 from .audio import audio_router
 from .datasets import router as datasets_router
 from .event_logs import router as event_logs_router
@@ -16,6 +17,7 @@ from .voice import voice_router
 
 __all__ = [
     "addons_router",
+    "adtk_router",
     "audio_router",
     "projects_router",
     "datasets_router",

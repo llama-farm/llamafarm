@@ -104,6 +104,14 @@ if _HAS_TIMESERIES:
     from routers.timeseries import set_state as set_timeseries_state
     from routers.timeseries import set_timeseries_loader
 
+# Conditional import for ADTK addon (requires adtk package)
+_HAS_ADTK = importlib.util.find_spec("adtk") is not None
+if _HAS_ADTK:
+    from models.adtk_model import ADTKModel
+    from routers.adtk import router as adtk_router
+    from routers.adtk import set_adtk_loader
+    from routers.adtk import set_state as set_adtk_state
+
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
 # released before interpreter shutdown. The OS kernel cleans these up on process exit —
@@ -256,6 +264,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Timeseries addon unavailable (darts not installed)")
 
+    if _HAS_ADTK:
+        logger.info("ADTK addon available (adtk installed)")
+    else:
+        logger.info("ADTK addon unavailable (adtk not installed)")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -333,6 +346,8 @@ app.include_router(vision_router)
 # Conditional addon routers
 if _HAS_TIMESERIES:
     app.include_router(timeseries_router)
+if _HAS_ADTK:
+    app.include_router(adtk_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -362,6 +377,12 @@ if _HAS_TIMESERIES:
 else:
     _timeseries = None
 
+# ADTK model cache (conditional on adtk availability)
+if _HAS_ADTK:
+    _adtk: ModelCache["ADTKModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+else:
+    _adtk = None
+
 
 # ============================================================================
 # Language Model Loading (for chat_completions router)
@@ -390,6 +411,8 @@ async def _cleanup_idle_models() -> None:
             ]
             if _HAS_TIMESERIES and _timeseries is not None:
                 caches_to_clean.append((_timeseries, "timeseries"))
+            if _HAS_ADTK and _adtk is not None:
+                caches_to_clean.append((_adtk, "adtk"))
 
             for cache, cache_name in caches_to_clean:
                 expired_items = cache.pop_expired()
@@ -803,6 +826,51 @@ if _HAS_TIMESERIES:
 
 
 # ============================================================================
+# ADTK Model Loading
+# ============================================================================
+
+if _HAS_ADTK:
+
+    def _make_adtk_cache_key(model_name: str) -> str:
+        """Create a cache key for ADTK models."""
+        return f"adtk:{model_name}"
+
+    async def load_adtk(
+        model_id: str,
+        detector_type: str = "LevelShiftAD",
+    ) -> "ADTKModel":
+        """Load or get cached ADTK model."""
+        cache_key = _make_adtk_cache_key(model_id)
+
+        # Evict cached model if detector_type changed
+        cached = _adtk.get(cache_key) if cache_key in _adtk else None
+        if cached is not None and getattr(cached, "detector_type", None) != detector_type:
+            logger.info(
+                f"Evicting ADTK model '{model_id}': detector_type changed "
+                f"({cached.detector_type} -> {detector_type})"
+            )
+            _adtk.pop(cache_key, None)
+            await cached.unload()
+
+        if cache_key not in _adtk:
+            async with _model_load_lock:
+                if cache_key not in _adtk:
+                    logger.info(f"Loading ADTK model: {model_id} (detector_type: {detector_type})")
+                    device = get_device()
+
+                    model = ADTKModel(
+                        model_id=model_id,
+                        device=device,
+                        detector_type=detector_type,
+                    )
+
+                    await model.load()
+                    _adtk[cache_key] = model
+
+        return _adtk.get(cache_key)
+
+
+# ============================================================================
 # Speech Model Loading
 # ============================================================================
 
@@ -990,6 +1058,11 @@ set_speech_loader(load_speech)
 if _HAS_TIMESERIES:
     set_timeseries_loader(load_timeseries)
     set_timeseries_state(_timeseries, _model_load_lock)
+
+# ADTK router (conditional)
+if _HAS_ADTK:
+    set_adtk_loader(load_adtk)
+    set_adtk_state(_adtk, _model_load_lock)
 
 
 # ============================================================================
