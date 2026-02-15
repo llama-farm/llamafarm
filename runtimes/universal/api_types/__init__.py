@@ -70,6 +70,28 @@ try:
 except ImportError:
     _HAS_ADTK_TYPES = False
 
+# Conditional import for Drift Detection (requires alibi_detect package)
+try:
+    from .drift import (
+        DriftDeleteResponse,
+        DriftDetector,
+        DriftDetectorsResponse,
+        DriftDetectRequest,
+        DriftDetectResponse,
+        DriftFitRequest,
+        DriftFitResponse,
+        DriftLoadRequest,
+        DriftLoadResponse,
+        DriftModelInfo,
+        DriftModelsResponse,
+        DriftResetResponse,
+        DriftStatusResponse,
+    )
+
+    _HAS_DRIFT_TYPES = True
+except ImportError:
+    _HAS_DRIFT_TYPES = False
+
 from .classifier import (
     ClassifierDeleteResponse,
     ClassifierFitRequest,
@@ -208,5 +230,25 @@ if _HAS_ADTK_TYPES:
             "ADTKModelInfo",
             "ADTKModelsResponse",
             "ADTKDeleteResponse",
+        ]
+    )
+
+# Add Drift Detection types to __all__ if available
+if _HAS_DRIFT_TYPES:
+    __all__.extend(
+        [
+            "DriftFitRequest",
+            "DriftDetectRequest",
+            "DriftLoadRequest",
+            "DriftDetector",
+            "DriftDetectorsResponse",
+            "DriftDetectResponse",
+            "DriftFitResponse",
+            "DriftLoadResponse",
+            "DriftModelInfo",
+            "DriftModelsResponse",
+            "DriftDeleteResponse",
+            "DriftResetResponse",
+            "DriftStatusResponse",
         ]
     )

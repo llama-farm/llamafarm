@@ -566,6 +566,50 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/adtk/models/{model_name}")
 
     # =========================================================================
+    # Drift Detection
+    # =========================================================================
+
+    @classmethod
+    async def drift_list_detectors(cls) -> dict[str, Any]:
+        """List available drift detector types."""
+        return await cls._make_request("GET", "/v1/drift/detectors")
+
+    @classmethod
+    async def drift_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit a drift detector on reference data."""
+        return await cls._make_request("POST", "/v1/drift/fit", json=request)
+
+    @classmethod
+    async def drift_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect drift in new data."""
+        return await cls._make_request("POST", "/v1/drift/detect", json=request)
+
+    @classmethod
+    async def drift_list_models(cls) -> dict[str, Any]:
+        """List saved drift models."""
+        return await cls._make_request("GET", "/v1/drift/models")
+
+    @classmethod
+    async def drift_status(cls, model_name: str) -> dict[str, Any]:
+        """Get drift detector status."""
+        return await cls._make_request("GET", f"/v1/drift/status/{model_name}")
+
+    @classmethod
+    async def drift_reset(cls, model_name: str) -> dict[str, Any]:
+        """Reset a drift detector."""
+        return await cls._make_request("POST", f"/v1/drift/reset/{model_name}")
+
+    @classmethod
+    async def drift_load(cls, request: dict) -> dict[str, Any]:
+        """Load a drift model from disk."""
+        return await cls._make_request("POST", "/v1/drift/load", json=request)
+
+    @classmethod
+    async def drift_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete a drift model."""
+        return await cls._make_request("DELETE", f"/v1/drift/models/{model_name}")
+
+    # =========================================================================
     # Anomaly Detection
     # =========================================================================
 

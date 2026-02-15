@@ -2,6 +2,7 @@ from .addons import router as addons_router
 from .adtk import adtk_router
 from .audio import audio_router
 from .datasets import router as datasets_router
+from .drift import drift_router
 from .event_logs import router as event_logs_router
 from .examples import router as examples_router
 from .health import router as health_router
@@ -21,6 +22,7 @@ __all__ = [
     "audio_router",
     "projects_router",
     "datasets_router",
+    "drift_router",
     "health_router",
     "rag_router",
     "disk_router",

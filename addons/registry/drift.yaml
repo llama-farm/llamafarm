@@ -1,0 +1,18 @@
+# Data Drift Detection Addon
+#
+# Provides statistical data drift monitoring using Alibi Detect.
+# Supports KS (Kolmogorov-Smirnov), MMD (Maximum Mean Discrepancy), and
+# Chi-squared drift detectors for monitoring production model inputs.
+
+name: drift
+display_name: Data Drift Detection
+description: Monitor data drift with KS, MMD, and Chi-squared detectors (Alibi Detect)
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - alibi-detect>=0.12.0
+
+hardware_notes:
+  cuda: MMD drift detector benefits from GPU for kernel computations
+  cpu: KS and Chi-squared detectors run efficiently on CPU

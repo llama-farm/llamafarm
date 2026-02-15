@@ -112,6 +112,14 @@ if _HAS_ADTK:
     from routers.adtk import set_adtk_loader
     from routers.adtk import set_state as set_adtk_state
 
+# Conditional import for Drift Detection addon (requires alibi_detect package)
+_HAS_DRIFT = importlib.util.find_spec("alibi_detect") is not None
+if _HAS_DRIFT:
+    from models.drift_model import DriftModel
+    from routers.drift import router as drift_router
+    from routers.drift import set_drift_loader
+    from routers.drift import set_state as set_drift_state
+
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
 # released before interpreter shutdown. The OS kernel cleans these up on process exit —
@@ -269,6 +277,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("ADTK addon unavailable (adtk not installed)")
 
+    if _HAS_DRIFT:
+        logger.info("Drift Detection addon available (alibi_detect installed)")
+    else:
+        logger.info("Drift Detection addon unavailable (alibi_detect not installed)")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -348,6 +361,8 @@ if _HAS_TIMESERIES:
     app.include_router(timeseries_router)
 if _HAS_ADTK:
     app.include_router(adtk_router)
+if _HAS_DRIFT:
+    app.include_router(drift_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -383,6 +398,12 @@ if _HAS_ADTK:
 else:
     _adtk = None
 
+# Drift Detection model cache (conditional on alibi_detect availability)
+if _HAS_DRIFT:
+    _drift: ModelCache["DriftModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+else:
+    _drift = None
+
 
 # ============================================================================
 # Language Model Loading (for chat_completions router)
@@ -413,6 +434,8 @@ async def _cleanup_idle_models() -> None:
                 caches_to_clean.append((_timeseries, "timeseries"))
             if _HAS_ADTK and _adtk is not None:
                 caches_to_clean.append((_adtk, "adtk"))
+            if _HAS_DRIFT and _drift is not None:
+                caches_to_clean.append((_drift, "drift"))
 
             for cache, cache_name in caches_to_clean:
                 expired_items = cache.pop_expired()
@@ -871,6 +894,51 @@ if _HAS_ADTK:
 
 
 # ============================================================================
+# Drift Detection Model Loading
+# ============================================================================
+
+if _HAS_DRIFT:
+
+    def _make_drift_cache_key(model_name: str) -> str:
+        """Create a cache key for drift detection models."""
+        return f"drift:{model_name}"
+
+    async def load_drift(
+        model_id: str,
+        detector_type: str = "ks",
+    ) -> "DriftModel":
+        """Load or get cached drift detection model."""
+        cache_key = _make_drift_cache_key(model_id)
+
+        # Evict cached model if detector_type changed
+        cached = _drift.get(cache_key) if cache_key in _drift else None
+        if cached is not None and getattr(cached, "detector_type", None) != detector_type:
+            logger.info(
+                f"Evicting Drift model '{model_id}': detector_type changed "
+                f"({cached.detector_type} -> {detector_type})"
+            )
+            _drift.pop(cache_key, None)
+            await cached.unload()
+
+        if cache_key not in _drift:
+            async with _model_load_lock:
+                if cache_key not in _drift:
+                    logger.info(f"Loading Drift Detection model: {model_id} (detector_type: {detector_type})")
+                    device = get_device()
+
+                    model = DriftModel(
+                        model_id=model_id,
+                        device=device,
+                        detector_type=detector_type,
+                    )
+
+                    await model.load()
+                    _drift[cache_key] = model
+
+        return _drift.get(cache_key)
+
+
+# ============================================================================
 # Speech Model Loading
 # ============================================================================
 
@@ -1063,6 +1131,11 @@ if _HAS_TIMESERIES:
 if _HAS_ADTK:
     set_adtk_loader(load_adtk)
     set_adtk_state(_adtk, _model_load_lock)
+
+# Drift Detection router (conditional)
+if _HAS_DRIFT:
+    set_drift_loader(load_drift)
+    set_drift_state(_drift, _model_load_lock)
 
 
 # ============================================================================
