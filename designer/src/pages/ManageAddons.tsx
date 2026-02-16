@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useListAddons,
@@ -34,6 +34,8 @@ export function ManageAddons() {
   const [addonsToInstall, setAddonsToInstall] = useState<AddonInfo[]>([])
   const [installTaskId, setInstallTaskId] = useState<string | null>(null)
   const [installingAddonName, setInstallingAddonName] = useState<string | null>(null)
+
+  const installAbortRef = useRef<AbortController | null>(null)
 
   // Dependency warning state
   const [showDependencyWarning, setShowDependencyWarning] = useState(false)
@@ -113,20 +115,28 @@ export function ManageAddons() {
     setShowInstallPane(true)
   }
 
-  // Poll a background install task until it reaches a terminal state
-  const waitForTaskCompletion = useCallback(async (taskId: string) => {
+  // Poll a background install task until it reaches a terminal state.
+  // Throws on failure or timeout so the caller's catch block surfaces the error.
+  const waitForTaskCompletion = useCallback(async (taskId: string, signal?: AbortSignal) => {
     const POLL_INTERVAL = 2000
     const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
     const start = Date.now()
     while (Date.now() - start < MAX_WAIT) {
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
       await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
       try {
         const status = await getTaskStatus(taskId)
-        if (status.status === 'completed' || status.status === 'failed') return
-      } catch {
-        // Network hiccup – keep polling
+        if (status.status === 'completed') return
+        if (status.status === 'failed') {
+          throw new Error(status.error || `Install task ${taskId} failed`)
+        }
+      } catch (e) {
+        // Re-throw task failures and abort errors; swallow network hiccups
+        if (e instanceof DOMException || (e instanceof Error && e.message.includes('failed'))) throw e
       }
     }
+    throw new Error('Install timed out')
   }, [])
 
   const handleInstallConfirm = async (selectedAddons: string[]) => {
@@ -136,11 +146,17 @@ export function ManageAddons() {
     // Set installing state
     setInstallingAddonName(selectedAddons[0])
 
+    // Create an AbortController so cancel can stop the chain
+    const abort = new AbortController()
+    installAbortRef.current = abort
+
     try {
       // Install all selected addons sequentially, waiting for each to finish.
       // The server's install endpoint returns immediately (background task), so we
       // poll for completion before starting the next to avoid lock conflicts.
       for (let i = 0; i < selectedAddons.length; i++) {
+        if (abort.signal.aborted) break
+
         const addonName = selectedAddons[i]
         const isLastAddon = i === selectedAddons.length - 1
 
@@ -153,15 +169,18 @@ export function ManageAddons() {
 
         // Wait for this install to finish before starting the next one
         if (!isLastAddon) {
-          await waitForTaskCompletion(response.task_id)
+          await waitForTaskCompletion(response.task_id, abort.signal)
         }
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
       setInstallingAddonName(null) // Clear on error
       toast({
         message: `Failed to install ${selectedAddon?.display_name}. Please try again.`,
         variant: 'destructive',
       })
+    } finally {
+      installAbortRef.current = null
     }
   }
 
@@ -416,7 +435,10 @@ export function ManageAddons() {
           taskId={installTaskId}
           addonName={selectedAddon.display_name}
           onComplete={handleInstallComplete}
-          onCancel={() => setInstallTaskId(null)}
+          onCancel={() => {
+            installAbortRef.current?.abort()
+            setInstallTaskId(null)
+          }}
         />
       )}
 

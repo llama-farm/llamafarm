@@ -119,13 +119,13 @@ export function AddonInstallSidePane({
     setSelectedAddons(newSelected)
   }
 
-  // Determine which addons to install (selected + their dependencies)
+  // Determine which addons to install (dependencies first, then selected primaries)
   const getAddonsToInstall = (): string[] => {
     const toInstall: string[] = []
-    // Add selected primary addons
-    selectedAddons.forEach(name => toInstall.push(name))
-    // Add dependencies for selected addons only
+    // Dependencies must be installed before the addons that require them
     selectedDependencies.forEach(dep => toInstall.push(dep.name))
+    // Then add selected primary addons
+    selectedAddons.forEach(name => toInstall.push(name))
     return toInstall
   }
 
