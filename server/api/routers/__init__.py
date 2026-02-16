@@ -6,6 +6,7 @@ from .datasets import router as datasets_router
 from .drift import drift_router
 from .event_logs import router as event_logs_router
 from .examples import router as examples_router
+from .explain import router as explain_router
 from .health import router as health_router
 from .ml import router as ml_router
 from .models import router as models_router
@@ -25,6 +26,7 @@ __all__ = [
     "projects_router",
     "datasets_router",
     "drift_router",
+    "explain_router",
     "health_router",
     "rag_router",
     "disk_router",

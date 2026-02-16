@@ -70,6 +70,8 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
+from routers.explain import router as explain_router
+from routers.explain import set_explain_state, set_model_getter
 from routers.files import router as files_router
 from routers.health import (
     router as health_router,
@@ -355,6 +357,7 @@ app.add_middleware(
 
 # Include all routers
 app.include_router(anomaly_router)
+app.include_router(explain_router)
 app.include_router(audio_router)
 app.include_router(audio_speech_router)
 app.include_router(audio_chat_router)
@@ -1165,6 +1168,48 @@ if _HAS_DRIFT:
 # CatBoost router (conditional)
 if _HAS_CATBOOST:
     set_catboost_state(_catboost, _model_load_lock, CATBOOST_MODELS_DIR)
+
+
+# ============================================================================
+# SHAP Explainer Dependencies
+# ============================================================================
+
+
+async def get_model_for_explain(model_type: str, model_id: str):
+    """Get a model by type and ID for SHAP explanation.
+
+    Looks up models from the appropriate cache based on model_type.
+    """
+    # Look up in the appropriate cache based on model type
+    if model_type == "anomaly":
+        for key, model in _models.items():
+            if key.startswith("anomaly:") and model_id in key:
+                return model
+    elif model_type == "classifier":
+        for key, model in _classifiers.items():
+            if model_id in key:
+                return model
+    elif model_type == "timeseries" and _timeseries is not None:
+        for key, model in _timeseries.items():
+            if model_id in key:
+                return model
+    elif model_type == "adtk" and _adtk is not None:
+        for key, model in _adtk.items():
+            if model_id in key:
+                return model
+    elif model_type == "drift" and _drift is not None:
+        for key, model in _drift.items():
+            if model_id in key:
+                return model
+    elif model_type == "catboost" and _catboost is not None:
+        for key, model in _catboost.items():
+            if model_id in key:
+                return model
+    return None
+
+
+set_model_getter(get_model_for_explain)
+set_explain_state(_model_load_lock)
 
 
 # ============================================================================

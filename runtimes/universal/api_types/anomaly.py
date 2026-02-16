@@ -64,6 +64,7 @@ class AnomalyScoreRequest(BaseModel):
     )  # Feature encoding schema
     threshold: float | None = None  # Override default threshold
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
+    explain: bool = False  # If True, include SHAP explanations for anomalous points
 
     model_config = {"populate_by_name": True}
 

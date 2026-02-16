@@ -1178,6 +1178,25 @@ class UniversalRuntimeService:
         return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}/data{query}")
 
     # =========================================================================
+    # SHAP Explainability
+    # =========================================================================
+
+    @classmethod
+    async def explain_list_explainers(cls) -> dict[str, Any]:
+        """List available SHAP explainer types."""
+        return await cls._make_request("GET", "/v1/explain/explainers")
+
+    @classmethod
+    async def explain_shap(cls, request: dict) -> dict[str, Any]:
+        """Generate SHAP explanations for model predictions."""
+        return await cls._make_request("POST", "/v1/explain/shap", json=request)
+
+    @classmethod
+    async def explain_importance(cls, request: dict) -> dict[str, Any]:
+        """Compute global feature importance from SHAP values."""
+        return await cls._make_request("POST", "/v1/explain/importance", json=request)
+
+    # =========================================================================
     # Text-to-Speech
     # =========================================================================
 
