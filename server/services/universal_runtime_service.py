@@ -704,6 +704,7 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
     ) -> dict[str, Any]:
         """Score data points for anomalies.
 
@@ -714,6 +715,7 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Include SHAP explanations for anomalous points
         """
         payload = {
             "model": model,
@@ -725,6 +727,8 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = True
 
         return await cls._make_request("POST", "/v1/anomaly/score", json=payload)
 
@@ -737,6 +741,7 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
     ) -> dict[str, Any]:
         """Detect anomalies (returns only anomalous points).
 
@@ -747,6 +752,7 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Include SHAP explanations for anomalous points
         """
         payload = {
             "model": model,
@@ -758,6 +764,8 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = True
 
         return await cls._make_request("POST", "/v1/anomaly/detect", json=payload)
 
