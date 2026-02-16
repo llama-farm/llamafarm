@@ -61,34 +61,14 @@ export function ManageAddons() {
         )
       : addons
 
-    // Filter out composite/meta add-ons from available list if all dependencies are installed
-    // (e.g., don't show "Speech Processing" if STT and TTS are already installed)
-    const availableFiltered = filtered.filter(a => {
-      if (a.installed) return false
-
-      // Only hide meta/composite addons (no packages, only dependencies)
-      // Regular addons should always show when uninstalled, even if dependencies are satisfied
-      const isMetaAddon = a.dependencies.length > 0 && (!a.packages || a.packages.length === 0)
-
-      if (isMetaAddon) {
-        // Check if ALL dependencies are installed
-        const allDepsInstalled = a.dependencies.every(depName => {
-          const depAddon = addons.find(addon => addon.name === depName)
-          return depAddon?.installed === true
-        })
-
-        // Hide meta add-ons where all dependencies are already installed
-        if (allDepsInstalled) {
-          return false
-        }
-      }
-
-      return true
-    })
+    // Meta-addons (no packages, only dependencies) exist for backend dependency
+    // resolution but should not appear on this page — users install individual addons directly
+    const isMetaAddon = (a: AddonInfo) =>
+      a.dependencies.length > 0 && (!a.packages || a.packages.length === 0)
 
     return {
-      installedAddons: filtered.filter(a => a.installed),
-      availableAddons: availableFiltered,
+      installedAddons: filtered.filter(a => a.installed && !isMetaAddon(a)),
+      availableAddons: filtered.filter(a => !a.installed && !isMetaAddon(a)),
     }
   }, [addons, search])
 
