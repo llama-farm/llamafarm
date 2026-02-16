@@ -62,24 +62,29 @@ class NarrativeExplanation:
     details: list[str]  # Per-feature explanations
 
 
-# Supported explainer types
-EXPLAINER_TYPES = {
-    "tree": {
-        "description": "Fast explainer for tree-based models (IForest, CatBoost, XGBoost)",
-        "class": shap.TreeExplainer,
-        "supported_models": ["isolation_forest", "catboost", "xgboost", "random_forest", "lightgbm"],
-    },
-    "linear": {
-        "description": "Fast explainer for linear models",
-        "class": shap.LinearExplainer,
-        "supported_models": ["linear", "logistic", "ridge", "lasso"],
-    },
-    "kernel": {
-        "description": "Model-agnostic explainer (slower but works with any model)",
-        "class": shap.KernelExplainer,
-        "supported_models": ["any"],
-    },
-}
+# Supported explainer types — lazy to avoid import-time shap access
+def _get_explainer_types() -> dict:
+    if not _HAS_SHAP:
+        return {}
+    return {
+        "tree": {
+            "description": "Fast explainer for tree-based models (IForest, CatBoost, XGBoost)",
+            "class": shap.TreeExplainer,
+            "supported_models": ["isolation_forest", "catboost", "xgboost", "random_forest", "lightgbm"],
+        },
+        "linear": {
+            "description": "Fast explainer for linear models",
+            "class": shap.LinearExplainer,
+            "supported_models": ["linear", "logistic", "ridge", "lasso"],
+        },
+        "kernel": {
+            "description": "Model-agnostic explainer (slower but works with any model)",
+            "class": shap.KernelExplainer,
+            "supported_models": ["any"],
+        },
+    }
+
+EXPLAINER_TYPES = _get_explainer_types()
 
 
 def get_explainer_types() -> list[dict[str, Any]]:
