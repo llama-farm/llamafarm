@@ -37,6 +37,7 @@ class CLIPModel(ClassificationModel):
         self._class_embeddings: torch.Tensor | None = None
         self._embedding_dim: int = 0
         self._cached_class_key: tuple | None = None
+        self._class_lock = asyncio.Lock()
 
     async def load(self) -> None:
         if self._loaded:
@@ -96,8 +97,11 @@ class CLIPModel(ClassificationModel):
             await self.load()
         import torch
 
-        if classes:
-            await self._encode_classes(classes)
+        if classes is not None:
+            if not classes:
+                raise ValueError("Empty classes list provided.")
+            async with self._class_lock:
+                await self._encode_classes(classes)
         elif not self.class_names or self._class_embeddings is None:
             raise ValueError("No classes provided.")
 
@@ -117,7 +121,8 @@ class CLIPModel(ClassificationModel):
         probs = await asyncio.to_thread(_infer)
         inference_time = (time.perf_counter() - start) * 1000
 
-        top_idx = np.argsort(probs)[::-1][:top_k]
+        effective_k = min(top_k, len(self.class_names))
+        top_idx = np.argsort(probs)[::-1][:effective_k]
         best = int(top_idx[0])
 
         return ClassificationResult(

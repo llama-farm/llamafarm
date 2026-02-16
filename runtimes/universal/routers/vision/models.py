@@ -62,13 +62,13 @@ async def list_vision_models() -> dict[str, Any]:
         info: dict[str, Any] = {"name": model_path.name}
         meta_file = model_path / "metadata.json"
         if meta_file.exists():
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception):  # best-effort metadata read
                 info.update(json.loads(meta_file.read_text()))
         # Count versions
         pts = list(model_path.glob("v*.pt"))
         info["versions"] = len(pts)
         info["has_current"] = (model_path / "current.pt").exists()
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception):  # best-effort metadata read
             size = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
             info["size_mb"] = round(size / (1024 * 1024), 2)
         models.append(info)
@@ -110,9 +110,10 @@ async def export_model(request: ModelExportRequest) -> ModelExportResponse:
 @handle_endpoint_errors("vision_save_model")
 async def save_model(model_id: str, name: str) -> dict[str, Any]:
     """Save a trained model."""
-    if '..' in name or name.startswith('/') or name.startswith('\\'):
+    safe_name = Path(name).name
+    if safe_name != name or '..' in name:
         raise HTTPException(status_code=400, detail="Invalid model name")
-    save_path = _models_dir() / name
+    save_path = _models_dir() / safe_name
     save_path.mkdir(parents=True, exist_ok=True)
     meta = {"name": name, "source_model_id": model_id,
             "created_at": datetime.utcnow().isoformat()}
@@ -124,13 +125,14 @@ async def save_model(model_id: str, name: str) -> dict[str, Any]:
 @handle_endpoint_errors("vision_load_model")
 async def load_model(name: str) -> dict[str, Any]:
     """Load a saved model for inference."""
-    if '..' in name or name.startswith('/') or name.startswith('\\'):
+    safe_name = Path(name).name
+    if safe_name != name or '..' in name:
         raise HTTPException(status_code=400, detail="Invalid model name")
-    model_path = _models_dir() / name
+    model_path = _models_dir() / safe_name
     if not model_path.exists():
         raise HTTPException(status_code=404, detail=f"Model '{name}' not found")
     meta = {}
     if (model_path / "metadata.json").exists():
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception):  # best-effort metadata read
             meta = json.loads((model_path / "metadata.json").read_text())
     return {"name": name, "metadata": meta, "loaded": True}

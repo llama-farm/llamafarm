@@ -648,7 +648,7 @@ async def load_ocr(backend: str = "surya", languages: list[str] | None = None):
 # Vision Model Loading (Detection / Classification)
 # ============================================================================
 
-VISION_MODELS_DIR = Path.home() / ".llamafarm" / "models" / "vision"
+VISION_MODELS_DIR = _LF_DATA_DIR / "models" / "vision"
 
 
 async def load_detection_model(model_id: str = "yolov8n"):

@@ -107,7 +107,7 @@ class ImageStore:
     def _to_record(self, row: sqlite3.Row) -> ImageRecord:
         created = None
         if row["created_at"]:
-            with contextlib.suppress(ValueError):
+            with contextlib.suppress(ValueError):  # graceful fallback for non-ISO timestamps
                 created = datetime.fromisoformat(str(row["created_at"]))
         return ImageRecord(
             id=row["id"], file_path=row["file_path"], source=row["source"],

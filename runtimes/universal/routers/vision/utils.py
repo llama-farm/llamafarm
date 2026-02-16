@@ -14,6 +14,6 @@ def decode_base64_image(image_str: str) -> bytes:
     else:
         base64_data = image_str
     try:
-        return base64.b64decode(base64_data)
+        return base64.b64decode(base64_data, validate=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid base64 image data") from e

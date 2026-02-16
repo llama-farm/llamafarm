@@ -161,7 +161,7 @@ class ReplayBuffer:
             conn.execute("DELETE FROM replay_samples WHERE id = ?", (sample_id,))
 
     def add(self, sample: ReplaySample) -> None:
-        if len(self._samples) >= self.max_size:
+        if sample.id not in self._samples and len(self._samples) >= self.max_size:
             self._evict_lowest()
         self._samples[sample.id] = sample
         self._persist(sample)

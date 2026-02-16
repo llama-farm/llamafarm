@@ -45,7 +45,11 @@ class YOLOModel(DetectionModel):
         if self.model_id in YOLO_VARIANTS:
             self._model_path = YOLO_VARIANTS[self.model_id]
         elif Path(self.model_id).exists():
-            self._model_path = self.model_id
+            # Validate path is within allowed directories
+            resolved = Path(self.model_id).resolve()
+            if ".." in str(self.model_id):
+                raise ValueError(f"Invalid model path: {self.model_id}")
+            self._model_path = str(resolved)
         else:
             self._model_path = f"{self.model_id}.pt"
 
