@@ -531,6 +531,7 @@ class DriftModel:
         state = joblib.load(path)
         self._detector = state["detector"]
         self.detector_type = state["detector_type"]
+        self.detector_config = DETECTOR_TYPES[self.detector_type]
         self._is_fitted = state["is_fitted"]
         self._reference_data = state.get("reference_data")
         self._detection_count = state.get("detection_count", 0)

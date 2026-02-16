@@ -85,7 +85,7 @@ class TimeseriesFitRequest(BaseModel):
         "arima",
         description="Forecasting algorithm to use",
     )
-    data: list[TimeseriesDataPoint] | list[dict] = Field(
+    data: list[TimeseriesDataPoint] = Field(
         ...,
         description="Training data as list of {timestamp, value} objects",
     )
@@ -126,7 +126,7 @@ class TimeseriesPredictRequest(BaseModel):
         le=0.99,
         description="Confidence level for prediction intervals",
     )
-    data: list[TimeseriesDataPoint] | list[dict] | None = Field(
+    data: list[TimeseriesDataPoint] | None = Field(
         None,
         description="Historical data (required for zero-shot backends)",
     )

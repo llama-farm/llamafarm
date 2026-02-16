@@ -70,10 +70,12 @@ def get_catboost_info() -> dict[str, Any]:
         "gpu_available": gpu_available,
         "model_types": ["classifier", "regressor"],
         "features": [
-            "native_categorical",
-            "incremental_learning",
-            "gpu_acceleration" if gpu_available else None,
-            "ordered_boosting",
+            f for f in [
+                "native_categorical",
+                "incremental_learning",
+                "gpu_acceleration" if gpu_available else None,
+                "ordered_boosting",
+            ] if f is not None
         ],
     }
 
