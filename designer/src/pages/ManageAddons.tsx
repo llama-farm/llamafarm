@@ -108,8 +108,11 @@ export function ManageAddons() {
       let status
       try {
         status = await getTaskStatus(taskId)
-      } catch {
-        continue // Network hiccup – keep polling
+      } catch (e: unknown) {
+        // Only retry true network failures (no server response).
+        // Re-throw HTTP errors (4xx/5xx) since they indicate permanent problems.
+        if (e && typeof e === 'object' && 'response' in e) throw e
+        continue
       }
       if (status.status === 'completed') return
       if (status.status === 'failed') {
