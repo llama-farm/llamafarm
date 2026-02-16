@@ -9,12 +9,33 @@ tasks can reuse the same behavior.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
 from celery import signature
 
 from core.celery import app
+
+logger = logging.getLogger(__name__)
+
+
+def _is_rag_available() -> bool:
+    """Check cached RAG health status to avoid dispatching tasks to an unhealthy worker.
+
+    Returns True if RAG appears healthy/degraded, False if unhealthy or unknown.
+    Uses a lazy import to avoid circular dependencies with the health cache module.
+    """
+    try:
+        from services.rag_health_cache import get_rag_health_cache
+
+        health = get_rag_health_cache().get_cached_health()
+        status = health.get("status", "unhealthy")
+        return status != "unhealthy"
+    except Exception:
+        # If we can't determine health, allow the request through
+        # so we don't break things if the cache isn't initialized yet
+        return True
 
 
 def build_ingest_signature(
@@ -87,6 +108,15 @@ async def delete_file_from_rag(
     Returns:
         Dictionary with deletion results including deleted_count
     """
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping delete for file_hash=%s", file_hash[:16])
+        return {
+            "status": "error",
+            "error": "RAG service is currently unavailable",
+            "file_hash": file_hash,
+            "deleted_count": 0,
+        }
+
     task = build_delete_signature(
         project_dir=project_dir,
         database_name=database_name,
@@ -163,6 +193,10 @@ async def ingest_file_with_rag(
     Dispatch rag.ingest_file and poll for completion from async contexts.
     """
 
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping ingest for %s", filename or source_path)
+        return False, {"error": "RAG service is currently unavailable"}
+
     sig = build_ingest_signature(
         project_dir=project_dir,
         data_processing_strategy_name=data_processing_strategy_name,
@@ -229,6 +263,10 @@ def search_with_rag_database(
     Run a search query via rag.search_with_database.
     """
 
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping search for database=%s", database)
+        return []
+
     task = signature(
         "rag.search_with_database",
         args=[
@@ -261,6 +299,18 @@ def handle_rag_query(
     """
     Execute rag.handle_rag_query and return the response.
     """
+
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping query for database=%s", database)
+        return {
+            "query": query,
+            "database": database,
+            "results": [],
+            "total_results": 0,
+            "retrieval_strategy": retrieval_strategy,
+            "context": context,
+            "error": "RAG service is currently unavailable",
+        }
 
     task = signature(
         "rag.handle_rag_query",
@@ -304,6 +354,21 @@ def get_rag_stats(project_dir: str, database: str) -> dict[str, Any]:
     """
     from datetime import UTC, datetime
 
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping stats for database=%s", database)
+        return {
+            "database": database,
+            "vector_count": 0,
+            "document_count": 0,
+            "chunk_count": 0,
+            "collection_size_bytes": 0,
+            "index_size_bytes": 0,
+            "embedding_dimension": 0,
+            "distance_metric": "unknown",
+            "last_updated": datetime.now(UTC).isoformat(),
+            "metadata": {"error": "RAG service is currently unavailable"},
+        }
+
     task = signature(
         "rag.get_database_stats",
         args=[project_dir, database],
@@ -341,6 +406,14 @@ def list_rag_documents(
     Returns:
         Dict with 'documents' list, 'total_count', and 'database' name
     """
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping document list for database=%s", database)
+        return {
+            "documents": [],
+            "total_count": 0,
+            "database": database,
+        }
+
     task = signature(
         "rag.list_database_documents",
         args=[project_dir, database, limit, offset],
@@ -363,6 +436,10 @@ def batch_search(
     """
     Execute rag.batch_search for a list of queries.
     """
+
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping batch search for database=%s", database)
+        return []
 
     task = signature(
         "rag.batch_search",
@@ -400,6 +477,22 @@ def preview_document(
     Returns:
         Dict with preview results including chunks and statistics
     """
+    if not _is_rag_available():
+        logger.info("RAG unavailable, skipping document preview")
+        return {
+            "original_text": "",
+            "chunks": [],
+            "file_info": {"filename": original_filename or "unknown", "size": 0},
+            "parser_used": "unknown",
+            "chunk_strategy": "unknown",
+            "chunk_size": 0,
+            "chunk_overlap": 0,
+            "total_chunks": 0,
+            "avg_chunk_size": 0.0,
+            "total_size_with_overlaps": 0,
+            "warnings": ["RAG service is currently unavailable"],
+        }
+
     task = signature(
         "rag.preview_document",
         args=[project_dir, file_path],
