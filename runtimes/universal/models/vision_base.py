@@ -89,7 +89,7 @@ class VisionModel(BaseModel):
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"
         except ImportError:
-            pass
+            pass  # torch not installed — fall back to CPU
         return "cpu"
 
     def _image_to_numpy(self, image: bytes | np.ndarray) -> np.ndarray:

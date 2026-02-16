@@ -115,7 +115,7 @@ class ReplayBuffer:
                     pass
                 created_at = datetime.utcnow()
                 if row["created_at"]:
-                    with contextlib.suppress(ValueError):
+                    with contextlib.suppress(ValueError):  # graceful fallback for non-ISO timestamps
                         created_at = datetime.fromisoformat(row["created_at"])
                 self._samples[row["id"]] = ReplaySample(
                     id=row["id"], image_path=row["image_path"],

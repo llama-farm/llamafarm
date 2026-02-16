@@ -111,9 +111,11 @@ async def export_model(request: ModelExportRequest) -> ModelExportResponse:
 async def save_model(model_id: str, name: str) -> dict[str, Any]:
     """Save a trained model."""
     safe_name = Path(name).name
-    if safe_name != name or '..' in name:
+    if safe_name != name or '..' in name or ':' in name or '\\' in name:
         raise HTTPException(status_code=400, detail="Invalid model name")
     save_path = _models_dir() / safe_name
+    if not str(save_path.resolve()).startswith(str(_models_dir().resolve())):
+        raise HTTPException(status_code=400, detail="Invalid model name")
     save_path.mkdir(parents=True, exist_ok=True)
     meta = {"name": name, "source_model_id": model_id,
             "created_at": datetime.utcnow().isoformat()}
@@ -126,9 +128,11 @@ async def save_model(model_id: str, name: str) -> dict[str, Any]:
 async def load_model(name: str) -> dict[str, Any]:
     """Load a saved model for inference."""
     safe_name = Path(name).name
-    if safe_name != name or '..' in name:
+    if safe_name != name or '..' in name or ':' in name or '\\' in name:
         raise HTTPException(status_code=400, detail="Invalid model name")
     model_path = _models_dir() / safe_name
+    if not str(model_path.resolve()).startswith(str(_models_dir().resolve())):
+        raise HTTPException(status_code=400, detail="Invalid model name")
     if not model_path.exists():
         raise HTTPException(status_code=404, detail=f"Model '{name}' not found")
     meta = {}

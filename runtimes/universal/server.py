@@ -23,7 +23,6 @@ import asyncio
 import os
 import warnings
 from contextlib import asynccontextmanager, suppress
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -660,7 +659,11 @@ async def load_detection_model(model_id: str = "yolov8n"):
                 from models.yolo_model import YOLOModel
                 device = get_device()
                 # Check for custom model in vision models dir
-                custom_path = VISION_MODELS_DIR / model_id / "current.pt"
+                from pathlib import Path as _Path
+                safe_id = _Path(model_id).name
+                if safe_id != model_id:
+                    raise ValueError(f"Invalid model_id: {model_id}")
+                custom_path = VISION_MODELS_DIR / safe_id / "current.pt"
                 mid = str(custom_path) if custom_path.exists() else model_id
                 model = YOLOModel(model_id=mid, device=device)
                 await model.load()

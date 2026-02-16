@@ -45,13 +45,18 @@ class YOLOModel(DetectionModel):
         if self.model_id in YOLO_VARIANTS:
             self._model_path = YOLO_VARIANTS[self.model_id]
         elif Path(self.model_id).exists():
-            # Validate path is within allowed directories
+            # Validate path — must resolve within home/.llamafarm or cwd
             resolved = Path(self.model_id).resolve()
-            if ".." in str(self.model_id):
-                raise ValueError(f"Invalid model path: {self.model_id}")
+            allowed_roots = [Path.home() / ".llamafarm", Path.cwd()]
+            if not any(str(resolved).startswith(str(r.resolve())) for r in allowed_roots):
+                raise ValueError(f"Model path outside allowed directories: {self.model_id}")
             self._model_path = str(resolved)
         else:
-            self._model_path = f"{self.model_id}.pt"
+            # Basename only for dynamic model IDs (no path components)
+            safe_id = Path(self.model_id).name
+            if safe_id != self.model_id:
+                raise ValueError(f"Invalid model_id: {self.model_id}")
+            self._model_path = f"{safe_id}.pt"
 
         self.yolo = YOLO(self._model_path)
         if self.device != "cpu":

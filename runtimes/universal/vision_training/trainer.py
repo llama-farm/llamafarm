@@ -208,7 +208,7 @@ class IncrementalTrainer:
     async def wait_for_job(self, job_id: str, timeout: float | None = None) -> TrainingJob | None:
         task = self._tasks.get(job_id)
         if task:
-            with contextlib.suppress(asyncio.TimeoutError):
+            with contextlib.suppress(asyncio.TimeoutError):  # best-effort wait; training may outlast timeout
                 await asyncio.wait_for(task, timeout=timeout)
         return self._jobs.get(job_id)
 
