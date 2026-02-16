@@ -109,16 +109,14 @@ _HAS_ADTK = importlib.util.find_spec("adtk") is not None
 if _HAS_ADTK:
     from models.adtk_model import ADTKModel
     from routers.adtk import router as adtk_router
-    from routers.adtk import set_adtk_loader
-    from routers.adtk import set_state as set_adtk_state
+    from routers.adtk import set_adtk_loader, set_adtk_state
 
 # Conditional import for Drift Detection addon (requires alibi_detect package)
 _HAS_DRIFT = importlib.util.find_spec("alibi_detect") is not None
 if _HAS_DRIFT:
     from models.drift_model import DriftModel
     from routers.drift import router as drift_router
-    from routers.drift import set_drift_loader
-    from routers.drift import set_state as set_drift_state
+    from routers.drift import set_drift_loader, set_drift_state
 
 # Conditional import for CatBoost addon (requires catboost package)
 _HAS_CATBOOST = importlib.util.find_spec("catboost") is not None
@@ -883,17 +881,18 @@ if _HAS_ADTK:
 
     async def load_adtk(
         model_id: str,
-        detector_type: str = "LevelShiftAD",
+        detector: str = "level_shift",
+        params: dict | None = None,
     ) -> "ADTKModel":
         """Load or get cached ADTK model."""
         cache_key = _make_adtk_cache_key(model_id)
 
-        # Evict cached model if detector_type changed
+        # Evict cached model if detector changed
         cached = _adtk.get(cache_key) if cache_key in _adtk else None
-        if cached is not None and getattr(cached, "detector_type", None) != detector_type:
+        if cached is not None and getattr(cached, "detector_type", None) != detector:
             logger.info(
-                f"Evicting ADTK model '{model_id}': detector_type changed "
-                f"({cached.detector_type} -> {detector_type})"
+                f"Evicting ADTK model '{model_id}': detector changed "
+                f"({cached.detector_type} -> {detector})"
             )
             _adtk.pop(cache_key, None)
             await cached.unload()
@@ -901,13 +900,14 @@ if _HAS_ADTK:
         if cache_key not in _adtk:
             async with _model_load_lock:
                 if cache_key not in _adtk:
-                    logger.info(f"Loading ADTK model: {model_id} (detector_type: {detector_type})")
+                    logger.info(f"Loading ADTK model: {model_id} (detector: {detector})")
                     device = get_device()
 
                     model = ADTKModel(
                         model_id=model_id,
                         device=device,
-                        detector_type=detector_type,
+                        detector=detector,
+                        **(params or {}),
                     )
 
                     await model.load()
@@ -928,17 +928,18 @@ if _HAS_DRIFT:
 
     async def load_drift(
         model_id: str,
-        detector_type: str = "ks",
+        detector: str = "ks",
+        params: dict | None = None,
     ) -> "DriftModel":
         """Load or get cached drift detection model."""
         cache_key = _make_drift_cache_key(model_id)
 
-        # Evict cached model if detector_type changed
+        # Evict cached model if detector changed
         cached = _drift.get(cache_key) if cache_key in _drift else None
-        if cached is not None and getattr(cached, "detector_type", None) != detector_type:
+        if cached is not None and getattr(cached, "detector_type", None) != detector:
             logger.info(
-                f"Evicting Drift model '{model_id}': detector_type changed "
-                f"({cached.detector_type} -> {detector_type})"
+                f"Evicting Drift model '{model_id}': detector changed "
+                f"({cached.detector_type} -> {detector})"
             )
             _drift.pop(cache_key, None)
             await cached.unload()
@@ -946,13 +947,14 @@ if _HAS_DRIFT:
         if cache_key not in _drift:
             async with _model_load_lock:
                 if cache_key not in _drift:
-                    logger.info(f"Loading Drift Detection model: {model_id} (detector_type: {detector_type})")
+                    logger.info(f"Loading Drift Detection model: {model_id} (detector: {detector})")
                     device = get_device()
 
                     model = DriftModel(
                         model_id=model_id,
                         device=device,
-                        detector_type=detector_type,
+                        detector=detector,
+                        **(params or {}),
                     )
 
                     await model.load()
