@@ -26,6 +26,7 @@ import { Selector } from '../ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
 import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { getTaskStatus } from '../../api/addonsService'
 import { useQueryClient } from '@tanstack/react-query'
 import type { AddonInfo } from '../../types/addons'
 import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
@@ -1877,6 +1878,22 @@ export default function TestChat({
 
   const installAddonMutation = useInstallAddon()
 
+  // Poll a background install task until it reaches a terminal state
+  const waitForTaskCompletion = useCallback(async (taskId: string) => {
+    const POLL_INTERVAL = 2000
+    const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      try {
+        const status = await getTaskStatus(taskId)
+        if (status.status === 'completed' || status.status === 'failed') return
+      } catch {
+        // Network hiccup – keep polling
+      }
+    }
+  }, [])
+
   // Handle install confirmation from side pane
   const handleAddonInstallConfirm = useCallback(async (selectedAddons: string[]) => {
     setShowAddonSidePane(false)
@@ -1887,8 +1904,9 @@ export default function TestChat({
       ? uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))?.display_name || 'Add-on'
       : `${selectedAddons.length} add-ons`
 
-    // Install all selected addons sequentially
-    // Only restart service after the LAST addon to avoid multiple restarts
+    // Install all selected addons sequentially.
+    // The server's install endpoint returns immediately (background task), so we must
+    // poll for each task to complete before starting the next install to avoid lock conflicts.
     try {
       for (let i = 0; i < selectedAddons.length; i++) {
         const addonName = selectedAddons[i]
@@ -1899,15 +1917,18 @@ export default function TestChat({
           restart_service: isLastAddon, // Only restart after last addon
         })
 
-        // Show progress panel for the last addon installation
-        if (isLastAddon) {
-          setAddonInstallTaskId(response.task_id)
-          setAddonInstallName(displayName)
+        // Show progress panel (tracks the current install task)
+        setAddonInstallTaskId(response.task_id)
+        setAddonInstallName(displayName)
+
+        // Wait for this install to finish before starting the next one
+        if (!isLastAddon) {
+          await waitForTaskCompletion(response.task_id)
         }
+        // For the last addon, let the progress panel handle completion via useTaskStatus
       }
     } catch (error) {
       console.error('Failed to install addons:', error)
-      // TODO: Show error toast to user
     }
   }, [uninstalledSpeechAddons, installAddonMutation])
 

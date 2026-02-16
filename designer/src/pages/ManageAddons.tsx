@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useListAddons,
@@ -6,6 +6,7 @@ import {
   useUninstallAddon,
   addonKeys,
 } from '../hooks/useAddons'
+import { getTaskStatus } from '../api/addonsService'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ui/toast'
 import { SearchInput } from '../components/ui/search-input'
@@ -112,6 +113,22 @@ export function ManageAddons() {
     setShowInstallPane(true)
   }
 
+  // Poll a background install task until it reaches a terminal state
+  const waitForTaskCompletion = useCallback(async (taskId: string) => {
+    const POLL_INTERVAL = 2000
+    const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      try {
+        const status = await getTaskStatus(taskId)
+        if (status.status === 'completed' || status.status === 'failed') return
+      } catch {
+        // Network hiccup – keep polling
+      }
+    }
+  }, [])
+
   const handleInstallConfirm = async (selectedAddons: string[]) => {
     if (selectedAddons.length === 0) return
     setShowInstallPane(false)
@@ -120,11 +137,25 @@ export function ManageAddons() {
     setInstallingAddonName(selectedAddons[0])
 
     try {
-      const response = await installMutation.mutateAsync({
-        name: selectedAddons[0],
-        restart_service: true,
-      })
-      setInstallTaskId(response.task_id)
+      // Install all selected addons sequentially, waiting for each to finish.
+      // The server's install endpoint returns immediately (background task), so we
+      // poll for completion before starting the next to avoid lock conflicts.
+      for (let i = 0; i < selectedAddons.length; i++) {
+        const addonName = selectedAddons[i]
+        const isLastAddon = i === selectedAddons.length - 1
+
+        const response = await installMutation.mutateAsync({
+          name: addonName,
+          restart_service: isLastAddon, // Only restart after last addon
+        })
+
+        setInstallTaskId(response.task_id)
+
+        // Wait for this install to finish before starting the next one
+        if (!isLastAddon) {
+          await waitForTaskCompletion(response.task_id)
+        }
+      }
     } catch (error) {
       setInstallingAddonName(null) // Clear on error
       toast({
