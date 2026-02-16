@@ -6,6 +6,6 @@ Provides access to:
 - Unsupervised detection for unlabeled time series data
 """
 
-from .router import router
+from .router import router as adtk_router
 
-__all__ = ["router"]
+__all__ = ["adtk_router"]

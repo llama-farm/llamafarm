@@ -7,6 +7,6 @@ Provides access to:
 - Model management (list, load, delete)
 """
 
-from .router import router
+from .router import router as timeseries_router
 
-__all__ = ["router"]
+__all__ = ["timeseries_router"]

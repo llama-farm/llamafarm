@@ -7,6 +7,6 @@ Provides access to data drift monitoring:
 - Chi-squared: Categorical drift
 """
 
-from .router import router
+from .router import router as drift_router
 
-__all__ = ["router"]
+__all__ = ["drift_router"]

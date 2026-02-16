@@ -8,6 +8,6 @@ Provides access to:
 - GPU acceleration (when available)
 """
 
-from .router import router
+from .router import router as catboost_router
 
-__all__ = ["router"]
+__all__ = ["catboost_router"]
