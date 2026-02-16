@@ -125,15 +125,15 @@ export function ManageAddons() {
       if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
       await new Promise(r => setTimeout(r, POLL_INTERVAL))
       if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      let status
       try {
-        const status = await getTaskStatus(taskId)
-        if (status.status === 'completed') return
-        if (status.status === 'failed') {
-          throw new Error(status.error || `Install task ${taskId} failed`)
-        }
-      } catch (e) {
-        // Re-throw task failures and abort errors; swallow network hiccups
-        if (e instanceof DOMException || (e instanceof Error && e.message.includes('failed'))) throw e
+        status = await getTaskStatus(taskId)
+      } catch {
+        continue // Network hiccup – keep polling
+      }
+      if (status.status === 'completed') return
+      if (status.status === 'failed') {
+        throw new Error(status.error || `Install task ${taskId} failed`)
       }
     }
     throw new Error('Install timed out')
@@ -438,6 +438,7 @@ export function ManageAddons() {
           onCancel={() => {
             installAbortRef.current?.abort()
             setInstallTaskId(null)
+            setInstallingAddonName(null)
           }}
         />
       )}
