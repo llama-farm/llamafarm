@@ -228,9 +228,37 @@ class TimeseriesModel(BaseModel):
                 logger.error(f"Security validation failed: {e}")
                 raise
         else:
-            await self._initialize_backend()
+            # Try to find persisted model by name in models directory
+            persisted = self._find_persisted_model()
+            if persisted:
+                await self._load_pretrained(persisted)
+            else:
+                await self._initialize_backend()
 
         logger.info(f"Timeseries model initialized: {self.backend}")
+
+    def _find_persisted_model(self) -> Path | None:
+        """Find a persisted model file by name in the models directory."""
+        if not TIMESERIES_MODELS_DIR.exists():
+            return None
+        # Match {model_id}_{backend}.joblib or {model_id}_*.joblib
+        safe_name = Path(self.model_id).name
+        if safe_name != self.model_id or ".." in self.model_id:
+            return None
+        candidates = sorted(
+            TIMESERIES_MODELS_DIR.glob(f"{safe_name}_{self.backend}.joblib"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if candidates:
+            return candidates[0]
+        # Fallback: any backend match
+        candidates = sorted(
+            TIMESERIES_MODELS_DIR.glob(f"{safe_name}_*.joblib"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        return candidates[0] if candidates else None
 
     async def _load_pretrained(self, model_path: Path) -> None:
         """Load a pre-trained model from disk."""

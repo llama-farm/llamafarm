@@ -112,6 +112,11 @@ def _find_model_file(model_name: str, default_detector: str = "ks") -> tuple[Pat
     Raises:
         FileNotFoundError: If no matching model file found
     """
+    # Prevent path traversal / glob injection
+    safe_name = Path(model_name).name
+    if safe_name != model_name or ".." in model_name:
+        raise ValueError(f"Invalid model_name: {model_name}")
+
     if model_name.endswith("-latest"):
         base_name = model_name[:-7]
         model_files = list(DRIFT_MODELS_DIR.glob(f"{base_name}_*.joblib"))
@@ -234,7 +239,7 @@ async def load_model(request: DriftLoadRequest) -> DriftLoadResponse:
     # Cache it
     if _drift_cache is not None:
         cache_key = f"{model_name}_{detector}"
-        _drift_cache.put(cache_key, model)
+        _drift_cache[cache_key] = model
 
     return DriftLoadResponse(
         model=model_name,

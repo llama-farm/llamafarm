@@ -70,8 +70,12 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
-from routers.explain import router as explain_router
-from routers.explain import set_explain_state, set_model_getter
+try:
+    from routers.explain import router as explain_router
+    from routers.explain import set_explain_state, set_model_getter
+    _HAS_EXPLAIN = True
+except ImportError:
+    _HAS_EXPLAIN = False
 from routers.files import router as files_router
 from routers.health import (
     router as health_router,
@@ -357,7 +361,8 @@ app.add_middleware(
 
 # Include all routers
 app.include_router(anomaly_router)
-app.include_router(explain_router)
+if _HAS_EXPLAIN:
+    app.include_router(explain_router)
 app.include_router(audio_router)
 app.include_router(audio_speech_router)
 app.include_router(audio_chat_router)
@@ -1208,8 +1213,9 @@ async def get_model_for_explain(model_type: str, model_id: str):
     return None
 
 
-set_model_getter(get_model_for_explain)
-set_explain_state(_model_load_lock)
+if _HAS_EXPLAIN:
+    set_model_getter(get_model_for_explain)
+    set_explain_state(_model_load_lock)
 
 
 # ============================================================================

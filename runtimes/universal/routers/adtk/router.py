@@ -247,7 +247,7 @@ async def load_model(request: ADTKLoadRequest) -> ADTKLoadResponse:
     # Cache it
     if _adtk_cache is not None:
         cache_key = f"{model_name}_{detector}"
-        _adtk_cache.put(cache_key, model)
+        _adtk_cache[cache_key] = model
 
     return ADTKLoadResponse(
         model=model_name,

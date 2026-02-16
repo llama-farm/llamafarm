@@ -10,6 +10,9 @@ Tests SHAP explainer functionality including:
 
 import numpy as np
 import pytest
+
+pytest.importorskip("shap", reason="shap addon not installed")
+
 from sklearn.ensemble import IsolationForest
 from sklearn.linear_model import LogisticRegression
 

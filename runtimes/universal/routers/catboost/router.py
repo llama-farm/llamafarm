@@ -61,7 +61,11 @@ def _get_model_path(model_id: str) -> Path:
     """Get the path for a CatBoost model file."""
     if _catboost_models_dir is None:
         raise RuntimeError("CatBoost models directory not set")
-    return _catboost_models_dir / f"{model_id}.joblib"
+    # Prevent path traversal
+    safe_name = Path(model_id).name
+    if safe_name != model_id or ".." in model_id:
+        raise ValueError(f"Invalid model_id: {model_id}")
+    return _catboost_models_dir / f"{safe_name}.joblib"
 
 
 def _list_saved_models() -> list[CatBoostModelInfo]:
@@ -181,7 +185,7 @@ async def fit_model(request: CatBoostFitRequest) -> CatBoostFitResponse:
 
     except Exception as e:
         logger.error(f"CatBoost fit failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to train CatBoost model: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to train CatBoost model") from e
 
 
 @router.post("/v1/catboost/predict")
@@ -239,7 +243,7 @@ async def predict(request: CatBoostPredictRequest) -> CatBoostPredictResponse:
 
     except Exception as e:
         logger.error(f"CatBoost predict failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Prediction failed") from e
 
 
 @router.post("/v1/catboost/update")
@@ -286,7 +290,7 @@ async def update_model(request: CatBoostUpdateRequest) -> CatBoostUpdateResponse
 
     except Exception as e:
         logger.error(f"CatBoost update failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Update failed") from e
 
 
 @router.post("/v1/catboost/load")
@@ -316,7 +320,7 @@ async def load_model(request: CatBoostLoadRequest) -> CatBoostLoadResponse:
 
     except Exception as e:
         logger.error(f"CatBoost load failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Load failed: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Load failed") from e
 
 
 @router.delete("/v1/catboost/{model_id}")
@@ -380,4 +384,4 @@ async def get_feature_importance(model_id: str) -> CatBoostFeatureImportanceResp
 
     except Exception as e:
         logger.error(f"Feature importance failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get feature importance: {str(e)}") from e
+        raise HTTPException(status_code=500, detail="Failed to get feature importance") from e

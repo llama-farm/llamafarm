@@ -23,7 +23,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import shap
+
+try:
+    import shap
+    _HAS_SHAP = True
+except ImportError:
+    shap = None
+    _HAS_SHAP = False
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +145,8 @@ class SHAPExplainer:
             feature_names: Optional feature names
             background_data: Background data for Kernel SHAP (required for kernel type)
         """
+        if not _HAS_SHAP:
+            raise ImportError("shap is required for SHAP explanations: pip install shap")
         self.model = model
         self.feature_names = feature_names
         self.background_data = background_data
