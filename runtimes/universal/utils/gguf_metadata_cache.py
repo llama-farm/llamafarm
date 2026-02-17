@@ -33,6 +33,11 @@ class GGUFMetadata:
     chat_template: str | None = None
     bos_token: str = ""
     eos_token: str = ""
+    # Architecture params for KV cache size estimation
+    n_layer: int | None = None
+    n_head_kv: int | None = None
+    head_k_size: int | None = None
+    head_v_size: int | None = None
     # Raw fields for any additional lookups
     _raw_fields: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -129,6 +134,23 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                         )
                 except (IndexError, ValueError, TypeError):
                     pass
+
+            # Architecture params for KV cache estimation
+            # Keys are prefixed by architecture (e.g., qwen3.block_count),
+            # so we match by suffix.
+            _arch_field_map = {
+                ".block_count": "n_layer",
+                ".attention.head_count_kv": "n_head_kv",
+                ".attention.key_length": "head_k_size",
+                ".attention.value_length": "head_v_size",
+            }
+            for suffix, attr in _arch_field_map.items():
+                if key.endswith(suffix) and field.data:
+                    try:
+                        val = int(field.parts[field.data[0]])
+                        setattr(metadata, attr, val)
+                    except (IndexError, ValueError, TypeError) as e:
+                        logger.debug("Could not parse GGUF field %s: %s", key, e)
 
             # Chat template
             if key == "tokenizer.chat_template":

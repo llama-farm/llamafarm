@@ -505,6 +505,260 @@ class TestLFAgent:
         assert messages[2]["content"] == "Hi there"
 
 
+class TestSystemPromptOverride:
+    """Test API system prompts override config system prompts."""
+
+    @pytest.fixture
+    def mock_client(self):
+        from config.datamodel import Model, Provider
+
+        from agents.base.clients.client import LFAgentClient
+
+        class MockLFAgentClient(LFAgentClient):
+            last_messages = None
+
+            async def chat(self, *, messages, tools=None, extra_body=None):
+                self.last_messages = messages
+                return "Response"
+
+            async def stream_chat(
+                self, *, messages, tools=None, extra_body=None
+            ):
+                self.last_messages = messages
+                mock_chunk = MagicMock()
+                mock_chunk.choices = [MagicMock()]
+                mock_chunk.choices[0].delta = MagicMock()
+                mock_chunk.choices[0].delta.content = "Response"
+                yield mock_chunk
+
+            @staticmethod
+            def prompt_to_message(prompt):
+                return LFChatCompletionSystemMessageParam(
+                    role="system", content=prompt.content
+                )
+
+        model_config = Model(
+            name="test-model",
+            provider=Provider.openai,
+            model="gpt-4",
+            base_url="https://api.openai.com/v1",
+            api_key="test-key",
+        )
+        return MockLFAgentClient(model_config=model_config)
+
+    @pytest.fixture
+    def agent_with_config_prompt(self, mock_client):
+        history = LFAgentHistory()
+        system_prompt_gen = LFAgentSystemPromptGenerator(
+            prompts=[
+                LFChatCompletionSystemMessageParam(
+                    role="system",
+                    content="Config system prompt",
+                )
+            ]
+        )
+        config = LFAgentConfig(
+            client=mock_client,
+            history=history,
+            system_prompt_generator=system_prompt_gen,
+        )
+        return LFAgent(config=config), mock_client
+
+    @pytest.mark.asyncio
+    async def test_api_system_prompt_overrides_config(
+        self, agent_with_config_prompt
+    ):
+        """API system message replaces config system prompt."""
+        agent, client = agent_with_config_prompt
+
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "API system prompt"},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+
+        msgs = client.last_messages
+        # First message should be the API system prompt
+        assert msgs[0]["role"] == "system"
+        assert msgs[0]["content"] == "API system prompt"
+        # Config system prompt should NOT appear
+        assert not any(
+            "Config system prompt" in str(m.get("content", ""))
+            for m in msgs
+        )
+
+    @pytest.mark.asyncio
+    async def test_config_prompt_used_when_no_api_system(
+        self, agent_with_config_prompt
+    ):
+        """Config system prompt used when API doesn't send one."""
+        agent, client = agent_with_config_prompt
+
+        await agent.run_async(
+            messages=[{"role": "user", "content": "Hello"}]
+        )
+
+        msgs = client.last_messages
+        assert msgs[0]["role"] == "system"
+        assert "Config system prompt" in msgs[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_not_persisted_in_history(
+        self, agent_with_config_prompt
+    ):
+        """System messages should not be stored in history."""
+        agent, _ = agent_with_config_prompt
+
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "API system prompt"},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+
+        # History should only have the user message
+        assert len(agent.history.history) == 1
+        assert agent.history.history[0]["role"] == "user"
+        assert agent.history.history[0]["content"] == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_context_providers_append_to_api_system_prompt(
+        self, agent_with_config_prompt
+    ):
+        """RAG context providers still work with API system prompts."""
+        agent, client = agent_with_config_prompt
+
+        provider = MagicMock(spec=LFAgentContextProvider)
+        provider.title = "RAG Context"
+        provider.get_info.return_value = "Retrieved document content"
+        agent.register_context_provider("rag", provider)
+
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "API system prompt"},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+
+        msgs = client.last_messages
+        system_content = msgs[0]["content"]
+        assert "API system prompt" in system_content
+        assert "RAG Context" in system_content
+        assert "Retrieved document content" in system_content
+
+    @pytest.mark.asyncio
+    async def test_successive_requests_different_system_prompts(
+        self, agent_with_config_prompt
+    ):
+        """Each request can send a different system prompt."""
+        agent, client = agent_with_config_prompt
+
+        # First request with system prompt A
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "System A"},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+        assert "System A" in client.last_messages[0]["content"]
+
+        # Second request with system prompt B
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "System B"},
+                {"role": "user", "content": "World"},
+            ]
+        )
+        assert "System B" in client.last_messages[0]["content"]
+        assert "System A" not in str(client.last_messages)
+
+    @pytest.mark.asyncio
+    async def test_request_without_system_falls_back_to_config(
+        self, agent_with_config_prompt
+    ):
+        """After a request with API system, next without falls back to config."""
+        agent, client = agent_with_config_prompt
+
+        # First request with API system prompt
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "API override"},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+        assert "API override" in client.last_messages[0]["content"]
+
+        # Second request WITHOUT system prompt — should use config
+        await agent.run_async(
+            messages=[{"role": "user", "content": "World"}]
+        )
+        assert "Config system prompt" in client.last_messages[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_stream_api_system_prompt_overrides_config(
+        self, agent_with_config_prompt
+    ):
+        """Streaming also respects API system prompt override."""
+        agent, client = agent_with_config_prompt
+
+        async for _ in agent.run_async_stream(
+            messages=[
+                {"role": "system", "content": "Stream API prompt"},
+                {"role": "user", "content": "Hello"},
+            ]
+        ):
+            pass
+
+        msgs = client.last_messages
+        assert msgs[0]["role"] == "system"
+        assert msgs[0]["content"] == "Stream API prompt"
+        assert not any(
+            "Config system prompt" in str(m.get("content", ""))
+            for m in msgs
+        )
+
+    @pytest.mark.asyncio
+    async def test_override_persists_across_tool_loop_calls(
+        self, agent_with_config_prompt
+    ):
+        """System prompt override survives messages=None in tool loops."""
+        agent, client = agent_with_config_prompt
+
+        # First call sets the override
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": "Tool loop prompt"},
+                {"role": "user", "content": "Use a tool"},
+            ]
+        )
+        assert "Tool loop prompt" in client.last_messages[0]["content"]
+
+        # Subsequent call with messages=None (tool iteration)
+        await agent.run_async(messages=None)
+        assert "Tool loop prompt" in client.last_messages[0]["content"]
+        assert "Config system prompt" not in str(client.last_messages)
+
+    @pytest.mark.asyncio
+    async def test_none_content_not_stringified(
+        self, agent_with_config_prompt
+    ):
+        """None content should not become the string 'None'."""
+        agent, client = agent_with_config_prompt
+
+        await agent.run_async(
+            messages=[
+                {"role": "system", "content": None},
+                {"role": "user", "content": "Hello"},
+            ]
+        )
+
+        msgs = client.last_messages
+        # Should use empty string, not "None"
+        assert msgs[0]["role"] == "system"
+        assert "None" not in msgs[0]["content"]
+
+
 class TestToolCallRequest:
     """Test suite for ToolCallRequest."""
 

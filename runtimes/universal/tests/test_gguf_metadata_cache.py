@@ -45,6 +45,10 @@ class TestGGUFMetadataCache:
             chat_template="test template",
             bos_token="<s>",
             eos_token="</s>",
+            n_layer=32,
+            n_head_kv=8,
+            head_k_size=128,
+            head_v_size=128,
         )
 
         assert metadata.file_path == "/test/path.gguf"
@@ -54,6 +58,10 @@ class TestGGUFMetadataCache:
         assert metadata.chat_template == "test template"
         assert metadata.bos_token == "<s>"
         assert metadata.eos_token == "</s>"
+        assert metadata.n_layer == 32
+        assert metadata.n_head_kv == 8
+        assert metadata.head_k_size == 128
+        assert metadata.head_v_size == 128
 
     def test_gguf_metadata_defaults(self):
         """Test GGUFMetadata default values."""
@@ -67,3 +75,7 @@ class TestGGUFMetadataCache:
         assert metadata.chat_template is None
         assert metadata.bos_token == ""
         assert metadata.eos_token == ""
+        assert metadata.n_layer is None
+        assert metadata.n_head_kv is None
+        assert metadata.head_k_size is None
+        assert metadata.head_v_size is None

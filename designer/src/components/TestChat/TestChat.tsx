@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mic, MicOff, Loader2, Volume2 } from 'lucide-react'
+import { Mic, MicOff, Loader2, Volume2, Download } from 'lucide-react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '../ui/badge'
@@ -25,6 +25,12 @@ import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifie
 import { Selector } from '../ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
+import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { getTaskStatus } from '../../api/addonsService'
+import { useQueryClient } from '@tanstack/react-query'
+import type { AddonInfo } from '../../types/addons'
+import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
+import { AddonInstallProgress } from '../Addons/AddonInstallProgress'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
@@ -232,6 +238,39 @@ function InferenceNoModelsState({
           className="mt-4 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90"
         >
           Add Inference Model
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Speech Addon Empty State - shown when speech addons (STT/TTS) are not installed
+function SpeechAddonEmptyState({
+  isLoading,
+  onInstall,
+}: {
+  isLoading: boolean
+  onInstall: () => void
+}) {
+  return (
+    <div className="flex items-center justify-center h-full w-full">
+      <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40">
+        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/20 border border-violet-500/30">
+          <Volume2 className="w-5 h-5 text-violet-400" />
+        </div>
+        <div className="text-lg font-medium text-foreground">
+          Speech add-ons required
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          Install the speech-to-text and text-to-speech add-ons to enable voice features
+        </div>
+        <button
+          onClick={onInstall}
+          disabled={isLoading}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" />
+          {isLoading ? 'Checking...' : 'Install Speech Add-ons'}
         </button>
       </div>
     </div>
@@ -1800,6 +1839,139 @@ export default function TestChat({
   const [speechHasMessages, setSpeechHasMessages] = useState(false)
 
   // ============================================================================
+  // Speech Add-on Detection & Installation
+  // ============================================================================
+
+  // Fetch addon list only when speech mode is active
+  const queryClient = useQueryClient()
+  const { data: addonsData, isLoading: isLoadingAddons } = useListAddons({
+    enabled: modelType === 'speech' || modelType === 'inference', // Also fetch for inference (mic button)
+    staleTime: 0, // Always refetch to avoid stale cache issues
+  })
+
+  // Check if speech addons (stt and tts) are installed
+  const speechAddonsInstalled = useMemo(() => {
+    if (!addonsData) return null // Still loading or error
+    const stt = addonsData.find((a: AddonInfo) => a.name === 'stt')
+    const tts = addonsData.find((a: AddonInfo) => a.name === 'tts')
+    return {
+      stt: Boolean(stt?.installed),
+      tts: Boolean(tts?.installed),
+      any: Boolean(stt?.installed || tts?.installed),
+      both: Boolean(stt?.installed && tts?.installed)
+    }
+  }, [addonsData])
+
+  // Get uninstalled speech addons (including dependencies) for the side pane
+  const uninstalledSpeechAddons = useMemo(() => {
+    if (!addonsData) return []
+    return addonsData.filter(
+      (a: AddonInfo) =>
+        !a.installed && (a.name === 'stt' || a.name === 'tts' || a.name === 'onnxruntime')
+    )
+  }, [addonsData])
+
+  // Side pane and installation tracking state
+  const [showAddonSidePane, setShowAddonSidePane] = useState(false)
+  const [addonInstallTaskId, setAddonInstallTaskId] = useState<string | null>(null)
+  const [addonInstallName, setAddonInstallName] = useState<string>('')
+  const installAbortRef = useRef<AbortController | null>(null)
+
+  const installAddonMutation = useInstallAddon()
+
+  // Poll a background install task until it reaches a terminal state.
+  // Throws on failure or timeout so the caller's catch block surfaces the error.
+  // Respects AbortSignal so the chain stops when the user cancels.
+  const waitForTaskCompletion = useCallback(async (taskId: string, signal?: AbortSignal) => {
+    const POLL_INTERVAL = 2000
+    const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      let status
+      try {
+        status = await getTaskStatus(taskId)
+      } catch (e: unknown) {
+        // Only retry true network failures (no server response).
+        // Re-throw HTTP errors (4xx/5xx) since they indicate permanent problems.
+        if (e && typeof e === 'object' && 'response' in e) throw e
+        continue
+      }
+      if (status.status === 'completed') return
+      if (status.status === 'failed') {
+        throw new Error(status.error || `Install task ${taskId} failed`)
+      }
+    }
+    throw new Error('Install timed out')
+  }, [])
+
+  // Handle install confirmation from side pane
+  const handleAddonInstallConfirm = useCallback(async (selectedAddons: string[]) => {
+    setShowAddonSidePane(false)
+    if (selectedAddons.length === 0) return
+
+    // Display name for progress panel
+    const displayName = selectedAddons.length === 1
+      ? uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))?.display_name || 'Add-on'
+      : `${selectedAddons.length} add-ons`
+
+    // Create an AbortController so cancel can stop the chain
+    const abort = new AbortController()
+    installAbortRef.current = abort
+
+    // Install all selected addons sequentially.
+    // The server's install endpoint returns immediately (background task), so we must
+    // poll for each task to complete before starting the next install to avoid lock conflicts.
+    try {
+      for (let i = 0; i < selectedAddons.length; i++) {
+        if (abort.signal.aborted) break
+
+        const addonName = selectedAddons[i]
+        const isLastAddon = i === selectedAddons.length - 1
+
+        const response = await installAddonMutation.mutateAsync({
+          name: addonName,
+          restart_service: isLastAddon, // Only restart after last addon
+        })
+
+        // Show progress panel (tracks the current install task)
+        setAddonInstallTaskId(response.task_id)
+        setAddonInstallName(displayName)
+
+        // Wait for this install to finish before starting the next one
+        if (!isLastAddon) {
+          await waitForTaskCompletion(response.task_id, abort.signal)
+        }
+        // For the last addon, let the progress panel handle completion via useTaskStatus
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      console.error('Failed to install addons:', error)
+    } finally {
+      installAbortRef.current = null
+    }
+  }, [uninstalledSpeechAddons, installAddonMutation, waitForTaskCompletion])
+
+  // Handle install completion - refresh addon list
+  const handleAddonInstallComplete = useCallback(() => {
+    setAddonInstallTaskId(null)
+    setAddonInstallName('')
+    // Invalidate addon list to refetch installation status NOW that installation is complete
+    queryClient.invalidateQueries({
+      queryKey: addonKeys.list(),
+    })
+  }, [queryClient])
+
+  // Handle install cancel/dismiss - abort the chain so no further installs start
+  const handleAddonInstallCancel = useCallback(() => {
+    installAbortRef.current?.abort()
+    setAddonInstallTaskId(null)
+    setAddonInstallName('')
+  }, [])
+
+  // ============================================================================
   // Voice Input for Text Generation (Mic button in input area)
   // ============================================================================
 
@@ -2238,15 +2410,30 @@ export default function TestChat({
 
   // Handler for mic button click
   const handleMicClick = useCallback(async () => {
+    // Check if STT is installed (required for voice input)
+    const sttAddon = addonsData?.find((a: AddonInfo) => a.name === 'stt')
+    const isSttInstalled = sttAddon?.installed
+
     if (voiceInput.recordingState === 'recording') {
       // Stop recording and transcribe
       await voiceInput.stopRecording()
     } else if (voiceInput.recordingState === 'idle') {
+      // Wait for addons to load before checking installation status
+      if (!addonsData) {
+        // Addons list still loading, don't proceed
+        return
+      }
+      // Check if STT is installed before starting recording
+      if (!isSttInstalled) {
+        // Show addon installation modal
+        setShowAddonSidePane(true)
+        return
+      }
       // Start recording
       await voiceInput.startRecording()
     }
     // If processing, do nothing (wait for transcription)
-  }, [voiceInput])
+  }, [voiceInput, addonsData])
 
   // Dismiss the speech mode suggestion for this session
   const dismissSpeechSuggestion = useCallback(() => {
@@ -2467,7 +2654,9 @@ export default function TestChat({
     if (USE_PROJECT_CHAT && chatParams) {
       // Use project chat streaming API
       let accumulatedContent = ''
-      let currentSources: RAGSource[] = []
+      // Initialize as undefined - will be set to [] or [...] when sources event received
+      // This distinguishes "no sources requested" from "RAG found nothing"
+      let currentSources: RAGSource[] | undefined = undefined
       const transientId = `stream_${Date.now()}`
 
       setIsProjectSending(true)
@@ -2583,7 +2772,7 @@ export default function TestChat({
                   currentSources
                 )
               }
-              currentSources = []
+              currentSources = undefined
               setStreamingMessage(null)
             },
           },
@@ -2642,6 +2831,7 @@ export default function TestChat({
     ragTopK,
     ragScoreThreshold,
     selectedStrategy,
+    showReferences,
   ])
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
@@ -2765,7 +2955,9 @@ export default function TestChat({
 
         // Send the actual test input via project chat streaming
         let accumulatedContent = ''
-        let testSources: RAGSource[] = []
+        // Initialize as undefined - will be set to [] or [...] when sources event received
+        // This distinguishes "no sources requested" from "RAG found nothing"
+        let testSources: RAGSource[] | undefined = undefined
         const finalSessionId = await projectChatStreamingMessage.mutateAsync({
           namespace: chatParams.namespace,
           projectId: chatParams.projectId,
@@ -2856,7 +3048,7 @@ export default function TestChat({
                   testSources
                 )
               }
-              testSources = []
+              testSources = undefined
               setStreamingMessage(null)
             },
           },
@@ -2909,6 +3101,7 @@ export default function TestChat({
     setStreamingMessage,
     projectChatStreamingSession.sessionId,
     projectChatStreamingSession.setSessionId,
+    showReferences,
   ])
 
   // ============================================================================
@@ -3691,8 +3884,8 @@ export default function TestChat({
                   <TestChatMessage
                     key={m.id}
                     message={m}
-                    showReferences={showReferences}
                     allowRanking={allowRanking}
+                    showReferences={showReferences}
                     showPrompts={showPrompts}
                     showThinking={showThinking}
                     lastUserInput={lastUserInputRef.current}
@@ -3960,11 +4153,21 @@ export default function TestChat({
         ) : modelType === 'speech' ? (
           /* Speech: Full speech test panel with STT, TTS, and voice cloning */
           <div className="absolute inset-0 overflow-hidden">
-            <SpeechTestPanel
-              className="h-full"
-              clearRef={speechClearRef}
-              onMessagesChange={setSpeechHasMessages}
-            />
+            {!speechAddonsInstalled || !speechAddonsInstalled.any ? (
+              <SpeechAddonEmptyState
+                isLoading={isLoadingAddons}
+                onInstall={() => setShowAddonSidePane(true)}
+              />
+            ) : (
+              <SpeechTestPanel
+                sttInstalled={speechAddonsInstalled.stt}
+                ttsInstalled={speechAddonsInstalled.tts}
+                onInstallAddon={() => setShowAddonSidePane(true)}
+                className="h-full"
+                clearRef={speechClearRef}
+                onMessagesChange={setSpeechHasMessages}
+              />
+            )}
           </div>
         ) : (
           /* Encoder: Embedding similarity or Reranking */
@@ -4595,14 +4798,32 @@ export default function TestChat({
         )}
       </div>
       )}
+
+      {/* Speech addon installation side pane */}
+      <AddonInstallSidePane
+        open={showAddonSidePane}
+        onOpenChange={setShowAddonSidePane}
+        addons={uninstalledSpeechAddons}
+        onConfirm={handleAddonInstallConfirm}
+      />
+
+      {/* Speech addon installation progress */}
+      {addonInstallTaskId && (
+        <AddonInstallProgress
+          taskId={addonInstallTaskId}
+          addonName={addonInstallName}
+          onComplete={handleAddonInstallComplete}
+          onCancel={handleAddonInstallCancel}
+        />
+      )}
     </div>
   )
 }
 
 interface TestChatMessageProps {
   message: ChatboxMessage
-  showReferences: boolean
   allowRanking: boolean
+  showReferences?: boolean
   showPrompts?: boolean
   showThinking?: boolean
   lastUserInput?: string
@@ -4611,8 +4832,8 @@ interface TestChatMessageProps {
 
 export function TestChatMessage({
   message,
-  showReferences,
   allowRanking,
+  showReferences,
   showPrompts,
   // showThinking - no longer used here; thinking is always shown if present in message
   lastUserInput,
@@ -4811,6 +5032,13 @@ export function TestChatMessage({
         )}
       </div>
 
+      {/* References - show when showReferences is enabled and RAG was enabled (sources array exists, even if empty) */}
+      {showReferences &&
+        isAssistant &&
+        !message.isStreaming &&
+        !message.isLoading &&
+        Array.isArray(message.sources) && <References sources={message.sources} />}
+
       {/* Assistant footer actions - hidden during streaming */}
       {isAssistant && !message.isStreaming && !message.isLoading && (
         <div className="mt-2 flex items-center gap-3 text-muted-foreground">
@@ -4897,11 +5125,6 @@ export function TestChatMessage({
           )
         })()}
 
-      {/* References */}
-      {showReferences &&
-        isAssistant &&
-        Array.isArray(message.sources) &&
-        message.sources.length > 0 && <References sources={message.sources} />}
 
       {/* Test result block */}
       {isAssistant && message.metadata?.testResult && (
@@ -5126,11 +5349,11 @@ function References({ sources }: { sources: any[] }) {
   }
 
   return (
-    <div className="mt-2 rounded-md border border-border bg-card/40">
+    <div className="mt-2 mb-1 rounded-md border border-border bg-card/40">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-accent/40 rounded-t-md focus:outline-none focus:ring-2 focus:ring-primary/60"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs text-muted-foreground hover:bg-accent/40 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/60"
         aria-expanded={open}
         aria-controls={`references-panel`}
       >
@@ -5139,6 +5362,11 @@ function References({ sources }: { sources: any[] }) {
       </button>
       {open && (
         <div id="references-panel" className="divide-y divide-border">
+          {count === 0 && (
+            <div className="px-3 py-3 text-sm text-muted-foreground italic">
+              No chunks were referenced to generate this response.
+            </div>
+          )}
           {sources.map((s, idx) => {
             const content =
               typeof s.content === 'string' ? s.content : String(s.content ?? '')
@@ -5183,12 +5411,17 @@ function References({ sources }: { sources: any[] }) {
                     }
                     aria-expanded={isLong ? isExpanded : undefined}
                   >
-                    {isLong && (
-                      <span className="mr-1 text-xs text-muted-foreground">
-                        {isExpanded ? '▼' : '▶'}
-                      </span>
-                    )}
-                    {displayContent}
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="flex-1">{displayContent}</span>
+                      {isLong && (
+                        <FontIcon
+                          type="chevron-down"
+                          className={`w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">

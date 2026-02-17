@@ -10,9 +10,11 @@ import json
 import logging
 import tempfile
 from collections.abc import Callable, Coroutine
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -20,6 +22,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
     WebSocket,
+    WebSocketDisconnect,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,33 +174,31 @@ async def create_transcription(
                 detail="Empty audio file",
             )
 
-        # Try to decode compressed audio to WAV for reliable processing
+        # Always try to convert audio to numpy arrays for direct transcription
+        # This avoids issues with malformed WAV files and provides consistent processing
+        audio_array = None
         try:
-            from utils.audio_buffer import (
-                decode_audio_bytes,
-                detect_audio_format,
-                pcm_to_wav,
-            )
+            from utils.audio_buffer import decode_audio_bytes
 
-            format_name, is_compressed = detect_audio_format(audio_bytes)
-            logger.debug(
-                f"Detected audio format: {format_name} (compressed={is_compressed})"
-            )
-
-            if is_compressed:
-                try:
-                    pcm_data = decode_audio_bytes(audio_bytes)
-                    audio_bytes = pcm_to_wav(pcm_data)
-                    file_extension = ".wav"
-                    logger.debug(
-                        f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to decode {format_name}: {e}, using original data"
-                    )
+            try:
+                # Decode to raw PCM (handles WAV, compressed formats, and raw PCM)
+                pcm_data = decode_audio_bytes(audio_bytes)
+                # Convert PCM to numpy array for direct transcription
+                audio_array = (
+                    np.frombuffer(pcm_data, dtype=np.int16).astype(np.float32)
+                    / 32768.0
+                )
+                logger.debug(
+                    f"Converted audio to numpy array ({len(pcm_data)} bytes PCM, {len(audio_array)} samples)"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert audio to numpy: {e}, will try file-based transcription"
+                )
+                audio_array = None
         except ImportError:
-            # Audio buffer utilities not available, use raw audio
+            # Audio buffer utilities not available, use file-based transcription
+            logger.debug("Audio buffer utilities not available, using file-based transcription")
             pass
 
         # Load speech model
@@ -215,39 +216,63 @@ async def create_transcription(
             granularities = [g.strip() for g in timestamp_granularities.split(",")]
             word_timestamps = "word" in granularities
 
-        # Write audio to temp file (faster-whisper requires file path)
+        # Use numpy array if available (from decoded compressed audio)
+        # Otherwise fall back to file-based transcription
         tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
-            ) as tmp_file:
-                tmp_path = tmp_file.name
-                tmp_file.write(audio_bytes)
+            if audio_array is None:
+                # Write audio to temp file for file-based transcription
+                with tempfile.NamedTemporaryFile(
+                    suffix=file_extension, delete=False
+                ) as tmp_file:
+                    tmp_path = tmp_file.name
+                    tmp_file.write(audio_bytes)
 
             if stream:
                 # Streaming response - yield segments as they're transcribed
                 async def generate_sse():
-                    async for segment in speech_model.transcribe_stream(
-                        audio_path=tmp_path,
-                        language=language,
-                        word_timestamps=word_timestamps,
-                        initial_prompt=prompt,
-                    ):
-                        segment_data = {
-                            "id": segment.id,
-                            "start": segment.start,
-                            "end": segment.end,
-                            "text": segment.text,
-                        }
-                        if segment.words:
-                            segment_data["words"] = segment.words
+                    if audio_array is not None:
+                        # Use numpy array streaming method
+                        async for segment in speech_model.transcribe_audio_stream(
+                            audio=audio_array,
+                            language=language,
+                            word_timestamps=word_timestamps,
+                            initial_prompt=prompt,
+                        ):
+                            segment_data = {
+                                "id": segment.id,
+                                "start": segment.start,
+                                "end": segment.end,
+                                "text": segment.text,
+                            }
+                            if segment.words:
+                                segment_data["words"] = segment.words
 
-                        yield f"data: {json.dumps(segment_data)}\n\n"
+                            yield f"data: {json.dumps(segment_data)}\n\n"
+                    else:
+                        # Use file path
+                        async for segment in speech_model.transcribe_stream(
+                            audio_path=tmp_path,
+                            language=language,
+                            word_timestamps=word_timestamps,
+                            initial_prompt=prompt,
+                        ):
+                            segment_data = {
+                                "id": segment.id,
+                                "start": segment.start,
+                                "end": segment.end,
+                                "text": segment.text,
+                            }
+                            if segment.words:
+                                segment_data["words"] = segment.words
+
+                            yield f"data: {json.dumps(segment_data)}\n\n"
 
                     yield "data: [DONE]\n\n"
 
-                # Use BackgroundTasks to ensure temp file cleanup even on client disconnect
-                background_tasks.add_task(Path(tmp_path).unlink, missing_ok=True)
+                # Use BackgroundTasks to ensure temp file cleanup if file was created
+                if tmp_path:
+                    background_tasks.add_task(Path(tmp_path).unlink, missing_ok=True)
 
                 return StreamingResponse(
                     generate_sse(),
@@ -261,15 +286,28 @@ async def create_transcription(
                 )
 
             # Non-streaming response
-            result = await speech_model.transcribe(
-                audio_path=tmp_path,
-                language=language,
-                word_timestamps=word_timestamps,
-                initial_prompt=prompt,
-                temperature=[temperature]
-                if temperature > 0
-                else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            )
+            if audio_array is not None:
+                # Use numpy array directly (no temp file needed)
+                result = await speech_model.transcribe(
+                    audio_array=audio_array,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=prompt,
+                    temperature=[temperature]
+                    if temperature > 0
+                    else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
+            else:
+                # Use file path
+                result = await speech_model.transcribe(
+                    audio_path=tmp_path,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                    initial_prompt=prompt,
+                    temperature=[temperature]
+                    if temperature > 0
+                    else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
 
             # Format response based on requested format
             if response_format == "text":
@@ -375,32 +413,31 @@ async def create_translation(
 
         file_extension = Path(file.filename).suffix if file.filename else ".wav"
 
-        # Try to decode compressed audio
+        # Always try to convert audio to numpy arrays for direct transcription
+        # This avoids issues with malformed WAV files and provides consistent processing
+        audio_array = None
         try:
-            from utils.audio_buffer import (
-                decode_audio_bytes,
-                detect_audio_format,
-                pcm_to_wav,
-            )
+            from utils.audio_buffer import decode_audio_bytes
 
-            format_name, is_compressed = detect_audio_format(audio_bytes)
-            logger.debug(
-                f"Detected audio format: {format_name} (compressed={is_compressed})"
-            )
-
-            if is_compressed:
-                try:
-                    pcm_data = decode_audio_bytes(audio_bytes)
-                    audio_bytes = pcm_to_wav(pcm_data)
-                    file_extension = ".wav"
-                    logger.debug(
-                        f"Decoded {format_name} to WAV ({len(audio_bytes)} bytes)"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to decode {format_name}: {e}, using original data"
-                    )
+            try:
+                # Decode to raw PCM (handles WAV, compressed formats, and raw PCM)
+                pcm_data = decode_audio_bytes(audio_bytes)
+                # Convert PCM to numpy array for direct transcription
+                audio_array = (
+                    np.frombuffer(pcm_data, dtype=np.int16).astype(np.float32)
+                    / 32768.0
+                )
+                logger.debug(
+                    f"Converted audio to numpy array ({len(pcm_data)} bytes PCM, {len(audio_array)} samples)"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to convert audio to numpy: {e}, will try file-based transcription"
+                )
+                audio_array = None
         except ImportError:
+            # Audio buffer utilities not available, use file-based transcription
+            logger.debug("Audio buffer utilities not available, using file-based transcription")
             pass
 
         # Load speech model
@@ -412,24 +449,38 @@ async def create_translation(
                 detail="Failed to load speech model",
             )
 
-        # Write to temp file
+        # Use numpy array if available, otherwise write to temp file
         tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                suffix=file_extension, delete=False
-            ) as tmp_file:
-                tmp_path = tmp_file.name
-                tmp_file.write(audio_bytes)
+            if audio_array is None:
+                # Write audio to temp file for file-based transcription
+                with tempfile.NamedTemporaryFile(
+                    suffix=file_extension, delete=False
+                ) as tmp_file:
+                    tmp_path = tmp_file.name
+                    tmp_file.write(audio_bytes)
 
             # Transcribe with translation task
-            result = await speech_model.transcribe(
-                audio_path=tmp_path,
-                task="translate",  # Translate to English
-                initial_prompt=prompt,
-                temperature=[temperature]
-                if temperature > 0
-                else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            )
+            if audio_array is not None:
+                # Use numpy array directly (no temp file needed)
+                result = await speech_model.transcribe(
+                    audio_array=audio_array,
+                    task="translate",  # Translate to English
+                    initial_prompt=prompt,
+                    temperature=[temperature]
+                    if temperature > 0
+                    else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
+            else:
+                # Use file path
+                result = await speech_model.transcribe(
+                    audio_path=tmp_path,
+                    task="translate",  # Translate to English
+                    initial_prompt=prompt,
+                    temperature=[temperature]
+                    if temperature > 0
+                    else [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                )
 
             if response_format == "text":
                 return result.text
@@ -533,22 +584,17 @@ async def websocket_transcription(
                 # Process when we have enough audio
                 buffer_duration = len(audio_buffer) / bytes_per_second
                 if buffer_duration >= chunk_interval:
-                    # Write buffer to temp file and transcribe
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".wav", delete=False
-                    ) as tmp_file:
-                        tmp_path = tmp_file.name
-                        # Write WAV header + PCM data
-                        from utils.audio_buffer import pcm_to_wav
-
-                        wav_data = pcm_to_wav(
-                            bytes(audio_buffer), sample_rate=sample_rate
+                    # Convert PCM bytes to numpy array
+                    audio_array = (
+                        np.frombuffer(bytes(audio_buffer), dtype=np.int16).astype(
+                            np.float32
                         )
-                        tmp_file.write(wav_data)
+                        / 32768.0
+                    )
 
                     try:
                         result = await speech_model.transcribe(
-                            audio_path=tmp_path,
+                            audio_array=audio_array,
                             language=language,
                             word_timestamps=word_timestamps,
                         )
@@ -568,40 +614,36 @@ async def websocket_transcription(
                         logger.warning(
                             f"Transcription error (may be silence): {transcribe_err}"
                         )
-                        # Send empty segment to indicate we processed but found no speech
-                        await websocket.send_json(
-                            {
-                                "type": "segment",
-                                "text": "",
-                                "duration": buffer_duration,
-                                "is_final": False,
-                                "warning": "No speech detected",
-                            }
-                        )
+                        # Try to send empty segment, but ignore if client disconnected
+                        with suppress(WebSocketDisconnect, RuntimeError):
+                            await websocket.send_json(
+                                {
+                                    "type": "segment",
+                                    "text": "",
+                                    "duration": buffer_duration,
+                                    "is_final": False,
+                                    "warning": "No speech detected",
+                                }
+                            )
 
                     finally:
-                        Path(tmp_path).unlink(missing_ok=True)
-
-                    # Clear buffer
-                    audio_buffer.clear()
+                        # Clear buffer
+                        audio_buffer.clear()
 
             elif "text" in message and message["text"].upper() == "END":
                 # Process remaining audio
                 if audio_buffer:
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".wav", delete=False
-                    ) as tmp_file:
-                        tmp_path = tmp_file.name
-                        from utils.audio_buffer import pcm_to_wav
-
-                        wav_data = pcm_to_wav(
-                            bytes(audio_buffer), sample_rate=sample_rate
+                    # Convert PCM bytes to numpy array
+                    audio_array = (
+                        np.frombuffer(bytes(audio_buffer), dtype=np.int16).astype(
+                            np.float32
                         )
-                        tmp_file.write(wav_data)
+                        / 32768.0
+                    )
 
                     try:
                         result = await speech_model.transcribe(
-                            audio_path=tmp_path,
+                            audio_array=audio_array,
                             language=language,
                             word_timestamps=word_timestamps,
                         )
@@ -620,25 +662,28 @@ async def websocket_transcription(
                         logger.warning(
                             f"Final transcription error (may be silence): {transcribe_err}"
                         )
-                        await websocket.send_json(
-                            {
-                                "type": "segment",
-                                "text": "",
-                                "duration": len(audio_buffer) / bytes_per_second,
-                                "is_final": True,
-                                "warning": "No speech detected",
-                            }
-                        )
-
-                    finally:
-                        Path(tmp_path).unlink(missing_ok=True)
+                        # Try to send empty segment, but ignore if client disconnected
+                        with suppress(WebSocketDisconnect, RuntimeError):
+                            await websocket.send_json(
+                                {
+                                    "type": "segment",
+                                    "text": "",
+                                    "duration": len(audio_buffer) / bytes_per_second,
+                                    "is_final": True,
+                                    "warning": "No speech detected",
+                                }
+                            )
 
                 # Signal completion
-                await websocket.send_json({"type": "done"})
+                with suppress(WebSocketDisconnect, RuntimeError):
+                    await websocket.send_json({"type": "done"})
                 break
 
-        await websocket.close()
+        with suppress(WebSocketDisconnect, RuntimeError):
+            await websocket.close()
 
+    except WebSocketDisconnect:
+        logger.debug("WebSocket transcription client disconnected")
     except Exception as e:
         logger.error(f"WebSocket transcription error: {e}", exc_info=True)
         try:

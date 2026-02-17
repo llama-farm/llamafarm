@@ -266,6 +266,22 @@ properties:
                 even under memory pressure. Useful for models that need fast
                 response times (e.g., voice chat LLMs).
               default: false
+            rag_enabled:
+              type: boolean
+              description: |
+                Default RAG behavior for this model. When true, RAG is enabled
+                by default for chat requests using this model. When false, RAG
+                is disabled by default. Can be overridden per-request via the
+                rag_enabled API parameter. If not set, falls back to project-level
+                behavior (RAG enabled when databases exist).
+            target_database:
+              type: string
+              description: |
+                Default RAG database for this model. When set, chat requests
+                using this model will use this database instead of the project's
+                default_database. Can be overridden per-request via the database
+                API parameter. Must match a database name defined in the
+                rag.databases section.
 
   mcp:
     type: object

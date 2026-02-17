@@ -1,0 +1,23 @@
+# Platform configurations for addon builds
+# Single source of truth for supported platforms and their GitHub Actions runners
+
+platforms:
+  - name: macos-arm64
+    runner: macos-latest
+    enabled: true
+
+  - name: macos-x86_64
+    runner: macos-13
+    enabled: false  # Temporarily disabled due to GitHub Actions macos-13 runner unavailability
+
+  - name: linux-x86_64
+    runner: ubuntu-latest
+    enabled: true
+
+  - name: linux-arm64
+    runner: ubuntu-24.04-arm
+    enabled: true
+
+  - name: windows-x86_64
+    runner: windows-latest
+    enabled: false  # Disabled until Windows file locking is fixed

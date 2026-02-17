@@ -27,8 +27,8 @@ dependencies = [
   # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
   "protobuf>=5.29.3",
   "sentencepiece>=0.2.1",
-  "cachetools>=6.0.0",  # TTL-based model caching
-  "jinja2>=3.0.0",  # For tool-aware chat template rendering
+  "cachetools>=6.0.0",    # TTL-based model caching
+  "jinja2>=3.0.0",        # For tool-aware chat template rendering
   # Anomaly detection
   "scikit-learn>=1.3.0",
   "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
@@ -98,45 +98,27 @@ classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 # Usage: uv pip install "universal-runtime[speech]"
 speech = [
   "faster-whisper>=1.0.0",
-  "webrtcvad>=2.0.10",  # Voice activity detection for streaming
-  "av>=12.0.0",  # PyAV for efficient compressed audio decoding (WebM/Opus)
+  "webrtcvad>=2.0.10",     # Voice activity detection for streaming
+  "av>=12.0.0",            # PyAV for efficient compressed audio decoding (WebM/Opus)
 ]
 
 # Text-to-speech with Kokoro
 # Usage: uv pip install "universal-runtime[tts]"
 tts = [
-  "kokoro>=0.9.0",  # High-quality neural TTS (~82M params)
-  "misaki[en]>=0.9.0",  # G2P for English (kokoro dependency)
-  "spacy>=3.7.0",  # NLP for G2P
-  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
-  "pydub>=0.25.0",  # Audio format conversion (MP3, FLAC)
-  "av>=12.0.0",  # PyAV for Opus/AAC encoding
-]
-
-# Text-to-speech with Chatterbox Turbo (voice cloning)
-# Usage: uv pip install "universal-runtime[tts-chatterbox]"
-# Note: chatterbox-tts has strict pins but works with newer versions.
-# We override its constraints via [tool.uv.override-dependencies] below.
-tts-chatterbox = [
-  "chatterbox-tts>=0.1.6",
-  "pydub>=0.25.0",
-  "av>=12.0.0",
-]
-
-# Text-to-speech with Pocket TTS (Kyutai)
-# Lightweight CPU-only TTS, ~6x faster than real-time on Apple Silicon
-# Usage: uv pip install "universal-runtime[tts-pocket]"
-tts-pocket = [
-  "pocket-tts>=0.1.0",
+  "kokoro>=0.9.4",     # High-quality neural TTS (~82M params)
+  "misaki>=0.9.0",     # G2P for English (kokoro dependency) - no [en] extra to avoid conflicts
+  "spacy>=3.8.11",     # NLP for G2P
+  "pydub>=0.25.0",     # Audio format conversion (MP3, FLAC)
+  "av>=12.0.0",        # PyAV for Opus/AAC encoding
+  "pocket-tts>=1.0.3",
 ]
 
 # Text-to-speech with Kokoro MLX (Apple Silicon optimized)
 # Native MLX implementation for faster inference on M-series chips
 # Usage: uv pip install "universal-runtime[tts-mlx]"
 tts-mlx = [
-  "mlx-audio>=0.1.0",
-  "spacy>=3.7.0",  # NLP for G2P (required by mlx-audio's Kokoro)
-  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",  # spaCy model for G2P
+  "mlx-audio>=0.3.1",
+  "spacy>=3.8.11",    # NLP for G2P (required by mlx-audio's Kokoro)
 ]
 
 [build-system]
@@ -158,7 +140,7 @@ environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'linux' and platform_machine == 'aarch64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "sys_platform == 'darwin' and platform_machine == 'x86_64'",  # Intel Mac
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'", # Intel Mac
   "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
 
@@ -184,13 +166,13 @@ index-url = "https://pypi.org/simple"
 
 # Override chatterbox-tts strict dependency pins - it works fine with newer versions
 override-dependencies = [
-  "numpy>=1.24.0,<2.4",   # numba (via librosa) requires numpy<2.4
+  "numpy>=1.24.0,<2.4", # numba (via librosa) requires numpy<2.4
   # PyTorch: Intel Mac only has wheels up to 2.2.2, other platforms can use latest
   "torch>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "torch>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
   "torchaudio>=2.0.0,<=2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
   "torchaudio>=2.0.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
-  "transformers>=4.35.0", # chatterbox pins ==4.46.3
+  "transformers>=4.35.0",                                                                 # chatterbox pins ==4.46.3
 ]
 
 [tool.uv.sources]

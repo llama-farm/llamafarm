@@ -20,9 +20,11 @@ Prerequisites:
 import asyncio
 import os
 import random
-import httpx
 from datetime import datetime
 from pathlib import Path
+
+import httpx
+
 
 # Configuration - uses environment variable or .env file, falls back to default
 def get_llamafarm_url():

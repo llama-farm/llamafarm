@@ -19,8 +19,10 @@ Run:
 
 import os
 import random
-import httpx
 from pathlib import Path
+
+import httpx
+
 
 # Configuration - uses environment variable or .env file, falls back to default
 def get_llamafarm_url():
@@ -94,7 +96,7 @@ def main():
     print("Step 1: Generating 500 normal transactions for training...")
     random.seed(42)
     training_data = generate_normal_transactions(500)
-    print(f"  Features: [amount, hour_of_day, merchant_risk_score]")
+    print("  Features: [amount, hour_of_day, merchant_risk_score]")
     print(f"  Sample: {training_data[0]}")
     print()
 
@@ -124,7 +126,7 @@ def main():
 
     # Remember which are actual frauds (last 5 before shuffle, but we shuffled)
     # For demo, we'll just look at detection results
-    print(f"  Generated 45 normal + 5 fraudulent transactions")
+    print("  Generated 45 normal + 5 fraudulent transactions")
     print()
 
     # Step 4: Score transactions in real-time
@@ -181,7 +183,7 @@ def main():
     )
     iforest_result = response.json()
 
-    print(f"\n  Backend Comparison:")
+    print("\n  Backend Comparison:")
     print(f"  {'Backend':<20} {'Anomalies':<12} {'Rate':<10} {'Train Time'}")
     print("  " + "-" * 56)
     print(f"  {'ECOD':<20} {score_result['summary']['anomaly_count']:<12} "

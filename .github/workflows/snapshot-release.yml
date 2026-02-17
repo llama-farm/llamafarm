@@ -1,0 +1,196 @@
+name: Create Snapshot Release
+
+# Create a snapshot/draft release for testing addon functionality.
+# This workflow creates a draft release with a snapshot tag and uploads
+# addon wheels that can be tested before making an official release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_version:
+        description: "Snapshot version (e.g., 0.0.27-snapshot.1)"
+        required: true
+        type: string
+      build_addons:
+        description: "Build and upload addon wheels"
+        required: true
+        default: true
+        type: boolean
+      draft:
+        description: "Create as draft release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  create-snapshot-release:
+    name: Create Snapshot Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+      tag_name: ${{ steps.create-release.outputs.tag_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create release tag
+        env:
+          VERSION: ${{ github.event.inputs.snapshot_version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format: must match semver (e.g. 0.0.27-snapshot.1)"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "Snapshot release v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub release
+        id: create-release
+        uses: actions/github-script@v7
+        env:
+          SNAPSHOT_VERSION: ${{ github.event.inputs.snapshot_version }}
+          IS_DRAFT: ${{ github.event.inputs.draft }}
+        with:
+          script: |
+            const version = process.env.SNAPSHOT_VERSION;
+            const isDraft = process.env.IS_DRAFT === 'true';
+
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${version}`,
+              name: `Snapshot Release v${version}`,
+              body: `## Snapshot Release for Testing
+
+              This is a snapshot/test release created for testing addon functionality.
+
+              **Do not use in production.**
+
+              ### Testing Addon Installation
+
+              To test addon installation with this snapshot:
+
+              \`\`\`bash
+              # Set the snapshot release tag
+              export LF_ADDON_RELEASE_TAG=v${version}
+
+              # Install an addon (this will download from the snapshot release)
+              lf addons install stt
+
+              # Start the service
+              lf services start universal-runtime
+              \`\`\`
+
+              ### Cleanup
+
+              To switch back to stable releases:
+              \`\`\`bash
+              unset LF_ADDON_RELEASE_TAG
+              \`\`\`
+              `,
+              draft: isDraft,
+              prerelease: true
+            });
+
+            core.setOutput('id', release.data.id);
+            core.setOutput('upload_url', release.data.upload_url);
+            core.setOutput('tag_name', release.data.tag_name);
+
+            core.info(`Created release: ${release.data.html_url}`);
+
+  build-addon-wheels:
+    name: Build Addon Wheels
+    if: github.event.inputs.build_addons == 'true'
+    needs: create-snapshot-release
+    uses: ./.github/workflows/build-addon-wheels.yml
+    permissions:
+      contents: write
+    secrets: inherit
+
+  # Generate the upload matrix dynamically from platforms.yaml and addon registry
+  # so it matches exactly what build-addon-wheels produced
+  setup-upload-matrix:
+    name: Setup Upload Matrix
+    if: github.event.inputs.build_addons == 'true'
+    needs: build-addon-wheels
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - id: set-matrix
+        run: |
+          MATRIX=$(python tools/generate_platform_matrix.py)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  upload-to-snapshot:
+    name: Upload Wheels to Snapshot
+    if: github.event.inputs.build_addons == 'true'
+    needs: [create-snapshot-release, setup-upload-matrix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-upload-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}
+          path: dist/
+
+      - name: Upload to snapshot release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-snapshot-release.outputs.tag_name }}
+          files: |
+            dist/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz
+            dist/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz.sha256
+          fail_on_unmatched_files: true
+
+  summary:
+    name: Release Summary
+    needs: [create-snapshot-release, upload-to-snapshot]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Output summary
+        env:
+          TAG_NAME: ${{ needs.create-snapshot-release.outputs.tag_name }}
+        run: |
+          echo "## Snapshot Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Testing Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Set the snapshot release tag" >> $GITHUB_STEP_SUMMARY
+          echo "export LF_ADDON_RELEASE_TAG=${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Install an addon" >> $GITHUB_STEP_SUMMARY
+          echo "lf addons install stt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Start the service" >> $GITHUB_STEP_SUMMARY
+          echo "lf services start universal-runtime" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

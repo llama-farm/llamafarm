@@ -7,6 +7,17 @@ imports (from runtime.models import ...).
 import os
 import sys
 
+# Inject addon paths from PYTHONPATH into sys.path
+# PyApp's Python doesn't automatically process PYTHONPATH, so we need to do it manually
+# Track actual insert position so skipped duplicates don't shift later entries
+pythonpath = os.environ.get('PYTHONPATH', '')
+if pythonpath:
+    insert_at = 0
+    for path in pythonpath.split(os.pathsep):
+        if path and path not in sys.path:
+            sys.path.insert(insert_at, path)
+            insert_at += 1
+
 # Allow bare imports (from models.xxx, from routers.xxx, etc.)
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -15,7 +26,7 @@ os.environ["LLAMAFARM_PYAPP"] = "1"
 
 # Import server module — this executes module-level setup
 # (logging, device detection, model loaders, FastAPI app creation)
-from runtime import server  # noqa: F401
+from runtime import server  # noqa: E402, F401
 
 if __name__ == '__main__':
     import uvicorn

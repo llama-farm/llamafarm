@@ -18,6 +18,13 @@ from typing import TYPE_CHECKING
 
 from utils.context_calculator import get_default_context_size
 from utils.context_manager import ContextBudget, ContextManager, ContextUsage
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
+from utils.gpu_allocator import (
+    SPLIT_MODE_LAYER,
+    SPLIT_MODE_NONE,
+    InsufficientVRAMError,
+    get_llama_gpu_params,
+)
 from utils.model_format import get_gguf_file_path
 from utils.token_counter import TokenCounter
 
@@ -161,11 +168,21 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers  # Store requested value (None = auto)
         )
         self.requested_n_threads = n_threads  # Store requested value (None = auto)
-        self.requested_flash_attn = flash_attn  # Store requested value (None = default True)
-        self.requested_use_mmap = use_mmap  # Store requested value (None = default False)
-        self.requested_use_mlock = use_mlock  # Store requested value (None = default False)
-        self.requested_cache_type_k = cache_type_k  # Store requested value (None = default f16)
-        self.requested_cache_type_v = cache_type_v  # Store requested value (None = default f16)
+        self.requested_flash_attn = (
+            flash_attn  # Store requested value (None = default True)
+        )
+        self.requested_use_mmap = (
+            use_mmap  # Store requested value (None = default False)
+        )
+        self.requested_use_mlock = (
+            use_mlock  # Store requested value (None = default False)
+        )
+        self.requested_cache_type_k = (
+            cache_type_k  # Store requested value (None = default f16)
+        )
+        self.requested_cache_type_v = (
+            cache_type_v  # Store requested value (None = default f16)
+        )
         self.preferred_quantization = preferred_quantization
         self.requested_mmproj_path = mmproj_path  # Explicit mmproj path
         self.auto_detect_mmproj = auto_detect_mmproj  # Auto-detect mmproj files
@@ -228,6 +245,11 @@ class GGUFLanguageModel(BaseModel):
             Exception: If model loading fails
         """
 
+        # Re-create executor if it was destroyed by unload()
+        # CRITICAL: Single-threaded executor prevents concurrent access to non-thread-safe llama.cpp
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1)
+
         logger.info(f"Loading GGUF model: {self.model_id}")
 
         # Get path to .gguf file in HF cache
@@ -273,6 +295,101 @@ class GGUFLanguageModel(BaseModel):
             n_gpu_layers = get_gguf_gpu_layers()
             logger.info(f"Auto-detected n_gpu_layers: {n_gpu_layers}")
 
+        # GPU allocation: select optimal GPU(s) based on free VRAM
+        # This prevents OOM crashes on multi-GPU systems by routing models
+        # to the GPU with the most free VRAM (split_mode=NONE) instead of
+        # splitting across all GPUs (llama.cpp's default split_mode=LAYER)
+        gpu_params = {}
+        try:
+            metadata = get_gguf_metadata_cached(gguf_path)
+            gpu_params = get_llama_gpu_params(
+                model_size_bytes=metadata.file_size_bytes,
+                n_ctx=self.actual_n_ctx,
+                n_gpu_layers=n_gpu_layers,
+                total_layers=metadata.n_layer,
+                n_layer=metadata.n_layer,
+                n_head_kv=metadata.n_head_kv,
+                head_k_size=metadata.head_k_size,
+                head_v_size=metadata.head_v_size,
+            )
+            if gpu_params:
+                gpu_idx = gpu_params.get("gpu_index")
+                logger.info(
+                    f"GPU allocation: main_gpu={gpu_params.get('main_gpu')}, "
+                    f"split_mode={gpu_params.get('split_mode')}, "
+                    f"gpu_index={gpu_idx}"
+                )
+                # Re-compute context size using the allocated GPU memory.
+                # - Single-GPU (SPLIT_MODE_NONE): use the specific GPU's
+                #   free VRAM via gpu_index.
+                # - Multi-GPU (SPLIT_MODE_LAYER): use the combined free VRAM
+                #   across all participating devices, since both model weights
+                #   and KV cache are distributed proportionally.
+                split_mode = gpu_params.get("split_mode")
+                if split_mode == SPLIT_MODE_NONE and gpu_idx is not None:
+                    new_n_ctx, new_warnings = get_default_context_size(
+                        model_id=self.model_id,
+                        gguf_path=gguf_path,
+                        device=self.device,
+                        config_n_ctx=self.requested_n_ctx,
+                        gpu_index=gpu_idx,
+                    )
+                elif split_mode == SPLIT_MODE_LAYER:
+                    new_n_ctx, new_warnings = get_default_context_size(
+                        model_id=self.model_id,
+                        gguf_path=gguf_path,
+                        device=self.device,
+                        config_n_ctx=self.requested_n_ctx,
+                        available_memory_override=gpu_params["total_free_vram"],
+                    )
+                else:
+                    new_n_ctx, new_warnings = self.actual_n_ctx, []
+
+                if new_n_ctx != self.actual_n_ctx:
+                    label = (
+                        f"GPU {gpu_idx}"
+                        if split_mode == SPLIT_MODE_NONE
+                        else "multi-GPU split"
+                    )
+                    logger.info(
+                        f"Context size adjusted for {label}: "
+                        f"{self.actual_n_ctx} -> {new_n_ctx}"
+                    )
+                    self.actual_n_ctx = new_n_ctx
+                    for w in new_warnings:
+                        logger.warning(w)
+
+                    # Context changed — re-run allocation so tensor_split
+                    # and per-device feasibility reflect the actual KV
+                    # cache size.  Without this the stale split computed
+                    # for the old n_ctx can OOM on a weaker GPU.
+                    if split_mode == SPLIT_MODE_LAYER:
+                        gpu_params = get_llama_gpu_params(
+                            model_size_bytes=metadata.file_size_bytes,
+                            n_ctx=self.actual_n_ctx,
+                            n_gpu_layers=n_gpu_layers,
+                            total_layers=metadata.n_layer,
+                            n_layer=metadata.n_layer,
+                            n_head_kv=metadata.n_head_kv,
+                            head_k_size=metadata.head_k_size,
+                            head_v_size=metadata.head_v_size,
+                        )
+                        logger.info(
+                            "Re-allocated GPUs for updated context: "
+                            f"split_mode={gpu_params.get('split_mode')}, "
+                            f"main_gpu={gpu_params.get('main_gpu')}"
+                        )
+            else:
+                logger.debug("No CUDA GPUs detected, using default GPU allocation")
+        except InsufficientVRAMError as e:
+            if e.gpu_details:
+                logger.error(f"GPU allocation failed:\n{e.gpu_details}")
+            else:
+                logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(str(e)) from e
+        except Exception as e:
+            logger.warning(f"GPU allocation failed, using defaults: {e}")
+
         # Configure batch size (critical for memory on constrained devices)
         # Default 2048 for fast prompt processing, but lower values reduce memory
         n_batch = self.requested_n_batch if self.requested_n_batch is not None else 2048
@@ -304,7 +421,9 @@ class GGUFLanguageModel(BaseModel):
         # Memory mapping can cause compute graph splits on unified memory systems where CPU and GPU
         # share the same physical memory. This results in suboptimal performance. For discrete GPUs
         # with separate VRAM, mmap may be beneficial for memory-constrained scenarios.
-        use_mmap = self.requested_use_mmap if self.requested_use_mmap is not None else False
+        use_mmap = (
+            self.requested_use_mmap if self.requested_use_mmap is not None else False
+        )
         logger.info(f"Using use_mmap: {use_mmap}")
 
         # Configure memory locking (default False to allow OS memory management)
@@ -358,6 +477,15 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
 
             try:
+                # Build GPU-specific kwargs from allocation
+                gpu_kwargs = {}
+                if gpu_params.get("main_gpu") is not None:
+                    gpu_kwargs["main_gpu"] = gpu_params["main_gpu"]
+                if gpu_params.get("split_mode") is not None:
+                    gpu_kwargs["split_mode"] = gpu_params["split_mode"]
+                if gpu_params.get("tensor_split") is not None:
+                    gpu_kwargs["tensor_split"] = gpu_params["tensor_split"]
+
                 return Llama(
                     model_path=gguf_path,
                     mmproj_path=mmproj_path,  # Multimodal projector for audio/vision
@@ -372,6 +500,7 @@ class GGUFLanguageModel(BaseModel):
                     cache_type_v=cache_type_v,  # KV cache value quantization
                     verbose=False,  # Disable verbose logging (managed by ggml_logging)
                     seed=-1,  # Random seed (-1 = random)
+                    **gpu_kwargs,
                 )
             except ValueError as e:
                 # Provide more helpful error message for common issues
@@ -393,7 +522,9 @@ class GGUFLanguageModel(BaseModel):
             # synchronously to ensure GPU context is created optimally and avoid
             # thread context switching overhead in shared memory architecture
             if _is_unified_memory_gpu():
-                logger.info("Loading model synchronously (unified memory GPU optimization)")
+                logger.info(
+                    "Loading model synchronously (unified memory GPU optimization)"
+                )
                 self.llama = _load_model()
             else:
                 self.llama = await loop.run_in_executor(self._executor, _load_model)
@@ -776,6 +907,7 @@ class GGUFLanguageModel(BaseModel):
             AssertionError: If model not loaded
         """
         import time
+
         _timing_start = time.perf_counter()
 
         assert self.llama is not None, "Model not loaded. Call load() first."
@@ -1226,7 +1358,9 @@ class GGUFLanguageModel(BaseModel):
             content = result["choices"][0]["message"]["content"]
             return content.strip() if content else ""
         except Exception as e:
-            logger.error(f"Error extracting audio completion result: {e}", exc_info=True)
+            logger.error(
+                f"Error extracting audio completion result: {e}", exc_info=True
+            )
             raise ValueError(f"Unexpected result from audio completion: {e}") from e
 
     async def generate_stream_with_audio(
@@ -1347,12 +1481,11 @@ class GGUFLanguageModel(BaseModel):
         # Shutdown thread pool executor
         if hasattr(self, "_executor"):
             self._executor.shutdown(wait=True, cancel_futures=True)
-            # Create new executor for potential future use
-            self._executor = ThreadPoolExecutor(max_workers=1)
+            self._executor = None
 
         logger.info(f"GGUF language model unloaded: {self.model_id}")
 
     def __del__(self):
         """Cleanup thread pool executor on deletion."""
-        if hasattr(self, "_executor"):
+        if getattr(self, "_executor", None) is not None:
             self._executor.shutdown(wait=False)

@@ -210,6 +210,11 @@ Common HTTP status codes:
 - `POST /v1/ml/polars/features` - Compute rolling features
 - `GET /v1/ml/polars/buffers/{buffer_id}/data` - Get raw buffer data
 
+### Audio (Text-to-Speech)
+
+- `POST /v1/{namespace}/{project}/audio/speech` - Generate speech from text (OpenAI-compatible)
+- `GET /v1/{namespace}/{project}/audio/voices` - List available TTS voices
+
 ### Voice Chat (Real-time Voice Assistant)
 
 - `WebSocket /v1/{namespace}/{project}/voice/chat` - Full-duplex voice chat (Speech → STT → LLM → TTS → Speech)
@@ -1983,6 +1988,160 @@ curl -X POST http://localhost:14345/v1/examples/fda_rag/import-data \
 
 ---
 
+## Audio API (Text-to-Speech)
+
+The Audio API provides OpenAI-compatible text-to-speech endpoints for generating speech from text.
+
+### Generate Speech
+
+`POST /v1/{namespace}/{project}/audio/speech`
+
+Generate audio from input text using the specified TTS model and voice.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace (e.g., "default") |
+| `project` | string | Project name |
+
+**Request Body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `input` | string | *required* | Text to synthesize (max 4096 characters) |
+| `model` | string | `"kokoro"` | TTS model ID |
+| `voice` | string | `"af_heart"` | Voice ID (see available voices below) |
+| `response_format` | string | `"mp3"` | Audio format: mp3, opus, aac, flac, wav, pcm |
+| `speed` | float | `1.0` | Speed multiplier (0.25 to 4.0) |
+
+**Available Voices:**
+
+| Voice ID | Description | Language |
+|----------|-------------|----------|
+| `af_heart` | Female, warm and friendly | English (US) |
+| `af_bella` | Female, professional | English (US) |
+| `af_nicole` | Female, conversational | English (US) |
+| `af_sarah` | Female, clear and articulate | English (US) |
+| `af_sky` | Female, youthful | English (US) |
+| `am_adam` | Male, professional | English (US) |
+| `am_michael` | Male, conversational | English (US) |
+| `bf_emma` | Female, British accent | English (UK) |
+| `bf_isabella` | Female, British accent | English (UK) |
+| `bm_george` | Male, British accent | English (UK) |
+| `bm_lewis` | Male, British accent | English (UK) |
+
+**Response:**
+
+Returns audio file in the requested format with appropriate Content-Type header.
+
+**Example:**
+
+```bash
+# Generate speech and save to file
+curl -X POST "http://localhost:14345/v1/default/my-project/audio/speech" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Hello! Welcome to LlamaFarm.",
+    "voice": "af_heart",
+    "response_format": "mp3"
+  }' \
+  --output speech.mp3
+
+# Generate with different voice and speed
+curl -X POST "http://localhost:14345/v1/default/my-project/audio/speech" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "This is a test of text to speech.",
+    "voice": "am_adam",
+    "speed": 1.2,
+    "response_format": "wav"
+  }' \
+  --output speech.wav
+```
+
+**Python Example:**
+
+```python
+import asyncio
+import httpx
+
+async def generate_speech(text: str, voice: str = "af_heart") -> bytes:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:14345/v1/default/my-project/audio/speech",
+            json={
+                "input": text,
+                "voice": voice,
+                "response_format": "mp3",
+            },
+        )
+        response.raise_for_status()
+        return response.content
+
+async def main():
+    audio = await generate_speech("Hello, world!")
+    with open("speech.mp3", "wb") as f:
+        f.write(audio)
+
+asyncio.run(main())
+```
+
+### List Voices
+
+`GET /v1/{namespace}/{project}/audio/voices`
+
+List available TTS voices.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `namespace` | string | Project namespace |
+| `project` | string | Project name |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *none* | Filter by model ID (optional) |
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "af_heart",
+      "name": "Heart",
+      "language": "en-US",
+      "model": "kokoro",
+      "preview_url": null
+    },
+    {
+      "id": "af_bella",
+      "name": "Bella",
+      "language": "en-US",
+      "model": "kokoro",
+      "preview_url": null
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+# List all voices
+curl "http://localhost:14345/v1/default/my-project/audio/voices"
+
+# Filter by model
+curl "http://localhost:14345/v1/default/my-project/audio/voices?model=kokoro"
+```
+
+---
+
 ## Voice Chat API
 
 The Voice Chat API provides a full-duplex WebSocket endpoint for real-time voice assistant functionality. It orchestrates Speech-to-Text (STT), LLM inference, and Text-to-Speech (TTS) into a seamless voice conversation pipeline.
@@ -3581,6 +3740,10 @@ For OCR and document extraction, you can use either:
 - **Universal Runtime** (`/v1/ocr`, `/v1/documents/extract`) - Accepts base64 images or file IDs
 :::
 
+:::tip Using Text-to-Speech APIs
+For text-to-speech, prefer the **LlamaFarm API** (`/v1/{namespace}/{project}/audio/speech`) which provides project-scoped access. The Universal Runtime endpoints (`/v1/audio/speech`, `/v1/audio/voices`) are also available for direct access.
+:::
+
 ### Starting the Universal Runtime
 
 ```bash
@@ -3618,6 +3781,9 @@ nx start universal-runtime
 | **Anomaly** | `POST /v1/anomaly/load` | Load saved model |
 | **Anomaly** | `GET /v1/anomaly/models` | List saved models |
 | **Anomaly** | `DELETE /v1/anomaly/models/{filename}` | Delete saved model |
+| **TTS** | `POST /v1/audio/speech` | Generate speech from text (OpenAI-compatible) |
+| **TTS** | `GET /v1/audio/voices` | List available TTS voices |
+| **TTS** | `WebSocket /v1/audio/speech/stream` | Real-time TTS streaming |
 
 :::info Classification Endpoints
 - **`/v1/classify`** (Universal Runtime only) - Use pre-trained HuggingFace models for sentiment, spam detection, etc. This endpoint is NOT proxied through the main LlamaFarm server.
