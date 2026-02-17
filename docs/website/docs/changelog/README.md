@@ -39,11 +39,11 @@ If the automated workflow fails or you need to backfill historical releases:
 
 ```
 docs/website/docs/changelog/
-├── README.md              # This file (developer documentation)
-└── index.md               # Changelog page with expandable accordion sections per release
+├── README.md       # This file (developer documentation)
+└── index.md        # Single changelog page with <details> accordion sections
 ```
 
-All releases live in a single `index.md` file as `<details>` accordion sections. The latest release is expanded by default (`<details open>`), while older releases are collapsed.
+All releases live in a single `index.md` file as `<details>` accordion sections. The latest release is expanded by default (`<details open>`), while older releases are collapsed. No individual version files are created.
 
 ## Testing the System
 

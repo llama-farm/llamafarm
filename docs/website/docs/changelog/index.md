@@ -7,6 +7,52 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.27</strong> — 2026-02-16</summary>
+
+**LlamaFarm 0.0.27: Addons, Smarter RAG, and Runtime Resilience**
+
+This release introduces the addons system, smarter RAG defaults, and significant runtime stability improvements.
+
+### New Features
+
+#### Addons System
+
+LlamaFarm now supports addons — modular extensions you can install and enable to expand your platform's capabilities. The Designer includes a polished UX for browsing, installing, and managing addons, with sequential installation and auto-enable on install for a smooth experience.
+
+#### Per-Model RAG Defaults
+
+You can now configure default RAG retrieval strategies on a per-model basis. This means different models can automatically use the retrieval settings that work best for them — no manual configuration needed each time.
+
+#### RAG Source Chunks in Test Outputs
+
+The Designer now shows RAG source chunks directly in test outputs, so you can see exactly which documents your model is referencing. Great for debugging retrieval quality and understanding model responses.
+
+#### Cascading Data Processing Strategies
+
+The server now supports cascading default data processing strategies, making it easier to set up sensible defaults that flow through your entire pipeline.
+
+#### Anomaly Detection Documentation
+
+Comprehensive docs, use-cases, and a full demo for the anomaly detection feature introduced in v0.0.24 — making it much easier to get started with outlier detection.
+
+### Infrastructure
+
+- **Binary component builds** for faster CI and distribution
+- **Server port change** — default port moved from 8000 to 14345 to avoid conflicts
+
+### Bug Fixes
+
+- **Smart GPU allocation** — prevents multi-model OOM crashes by intelligently managing GPU memory across loaded models
+- **Event loop protection** — model loading in the Universal Runtime no longer blocks the event loop, improving responsiveness during heavy loads
+- **API system prompts** — fixed a bug where API-provided system prompts were being overridden by config-level system prompts
+- **Designer improvements** — better delete UX, ghost project handling, fixed 404 on train button, improved onboarding checklist updates after demo project conversion
+- **Audio error handling** — improved error handling in the Designer for audio features
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.27)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.26</strong> — 2026-01-27</summary>
 
 **LlamaFarm 0.0.26: Smarter, Faster, and More Accessible**
