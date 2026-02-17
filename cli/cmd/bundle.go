@@ -156,7 +156,7 @@ func runBundle(cmd *cobra.Command, args []string) error {
 
 	// Download PyApp service binaries
 	pyappPlatform := fmt.Sprintf("%s-%s", goOS, bundleFlags.arch)
-	for _, component := range []string{"server", "rag", "universal-runtime"} {
+	for _, component := range []string{"server", "rag", "runtime"} {
 		binaryName := fmt.Sprintf("llamafarm-%s-%s", component, pyappPlatform)
 		if bundleFlags.platform == "windows" {
 			binaryName += ".exe"

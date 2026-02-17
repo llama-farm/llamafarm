@@ -185,7 +185,7 @@ install_cli() {
     local bin_dir="$LF_DATA_DIR/bin"
     mkdir -p "$bin_dir"
 
-    for component in server rag universal-runtime; do
+    for component in server rag runtime; do
         local pyapp_name="llamafarm-${component}-${pyapp_suffix}"
         if [[ "$pyapp_os" == "windows" ]]; then
             pyapp_name="${pyapp_name}.exe"
@@ -228,7 +228,7 @@ install_pyapp_binaries() {
 
     mkdir -p "$bin_dir"
 
-    for component in server rag universal-runtime; do
+    for component in server rag runtime; do
         local binary
         binary=$(find "$source_dir" -maxdepth 1 -name "llamafarm-${component}*" -not -name "*.sha256" | head -1)
         if [[ -n "$binary" ]]; then
@@ -254,8 +254,8 @@ install_torch_wheels() {
 
     info "Installing accelerator-specific torch from bundle..."
 
-    if [[ -x "$bin_dir/llamafarm-universal-runtime" ]]; then
-        "$bin_dir/llamafarm-universal-runtime" self pip install \
+    if [[ -x "$bin_dir/llamafarm-runtime" ]]; then
+        "$bin_dir/llamafarm-runtime" self pip install \
             --find-links "$torch_dir" --force-reinstall torch 2>&1 || {
             warning "Failed to install torch wheels. The runtime will use CPU-only torch."
             return 0
