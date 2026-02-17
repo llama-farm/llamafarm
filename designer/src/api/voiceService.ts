@@ -14,17 +14,42 @@ function getApiHost(): string {
   // 1) Explicit URL from env (for custom deployments)
   const envUrl = (import.meta.env as Record<string, string>).VITE_APP_API_URL
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.trim()
+    const trimmed = envUrl.trim()
+
+    // Accept full absolute URLs directly.
+    try {
+      const parsed = new URL(trimmed)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.toString().replace(/\/$/, '')
+      }
+    } catch {
+      // Fall through to protocol-normalized parsing below.
+    }
+
+    // Also accept host[:port] values by inheriting current page protocol.
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(`${window.location.protocol}//${trimmed}`)
+        return parsed.toString().replace(/\/$/, '')
+      } catch {
+        // Fall through to standard runtime fallback.
+      }
+    }
   }
 
   // 2) Default to backend port on current hostname for split-origin dev setups
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-    return `${protocol}//${window.location.hostname}:14345`
+    const apiUrl = new URL(window.location.origin)
+    // Use 127.0.0.1 to avoid localhost IPv6 resolution issues on macOS.
+    if (apiUrl.hostname === 'localhost') {
+      apiUrl.hostname = '127.0.0.1'
+    }
+    apiUrl.port = '14345'
+    return apiUrl.toString().replace(/\/$/, '')
   }
 
   // 3) Fallback for SSR or edge cases
-  return 'http://localhost:14345'
+  return 'http://127.0.0.1:14345'
 }
 
 const API_HOST = getApiHost()
