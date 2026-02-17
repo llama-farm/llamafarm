@@ -20,16 +20,19 @@ function getRuntimeBaseUrl(): string {
   // 1) Explicit URL from env (for custom deployments)
   const envUrl = import.meta.env.VITE_UNIVERSAL_RUNTIME_URL
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl
+    return envUrl.trim()
   }
 
-  // 2) Derive from current window location (works for localhost and remote access)
+  // 2) Derive from current window location (works for localhost, remote access, and IPv6 hosts)
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:11540`
+    const runtimeUrl = new URL(window.location.origin)
+    runtimeUrl.port = '11540'
+    return runtimeUrl.toString().replace(/\/$/, '')
   }
 
   // 3) Fallback for SSR or edge cases
-  return 'http://localhost:11540'
+  // Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS.
+  return 'http://127.0.0.1:11540'
 }
 
 const RUNTIME_BASE_URL = getRuntimeBaseUrl()
