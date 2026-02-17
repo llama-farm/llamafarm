@@ -37,31 +37,81 @@ def normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "_", name.lower())
 
 
-def parse_uv_lock_packages(uv_lock_path: Path) -> Set[str]:
-    """Parse uv.lock file to extract package names from base install."""
+def parse_uv_lock_packages(uv_lock_path: Path, pyproject_path: Path) -> Set[str]:
+    """
+    Parse uv.lock file to extract package names reachable from base dependencies only.
+    Builds a dependency graph and only includes packages reachable from 
+    [project].dependencies.
+    """
     if not uv_lock_path.exists():
-        logging.warning(f"uv.lock file not found at {uv_lock_path}")
+        return set()
+    
+    if not pyproject_path.exists():
         return set()
     
     try:
+        # Load uv.lock to build dependency graph
         with open(uv_lock_path, 'rb') as f:
             lock_data = tomllib.load(f)
         
-        packages = set()
+        # Load pyproject.toml to get base dependencies
+        with open(pyproject_path, 'rb') as f:
+            project_data = tomllib.load(f)
+        
+        # Build package dependency graph from uv.lock
+        dependency_graph = {}
         for package in lock_data.get("package", []):
             package_name = package.get("name")
             if package_name:
-                packages.add(normalize_package_name(package_name))
+                normalized_name = normalize_package_name(package_name)
+                deps = []
+                for dep in package.get("dependencies", []):
+                    # Dependency names in uv.lock can have version specs
+                    dep_name = re.split(r'[<>=!;]', dep.strip())[0].strip()
+                    if dep_name:
+                        deps.append(normalize_package_name(dep_name))
+                dependency_graph[normalized_name] = deps
         
-        logging.info(f"Parsed {len(packages)} packages from uv.lock")
-        return packages
+        # Get base dependencies from pyproject.toml [project].dependencies
+        base_deps = set()
+        project_deps = project_data.get("project", {}).get("dependencies", [])
+        for dep in project_deps:
+            # Extract package name from dependency spec
+            dep_name = re.split(r'[<>=!;]', dep.strip())[0].strip()
+            if dep_name:
+                base_deps.add(normalize_package_name(dep_name))
+        
+        # Walk the dependency graph transitively from base dependencies
+        base_reachable = set()
+        
+        def walk_dependencies(package_name: str, visited: Set[str]):
+            """Recursively walk dependencies to find all reachable packages."""
+            if package_name in visited:
+                return  # Avoid cycles
+            visited.add(package_name)
+            base_reachable.add(package_name)
+            
+            # Walk transitive dependencies
+            for dep in dependency_graph.get(package_name, []):
+                walk_dependencies(dep, visited)
+        
+        # Start walk from each base dependency
+        for base_dep in base_deps:
+            walk_dependencies(base_dep, set())
+        
+        count = len(base_reachable)
+        logging.info(f"Parsed {count} base-reachable packages from uv.lock")
+        logging.debug(f"Base dependencies: {sorted(base_deps)}")
+        logging.debug(f"Base-reachable packages: {sorted(base_reachable)}")
+        return base_reachable
+        
     except Exception as e:
-        logging.warning(f"Failed to parse uv.lock: {e}")
+        logging.warning(f"Failed to parse uv.lock and dependency graph: {e}")
         return set()
 
 
 def parse_pyproject_extras(pyproject_path: Path) -> Set[str]:
-    """Parse pyproject.toml to extract packages from optional-dependencies and dependency-groups."""
+    """Parse pyproject.toml to extract packages from GPU extra only."""
     if not pyproject_path.exists():
         logging.warning(f"pyproject.toml file not found at {pyproject_path}")
         return set()
@@ -72,43 +122,62 @@ def parse_pyproject_extras(pyproject_path: Path) -> Set[str]:
         
         packages = set()
         
-        # Parse optional-dependencies (gpu, tts, tts-mlx, speech, etc.)
+        # Only include packages from the 'gpu' extra (torch etc. installed by CLI)
+        # Remove tts, tts-mlx, speech (addon-managed) and dev (not base-installed)
         optional_deps = project_data.get("project", {}).get("optional-dependencies", {})
-        for extra_name, deps in optional_deps.items():
-            if extra_name in ["gpu", "tts", "tts-mlx", "speech"]:
-                for dep in deps:
-                    # Extract package name from dependency spec (e.g., "torch>=2.0.0" -> "torch")
-                    package_name = re.split(r'[<>=!]', dep.strip())[0].strip()
-                    packages.add(normalize_package_name(package_name))
-        
-        # Parse dependency-groups (dev group)
-        dependency_groups = project_data.get("dependency-groups", {})
-        dev_deps = dependency_groups.get("dev", [])
-        for dep in dev_deps:
+        gpu_deps = optional_deps.get("gpu", [])
+        for dep in gpu_deps:
+            # Extract package name from dependency spec 
             package_name = re.split(r'[<>=!]', dep.strip())[0].strip()
-            packages.add(normalize_package_name(package_name))
+            if package_name:
+                packages.add(normalize_package_name(package_name))
         
-        logging.info(f"Parsed {len(packages)} packages from pyproject.toml extras/groups")
+        logging.info(f"Parsed {len(packages)} packages from pyproject.toml gpu extra")
         return packages
     except Exception as e:
         logging.warning(f"Failed to parse pyproject.toml: {e}")
         return set()
 
 
-def get_base_exclusion_set() -> Set[str]:
+def get_base_exclusion_set(no_exclude: bool = False) -> Set[str]:
     """Get combined set of packages to exclude from base install."""
+    if no_exclude:
+        logging.info("Base package exclusion disabled via --no-exclude flag")
+        return set()
+    
     repo_root = Path(__file__).parent.parent
     uv_lock_path = repo_root / "runtimes" / "universal" / "uv.lock"
     pyproject_path = repo_root / "runtimes" / "universal" / "pyproject.toml"
     
-    # Get packages from uv.lock
-    uv_packages = parse_uv_lock_packages(uv_lock_path)
+    # Check if required files exist
+    if not uv_lock_path.exists():
+        raise FileNotFoundError(
+            f"uv.lock file not found at {uv_lock_path}. "
+            f"Run 'uv sync' to generate it or use --no-exclude to disable filtering."
+        )
     
-    # Get packages from pyproject.toml extras/groups
+    if not pyproject_path.exists():
+        raise FileNotFoundError(
+            f"pyproject.toml file not found at {pyproject_path}. "
+            f"Check the project structure or use --no-exclude to disable filtering."
+        )
+    
+    # Get packages from uv.lock (base-reachable only)
+    uv_packages = parse_uv_lock_packages(uv_lock_path, pyproject_path)
+    
+    # Get packages from pyproject.toml extras (GPU only)
     extra_packages = parse_pyproject_extras(pyproject_path)
     
     # Combine both sets
     all_excluded = uv_packages | extra_packages
+    
+    # Fail loudly if exclusion set is empty (would reproduce 4GB problem)
+    if not all_excluded:
+        raise RuntimeError(
+            "Base exclusion set is empty - this would include all packages and "
+            "reproduce the original 4GB addon problem. Check that uv.lock and "
+            "pyproject.toml are valid, or use --no-exclude if this is intentional."
+        )
     
     logging.info(f"Total base packages to exclude: {len(all_excluded)}")
     logging.debug(f"Excluded packages: {sorted(all_excluded)}")
@@ -227,7 +296,12 @@ def get_host_platform() -> str:
     return "unknown"
 
 
-def build_addon_wheels(addon_name: str, target_platform: str, output_dir: Path, no_exclude: bool = False):
+def build_addon_wheels(
+    addon_name: str,
+    target_platform: str, 
+    output_dir: Path,
+    no_exclude: bool = False
+):
     """Build wheels for an addon."""
     spec = ADDON_SPECS[addon_name]
 
@@ -285,7 +359,7 @@ def build_addon_wheels(addon_name: str, target_platform: str, output_dir: Path, 
         final_wheel_files = all_wheel_files
     else:
         # Get base packages to exclude
-        base_excluded = get_base_exclusion_set()
+        base_excluded = get_base_exclusion_set(no_exclude=False)
         
         # Get packages to keep for this addon
         addon_keep = get_addon_keep_packages(addon_name, spec)
@@ -302,14 +376,17 @@ def build_addon_wheels(addon_name: str, target_platform: str, output_dir: Path, 
                 final_wheel_files.append(wheel_file)
                 logging.debug(f"    Keeping {wheel_name} (addon-specific package)")
             elif package_name in base_excluded:
-                logging.info(f"    Excluding {wheel_name} (base package: {package_name})")
+                msg = f"    Excluding {wheel_name} (base package: {package_name})"
+                logging.info(msg)
                 wheel_file.unlink()  # Delete the excluded wheel
                 excluded_count += 1
             else:
                 final_wheel_files.append(wheel_file)
                 logging.debug(f"    Keeping {wheel_name} (not in base exclusion set)")
         
-        logging.info(f"  Excluded {excluded_count} wheel(s), keeping {len(final_wheel_files)} wheel(s)")
+        kept_count = len(final_wheel_files)
+        msg = f"  Excluded {excluded_count} wheel(s), keeping {kept_count} wheel(s)"
+        logging.info(msg)
 
     # Create tar.gz with remaining wheels
     tarball_path = output_dir / f"{addon_name}-wheels-{target_platform}.tar.gz"
