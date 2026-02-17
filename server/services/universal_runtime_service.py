@@ -420,6 +420,240 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/classifier/models/{model_name}")
 
     # =========================================================================
+    # Timeseries Forecasting
+    # =========================================================================
+
+    @classmethod
+    async def timeseries_list_backends(cls) -> dict[str, Any]:
+        """List available timeseries forecasting backends."""
+        return await cls._make_request("GET", "/v1/timeseries/backends")
+
+    @classmethod
+    async def timeseries_fit(
+        cls,
+        model: str,
+        backend: str,
+        data: list[dict],
+        frequency: str | None = None,
+        overwrite: bool = True,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Fit a timeseries forecasting model.
+
+        Args:
+            model: Model name (auto-generated if not provided)
+            backend: Forecasting algorithm (arima, exponential_smoothing, etc.)
+            data: Training data as list of {timestamp, value} dicts
+            frequency: Time frequency (D, H, M, etc.)
+            overwrite: If True, overwrite existing model
+            description: Optional model description
+
+        Returns:
+            Fit result with model info and saved path
+        """
+        payload = {
+            "model": model,
+            "backend": backend,
+            "data": data,
+            "overwrite": overwrite,
+        }
+        if frequency:
+            payload["frequency"] = frequency
+        if description:
+            payload["description"] = description
+
+        return await cls._make_request("POST", "/v1/timeseries/fit", json=payload)
+
+    @classmethod
+    async def timeseries_predict(
+        cls,
+        model: str,
+        horizon: int,
+        confidence_level: float = 0.95,
+        data: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Generate timeseries forecasts.
+
+        Args:
+            model: Model name
+            horizon: Number of periods to forecast
+            confidence_level: Confidence level for prediction intervals
+            data: Historical data (required for zero-shot backends)
+
+        Returns:
+            Predictions with confidence intervals
+        """
+        payload = {
+            "model": model,
+            "horizon": horizon,
+            "confidence_level": confidence_level,
+        }
+        if data:
+            payload["data"] = data
+
+        return await cls._make_request("POST", "/v1/timeseries/predict", json=payload)
+
+    @classmethod
+    async def timeseries_load(
+        cls,
+        model: str,
+        backend: str | None = None,
+    ) -> dict[str, Any]:
+        """Load a saved timeseries model.
+
+        Args:
+            model: Model name (supports '-latest' suffix)
+            backend: Backend hint for file matching
+
+        Returns:
+            Model info
+        """
+        payload = {"model": model}
+        if backend:
+            payload["backend"] = backend
+
+        return await cls._make_request("POST", "/v1/timeseries/load", json=payload)
+
+    @classmethod
+    async def timeseries_list_models(cls) -> dict[str, Any]:
+        """List all saved timeseries models."""
+        return await cls._make_request("GET", "/v1/timeseries/models")
+
+    @classmethod
+    async def timeseries_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete a saved timeseries model.
+
+        Args:
+            model_name: Model name to delete
+
+        Returns:
+            Delete result
+        """
+        return await cls._make_request("DELETE", f"/v1/timeseries/models/{model_name}")
+
+    # =========================================================================
+    # ADTK (Time-Series Anomaly Detection)
+    # =========================================================================
+
+    @classmethod
+    async def adtk_list_detectors(cls) -> dict[str, Any]:
+        """List available ADTK detectors."""
+        return await cls._make_request("GET", "/v1/adtk/detectors")
+
+    @classmethod
+    async def adtk_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit an ADTK model on time series data."""
+        return await cls._make_request("POST", "/v1/adtk/fit", json=request)
+
+    @classmethod
+    async def adtk_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect anomalies in time series data."""
+        return await cls._make_request("POST", "/v1/adtk/detect", json=request)
+
+    @classmethod
+    async def adtk_list_models(cls) -> dict[str, Any]:
+        """List saved ADTK models."""
+        return await cls._make_request("GET", "/v1/adtk/models")
+
+    @classmethod
+    async def adtk_load(cls, request: dict) -> dict[str, Any]:
+        """Load an ADTK model from disk."""
+        return await cls._make_request("POST", "/v1/adtk/load", json=request)
+
+    @classmethod
+    async def adtk_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete an ADTK model."""
+        return await cls._make_request("DELETE", f"/v1/adtk/models/{model_name}")
+
+    # =========================================================================
+    # Drift Detection
+    # =========================================================================
+
+    @classmethod
+    async def drift_list_detectors(cls) -> dict[str, Any]:
+        """List available drift detector types."""
+        return await cls._make_request("GET", "/v1/drift/detectors")
+
+    @classmethod
+    async def drift_fit(cls, request: dict) -> dict[str, Any]:
+        """Fit a drift detector on reference data."""
+        return await cls._make_request("POST", "/v1/drift/fit", json=request)
+
+    @classmethod
+    async def drift_detect(cls, request: dict) -> dict[str, Any]:
+        """Detect drift in new data."""
+        return await cls._make_request("POST", "/v1/drift/detect", json=request)
+
+    @classmethod
+    async def drift_list_models(cls) -> dict[str, Any]:
+        """List saved drift models."""
+        return await cls._make_request("GET", "/v1/drift/models")
+
+    @classmethod
+    async def drift_status(cls, model_name: str) -> dict[str, Any]:
+        """Get drift detector status."""
+        return await cls._make_request("GET", f"/v1/drift/status/{model_name}")
+
+    @classmethod
+    async def drift_reset(cls, model_name: str) -> dict[str, Any]:
+        """Reset a drift detector."""
+        return await cls._make_request("POST", f"/v1/drift/reset/{model_name}")
+
+    @classmethod
+    async def drift_load(cls, request: dict) -> dict[str, Any]:
+        """Load a drift model from disk."""
+        return await cls._make_request("POST", "/v1/drift/load", json=request)
+
+    @classmethod
+    async def drift_delete(cls, model_name: str) -> dict[str, Any]:
+        """Delete a drift model."""
+        return await cls._make_request("DELETE", f"/v1/drift/models/{model_name}")
+
+    # =========================================================================
+    # CatBoost Gradient Boosting
+    # =========================================================================
+
+    @classmethod
+    async def catboost_info(cls) -> dict[str, Any]:
+        """Get CatBoost availability and capabilities."""
+        return await cls._make_request("GET", "/v1/catboost/info")
+
+    @classmethod
+    async def catboost_list_models(cls) -> dict[str, Any]:
+        """List saved CatBoost models."""
+        return await cls._make_request("GET", "/v1/catboost/models")
+
+    @classmethod
+    async def catboost_fit(cls, request: dict) -> dict[str, Any]:
+        """Train a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/fit", json=request)
+
+    @classmethod
+    async def catboost_predict(cls, request: dict) -> dict[str, Any]:
+        """Make predictions with a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/predict", json=request)
+
+    @classmethod
+    async def catboost_update(cls, request: dict) -> dict[str, Any]:
+        """Incrementally update a CatBoost model."""
+        return await cls._make_request("POST", "/v1/catboost/update", json=request)
+
+    @classmethod
+    async def catboost_load(cls, request: dict) -> dict[str, Any]:
+        """Load a CatBoost model from disk."""
+        return await cls._make_request("POST", "/v1/catboost/load", json=request)
+
+    @classmethod
+    async def catboost_delete(cls, model_id: str) -> dict[str, Any]:
+        """Delete a CatBoost model."""
+        return await cls._make_request("DELETE", f"/v1/catboost/{model_id}")
+
+    @classmethod
+    async def catboost_importance(cls, model_id: str) -> dict[str, Any]:
+        """Get feature importance for a CatBoost model."""
+        return await cls._make_request("GET", f"/v1/catboost/{model_id}/importance")
+
+    # =========================================================================
     # Anomaly Detection
     # =========================================================================
 
@@ -470,6 +704,7 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
     ) -> dict[str, Any]:
         """Score data points for anomalies.
 
@@ -480,6 +715,7 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Include SHAP explanations for anomalous points
         """
         payload = {
             "model": model,
@@ -491,6 +727,8 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = True
 
         return await cls._make_request("POST", "/v1/anomaly/score", json=payload)
 
@@ -503,6 +741,7 @@ class UniversalRuntimeService:
         schema: dict[str, str] | None = None,
         normalization: str = "standardization",
         threshold: float | None = None,
+        explain: bool = False,
     ) -> dict[str, Any]:
         """Detect anomalies (returns only anomalous points).
 
@@ -513,6 +752,7 @@ class UniversalRuntimeService:
             schema: Feature encoding schema (for dict data)
             normalization: Score normalization method (standardization, zscore, raw)
             threshold: Anomaly threshold
+            explain: Include SHAP explanations for anomalous points
         """
         payload = {
             "model": model,
@@ -524,6 +764,8 @@ class UniversalRuntimeService:
             payload["schema"] = schema
         if threshold is not None:
             payload["threshold"] = threshold
+        if explain:
+            payload["explain"] = True
 
         return await cls._make_request("POST", "/v1/anomaly/detect", json=payload)
 
@@ -942,6 +1184,25 @@ class UniversalRuntimeService:
             params.append("with_features=true")
         query = f"?{'&'.join(params)}" if params else ""
         return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}/data{query}")
+
+    # =========================================================================
+    # SHAP Explainability
+    # =========================================================================
+
+    @classmethod
+    async def explain_list_explainers(cls) -> dict[str, Any]:
+        """List available SHAP explainer types."""
+        return await cls._make_request("GET", "/v1/explain/explainers")
+
+    @classmethod
+    async def explain_shap(cls, request: dict) -> dict[str, Any]:
+        """Generate SHAP explanations for model predictions."""
+        return await cls._make_request("POST", "/v1/explain/shap", json=request)
+
+    @classmethod
+    async def explain_importance(cls, request: dict) -> dict[str, Any]:
+        """Compute global feature importance from SHAP values."""
+        return await cls._make_request("POST", "/v1/explain/importance", json=request)
 
     # =========================================================================
     # Text-to-Speech

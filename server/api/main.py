@@ -85,6 +85,10 @@ def llama_farm_api() -> fastapi.FastAPI:
     register_exception_handlers(app)
 
     app.include_router(routers.addons_router)
+    app.include_router(routers.adtk_router, prefix=API_PREFIX)
+    app.include_router(routers.catboost_router, prefix=API_PREFIX)
+    app.include_router(routers.drift_router, prefix=API_PREFIX)
+    app.include_router(routers.explain_router, prefix=API_PREFIX)
     app.include_router(routers.projects_router, prefix=API_PREFIX)
     app.include_router(routers.datasets_router, prefix=API_PREFIX)
     app.include_router(routers.rag_router, prefix=API_PREFIX)
@@ -95,6 +99,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     app.include_router(routers.models_router, prefix=API_PREFIX)
     app.include_router(routers.ml_router, prefix=API_PREFIX)
     app.include_router(routers.nlp_router, prefix=API_PREFIX)
+    app.include_router(routers.timeseries_router, prefix=API_PREFIX)
     app.include_router(routers.vision_router, prefix=API_PREFIX)
     # Audio TTS endpoints - project-scoped (path already includes /v1)
     app.include_router(routers.audio_router, prefix=API_PREFIX)

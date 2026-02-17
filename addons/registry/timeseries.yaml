@@ -1,0 +1,20 @@
+# Time-Series Forecasting Addon
+#
+# Provides time-series forecasting using classical methods (ARIMA, Exponential Smoothing,
+# Theta via Darts) and zero-shot foundation models (Amazon Chronos).
+# Supports training, prediction with confidence intervals, and model persistence.
+
+name: timeseries
+display_name: Time-Series Forecasting
+description: Forecast time-series data with Darts (ARIMA, ExpSmoothing, Theta) and Amazon Chronos
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - darts>=0.29.0
+  - chronos-forecasting>=1.2.0
+
+hardware_notes:
+  cuda: Chronos foundation model benefits significantly from GPU acceleration
+  metal: MPS acceleration available for Chronos inference
+  cpu: Classical methods (ARIMA, ExpSmoothing) run efficiently on CPU; Chronos is slower

@@ -158,19 +158,25 @@ export function SpeechTestPanel({
     }
   }, [availableLLMModels, selectedLLMModel])
 
-  // Sync STT enabled state with installation status
+  // Sync STT enabled state with installation status:
+  // disable when uninstalled, auto-enable when newly installed
   useEffect(() => {
-    if (!sttInstalled && sttEnabled) {
+    if (sttInstalled) {
+      setSttEnabled(true)
+    } else if (sttEnabled) {
       setSttEnabled(false)
     }
-  }, [sttInstalled, sttEnabled])
+  }, [sttInstalled]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync TTS enabled state with installation status
+  // Sync TTS enabled state with installation status:
+  // disable when uninstalled, auto-enable when newly installed
   useEffect(() => {
-    if (!ttsInstalled && ttsEnabled) {
+    if (ttsInstalled) {
+      setTtsEnabled(true)
+    } else if (ttsEnabled) {
       setTtsEnabled(false)
     }
-  }, [ttsInstalled, ttsEnabled])
+  }, [ttsInstalled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Determine which mode we're in (calculated early for hook config)
   // If LLM is enabled, always use conversation mode (supports typed input with LLM responses)

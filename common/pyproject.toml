@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "huggingface_hub>=0.24.0",
     "hf-transfer>=0.1.9",  # High-speed downloads (set HF_HUB_ENABLE_HF_TRANSFER=1)
-    "filelock>=3.16.1",
+    "filelock>=3.16.1",  # Pinned <=3.20.0 by PyTorch CPU index; don't raise above
 ]
 
 [project.optional-dependencies]

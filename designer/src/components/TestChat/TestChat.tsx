@@ -26,6 +26,7 @@ import { Selector } from '../ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
 import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { getTaskStatus } from '../../api/addonsService'
 import { useQueryClient } from '@tanstack/react-query'
 import type { AddonInfo } from '../../types/addons'
 import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
@@ -1874,8 +1875,37 @@ export default function TestChat({
   const [showAddonSidePane, setShowAddonSidePane] = useState(false)
   const [addonInstallTaskId, setAddonInstallTaskId] = useState<string | null>(null)
   const [addonInstallName, setAddonInstallName] = useState<string>('')
+  const installAbortRef = useRef<AbortController | null>(null)
 
   const installAddonMutation = useInstallAddon()
+
+  // Poll a background install task until it reaches a terminal state.
+  // Throws on failure or timeout so the caller's catch block surfaces the error.
+  // Respects AbortSignal so the chain stops when the user cancels.
+  const waitForTaskCompletion = useCallback(async (taskId: string, signal?: AbortSignal) => {
+    const POLL_INTERVAL = 2000
+    const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      let status
+      try {
+        status = await getTaskStatus(taskId)
+      } catch (e: unknown) {
+        // Only retry true network failures (no server response).
+        // Re-throw HTTP errors (4xx/5xx) since they indicate permanent problems.
+        if (e && typeof e === 'object' && 'response' in e) throw e
+        continue
+      }
+      if (status.status === 'completed') return
+      if (status.status === 'failed') {
+        throw new Error(status.error || `Install task ${taskId} failed`)
+      }
+    }
+    throw new Error('Install timed out')
+  }, [])
 
   // Handle install confirmation from side pane
   const handleAddonInstallConfirm = useCallback(async (selectedAddons: string[]) => {
@@ -1887,10 +1917,17 @@ export default function TestChat({
       ? uninstalledSpeechAddons.find(a => selectedAddons.includes(a.name))?.display_name || 'Add-on'
       : `${selectedAddons.length} add-ons`
 
-    // Install all selected addons sequentially
-    // Only restart service after the LAST addon to avoid multiple restarts
+    // Create an AbortController so cancel can stop the chain
+    const abort = new AbortController()
+    installAbortRef.current = abort
+
+    // Install all selected addons sequentially.
+    // The server's install endpoint returns immediately (background task), so we must
+    // poll for each task to complete before starting the next install to avoid lock conflicts.
     try {
       for (let i = 0; i < selectedAddons.length; i++) {
+        if (abort.signal.aborted) break
+
         const addonName = selectedAddons[i]
         const isLastAddon = i === selectedAddons.length - 1
 
@@ -1899,17 +1936,23 @@ export default function TestChat({
           restart_service: isLastAddon, // Only restart after last addon
         })
 
-        // Show progress panel for the last addon installation
-        if (isLastAddon) {
-          setAddonInstallTaskId(response.task_id)
-          setAddonInstallName(displayName)
+        // Show progress panel (tracks the current install task)
+        setAddonInstallTaskId(response.task_id)
+        setAddonInstallName(displayName)
+
+        // Wait for this install to finish before starting the next one
+        if (!isLastAddon) {
+          await waitForTaskCompletion(response.task_id, abort.signal)
         }
+        // For the last addon, let the progress panel handle completion via useTaskStatus
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to install addons:', error)
-      // TODO: Show error toast to user
+    } finally {
+      installAbortRef.current = null
     }
-  }, [uninstalledSpeechAddons, installAddonMutation])
+  }, [uninstalledSpeechAddons, installAddonMutation, waitForTaskCompletion])
 
   // Handle install completion - refresh addon list
   const handleAddonInstallComplete = useCallback(() => {
@@ -1921,8 +1964,9 @@ export default function TestChat({
     })
   }, [queryClient])
 
-  // Handle install cancel/dismiss
+  // Handle install cancel/dismiss - abort the chain so no further installs start
   const handleAddonInstallCancel = useCallback(() => {
+    installAbortRef.current?.abort()
     setAddonInstallTaskId(null)
     setAddonInstallName('')
   }, [])

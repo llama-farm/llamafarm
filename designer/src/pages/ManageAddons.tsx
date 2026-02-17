@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useListAddons,
@@ -6,6 +6,7 @@ import {
   useUninstallAddon,
   addonKeys,
 } from '../hooks/useAddons'
+import { getTaskStatus } from '../api/addonsService'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../components/ui/toast'
 import { SearchInput } from '../components/ui/search-input'
@@ -34,6 +35,8 @@ export function ManageAddons() {
   const [installTaskId, setInstallTaskId] = useState<string | null>(null)
   const [installingAddonName, setInstallingAddonName] = useState<string | null>(null)
 
+  const installAbortRef = useRef<AbortController | null>(null)
+
   // Dependency warning state
   const [showDependencyWarning, setShowDependencyWarning] = useState(false)
   const [addonToRemove, setAddonToRemove] = useState<AddonInfo | null>(null)
@@ -58,34 +61,14 @@ export function ManageAddons() {
         )
       : addons
 
-    // Filter out composite/meta add-ons from available list if all dependencies are installed
-    // (e.g., don't show "Speech Processing" if STT and TTS are already installed)
-    const availableFiltered = filtered.filter(a => {
-      if (a.installed) return false
-
-      // Only hide meta/composite addons (no packages, only dependencies)
-      // Regular addons should always show when uninstalled, even if dependencies are satisfied
-      const isMetaAddon = a.dependencies.length > 0 && (!a.packages || a.packages.length === 0)
-
-      if (isMetaAddon) {
-        // Check if ALL dependencies are installed
-        const allDepsInstalled = a.dependencies.every(depName => {
-          const depAddon = addons.find(addon => addon.name === depName)
-          return depAddon?.installed === true
-        })
-
-        // Hide meta add-ons where all dependencies are already installed
-        if (allDepsInstalled) {
-          return false
-        }
-      }
-
-      return true
-    })
+    // Meta-addons (no packages, only dependencies) exist for backend dependency
+    // resolution but should not appear on this page — users install individual addons directly
+    const isMetaAddon = (a: AddonInfo) =>
+      a.dependencies.length > 0 && (!a.packages || a.packages.length === 0)
 
     return {
-      installedAddons: filtered.filter(a => a.installed),
-      availableAddons: availableFiltered,
+      installedAddons: filtered.filter(a => a.installed && !isMetaAddon(a)),
+      availableAddons: filtered.filter(a => !a.installed && !isMetaAddon(a)),
     }
   }, [addons, search])
 
@@ -112,6 +95,33 @@ export function ManageAddons() {
     setShowInstallPane(true)
   }
 
+  // Poll a background install task until it reaches a terminal state.
+  // Throws on failure or timeout so the caller's catch block surfaces the error.
+  const waitForTaskCompletion = useCallback(async (taskId: string, signal?: AbortSignal) => {
+    const POLL_INTERVAL = 2000
+    const MAX_WAIT = 10 * 60 * 1000 // 10 minutes
+    const start = Date.now()
+    while (Date.now() - start < MAX_WAIT) {
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      if (signal?.aborted) throw new DOMException('Install cancelled', 'AbortError')
+      let status
+      try {
+        status = await getTaskStatus(taskId)
+      } catch (e: unknown) {
+        // Only retry true network failures (no server response).
+        // Re-throw HTTP errors (4xx/5xx) since they indicate permanent problems.
+        if (e && typeof e === 'object' && 'response' in e) throw e
+        continue
+      }
+      if (status.status === 'completed') return
+      if (status.status === 'failed') {
+        throw new Error(status.error || `Install task ${taskId} failed`)
+      }
+    }
+    throw new Error('Install timed out')
+  }, [])
+
   const handleInstallConfirm = async (selectedAddons: string[]) => {
     if (selectedAddons.length === 0) return
     setShowInstallPane(false)
@@ -119,18 +129,41 @@ export function ManageAddons() {
     // Set installing state
     setInstallingAddonName(selectedAddons[0])
 
+    // Create an AbortController so cancel can stop the chain
+    const abort = new AbortController()
+    installAbortRef.current = abort
+
     try {
-      const response = await installMutation.mutateAsync({
-        name: selectedAddons[0],
-        restart_service: true,
-      })
-      setInstallTaskId(response.task_id)
+      // Install all selected addons sequentially, waiting for each to finish.
+      // The server's install endpoint returns immediately (background task), so we
+      // poll for completion before starting the next to avoid lock conflicts.
+      for (let i = 0; i < selectedAddons.length; i++) {
+        if (abort.signal.aborted) break
+
+        const addonName = selectedAddons[i]
+        const isLastAddon = i === selectedAddons.length - 1
+
+        const response = await installMutation.mutateAsync({
+          name: addonName,
+          restart_service: isLastAddon, // Only restart after last addon
+        })
+
+        setInstallTaskId(response.task_id)
+
+        // Wait for this install to finish before starting the next one
+        if (!isLastAddon) {
+          await waitForTaskCompletion(response.task_id, abort.signal)
+        }
+      }
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
       setInstallingAddonName(null) // Clear on error
       toast({
         message: `Failed to install ${selectedAddon?.display_name}. Please try again.`,
         variant: 'destructive',
       })
+    } finally {
+      installAbortRef.current = null
     }
   }
 
@@ -385,7 +418,11 @@ export function ManageAddons() {
           taskId={installTaskId}
           addonName={selectedAddon.display_name}
           onComplete={handleInstallComplete}
-          onCancel={() => setInstallTaskId(null)}
+          onCancel={() => {
+            installAbortRef.current?.abort()
+            setInstallTaskId(null)
+            setInstallingAddonName(null)
+          }}
         />
       )}
 

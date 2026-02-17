@@ -347,6 +347,7 @@ async def score_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         schema=request.schema,
         normalization=request.normalization,
         threshold=request.threshold,
+        explain=request.explain,
     )
 
 
@@ -379,6 +380,7 @@ async def detect_anomalies(request: AnomalyScoreRequest) -> dict[str, Any]:
         schema=request.schema,
         normalization=request.normalization,
         threshold=request.threshold,
+        explain=request.explain,
     )
 
 

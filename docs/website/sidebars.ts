@@ -137,6 +137,11 @@ const sidebars: SidebarsConfig = {
       link: { type: 'doc', id: 'contributing/index' },
       items: [],
     },
+    {
+      type: 'doc',
+      id: 'changelog/index',
+      label: 'Changelog',
+    },
   ],
 }
 
