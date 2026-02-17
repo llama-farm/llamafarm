@@ -85,22 +85,25 @@ class LFAgentClientOpenAI(LFAgentClient):
             base_url=self._model_config.base_url or "",
         )
 
-        # Convert tools to OpenAI format
-        # Check for native_api strategy (handle both enum and string values)
-        strategy = self._model_config.tool_call_strategy
-        use_native_api = strategy in (
-            ToolCallStrategy.native_api,
-            "native_api",
-            None,  # Default to native_api if not set
-        )
-
-        if use_native_api:
-            openai_tools = (
-                [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
+        # Convert tools to OpenAI format.
+        # Skip tool processing for structured output because instructor manages
+        # function-calling/tool internals for response_model extraction.
+        openai_tools = NOT_GIVEN
+        if not self._response_model:
+            # Check for native_api strategy (handle both enum and string values)
+            strategy = self._model_config.tool_call_strategy
+            use_native_api = strategy in (
+                ToolCallStrategy.native_api,
+                "native_api",
+                None,  # Default to native_api if not set
             )
-        else:
-            openai_tools = NOT_GIVEN
-            self._update_system_message_with_tools(messages, tools)
+
+            if use_native_api:
+                openai_tools = (
+                    [self._tool_to_openai_format(t) for t in tools] if tools else NOT_GIVEN
+                )
+            else:
+                self._update_system_message_with_tools(messages, tools)
 
         # Prepare API parameters
         # model_api_parameters go as direct kwargs, extra_body goes in extra_body
