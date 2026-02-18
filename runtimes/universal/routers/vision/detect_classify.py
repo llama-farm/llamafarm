@@ -6,7 +6,6 @@ import time
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-import numpy as np
 from fastapi import APIRouter, HTTPException
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -132,6 +131,10 @@ async def detect_and_classify(request: DetectClassifyRequest) -> DetectClassifyR
             continue
 
         crop = pil_image.crop((x1, y1, x2, y2))
+
+        # Ensure RGB mode for JPEG encoding (handles RGBA, P, L, etc.)
+        if crop.mode != "RGB":
+            crop = crop.convert("RGB")
 
         # Convert crop to bytes for the classifier
         buf = io.BytesIO()

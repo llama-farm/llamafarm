@@ -83,7 +83,13 @@ def convert_coco_to_yolo(
     skipped = 0
 
     for img_id, img_info in images_by_id.items():
-        filename = img_info["file_name"]
+        raw_filename = img_info["file_name"]
+        # Sanitize: use basename only to prevent path traversal
+        filename = Path(raw_filename).name
+        if not filename or ".." in raw_filename or ":" in raw_filename or "\\" in raw_filename:
+            logger.warning(f"Skipping image with suspicious filename: {raw_filename!r}")
+            skipped += 1
+            continue
         img_w = img_info.get("width", 0)
         img_h = img_info.get("height", 0)
 
@@ -97,17 +103,17 @@ def convert_coco_to_yolo(
         img_dst = train_images if is_train else val_images
         lbl_dst = train_labels if is_train else val_labels
 
-        # Copy image if it exists
-        src_path = images_dir / filename
-        if src_path.exists():
-            shutil.copy2(str(src_path), str(img_dst / filename))
+        # Copy image if it exists — try original relative path first, then basename
+        src_path = images_dir / raw_filename
+        dst_name = filename  # Always use sanitized basename for output
+        if src_path.exists() and src_path.resolve().is_relative_to(images_dir.resolve()):
+            shutil.copy2(str(src_path), str(img_dst / dst_name))
         else:
-            # Try without subdirectory
-            src_path = images_dir / Path(filename).name
+            src_path = images_dir / filename
             if src_path.exists():
-                shutil.copy2(str(src_path), str(img_dst / Path(filename).name))
+                shutil.copy2(str(src_path), str(img_dst / dst_name))
             else:
-                logger.warning(f"Image not found: {filename}")
+                logger.warning(f"Image not found: {raw_filename}")
                 skipped += 1
                 continue
 

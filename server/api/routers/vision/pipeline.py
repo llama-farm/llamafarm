@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, HTTPException
 from server.services.vision import VisionPipelineService
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,8 @@ async def detect_classify(
 ) -> dict[str, Any]:
     """Detect objects then classify each crop — single round-trip."""
     cls_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not cls_list:
+        raise HTTPException(status_code=422, detail="classes must contain at least one non-empty value")
     det_cls = [c.strip() for c in detection_classes.split(",") if c.strip()] if detection_classes else None
     return await VisionPipelineService.detect_classify({
         "image": image,
