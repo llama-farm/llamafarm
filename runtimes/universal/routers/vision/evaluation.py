@@ -1,7 +1,17 @@
-"""Evaluation router — /v1/vision/eval endpoints"""
+"""Evaluation router — /v1/vision/eval endpoints
+
+Eval jobs run in isolated subprocesses to prevent OOM from taking down
+the runtime. The subprocess writes results to a temp JSON file which
+the parent reads on completion.
+"""
 
 import asyncio
+import contextlib
+import json
 import logging
+import os
+import sys
+import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from models.eval_model import DEFAULT_WEIGHTS, EvalDB, EvalResult, ModelEvaluator
+from models.eval_model import DEFAULT_WEIGHTS, EVAL_DB_PATH, EvalDB, EvalResult, ModelEvaluator
 from services.error_handler import handle_endpoint_errors
 
 logger = logging.getLogger(__name__)
@@ -128,29 +138,96 @@ def _create_job(job_type: str) -> str:
     return job_id
 
 
-# ── Background runners ──────────────────────────────────────────────────────
+# ── Subprocess eval ──────────────────────────────────────────────────────────
+
+# Path to eval worker script — runtime root is 3 levels up from routers/vision/evaluation.py
+_RUNTIME_ROOT = Path(__file__).resolve().parent.parent.parent
+_WORKER_SCRIPT = str(_RUNTIME_ROOT / "vision_training" / "eval_worker.py")
+# Python executable from the runtime's venv
+_PYTHON = sys.executable
+
+
+def _build_eval_cmd(
+    model_path: str,
+    dataset: str,
+    output_path: str,
+    model_name: str | None = None,
+    imgsz: int = 640,
+    batch: int = 16,
+    weights: dict[str, float] | None = None,
+) -> list[str]:
+    """Build the subprocess command for eval worker."""
+    cmd = [
+        _PYTHON, _WORKER_SCRIPT,
+        "--model", model_path,
+        "--dataset", dataset,
+        "--output", output_path,
+        "--imgsz", str(imgsz),
+        "--batch", str(batch),
+        "--db-path", str(EVAL_DB_PATH),
+    ]
+    if model_name:
+        cmd.extend(["--model-name", model_name])
+    if weights:
+        cmd.extend(["--weights", json.dumps(weights)])
+    return cmd
+
+
+async def _run_subprocess_eval(cmd: list[str], output_path: str) -> dict[str, Any]:
+    """Run eval in subprocess, return parsed result dict."""
+    env = {**os.environ, "TRANSFORMERS_SKIP_MPS": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        # Subprocess crashed (OOM, segfault, etc.) — runtime stays alive
+        err_msg = stderr.decode(errors="replace").strip()[-500:] if stderr else "Unknown error"
+        logger.error(f"Eval subprocess exited {proc.returncode}: {err_msg}")
+        return {"status": "failed", "error": f"Eval process crashed (exit {proc.returncode}): {err_msg}"}
+
+    # Read result from temp file
+    try:
+        result = json.loads(Path(output_path).read_text())
+        return result
+    except Exception as e:
+        return {"status": "failed", "error": f"Failed to read eval result: {e}"}
 
 
 async def _run_eval(job_id: str, model_path: str, request: EvalRequest) -> None:
     try:
         _eval_jobs[job_id]["status"] = "running"
-        evaluator = _get_evaluator()
-        result = await evaluator.evaluate(
-            model_path=model_path,
-            data_yaml=request.dataset,
-            model_name=request.model,
-            imgsz=request.imgsz,
-            batch=request.batch_size,
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_") as f:
+            output_path = f.name
+
+        cmd = _build_eval_cmd(
+            model_path=model_path, dataset=request.dataset,
+            output_path=output_path, model_name=request.model,
+            imgsz=request.imgsz, batch=request.batch_size,
             weights=request.weights,
         )
-        _eval_jobs[job_id]["status"] = "completed"
+        result = await _run_subprocess_eval(cmd, output_path)
+
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
-        _eval_jobs[job_id]["result"] = result.to_dict()
+        if result.get("status") == "completed":
+            _eval_jobs[job_id]["status"] = "completed"
+            _eval_jobs[job_id]["result"] = result["result"]
+        else:
+            _eval_jobs[job_id]["status"] = "failed"
+            _eval_jobs[job_id]["error"] = result.get("error", "Unknown error")
     except Exception as e:
         logger.error(f"Eval job {job_id} failed: {e}", exc_info=True)
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         _eval_jobs[job_id]["error"] = str(e)
+    finally:
+        # Clean up temp file
+        with contextlib.suppress(OSError):
+            Path(output_path).unlink()
 
 
 async def _run_compare(
@@ -158,16 +235,37 @@ async def _run_compare(
 ) -> None:
     try:
         _eval_jobs[job_id]["status"] = "running"
-        evaluator = _get_evaluator()
-        result_a = await evaluator.evaluate(
-            model_path=path_a, data_yaml=request.dataset,
+
+        # Run both evals in subprocesses (sequentially to limit memory)
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_a_") as f:
+            out_a = f.name
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_b_") as f:
+            out_b = f.name
+
+        cmd_a = _build_eval_cmd(
+            model_path=path_a, dataset=request.dataset, output_path=out_a,
             model_name=request.model_a, imgsz=request.imgsz, batch=request.batch_size,
         )
-        result_b = await evaluator.evaluate(
-            model_path=path_b, data_yaml=request.dataset,
+        cmd_b = _build_eval_cmd(
+            model_path=path_b, dataset=request.dataset, output_path=out_b,
             model_name=request.model_b, imgsz=request.imgsz, batch=request.batch_size,
         )
+
+        res_a = await _run_subprocess_eval(cmd_a, out_a)
+        if res_a.get("status") != "completed":
+            raise RuntimeError(f"Eval of {request.model_a} failed: {res_a.get('error')}")
+
+        res_b = await _run_subprocess_eval(cmd_b, out_b)
+        if res_b.get("status") != "completed":
+            raise RuntimeError(f"Eval of {request.model_b} failed: {res_b.get('error')}")
+
+        # Compare using in-process evaluator (lightweight, no model loading)
+        evaluator = _get_evaluator()
+        from models.eval_model import EvalResult
+        result_a = EvalResult(**{k: v for k, v in res_a["result"].items() if k != "eval_id"})
+        result_b = EvalResult(**{k: v for k, v in res_b["result"].items() if k != "eval_id"})
         comparison = evaluator.compare(result_a, result_b)
+
         _eval_jobs[job_id]["status"] = "completed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         _eval_jobs[job_id]["result"] = comparison
@@ -176,6 +274,10 @@ async def _run_compare(
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         _eval_jobs[job_id]["error"] = str(e)
+    finally:
+        for p in (out_a, out_b):
+            with contextlib.suppress(OSError):
+                Path(p).unlink()
 
 
 # ── Auto-eval callback (called from training completion) ────────────────────
@@ -188,23 +290,31 @@ async def auto_eval_after_training(
     auto_promote: bool = False,
     weights: dict[str, float] | None = None,
 ) -> EvalResult | None:
-    """Run evaluation after training completes. Optionally auto-promote.
+    """Run evaluation after training completes (in subprocess). Optionally auto-promote.
 
     Called from the training pipeline when auto_eval=true.
     Returns the EvalResult or None on failure.
     """
     try:
-        evaluator = _get_evaluator()
-        result = await evaluator.evaluate(
-            model_path=model_path,
-            data_yaml=dataset,
-            model_name=model_id,
-            weights=weights,
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="autoeval_") as f:
+            output_path = f.name
+
+        cmd = _build_eval_cmd(
+            model_path=model_path, dataset=dataset, output_path=output_path,
+            model_name=model_id, weights=weights,
         )
+        res = await _run_subprocess_eval(cmd, output_path)
+        Path(output_path).unlink(missing_ok=True)
+
+        if res.get("status") != "completed":
+            logger.error(f"Auto-eval subprocess failed for {model_id}: {res.get('error')}")
+            return None
+
+        result = EvalResult(**{k: v for k, v in res["result"].items() if k != "eval_id"})
         logger.info(f"Auto-eval for {model_id}: score={result.score:.4f} mAP50={result.mAP50:.4f}")
 
         if auto_promote:
-            db = evaluator.db
+            db = EvalDB()  # Fresh connection — eval was in subprocess
             best = db.best_model(dataset)
 
             if not best or best["model_name"] == model_id:
