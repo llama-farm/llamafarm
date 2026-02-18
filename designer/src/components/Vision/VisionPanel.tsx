@@ -21,7 +21,7 @@ export function VisionPanel() {
   const [activeTab, setActiveTab] = useState<VisionTab>('analyze')
 
   return (
-    <div className="flex h-full min-h-[500px]">
+    <div className="flex h-[calc(100vh-220px)] min-h-[400px]">
       {/* Left sidebar navigation */}
       <div className="w-48 flex-shrink-0 border-r border-border bg-muted/20 py-2">
         <div className="px-3 py-2 mb-1">

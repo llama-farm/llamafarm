@@ -1,23 +1,22 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Slider } from '../ui/slider'
 import { Badge } from '../ui/badge'
+import { Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDetect, useClassify, useDetectClassify } from '../../hooks/useVision'
 import { useImageUpload } from './useImageUpload'
-import { ImageDropzone } from './ImageDropzone'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
-import { PanelIntro } from './PanelIntro'
 import type { Detection, ClassifyResponse, DetectClassifyResult } from '../../types/vision'
 
 type AnalyzeMode = 'detect' | 'classify' | 'detect-classify'
 
-const MODES: { id: AnalyzeMode; label: string }[] = [
-  { id: 'detect', label: 'Detect' },
-  { id: 'classify', label: 'Classify' },
-  { id: 'detect-classify', label: 'Detect + Classify' },
+const MODES: { id: AnalyzeMode; label: string; desc: string }[] = [
+  { id: 'detect', label: 'Detect', desc: 'Find objects and their locations' },
+  { id: 'classify', label: 'Classify', desc: 'Categorize the whole image' },
+  { id: 'detect-classify', label: 'Detect + Classify', desc: 'Find objects, then classify each one' },
 ]
 
 const YOLO_MODELS = [
@@ -51,9 +50,9 @@ function summarizeDetections(detections: Detection[]): string {
 
 export function AnalyzePanel() {
   const [mode, setMode] = useState<AnalyzeMode>('detect')
+  const [isDragOver, setIsDragOver] = useState(false)
 
-  // Shared state
-  const { imageBase64, imagePreview, fileName, fileSize, handleFileChange, handleFileDirect, clear } = useImageUpload()
+  const { imageBase64, imagePreview, fileName, fileSize, handleFileDirect, clear } = useImageUpload()
 
   // Detect state
   const [detectModel, setDetectModel] = useState('yolov8s')
@@ -79,19 +78,31 @@ export function AnalyzePanel() {
     setDcResults([])
   }
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDetections([])
-    setClassifyResult(null)
-    setDcResults([])
-    handleFileChange(e)
-  }
-
-  const handleFileDirectUpload = (file: File) => {
+  const handleNewFile = (file: File) => {
     setDetections([])
     setClassifyResult(null)
     setDcResults([])
     handleFileDirect(file)
   }
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/')) handleNewFile(file)
+  }, [])
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) handleNewFile(file)
+        break
+      }
+    }
+  }, [])
 
   // Classify helpers
   const addCls = () => {
@@ -102,9 +113,7 @@ export function AnalyzePanel() {
     }
   }
   const removeCls = (cls: string) => setClasses(prev => prev.filter(c => c !== cls))
-  const addPreset = (preset: string[]) => {
-    setClasses(prev => [...new Set([...prev, ...preset])])
-  }
+  const addPreset = (preset: string[]) => setClasses(prev => [...new Set([...prev, ...preset])])
 
   // Actions
   const handleDetect = () => {
@@ -152,7 +161,6 @@ export function AnalyzePanel() {
         ? classifyMutation.isPending ? 'Classifying...' : 'Classify'
         : dcMutation.isPending ? 'Processing...' : 'Detect + Classify'
 
-  // Build detections for D+C overlay
   const dcDetections: Detection[] = dcResults.map(r => ({
     ...r.detection,
     class_name: `${r.detection.class_name} → ${r.classification.class_name}`,
@@ -160,10 +168,14 @@ export function AnalyzePanel() {
 
   const activeDetections = mode === 'detect' ? detections : mode === 'detect-classify' ? dcDetections : []
   return (
-    <div className="flex flex-col gap-4">
-      <PanelIntro>
-        Upload and analyze images using state-of-the-art models. Your images are processed locally — nothing leaves your machine.
-      </PanelIntro>
+    <div
+      className="flex flex-col gap-4"
+      onPaste={handlePaste}
+      tabIndex={0}
+    >
+      <p className="text-sm text-muted-foreground">
+        Analyze images using state-of-the-art vision models. Your images are processed locally — nothing leaves your machine.
+      </p>
 
       {/* Mode selector */}
       <div className="flex rounded-lg border border-border p-1 bg-muted/30 w-fit">
@@ -182,198 +194,208 @@ export function AnalyzePanel() {
           </button>
         ))}
       </div>
+      <p className="text-xs text-muted-foreground -mt-2">{MODES.find(m => m.id === mode)?.desc}</p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: controls */}
-        <div className="flex flex-col gap-4">
-          {/* Upload */}
-          <ImageDropzone
-            onFileSelected={handleFileSelected}
-            onFileDirect={handleFileDirectUpload}
-            fileName={fileName}
-            fileSize={fileSize}
-            imagePreview={imagePreview}
-            onClear={handleClear}
+      {/* Image area — drop zone that becomes the preview */}
+      {!imagePreview ? (
+        <label
+          className={cn(
+            'relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors',
+            isDragOver
+              ? 'border-primary bg-primary/5'
+              : 'border-border hover:border-primary/50 hover:bg-muted/30'
+          )}
+          onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <Upload className="w-8 h-8 text-muted-foreground" />
+          <div className="text-center">
+            <p className="text-sm font-medium text-foreground">Drop an image here, click to browse, or paste from clipboard</p>
+            <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, WEBP, GIF</p>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleNewFile(f) }}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
-
-          {/* Detect config */}
-          {(mode === 'detect' || mode === 'detect-classify') && (
-            <>
-              <div>
-                <Label className="text-sm">Detection Model</Label>
-                <select
-                  value={detectModel}
-                  onChange={e => setDetectModel(e.target.value)}
-                  className={cn(
-                    'mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
-                    'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                  )}
-                >
-                  {YOLO_MODELS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label className="text-sm">
-                  Confidence Threshold: {(confidence * 100).toFixed(0)}%
-                </Label>
-                <Slider
-                  value={[confidence]}
-                  onValueChange={([v]) => setConfidence(v)}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  className="mt-2"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Classify config */}
-          {(mode === 'classify' || mode === 'detect-classify') && (
-            <div>
-              <Label className="text-sm">Classification Labels</Label>
-              <p className="text-xs text-muted-foreground mt-1 mb-2">
-                {mode === 'classify'
-                  ? 'CLIP understands natural language — describe what you\'re looking for and it will match against your image. No training required for common concepts.'
-                  : 'Detect objects first, then classify each one. Example: detect all birds, then identify each species.'}
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={classInput}
-                  onChange={e => setClassInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCls())}
-                  placeholder="Type a label and press Enter..."
-                  className="flex-1"
-                />
-              </div>
-              {classes.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {classes.map(cls => (
-                    <Badge key={cls} variant="secondary" className="cursor-pointer gap-1" onClick={() => removeCls(cls)}>
-                      {cls}
-                      <span className="text-muted-foreground">×</span>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2 mt-2">
-                {Object.entries(PRESETS).map(([name, labels]) => (
-                  <Button key={name} variant="outline" size="sm" onClick={() => addPreset(labels)}>
-                    {name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Run button */}
-          <Button onClick={handleRun} disabled={!imageBase64 || isPending} className="w-full">
-            {runLabel}
-          </Button>
-
-          {mutationError && (
-            <p className="text-sm text-destructive">{(mutationError as Error).message}</p>
-          )}
-
-          {/* Detect results list */}
-          {mode === 'detect' && detections.length > 0 && (
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-sm font-medium mb-2">{summarizeDetections(detections)}</p>
-              <div className="flex flex-col gap-1">
-                {detections.map((d, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{d.class_name}</span>
-                    <span className={cn('text-xs px-2 py-0.5 rounded-full border', confidenceBadgeColor(d.confidence))}>
-                      {(d.confidence * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Classify results */}
-          {mode === 'classify' && classifyResult && (
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-sm font-medium mb-3">
-                Top result: <span className="text-primary">{classifyResult.class_name}</span>{' '}
-                ({(classifyResult.confidence * 100).toFixed(1)}%)
-              </p>
-              <div className="flex flex-col gap-2">
-                {classifyResult.all_scores.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-sm w-24 truncate">{s.class_name}</span>
-                    <div className="flex-1 h-3 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          i === 0 ? 'bg-primary' : 'bg-primary/60'
-                        )}
-                        style={{ width: `${s.confidence * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground w-12 text-right">
-                      {(s.confidence * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* D+C results list */}
-          {mode === 'detect-classify' && dcResults.length > 0 && (
-            <div className="rounded-lg border border-border p-3">
-              <p className="text-sm font-medium mb-2">
-                {dcResults.length} object{dcResults.length !== 1 ? 's' : ''} found
-              </p>
-              <div className="flex flex-col gap-2">
-                {dcResults.map((r, i) => (
-                  <div key={i} className="rounded-md border border-border p-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="font-medium">{r.detection.class_name}</span>
-                      <span className={cn('text-xs px-2 py-0.5 rounded-full border', confidenceBadgeColor(r.detection.confidence))}>
-                        {(r.detection.confidence * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Classified as: <span className="text-primary">{r.classification.class_name}</span>{' '}
-                      ({(r.classification.confidence * 100).toFixed(1)}%)
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right: preview / results */}
-        <div className="flex flex-col items-center justify-start">
-          {imagePreview && activeDetections.length > 0 ? (
+        </label>
+      ) : (
+        <div className="relative group">
+          {activeDetections.length > 0 ? (
             <BoundingBoxCanvas
               imageSrc={imagePreview}
               detections={activeDetections}
-              className="rounded-lg border border-border"
+              className="rounded-lg border border-border w-full"
             />
-          ) : imagePreview ? (
+          ) : (
             <img
               src={imagePreview}
               alt="Uploaded"
-              className="max-w-full rounded-lg border border-border"
+              className="max-w-full max-h-[400px] rounded-lg border border-border"
             />
-          ) : (
-            <div className={cn(
-              'w-full aspect-video rounded-lg border-2 border-dashed border-border',
-              'flex items-center justify-center text-muted-foreground text-sm'
-            )}>
-              Upload an image to get started
-            </div>
+          )}
+          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <label className="p-1.5 rounded-md bg-background/80 backdrop-blur border border-border cursor-pointer hover:bg-background" title="Upload another image">
+              <Upload className="w-4 h-4" />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleNewFile(f) }}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={handleClear}
+              className="p-1.5 rounded-md bg-background/80 backdrop-blur border border-border hover:bg-background"
+              title="Remove image"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {fileName && (
+            <p className="text-xs text-muted-foreground mt-1">{fileName} {fileSize ? `(${(fileSize / 1024).toFixed(0)} KB)` : ''}</p>
           )}
         </div>
-      </div>
+      )}
+
+      {/* Configuration */}
+      {(mode === 'detect' || mode === 'detect-classify') && (
+        <div className="flex gap-4 items-end">
+          <div className="flex-1">
+            <Label className="text-sm">Model</Label>
+            <select
+              value={detectModel}
+              onChange={e => setDetectModel(e.target.value)}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {YOLO_MODELS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1">
+            <Label className="text-sm">Confidence: {(confidence * 100).toFixed(0)}%</Label>
+            <Slider
+              value={[confidence]}
+              onValueChange={([v]) => setConfidence(v)}
+              min={0}
+              max={1}
+              step={0.05}
+              className="mt-3"
+            />
+          </div>
+        </div>
+      )}
+
+      {(mode === 'classify' || mode === 'detect-classify') && (
+        <div>
+          <Label className="text-sm">Classification Labels</Label>
+          <p className="text-xs text-muted-foreground mt-1 mb-2">
+            {mode === 'classify'
+              ? 'CLIP understands natural language — type what you\'re looking for. No training needed for common concepts. For domain-specific accuracy, train a custom model.'
+              : 'Each detected object will be classified against these labels.'}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={classInput}
+              onChange={e => setClassInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCls())}
+              placeholder="Type a label and press Enter..."
+              className="flex-1"
+            />
+            <Button variant="outline" size="sm" onClick={addCls} disabled={!classInput.trim()}>Add</Button>
+          </div>
+          {classes.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {classes.map(cls => (
+                <Badge key={cls} variant="secondary" className="cursor-pointer gap-1" onClick={() => removeCls(cls)}>
+                  {cls} <span className="text-muted-foreground">×</span>
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 mt-2">
+            <span className="text-xs text-muted-foreground self-center">Presets:</span>
+            {Object.entries(PRESETS).map(([name, labels]) => (
+              <Button key={name} variant="ghost" size="sm" className="text-xs h-7" onClick={() => addPreset(labels)}>
+                {name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Run button */}
+      <Button onClick={handleRun} disabled={!imageBase64 || isPending} className="w-fit">
+        {runLabel}
+      </Button>
+
+      {mutationError && (
+        <p className="text-sm text-destructive">{(mutationError as Error).message}</p>
+      )}
+
+      {/* Results */}
+      {mode === 'detect' && detections.length > 0 && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-sm font-medium mb-2">{summarizeDetections(detections)}</p>
+          <div className="flex flex-col gap-1">
+            {detections.map((d, i) => (
+              <div key={i} className="flex items-center justify-between text-sm">
+                <span className="font-medium">{d.class_name}</span>
+                <span className={cn('text-xs px-2 py-0.5 rounded-full border', confidenceBadgeColor(d.confidence))}>
+                  {(d.confidence * 100).toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === 'classify' && classifyResult && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-sm font-medium mb-3">
+            Top result: <span className="text-primary">{classifyResult.class_name}</span>{' '}
+            ({(classifyResult.confidence * 100).toFixed(1)}%)
+          </p>
+          <div className="flex flex-col gap-2">
+            {classifyResult.all_scores.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-sm w-24 truncate">{s.class_name}</span>
+                <div className="flex-1 h-3 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all', i === 0 ? 'bg-primary' : 'bg-primary/60')}
+                    style={{ width: `${s.confidence * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground w-12 text-right">{(s.confidence * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === 'detect-classify' && dcResults.length > 0 && (
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-sm font-medium mb-2">{dcResults.length} object{dcResults.length !== 1 ? 's' : ''} found</p>
+          <div className="flex flex-col gap-2">
+            {dcResults.map((r, i) => (
+              <div key={i} className="rounded-md border border-border p-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-medium">{r.detection.class_name}</span>
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full border', confidenceBadgeColor(r.detection.confidence))}>
+                    {(r.detection.confidence * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  → {r.classification.class_name} ({(r.classification.confidence * 100).toFixed(1)}%)
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
