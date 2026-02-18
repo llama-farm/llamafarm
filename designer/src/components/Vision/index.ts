@@ -1,7 +1,5 @@
 export { VisionPanel } from './VisionPanel'
-export { DetectPanel } from './DetectPanel'
-export { ClassifyPanel } from './ClassifyPanel'
-export { DetectClassifyPanel } from './DetectClassifyPanel'
+export { AnalyzePanel } from './AnalyzePanel'
 export { TrainingPanel } from './TrainingPanel'
 export { ModelsPanel } from './ModelsPanel'
 export { StreamingPanel } from './StreamingPanel'

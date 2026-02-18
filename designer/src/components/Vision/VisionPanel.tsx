@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Search, Tags, Layers, GraduationCap, Database, Video, CheckCircle } from 'lucide-react'
-import { DetectPanel } from './DetectPanel'
-import { ClassifyPanel } from './ClassifyPanel'
-import { DetectClassifyPanel } from './DetectClassifyPanel'
+import { Search, GraduationCap, Database, Video, CheckCircle } from 'lucide-react'
+import { AnalyzePanel } from './AnalyzePanel'
 import { TrainingPanel } from './TrainingPanel'
 import { ModelsPanel } from './ModelsPanel'
 import { StreamingPanel } from './StreamingPanel'
 import { ReviewPanel } from './ReviewPanel'
 
 const VISION_TABS = [
-  { id: 'detect', label: 'Detect', icon: Search, description: 'Find objects in images' },
-  { id: 'classify', label: 'Classify', icon: Tags, description: 'Categorize images' },
-  { id: 'detect-classify', label: 'Detect + Classify', icon: Layers, description: 'Detect then classify' },
+  { id: 'analyze', label: 'Analyze', icon: Search, description: 'Upload and analyze images' },
   { id: 'train', label: 'Train', icon: GraduationCap, description: 'Train custom models' },
   { id: 'models', label: 'Models', icon: Database, description: 'Manage saved models' },
   { id: 'stream', label: 'Stream', icon: Video, description: 'Real-time detection' },
@@ -22,7 +18,7 @@ const VISION_TABS = [
 type VisionTab = (typeof VISION_TABS)[number]['id']
 
 export function VisionPanel() {
-  const [activeTab, setActiveTab] = useState<VisionTab>('detect')
+  const [activeTab, setActiveTab] = useState<VisionTab>('analyze')
 
   return (
     <div className="flex h-full min-h-[500px]">
@@ -53,9 +49,7 @@ export function VisionPanel() {
 
       {/* Content area */}
       <div className="flex-1 min-w-0 overflow-y-auto p-4">
-        {activeTab === 'detect' && <DetectPanel />}
-        {activeTab === 'classify' && <ClassifyPanel />}
-        {activeTab === 'detect-classify' && <DetectClassifyPanel />}
+        {activeTab === 'analyze' && <AnalyzePanel />}
         {activeTab === 'train' && <TrainingPanel />}
         {activeTab === 'models' && <ModelsPanel />}
         {activeTab === 'stream' && <StreamingPanel />}
