@@ -49,6 +49,8 @@ export function ClassifyPanel() {
   }
 
   return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Classify images using zero-shot CLIP models. Enter the class labels you want to test against, upload an image, and see how confidently it matches each class.</p>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="flex flex-col gap-4">
         <div>
@@ -143,6 +145,7 @@ export function ClassifyPanel() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

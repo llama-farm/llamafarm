@@ -36,6 +36,8 @@ export function DetectClassifyPanel() {
   }))
 
   return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Detect objects first, then classify each detected region. Great for identifying specific types within broader categories — for example, detecting birds then classifying each by species.</p>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="flex flex-col gap-4">
         <div>
@@ -96,6 +98,7 @@ export function DetectClassifyPanel() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

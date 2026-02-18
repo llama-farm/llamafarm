@@ -9,6 +9,10 @@ import { useImageUpload } from './useImageUpload'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import type { Detection } from '../../types/vision'
 
+function PanelIntro({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-muted-foreground mb-4">{children}</p>
+}
+
 export function DetectPanel() {
   const [model, setModel] = useState('')
   const [confidence, setConfidence] = useState(0.5)
@@ -43,6 +47,8 @@ export function DetectPanel() {
   }
 
   return (
+    <div className="flex flex-col gap-4">
+      <PanelIntro>Upload an image to detect objects using YOLO. Select a detection model, set a confidence threshold, and see bounding boxes overlaid on your image.</PanelIntro>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Controls */}
       <div className="flex flex-col gap-4">
@@ -150,6 +156,7 @@ export function DetectPanel() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
