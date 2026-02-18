@@ -15,8 +15,13 @@ export function ClassifyPanel() {
   const [topK, setTopK] = useState(5)
   const [result, setResult] = useState<ClassifyResponse | null>(null)
 
-  const { imageBase64, imagePreview, fileName, handleFileChange } = useImageUpload()
+  const { imageBase64, imagePreview, fileName, handleFileChange: onFileChange } = useImageUpload()
   const classifyMutation = useClassify()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setResult(null)
+    onFileChange(e)
+  }
 
   const addCls = () => {
     const val = classInput.trim()

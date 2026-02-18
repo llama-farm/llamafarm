@@ -15,46 +15,62 @@ const COLORS = [
 export function BoundingBoxCanvas({ imageSrc, detections, className }: BoundingBoxCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
+  const prevSrcRef = useRef<string | null>(null)
 
+  // Load image only when imageSrc changes
   useEffect(() => {
+    if (imageSrc === prevSrcRef.current && imgRef.current) return
+
+    const img = new Image()
+    img.onload = () => {
+      imgRef.current = img
+      prevSrcRef.current = imageSrc
+      drawDetections(img, detections)
+    }
+    img.src = imageSrc
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageSrc])
+
+  // Redraw detections when they change (without reloading image)
+  useEffect(() => {
+    if (imgRef.current) {
+      drawDetections(imgRef.current, detections)
+    }
+  }, [detections])
+
+  function drawDetections(img: HTMLImageElement, dets: Detection[]) {
     const canvas = canvasRef.current
     if (!canvas) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const img = new Image()
-    img.onload = () => {
-      imgRef.current = img
-      canvas.width = img.width
-      canvas.height = img.height
-      ctx.drawImage(img, 0, 0)
+    canvas.width = img.width
+    canvas.height = img.height
+    ctx.drawImage(img, 0, 0)
 
-      // Draw bounding boxes
-      detections.forEach((det, i) => {
-        const color = COLORS[i % COLORS.length]
-        const { x1, y1, x2, y2 } = det.box
-        const w = x2 - x1
-        const h = y2 - y1
+    dets.forEach((det, i) => {
+      const color = COLORS[i % COLORS.length]
+      const { x1, y1, x2, y2 } = det.box
+      const w = x2 - x1
+      const h = y2 - y1
 
-        ctx.strokeStyle = color
-        ctx.lineWidth = 3
-        ctx.strokeRect(x1, y1, w, h)
+      ctx.strokeStyle = color
+      ctx.lineWidth = 3
+      ctx.strokeRect(x1, y1, w, h)
 
-        // Label background
-        const label = `${det.class_name} ${(det.confidence * 100).toFixed(1)}%`
-        ctx.font = 'bold 14px sans-serif'
-        const textWidth = ctx.measureText(label).width
-        ctx.fillStyle = color
-        ctx.fillRect(x1, y1 - 22, textWidth + 8, 22)
+      // Label background
+      const label = `${det.class_name} ${(det.confidence * 100).toFixed(1)}%`
+      ctx.font = 'bold 14px sans-serif'
+      const textWidth = ctx.measureText(label).width
+      ctx.fillStyle = color
+      ctx.fillRect(x1, y1 - 22, textWidth + 8, 22)
 
-        // Label text
-        ctx.fillStyle = '#ffffff'
-        ctx.fillText(label, x1 + 4, y1 - 6)
-      })
-    }
-    img.src = imageSrc
-  }, [imageSrc, detections])
+      // Label text
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(label, x1 + 4, y1 - 6)
+    })
+  }
 
   return (
     <canvas

@@ -31,7 +31,7 @@ export const visionKeys = {
   streaming: () => [...visionKeys.all, 'streaming'] as const,
   streamSessions: () => [...visionKeys.streaming(), 'sessions'] as const,
   review: () => [...visionKeys.all, 'review'] as const,
-  reviewPending: (page: number) => [...visionKeys.review(), 'pending', page] as const,
+  reviewPending: (page: number, pageSize: number) => [...visionKeys.review(), 'pending', page, pageSize] as const,
 }
 
 // =============================================================================
@@ -96,7 +96,7 @@ export function usePendingReviews(
   options?: { enabled?: boolean }
 ) {
   return useQuery({
-    queryKey: visionKeys.reviewPending(page),
+    queryKey: visionKeys.reviewPending(page, pageSize),
     queryFn: () => visionService.getPendingReviews(page, pageSize),
     enabled: options?.enabled !== false,
     staleTime: 5_000,

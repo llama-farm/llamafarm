@@ -43,7 +43,8 @@ export function ModelsPanel() {
           a.href = url
           a.download = `${name}.zip`
           a.click()
-          URL.revokeObjectURL(url)
+          // Delay revocation to give browser time to start download
+          setTimeout(() => URL.revokeObjectURL(url), 30_000)
           toast({ message: `Model "${name}" exported`, variant: 'default' })
         },
         onError: (err: Error) => toast({ message: err.message, variant: 'destructive' }),
