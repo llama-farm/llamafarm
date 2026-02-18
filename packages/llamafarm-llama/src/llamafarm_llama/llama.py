@@ -73,6 +73,7 @@ class Llama:
         n_threads_batch: Optional[int] = None,
         n_gpu_layers: int = 0,
         main_gpu: int = 0,
+        split_mode: int = 1,
         tensor_split: Optional[List[float]] = None,
         vocab_only: bool = False,
         use_mmap: bool = True,
@@ -100,8 +101,12 @@ class Llama:
             n_threads: Number of threads for generation. None = auto.
             n_threads_batch: Number of threads for batch processing. None = auto.
             n_gpu_layers: Number of layers to offload to GPU. -1 = all.
-            main_gpu: Main GPU to use.
-            tensor_split: How to split tensors across GPUs.
+            main_gpu: Main GPU to use (0-indexed).
+            split_mode: How to split the model across GPUs.
+                0 = NONE (entire model on main_gpu),
+                1 = LAYER (split layers across GPUs, default),
+                2 = ROW (split rows within layers).
+            tensor_split: How to split tensors across GPUs (proportional weights).
             vocab_only: Only load vocabulary.
             use_mmap: Use memory mapping.
             use_mlock: Lock model in memory.
@@ -151,6 +156,7 @@ class Llama:
             n_gpu_layers = 999  # Offload all layers to GPU
         model_params.n_gpu_layers = n_gpu_layers
         model_params.main_gpu = main_gpu
+        model_params.split_mode = split_mode
         model_params.vocab_only = vocab_only
         model_params.use_mmap = use_mmap
         model_params.use_mlock = use_mlock

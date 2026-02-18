@@ -307,7 +307,81 @@ async def score_anomalies(request: AnomalyScoreRequest):
 
     anomaly_count = sum(1 for r in results if r.is_anomaly)
 
-    return {
+    # SHAP explanations for anomalous points
+    explanations = None
+    if request.explain:
+        try:
+            import numpy as np
+
+            from models.shap_explainer import SHAPExplainer
+            
+            # Get the underlying PyOD model for SHAP
+            if hasattr(model, '_detector') and model._detector is not None:
+                # Get feature names from schema or generate defaults
+                feature_names = None
+                if request.schema_:
+                    feature_names = list(request.schema_.keys())
+                elif len(prepared_data) > 0:
+                    feature_names = [f"feature_{i}" for i in range(len(prepared_data[0]))]
+                
+                data_array = np.array(prepared_data)
+                
+                # Only explain anomalous points
+                anomaly_indices = [i for i, r in enumerate(results) if r.is_anomaly]
+                if anomaly_indices:
+                    anomaly_data = data_array[anomaly_indices]
+                    
+                    # Create explainer with the underlying PyOD model
+                    explainer = SHAPExplainer(
+                        model=model._detector,
+                        feature_names=feature_names,
+                        background_data=data_array,
+                    )
+                    
+                    await explainer.load()
+                    
+                    shap_result = await explainer.explain(
+                        data=anomaly_data,
+                        top_k=5,
+                    )
+                    
+                    await explainer.unload()
+                    
+                    # Build explanation lookup by index
+                    explanation_map = {}
+                    for idx, explanation in zip(anomaly_indices, shap_result, strict=True):
+                        exp = {
+                            "base_value": explanation.base_value,
+                            "contributions": [
+                                {
+                                    "feature": c.feature,
+                                    "value": c.value,
+                                    "shap_value": c.shap_value,
+                                    "direction": c.direction,
+                                }
+                                for c in explanation.contributions
+                            ],
+                        }
+                        # Generate summary narrative
+                        top = explanation.contributions[:3] if explanation.contributions else []
+                        if top:
+                            parts = [f"{c.feature} ({c.direction})" for c in top]
+                            exp["summary"] = f"Driven by: {', '.join(parts)}"
+                        explanation_map[idx] = exp
+
+                    # Embed explanations into data items
+                    for item in data:
+                        if item["index"] in explanation_map:
+                            item["explanation"] = explanation_map[item["index"]]
+
+                    explanations = [
+                        {"index": idx, **exp} for idx, exp in explanation_map.items()
+                    ]
+        except Exception as e:
+            logger.warning(f"SHAP explanation failed (non-fatal): {e}")
+            explanations = None
+
+    response = {
         "object": "list",
         "data": data,
         "total_count": len(data),
@@ -320,6 +394,10 @@ async def score_anomalies(request: AnomalyScoreRequest):
             "threshold": request.threshold or model.threshold,
         },
     }
+    if explanations is not None:
+        response["explanations"] = explanations
+    
+    return response
 
 
 @router.post("/v1/anomaly/fit")
@@ -444,7 +522,77 @@ async def detect_anomalies(request: AnomalyScoreRequest):
         for r in results
     ]
 
-    return {
+    # SHAP explanations for detected anomalies
+    explanations = None
+    if request.explain and results:
+        try:
+            import numpy as np
+
+            from models.shap_explainer import SHAPExplainer
+            
+            # Get the underlying PyOD model for SHAP
+            if hasattr(model, '_detector') and model._detector is not None:
+                # Get feature names from schema or generate defaults
+                feature_names = None
+                if request.schema_:
+                    feature_names = list(request.schema_.keys())
+                elif len(prepared_data) > 0:
+                    feature_names = [f"feature_{i}" for i in range(len(prepared_data[0]))]
+                
+                data_array = np.array(prepared_data)
+                
+                # Get indices and data for detected anomalies
+                anomaly_indices = [r.index for r in results]
+                anomaly_data = data_array[anomaly_indices]
+                
+                # Create explainer with the underlying PyOD model
+                explainer = SHAPExplainer(
+                    model=model._detector,
+                    feature_names=feature_names,
+                    background_data=data_array,
+                )
+                
+                await explainer.load()
+                
+                shap_result = await explainer.explain(
+                    data=anomaly_data,
+                    top_k=5,
+                )
+                
+                await explainer.unload()
+                
+                explanation_map = {}
+                for idx, explanation in zip(anomaly_indices, shap_result, strict=True):
+                    exp = {
+                        "base_value": explanation.base_value,
+                        "contributions": [
+                            {
+                                "feature": c.feature,
+                                "value": c.value,
+                                "shap_value": c.shap_value,
+                                "direction": c.direction,
+                            }
+                            for c in explanation.contributions
+                        ],
+                    }
+                    top = explanation.contributions[:3] if explanation.contributions else []
+                    if top:
+                        parts = [f"{c.feature} ({c.direction})" for c in top]
+                        exp["summary"] = f"Driven by: {', '.join(parts)}"
+                    explanation_map[idx] = exp
+
+                for item in data:
+                    if item["index"] in explanation_map:
+                        item["explanation"] = explanation_map[item["index"]]
+
+                explanations = [
+                    {"index": idx, **exp} for idx, exp in explanation_map.items()
+                ]
+        except Exception as e:
+            logger.warning(f"SHAP explanation failed (non-fatal): {e}")
+            explanations = None
+
+    response = {
         "object": "list",
         "data": data,
         "total_count": len(data),
@@ -455,6 +603,10 @@ async def detect_anomalies(request: AnomalyScoreRequest):
             "threshold": request.threshold or model.threshold,
         },
     }
+    if explanations is not None:
+        response["explanations"] = explanations
+    
+    return response
 
 
 # Note: /v1/anomaly/save endpoint removed - auto-save handles persistence

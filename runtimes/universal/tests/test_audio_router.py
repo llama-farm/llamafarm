@@ -35,7 +35,8 @@ def mock_speech_model():
             ]
 
     async def mock_transcribe(
-        audio_path,
+        audio_path=None,
+        audio_array=None,
         language=None,
         word_timestamps=False,
         initial_prompt=None,

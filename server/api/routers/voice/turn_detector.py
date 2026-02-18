@@ -30,7 +30,7 @@ class TurnDetectorConfig:
     """Configuration for end-of-turn detection."""
 
     # Base silence threshold for complete utterances (seconds)
-    base_silence_duration: float = 0.4
+    base_silence_duration: float = 0.6
 
     # Extended silence threshold for incomplete utterances (seconds)
     # User is likely thinking, wait longer before triggering

@@ -133,6 +133,7 @@ class AnomalyScoreRequest(BaseModel):
     schema: dict[str, str] | None = None  # Feature encoding schema
     normalization: Literal["standardization", "zscore", "raw"] = "standardization"
     threshold: float | None = None  # Override default threshold
+    explain: bool = False  # Include SHAP explanations for anomalous points
 
 
 class AnomalySaveRequest(BaseModel):

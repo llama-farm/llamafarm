@@ -14,7 +14,7 @@ from typing import Any
 
 from .turn_detector import EndOfTurnDetector, TurnDetectorConfig
 from .types import VoiceSessionConfig, VoiceState
-from .vad import VoiceActivityDetector
+from .vad import VADConfig, VoiceActivityDetector
 
 logger = logging.getLogger(__name__)
 
@@ -436,6 +436,10 @@ class VoiceSession:
     # Partial transcription for turn detection (updated during silence window)
     _partial_transcript: str = ""
 
+    # Tool result storage for client round-trip tool execution
+    _tool_result_queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    _tool_result_stash: dict = field(default_factory=dict)
+
     def __post_init__(self):
         """Initialize session with system prompt if provided."""
         if self.config.system_prompt and not self.messages:
@@ -443,6 +447,18 @@ class VoiceSession:
                 "role": "system",
                 "content": self.config.system_prompt,
             })
+
+        # When smart turn detection is enabled, the turn detector (not the
+        # VAD) decides when to trigger processing based on linguistic
+        # analysis.  Set the VAD silence_duration to max_silence_duration so
+        # it stays in the SILENCE state long enough for the turn detector to
+        # operate, rather than auto-triggering at 0.4s and bypassing it.
+        if self.config.turn_detection_enabled:
+            self._vad = VoiceActivityDetector(
+                config=VADConfig(
+                    silence_duration=self.config.max_silence_duration,
+                )
+            )
 
         # Initialize turn detector with config
         self._turn_detector = EndOfTurnDetector(
@@ -490,6 +506,49 @@ class VoiceSession:
             return True
         except TimeoutError:
             return False
+
+    def submit_tool_result(self, tool_call_id: str, result: str, is_error: bool = False) -> None:
+        """Submit a tool result from the client.
+
+        Called by the router when it receives a tool_result message from the WebSocket.
+        """
+        self._tool_result_queue.put_nowait({
+            "tool_call_id": tool_call_id,
+            "result": result,
+            "is_error": is_error,
+        })
+
+    async def wait_for_tool_result(self, tool_call_id: str, timeout: float = 30.0) -> dict | None:
+        """Wait for a tool result from the client with timeout and interrupt support.
+
+        Args:
+            tool_call_id: The tool call ID to wait for.
+            timeout: Maximum seconds to wait.
+
+        Returns:
+            Result dict with tool_call_id/result/is_error, or None on timeout/interrupt.
+        """
+        # Check stash first (may have been stored by a previous iteration)
+        if tool_call_id in self._tool_result_stash:
+            return self._tool_result_stash.pop(tool_call_id)
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                return None
+            if self.is_interrupted():
+                return None
+            try:
+                result = await asyncio.wait_for(
+                    self._tool_result_queue.get(), timeout=min(0.5, remaining)
+                )
+                if result["tool_call_id"] == tool_call_id:
+                    return result
+                # Not ours — stash by ID so other waiters can find it
+                self._tool_result_stash[result["tool_call_id"]] = result
+            except TimeoutError:
+                continue
 
     def append_audio(self, chunk: bytes) -> bool:
         """Append audio chunk to buffer and check for end-of-speech.
@@ -832,16 +891,25 @@ class VoiceSession:
             self.config.max_silence_duration = max_silence_duration
             turn_detector_updated = True
 
-        # Recreate turn detector if config changed
-        if turn_detector_updated and self._turn_detector is not None:
-            self._turn_detector = EndOfTurnDetector(
-                config=TurnDetectorConfig(
-                    base_silence_duration=self.config.base_silence_duration,
-                    thinking_silence_duration=self.config.thinking_silence_duration,
-                    max_silence_duration=self.config.max_silence_duration,
-                    enable_linguistic_analysis=self.config.turn_detection_enabled,
+        # Recreate turn detector and update VAD if config changed
+        if turn_detector_updated:
+            if self._turn_detector is not None:
+                self._turn_detector = EndOfTurnDetector(
+                    config=TurnDetectorConfig(
+                        base_silence_duration=self.config.base_silence_duration,
+                        thinking_silence_duration=self.config.thinking_silence_duration,
+                        max_silence_duration=self.config.max_silence_duration,
+                        enable_linguistic_analysis=self.config.turn_detection_enabled,
+                    )
                 )
-            )
+            # Keep VAD silence_duration aligned with turn detection config.
+            # When turn detection is enabled, VAD acts as a safety-net at
+            # max_silence; the turn detector decides the actual trigger point.
+            # When disabled, use the default 0.4s hard trigger.
+            if self.config.turn_detection_enabled:
+                self._vad.config.silence_duration = self.config.max_silence_duration
+            else:
+                self._vad.config.silence_duration = VADConfig().silence_duration
 
 
 class SessionManager:

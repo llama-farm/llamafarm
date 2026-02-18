@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { TTS_MODELS, getVoicesForModel } from '../../types/ml'
 import type { TTSModel, VoiceClone } from '../../types/ml'
 import { synthesizeSpeech } from '../../api/voiceService'
+import { AddonsLink } from './AddonsLink'
 
 interface TextToSpeechConfigProps {
   enabled: boolean
@@ -129,6 +130,7 @@ export function TextToSpeechConfig({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">Text-to-Speech</h3>
+          <AddonsLink />
           {currentModel?.supportsVoiceCloning && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
               Cloning

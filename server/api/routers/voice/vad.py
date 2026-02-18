@@ -31,7 +31,7 @@ class VADConfig:
 
     # Energy threshold for speech detection (0.0-1.0)
     # Lower = more sensitive, higher = less sensitive
-    speech_threshold: float = 0.01
+    speech_threshold: float = 0.015
 
     # How long silence must persist after speech to trigger end (seconds)
     # Lower = faster response, higher = fewer false positives

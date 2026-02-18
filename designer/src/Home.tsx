@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 // removed decorative llama image
 import FontIcon from './common/FontIcon'
 // Modal rendered globally in App
@@ -29,7 +29,14 @@ import { Input } from './components/ui/input'
 import { useDemoModal } from './contexts/DemoModalContext'
 import { getFileBasedDemos } from './config/demos'
 import { useGitHubStars } from './hooks/useGitHubStars'
-import { Star } from 'lucide-react'
+import { Star, Package } from 'lucide-react'
+import { useListAddons, useInstallAddon } from './hooks/useAddons'
+import {
+  AddonInstallSidePane,
+  AddonInstallProgress,
+} from './components/Addons'
+import { useToast } from './components/ui/toast'
+import type { AddonInfo } from './types/addons'
 
 function Home() {
   // Demo modal context
@@ -68,6 +75,19 @@ function Home() {
   // API hooks
   const { data: projectsResponse } = useProjects(namespace)
   const { data: githubData } = useGitHubStars()
+
+  // Addon hooks
+  const { data: addons, isLoading: isLoadingAddons } = useListAddons()
+  const installAddonMutation = useInstallAddon()
+  const { toast } = useToast()
+
+  // Addon installation state
+  const [showAddonSidePane, setShowAddonSidePane] = useState(false)
+  const [selectedAddonForInstall, setSelectedAddonForInstall] =
+    useState<AddonInfo | null>(null)
+  const [addonInstallTaskId, setAddonInstallTaskId] = useState<string | null>(
+    null
+  )
 
   // Convert API projects to project names for UI compatibility
   // projectsRefreshKey forces recalculation when localStorage changes (e.g., ghost project deleted)
@@ -289,6 +309,47 @@ function Home() {
       // Open modal with auto-start demo ID
       demoModal.openModal(llamaDemo.id)
     }
+  }
+
+  // Addon installation handlers
+  const handleAddonClick = (addon: AddonInfo) => {
+    if (addon.installed) {
+      // Navigate to manage page to see details
+      navigate('/addons')
+    } else {
+      // Open install panel
+      setSelectedAddonForInstall(addon)
+      setShowAddonSidePane(true)
+    }
+  }
+
+  const handleInstallConfirm = async (selectedAddons: string[]) => {
+    if (selectedAddons.length === 0) return
+    setShowAddonSidePane(false)
+
+    try {
+      // For simplicity, install the first selected addon (or handle multiple if needed)
+      const response = await installAddonMutation.mutateAsync({
+        name: selectedAddons[0],
+        restart_service: true,
+      })
+      setAddonInstallTaskId(response.task_id)
+    } catch (error) {
+      toast({
+        message: 'Failed to start installation',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleInstallComplete = () => {
+    setAddonInstallTaskId(null)
+    queryClient.invalidateQueries({ queryKey: ['addons', 'list'] })
+    toast({
+      message: 'Add-on installed successfully!',
+      variant: 'default',
+      icon: 'checkmark-filled',
+    })
   }
 
   // Listen for header-triggered create intent and scroll (run once on mount)
@@ -812,6 +873,81 @@ function Home() {
         )}
       </div>
 
+      {/* Add-ons section */}
+      <div id="addons" className="w-full max-w-6xl mx-auto px-6 mt-12 lg:mt-16 mb-12">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl text-primary">Add-ons</h3>
+          <Link
+            to="/addons"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all →
+          </Link>
+        </div>
+
+        {isLoadingAddons ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-32 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : (() => {
+          // Filter to only installed add-ons
+          const installedAddons = addons?.filter(a => a.installed) || []
+          // Show up to 3 slots (fill empty slots with placeholder cards)
+          const slotsToShow = 3
+          const emptySlots = Math.max(0, slotsToShow - installedAddons.length)
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Installed add-ons */}
+              {installedAddons.slice(0, slotsToShow).map(addon => (
+                <button
+                  key={addon.name}
+                  type="button"
+                  className="group text-left rounded-lg p-4 bg-card border border-border hover:bg-accent/20 transition-colors"
+                  onClick={() => handleAddonClick(addon)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Package className="w-4 h-4 text-primary" />
+                        <div className="text-sm font-semibold text-foreground">
+                          {addon.display_name}
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-2">
+                        {addon.description}
+                      </div>
+                      <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-600 dark:text-green-400">
+                        ✓ Installed
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+
+              {/* Empty placeholder cards */}
+              {Array.from({ length: emptySlots }).map((_, i) => (
+                <button
+                  key={`empty-${i}`}
+                  type="button"
+                  onClick={() => navigate('/addons')}
+                  className="rounded-lg p-4 bg-muted/20 border border-dashed border-border/50 flex items-center justify-center h-32 hover:bg-muted/30 hover:border-primary/30 transition-colors cursor-pointer"
+                >
+                  <div className="text-center">
+                    <Package className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
+                    <div className="text-xs text-muted-foreground/50">
+                      Browse add-ons
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+
       {/* Resources footer-like section */}
       <div
         id="resources"
@@ -863,6 +999,25 @@ function Home() {
           </a>
         </div>
       </div>
+
+      {/* Addon installation side panel */}
+      <AddonInstallSidePane
+        open={showAddonSidePane}
+        onOpenChange={setShowAddonSidePane}
+        addons={selectedAddonForInstall ? [selectedAddonForInstall] : []}
+        onConfirm={handleInstallConfirm}
+      />
+
+      {/* Addon installation progress */}
+      {addonInstallTaskId && selectedAddonForInstall && (
+        <AddonInstallProgress
+          taskId={addonInstallTaskId}
+          addonName={selectedAddonForInstall.display_name}
+          onComplete={handleInstallComplete}
+          onCancel={() => setAddonInstallTaskId(null)}
+        />
+      )}
+
       {/* Project edit modal over Home */}
       {/* Modal rendered globally in App */}
       {/* Demo Modal rendered globally in App via DemoModalRoot */}

@@ -107,6 +107,14 @@ class ToolCallMessage(BaseModel):
     arguments: str  # JSON string of arguments
 
 
+class ToolExecutingMessage(BaseModel):
+    """Server is executing a tool call (notifies client that server handles it)."""
+
+    type: Literal["tool_executing"] = "tool_executing"
+    tool_call_id: str
+    function_name: str
+
+
 class TTSStartMessage(BaseModel):
     """TTS synthesis starting for a phrase."""
 
@@ -189,7 +197,7 @@ class VoiceSessionConfig(BaseModel):
         "Set to False for more responsive (but potentially more false positive) detection.",
     )
     barge_in_min_chunks: int = Field(
-        default=2,
+        default=3,
         ge=1,
         le=10,
         description="Minimum consecutive chunks above speech threshold required to trigger "

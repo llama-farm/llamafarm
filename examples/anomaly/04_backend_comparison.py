@@ -35,8 +35,10 @@ Run:
 import os
 import random
 import time
-import httpx
 from pathlib import Path
+
+import httpx
+
 
 # Configuration - uses environment variable or .env file, falls back to default
 def get_llamafarm_url():

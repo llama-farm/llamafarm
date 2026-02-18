@@ -19,6 +19,7 @@ from server import main  # noqa: F401
 
 if __name__ == '__main__':
     import uvicorn
+
     from server.core.settings import settings
 
     uvicorn.run(

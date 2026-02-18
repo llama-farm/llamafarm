@@ -1,0 +1,17 @@
+# Time-Series Anomaly Detection Addon
+#
+# Provides time-series-aware anomaly detection using ADTK (Anomaly Detection Toolkit).
+# Detects level shifts, seasonal anomalies, spikes, volatility shifts, and persistence patterns
+# that point anomaly detectors miss.
+
+name: adtk
+display_name: Time-Series Anomaly Detection
+description: Detect level shifts, seasonal anomalies, and spikes with ADTK
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - adtk>=0.6.2
+
+hardware_notes:
+  cpu: ADTK runs efficiently on CPU (no GPU acceleration needed)

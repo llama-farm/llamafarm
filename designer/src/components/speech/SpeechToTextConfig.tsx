@@ -3,6 +3,7 @@ import { Selector } from '../ui/selector'
 import { Checkbox } from '../ui/checkbox'
 import { STT_MODELS, STT_LANGUAGES } from '../../types/ml'
 import type { STTModel } from '../../types/ml'
+import { AddonsLink } from './AddonsLink'
 
 interface SpeechToTextConfigProps {
   enabled: boolean
@@ -35,7 +36,10 @@ export function SpeechToTextConfig({
     <div className={`rounded-lg border border-border bg-card/40 p-3 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium">Speech-to-Text</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">Speech-to-Text</h3>
+          <AddonsLink />
+        </div>
         <div className="flex items-center gap-2">
           <Switch
             checked={enabled}
