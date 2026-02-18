@@ -1,12 +1,10 @@
 """Tests for vision model evaluation."""
 
-import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from models.eval_model import DEFAULT_WEIGHTS, EvalDB, EvalResult, ModelEvaluator
+from models.eval_model import EvalDB, EvalResult, ModelEvaluator
 
 
 class TestEvalResult:
@@ -110,8 +108,8 @@ class TestEvalDB:
 
 
 class TestModelEvaluatorCompare:
-    def test_compare_picks_winner(self):
-        ev = ModelEvaluator(db=EvalDB(Path("/tmp/test_eval_cmp.db")))
+    def test_compare_picks_winner(self, tmp_path):
+        ev = ModelEvaluator(db=EvalDB(tmp_path / "test_eval_cmp.db"))
         a = EvalResult(model_name="a", model_path="", dataset="", score=0.8,
                         mAP50=0.7, mAP50_95=0.5, precision=0.6, recall=0.5,
                         f1=0.55, inference_ms=50, small_object_recall=0.3)
@@ -124,8 +122,8 @@ class TestModelEvaluatorCompare:
         assert comp["metrics"]["mAP50"]["better"] == "a"
         assert comp["metrics"]["inference_ms"]["better"] == "a"  # lower is better
 
-    def test_compare_speed_better_for_lower(self):
-        ev = ModelEvaluator(db=EvalDB(Path("/tmp/test_eval_cmp2.db")))
+    def test_compare_speed_better_for_lower(self, tmp_path):
+        ev = ModelEvaluator(db=EvalDB(tmp_path / "test_eval_cmp2.db"))
         a = EvalResult(model_name="a", model_path="", dataset="", score=0.5, inference_ms=200)
         b = EvalResult(model_name="b", model_path="", dataset="", score=0.5, inference_ms=50)
         comp = ev.compare(a, b)

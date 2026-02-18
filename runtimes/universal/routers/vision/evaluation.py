@@ -20,7 +20,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from models.eval_model import DEFAULT_WEIGHTS, EVAL_DB_PATH, EvalDB, EvalResult, ModelEvaluator
+from models.eval_model import EVAL_DB_PATH, EvalDB, EvalResult, ModelEvaluator
 from services.error_handler import handle_endpoint_errors
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,6 @@ router = APIRouter(tags=["vision-eval"])
 # ── Shared state ────────────────────────────────────────────────────────────
 
 _eval_jobs: dict[str, dict[str, Any]] = {}
-_eval_lock = asyncio.Lock()
 _evaluator: ModelEvaluator | None = None
 
 _VISION_MODELS_DIR: Path | None = None
@@ -98,16 +97,33 @@ class LeaderboardEntry(BaseModel):
 
 
 def _resolve_model_path(model: str) -> str:
-    """Resolve model name to .pt path. Accepts paths or model IDs."""
-    p = Path(model)
-    if p.exists() and p.suffix == ".pt":
-        return str(p)
+    """Resolve model name to .pt path.
 
-    # Check vision models directory
+    Accepts:
+    - Model names (looked up in VISION_MODELS_DIR)
+    - Absolute .pt paths (must be within ~/.llamafarm or cwd)
+    """
+    # Reject traversal characters in all cases
+    if ".." in model or "\\" in model:
+        raise HTTPException(400, "Invalid model path")
+
+    p = Path(model)
+
+    # If it looks like a path (has separators or .pt suffix), validate containment
+    if p.suffix == ".pt" and p.is_absolute():
+        resolved = p.resolve()
+        home_llamafarm = Path.home() / ".llamafarm"
+        cwd = Path.cwd().resolve()
+        if not (resolved.is_relative_to(home_llamafarm) or resolved.is_relative_to(cwd)):
+            raise HTTPException(403, "Model path outside allowed directories")
+        if resolved.exists():
+            return str(resolved)
+        raise HTTPException(404, "Model file not found")
+
+    # Model name lookup in vision models directory
     if _VISION_MODELS_DIR:
-        # Sanitize: basename only, reject traversal
         safe_name = Path(model).name
-        if safe_name != model or ".." in model or ":" in model or "\\" in model:
+        if safe_name != model or ":" in model:
             raise HTTPException(400, "Invalid model name")
 
         current = _VISION_MODELS_DIR / safe_name / "current.pt"
@@ -121,7 +137,7 @@ def _resolve_model_path(model: str) -> str:
             if versions:
                 return str(versions[0])
 
-    raise HTTPException(404, f"Model not found: {model}")
+    raise HTTPException(404, "Model not found")
 
 
 def _create_job(job_type: str) -> str:
@@ -199,6 +215,7 @@ async def _run_subprocess_eval(cmd: list[str], output_path: str) -> dict[str, An
 
 
 async def _run_eval(job_id: str, model_path: str, request: EvalRequest) -> None:
+    output_path: str | None = None
     try:
         _eval_jobs[job_id]["status"] = "running"
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_") as f:
@@ -223,16 +240,18 @@ async def _run_eval(job_id: str, model_path: str, request: EvalRequest) -> None:
         logger.error(f"Eval job {job_id} failed: {e}", exc_info=True)
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
-        _eval_jobs[job_id]["error"] = str(e)
+        _eval_jobs[job_id]["error"] = "Evaluation failed"
     finally:
-        # Clean up temp file
-        with contextlib.suppress(OSError):
-            Path(output_path).unlink()
+        if output_path:
+            with contextlib.suppress(OSError):
+                Path(output_path).unlink()
 
 
 async def _run_compare(
     job_id: str, path_a: str, path_b: str, request: EvalCompareRequest
 ) -> None:
+    out_a: str | None = None
+    out_b: str | None = None
     try:
         _eval_jobs[job_id]["status"] = "running"
 
@@ -273,11 +292,12 @@ async def _run_compare(
         logger.error(f"Compare job {job_id} failed: {e}", exc_info=True)
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
-        _eval_jobs[job_id]["error"] = str(e)
+        _eval_jobs[job_id]["error"] = "Comparison failed"
     finally:
         for p in (out_a, out_b):
-            with contextlib.suppress(OSError):
-                Path(p).unlink()
+            if p:
+                with contextlib.suppress(OSError):
+                    Path(p).unlink()
 
 
 # ── Auto-eval callback (called from training completion) ────────────────────

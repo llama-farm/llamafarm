@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import sqlite3
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -107,6 +107,7 @@ class EvalDB:
         self._db = sqlite3.connect(str(self._path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._lock = threading.Lock()
         self._init_tables()
 
     def _init_tables(self) -> None:
@@ -140,26 +141,27 @@ class EvalDB:
         self._db.commit()
 
     def save(self, result: EvalResult) -> int:
-        cur = self._db.execute("""
-            INSERT INTO eval_results (
-                model_name, model_path, dataset, timestamp,
-                mAP50, mAP50_95, precision_val, recall_val, f1, per_class,
-                inference_ms, preprocess_ms, postprocess_ms, model_size_mb,
-                small_object_recall, medium_object_recall, large_object_recall,
-                score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            result.model_name, result.model_path, result.dataset, result.timestamp,
-            result.mAP50, result.mAP50_95, result.precision, result.recall, result.f1,
-            json.dumps(result.per_class),
-            result.inference_ms, result.preprocess_ms, result.postprocess_ms,
-            result.model_size_mb,
-            result.small_object_recall, result.medium_object_recall, result.large_object_recall,
-            result.score,
-        ))
-        self._db.commit()
-        result.eval_id = cur.lastrowid
-        return cur.lastrowid
+        with self._lock:
+            cur = self._db.execute("""
+                INSERT INTO eval_results (
+                    model_name, model_path, dataset, timestamp,
+                    mAP50, mAP50_95, precision_val, recall_val, f1, per_class,
+                    inference_ms, preprocess_ms, postprocess_ms, model_size_mb,
+                    small_object_recall, medium_object_recall, large_object_recall,
+                    score
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                result.model_name, result.model_path, result.dataset, result.timestamp,
+                result.mAP50, result.mAP50_95, result.precision, result.recall, result.f1,
+                json.dumps(result.per_class),
+                result.inference_ms, result.preprocess_ms, result.postprocess_ms,
+                result.model_size_mb,
+                result.small_object_recall, result.medium_object_recall, result.large_object_recall,
+                result.score,
+            ))
+            self._db.commit()
+            result.eval_id = cur.lastrowid
+            return cur.lastrowid
 
     def leaderboard(self, dataset: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         query = "SELECT * FROM eval_results"
@@ -177,11 +179,12 @@ class EvalDB:
         return lb[0] if lb else None
 
     def record_promotion(self, model_name: str, eval_id: int, reason: str) -> None:
-        self._db.execute(
-            "INSERT INTO promotions (model_name, eval_id, promoted_at, reason) VALUES (?, ?, ?, ?)",
-            (model_name, eval_id, datetime.now().isoformat(), reason),
-        )
-        self._db.commit()
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO promotions (model_name, eval_id, promoted_at, reason) VALUES (?, ?, ?, ?)",
+                (model_name, eval_id, datetime.now().isoformat(), reason),
+            )
+            self._db.commit()
 
     def model_history(self, model_name: str, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._db.execute(

@@ -1,6 +1,7 @@
 """Eval service — proxy for vision model evaluation endpoints."""
 
 from typing import Any
+from urllib.parse import quote, urlencode
 
 from server.services.universal_runtime_service import UniversalRuntimeService
 
@@ -25,13 +26,15 @@ class VisionEvalService:
 
     @staticmethod
     async def leaderboard(dataset: str | None = None, limit: int = 20) -> Any:
-        qs = f"?limit={limit}"
+        params: dict[str, Any] = {"limit": limit}
         if dataset:
-            qs += f"&dataset={dataset}"
+            params["dataset"] = dataset
+        qs = urlencode(params)
         return await UniversalRuntimeService._make_request(
-            "GET", f"/v1/vision/eval/leaderboard{qs}")
+            "GET", f"/v1/vision/eval/leaderboard?{qs}")
 
     @staticmethod
     async def model_history(model_name: str, limit: int = 50) -> Any:
+        safe_name = quote(model_name, safe="")
         return await UniversalRuntimeService._make_request(
-            "GET", f"/v1/vision/eval/leaderboard/{model_name}?limit={limit}")
+            "GET", f"/v1/vision/eval/leaderboard/{safe_name}?limit={limit}")

@@ -150,13 +150,18 @@ class IncrementalTrainer:
 
             # Run on_complete callback (e.g., auto-eval)
             if on_complete:
-                model_dir = VISION_MODELS_DIR / job.model_id
-                current_pt = model_dir / "current.pt"
-                if current_pt.exists():
-                    try:
-                        await on_complete(job.model_id, str(current_pt))
-                    except Exception as cb_err:
-                        logger.error(f"on_complete callback failed for {job.job_id}: {cb_err}")
+                # Validate model_id: basename only, no traversal
+                safe_id = Path(job.model_id).name
+                if safe_id != job.model_id or ".." in job.model_id or ":" in job.model_id:
+                    logger.error(f"Invalid model_id for on_complete: {job.model_id}")
+                else:
+                    model_dir = VISION_MODELS_DIR / safe_id
+                    current_pt = model_dir / "current.pt"
+                    if current_pt.exists():
+                        try:
+                            await on_complete(job.model_id, str(current_pt))
+                        except Exception as cb_err:
+                            logger.error(f"on_complete callback failed for {job.job_id}: {cb_err}")
 
         except Exception as e:
             logger.error(f"Training job {job.job_id} failed: {e}")

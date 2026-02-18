@@ -26,10 +26,13 @@ async def start_eval(
     auto_promote: bool = Form(default=False, description="Auto-promote if best"),
 ) -> dict[str, Any]:
     """Start a model evaluation job. Returns job_id to poll."""
-    return await VisionEvalService.start_eval({
+    payload: dict[str, Any] = {
         "model": model, "dataset": dataset,
         "imgsz": imgsz, "batch_size": batch_size,
-    })
+    }
+    if auto_promote:
+        payload["auto_promote"] = True
+    return await VisionEvalService.start_eval(payload)
 
 
 @router.post("/eval/compare")

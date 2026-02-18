@@ -58,9 +58,12 @@ async def start_training(request: TrainRequest) -> TrainResponse:
         learning_rate=request.config.learning_rate,
     )
 
+    # auto_promote implies auto_eval
+    auto_eval = request.auto_eval or request.auto_promote
+
     # Build completion callback for auto-eval
     on_complete = None
-    if request.auto_eval:
+    if auto_eval:
         from .evaluation import auto_eval_after_training
 
         async def on_complete(model_id: str, model_path: str) -> None:
