@@ -72,8 +72,8 @@ export function ReviewPanel() {
     )
   }
 
-  // Error or empty — show the same helpful empty state
-  if (error || items.length === 0) {
+  // Empty state (only show when no cached items AND no error, or no items at all)
+  if (items.length === 0 && !error) {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
@@ -107,6 +107,41 @@ export function ReviewPanel() {
     )
   }
 
+  // If error but no items at all, show the empty state with walkthrough
+  if (error && items.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Review is the human-in-the-loop step that makes your models smarter over time.
+        </p>
+        <div className="py-8 max-w-lg mx-auto">
+          <p className="text-sm font-medium text-foreground mb-4">Nothing to review yet</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Review items appear when streaming detects objects it isn't confident about. Here's how it works:
+          </p>
+          <ol className="text-sm text-muted-foreground space-y-3 list-none">
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">1</span>
+              <span><span className="text-foreground font-medium">Start a stream</span> — connect a camera or video feed in the Stream tab and set a confidence threshold.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">2</span>
+              <span><span className="text-foreground font-medium">Uncertain detections get queued</span> — when the model detects something but isn't confident enough, it flags it for review.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">3</span>
+              <span><span className="text-foreground font-medium">You confirm or correct</span> — accept, reject, or re-label. These corrections become training data.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">4</span>
+              <span><span className="text-foreground font-medium">Retrain</span> — use your reviewed data to fine-tune the model. Each cycle makes it more accurate.</span>
+            </li>
+          </ol>
+        </div>
+      </div>
+    )
+  }
+
   if (!currentItem) return null
 
   const reviewed = currentIndex
@@ -121,6 +156,13 @@ export function ReviewPanel() {
       <PanelIntro>
         Review low-confidence detections flagged by the system. Sorted by lowest confidence first.
       </PanelIntro>
+
+      {error && items.length > 0 && (
+        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-700">
+          Failed to refresh review items. Showing cached data.
+          <Button variant="link" size="sm" className="ml-2 h-auto p-0 text-yellow-700 underline" onClick={() => refetch()}>Retry</Button>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="flex flex-col gap-1">
