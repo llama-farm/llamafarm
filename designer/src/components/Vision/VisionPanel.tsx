@@ -51,7 +51,7 @@ export function VisionPanel() {
       <div className="flex-1 min-w-0 overflow-y-auto p-4">
         {activeTab === 'analyze' && <AnalyzePanel />}
         {activeTab === 'train' && <TrainingPanel />}
-        {activeTab === 'models' && <ModelsPanel />}
+        {activeTab === 'models' && <ModelsPanel onNavigateToTrain={() => setActiveTab('train')} />}
         {activeTab === 'stream' && <StreamingPanel />}
         {activeTab === 'review' && <ReviewPanel />}
       </div>

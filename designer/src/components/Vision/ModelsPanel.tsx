@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
 import {
@@ -46,7 +47,7 @@ const BUILTIN_MODELS = [
   },
 ]
 
-export function ModelsPanel() {
+export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => void } = {}) {
   const [search, setSearch] = useState('')
   const { data, isLoading, error } = useVisionModels()
   const loadModel = useLoadVisionModel()
@@ -143,11 +144,18 @@ export function ModelsPanel() {
             No custom models found. Train a model from the Train tab to create one.
           </p>
         ) : filteredCustom.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            {customModels.length === 0
-              ? 'No custom models yet. Train a model to create one tailored to your use case.'
-              : 'No models match your search.'}
-          </p>
+          <div className="text-center py-4">
+            <p className="text-sm text-muted-foreground">
+              {customModels.length === 0
+                ? 'No custom models yet. Train a model to create one tailored to your specific use case.'
+                : 'No models match your search.'}
+            </p>
+            {customModels.length === 0 && onNavigateToTrain && (
+              <Button variant="outline" size="sm" className="mt-3" onClick={onNavigateToTrain}>
+                Train your first model
+              </Button>
+            )}
+          </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
             {filteredCustom.map(model => (

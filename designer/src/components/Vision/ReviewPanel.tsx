@@ -7,7 +7,6 @@ import { Check, Pencil, X, ArrowRight } from 'lucide-react'
 import { usePendingReviews, useReviewDecision } from '../../hooks/useVision'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import { PanelIntro } from './PanelIntro'
-import FontIcon from '../../common/FontIcon'
 import type { ReviewDecision, ReviewItem, Detection } from '../../types/vision'
 
 export function ReviewPanel() {
@@ -73,44 +72,36 @@ export function ReviewPanel() {
     )
   }
 
-  // Error state
-  if (error) {
+  // Error or empty — show the same helpful empty state
+  if (error || items.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <PanelIntro>
-          Review low-confidence detections flagged by the system. Correct or confirm classifications to improve model accuracy over time.
-        </PanelIntro>
-        <div className="text-center py-12">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 border border-destructive/30">
-            <FontIcon type="alert-triangle" className="w-6 h-6 text-destructive" />
-          </div>
-          <p className="text-sm font-medium mb-1">Unable to load review items</p>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Review is the human-in-the-loop step that makes your models smarter over time.
+        </p>
+        <div className="py-8 max-w-lg mx-auto">
+          <p className="text-sm font-medium text-foreground mb-4">Nothing to review yet</p>
           <p className="text-sm text-muted-foreground mb-4">
-            The review service may not be available yet. This is normal if no detections have been flagged.
+            Review items appear when streaming detects objects it isn't confident about. Here's how it works:
           </p>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  // Empty state
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PanelIntro>
-          Review low-confidence detections flagged by the system. Correct or confirm classifications to improve model accuracy over time.
-        </PanelIntro>
-        <div className="text-center py-12">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/15 border border-green-500/30">
-            <FontIcon type="checkmark-filled" className="w-6 h-6 text-green-600" />
-          </div>
-          <p className="text-sm font-medium mb-1">No items to review</p>
-          <p className="text-sm text-muted-foreground">
-            When the system flags low-confidence detections, they'll appear here for your review.
-          </p>
+          <ol className="text-sm text-muted-foreground space-y-3 list-none">
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">1</span>
+              <span><span className="text-foreground font-medium">Start a stream</span> — connect a camera or video feed in the Stream tab and set a confidence threshold.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">2</span>
+              <span><span className="text-foreground font-medium">Uncertain detections get queued</span> — when the model detects something but isn't confident enough (e.g. 40% confidence vs your 70% threshold), it flags it for review instead of discarding it.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">3</span>
+              <span><span className="text-foreground font-medium">You confirm or correct</span> — accept ("yes, that's a truck"), reject ("no, that's a shadow"), or re-label ("that's actually a van"). These corrections become training data.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">4</span>
+              <span><span className="text-foreground font-medium">Retrain</span> — use your reviewed data to fine-tune the model. Each cycle makes it more accurate for your specific use case.</span>
+            </li>
+          </ol>
         </div>
       </div>
     )

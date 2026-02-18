@@ -3229,7 +3229,7 @@ const Models = () => {
 
   return (
     <div
-      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? `gap-3 ${activeTab === 'vision' ? '' : 'pb-32'}` : ''}`}
     >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">
