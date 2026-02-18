@@ -3306,7 +3306,9 @@ const Models = () => {
           {activeTab === 'training' && <TrainedModels />}
           {activeTab === 'vision' && (
             isVisionInstalled ? (
-              <VisionPanel />
+              <div className="flex-1 min-h-0">
+                <VisionPanel />
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-md">
