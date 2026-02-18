@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { useStreamStart, useStreamFrame, useStreamStop, useStreamSessions } from '../../hooks/useVision'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import type { Detection } from '../../types/vision'
+import { useToast } from '../ui/toast'
 
 export function StreamingPanel() {
   const [targetFps, setTargetFps] = useState(5)
@@ -24,6 +25,7 @@ export function StreamingPanel() {
   const startMutation = useStreamStart()
   const frameMutation = useStreamFrame()
   const stopMutation = useStreamStop()
+  const { toast } = useToast()
   useStreamSessions({ enabled: isStreaming })
 
   const captureFrame = useCallback((): string | null => {
@@ -75,7 +77,8 @@ export function StreamingPanel() {
         }
       }, 1000 / targetFps)
     } catch (err) {
-      console.error('Failed to start camera:', err)
+      const message = err instanceof Error ? err.message : 'Failed to start camera'
+      toast({ message, variant: 'destructive' })
     }
   }
 
@@ -91,7 +94,12 @@ export function StreamingPanel() {
     }
 
     if (sessionId) {
-      await stopMutation.mutateAsync({ session_id: sessionId })
+      try {
+        await stopMutation.mutateAsync({ session_id: sessionId })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to stop stream session'
+        toast({ message, variant: 'destructive' })
+      }
     }
 
     setIsStreaming(false)

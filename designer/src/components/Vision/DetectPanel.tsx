@@ -15,8 +15,13 @@ export function DetectPanel() {
   const [classesInput, setClassesInput] = useState('')
   const [detections, setDetections] = useState<Detection[]>([])
 
-  const { imageBase64, imagePreview, fileName, handleFileChange } = useImageUpload()
+  const { imageBase64, imagePreview, fileName, handleFileChange: onFileChange } = useImageUpload()
   const detectMutation = useDetect()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDetections([])
+    onFileChange(e)
+  }
 
   const handleDetect = () => {
     if (!imageBase64) return

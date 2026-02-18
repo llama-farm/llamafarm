@@ -13,8 +13,13 @@ export function DetectClassifyPanel() {
   const [confidence, setConfidence] = useState(0.5)
   const [results, setResults] = useState<DetectClassifyResult[]>([])
 
-  const { imageBase64, imagePreview, fileName, handleFileChange } = useImageUpload()
+  const { imageBase64, imagePreview, fileName, handleFileChange: onFileChange } = useImageUpload()
   const mutation = useDetectClassify()
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setResults([])
+    onFileChange(e)
+  }
 
   const handleRun = () => {
     if (!imageBase64) return
