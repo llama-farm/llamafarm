@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
-import { cn } from '@/lib/utils'
 import { usePendingReviews, useReviewDecision } from '../../hooks/useVision'
 import type { ReviewDecision } from '../../types/vision'
 

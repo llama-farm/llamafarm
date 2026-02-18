@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Slider } from '../ui/slider'
 import { cn } from '@/lib/utils'
@@ -25,7 +24,7 @@ export function StreamingPanel() {
   const startMutation = useStreamStart()
   const frameMutation = useStreamFrame()
   const stopMutation = useStreamStop()
-  const { data: sessions } = useStreamSessions({ enabled: isStreaming })
+  useStreamSessions({ enabled: isStreaming })
 
   const captureFrame = useCallback((): string | null => {
     const video = videoRef.current

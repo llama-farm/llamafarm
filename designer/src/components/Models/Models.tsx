@@ -2675,7 +2675,7 @@ const Models = () => {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [showAddonInstall, setShowAddonInstall] = useState(false)
   const { data: addonsData } = useListAddons()
-  const visionAddon = addonsData?.addons?.find((a: any) => a.name === 'vision')
+  const visionAddon = addonsData?.find((addon) => addon.name === 'vision')
   const isVisionInstalled = visionAddon?.installed ?? false
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
