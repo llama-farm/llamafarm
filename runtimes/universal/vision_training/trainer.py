@@ -67,17 +67,19 @@ class IncrementalTrainer:
     async def start_training(self, model_id: str, dataset_path: str,
                              task: Literal["detection", "classification"],
                              config: TrainingConfig | None = None,
-                             base_model: str | None = None) -> TrainingJob:
+                             base_model: str | None = None,
+                             on_complete: Callable | None = None) -> TrainingJob:
         config = config or TrainingConfig()
         job_id = str(uuid.uuid4())[:8]
         job = TrainingJob(job_id=job_id, model_id=model_id,
                           dataset_path=dataset_path, task=task, config=config)
         self._jobs[job_id] = job
-        self._tasks[job_id] = asyncio.create_task(self._run(job, base_model))
+        self._tasks[job_id] = asyncio.create_task(self._run(job, base_model, on_complete))
         logger.info(f"Started training job {job_id} for {model_id}")
         return job
 
-    async def _run(self, job: TrainingJob, base_model: str | None) -> None:
+    async def _run(self, job: TrainingJob, base_model: str | None,
+                   on_complete: Callable | None = None) -> None:
         try:
             job.status = TrainingStatus.RUNNING
             job.started_at = datetime.utcnow()
@@ -145,6 +147,16 @@ class IncrementalTrainer:
             # Save versioned model and auto-export ONNX
             await self._save_versioned(job, training_yolo)
             logger.info(f"Training job {job.job_id} completed")
+
+            # Run on_complete callback (e.g., auto-eval)
+            if on_complete:
+                model_dir = VISION_MODELS_DIR / job.model_id
+                current_pt = model_dir / "current.pt"
+                if current_pt.exists():
+                    try:
+                        await on_complete(job.model_id, str(current_pt))
+                    except Exception as cb_err:
+                        logger.error(f"on_complete callback failed for {job.job_id}: {cb_err}")
 
         except Exception as e:
             logger.error(f"Training job {job.job_id} failed: {e}")
