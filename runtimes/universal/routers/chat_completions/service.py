@@ -20,7 +20,7 @@ from openai.types.chat.chat_completion_chunk import (
 )
 
 from models import GGUFLanguageModel
-from utils.context_manager import TruncationStrategy
+from utils.context_manager import ContextBudget, ContextManager, TruncationStrategy
 from utils.context_summarizer import ContextSummarizer
 from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
@@ -271,19 +271,50 @@ class ChatCompletionsService:
             tools_dict = None
             if chat_request.tools:
                 tools_dict = [dict(tool) for tool in chat_request.tools]
+            tools_for_generation = tools_dict
 
             # Context management for GGUF models
             context_usage_info = None
 
             if is_gguf and model.context_manager:
+                context_manager = model.context_manager
+
+                # Build a request-aware budget so context checks reserve the same
+                # completion budget we intend to generate (answer + thinking).
+                if model.token_counter:
+                    base_budget = context_manager.budget
+                    context_manager = ContextManager(
+                        model.token_counter,
+                        ContextBudget.from_context_size(
+                            base_budget.total_context,
+                            max_completion_tokens=total_max_tokens,
+                        ),
+                    )
+
                 # Apply history compression to reduce token usage
                 compressor = HistoryCompressor(model.token_counter)
                 messages_dict = compressor.compress(messages_dict)
 
-                # Validate context and truncate if needed
-                usage = model.context_manager.validate_messages(messages_dict)
+                # If tools are injected into the prompt path, validate against the same
+                # message shape to avoid undercounting prompt tokens.
+                messages_for_context = messages_dict
+                if tools_dict:
+                    (
+                        messages_for_context,
+                        tools_already_injected,
+                    ) = model.prepare_messages_for_context_validation(
+                        messages_dict,
+                        tools_dict,
+                        chat_request.tool_choice,
+                    )
+                    if tools_already_injected:
+                        messages_dict = messages_for_context
+                        tools_for_generation = None
 
-                if model.context_manager.needs_truncation(messages_dict):
+                # Validate context and truncate if needed
+                usage = context_manager.validate_messages(messages_for_context)
+
+                if context_manager.needs_truncation(messages_for_context):
                     auto_truncate = chat_request.auto_truncate
                     if auto_truncate is None:
                         auto_truncate = True  # Default to auto-truncate
@@ -330,24 +361,24 @@ class ChatCompletionsService:
                             summarizer = ContextSummarizer(
                                 load_language=self.load_language
                             )
-                            messages_dict = await summarizer.summarize_messages(
-                                messages_dict
+                            messages_for_context = await summarizer.summarize_messages(
+                                messages_for_context
                             )
                             # Re-validate after summarization
-                            usage = model.context_manager.validate_messages(
-                                messages_dict
+                            usage = context_manager.validate_messages(
+                                messages_for_context
                             )
 
                             # Check if we STILL need truncation after summarization
                             # (e.g., if recent messages are still too large)
-                            if model.context_manager.needs_truncation(messages_dict):
+                            if context_manager.needs_truncation(messages_for_context):
                                 logger.warning(
                                     f"Still over budget after summarization "
                                     f"({usage.prompt_tokens} tokens), applying fallback truncation"
                                 )
-                                messages_dict, usage = (
-                                    model.context_manager.truncate_if_needed(
-                                        messages_dict,
+                                messages_for_context, usage = (
+                                    context_manager.truncate_if_needed(
+                                        messages_for_context,
                                         TruncationStrategy.KEEP_SYSTEM_SLIDING,
                                     )
                                 )
@@ -375,21 +406,24 @@ class ChatCompletionsService:
                             logger.warning(
                                 f"Summarization failed: {e}, falling back to keep_system"
                             )
-                            messages_dict, usage = (
-                                model.context_manager.truncate_if_needed(
-                                    messages_dict,
+                            messages_for_context, usage = (
+                                context_manager.truncate_if_needed(
+                                    messages_for_context,
                                     TruncationStrategy.KEEP_SYSTEM_SLIDING,
                                 )
                             )
                     else:
                         # Use regular truncation strategy
-                        messages_dict, usage = model.context_manager.truncate_if_needed(
-                            messages_dict, strategy
+                        messages_for_context, usage = context_manager.truncate_if_needed(
+                            messages_for_context, strategy
                         )
                         logger.info(
                             f"Context truncated: {usage.truncated_messages} messages removed, "
                             f"strategy={usage.strategy_used}"
                         )
+
+                # Use the validated/truncated message set for generation.
+                messages_dict = messages_for_context
 
                 # Store context usage for response
                 context_usage_info = ContextUsageInfo(
@@ -402,12 +436,12 @@ class ChatCompletionsService:
                 )
 
                 # Final safety check: ensure we're actually under budget
-                if model.context_manager.needs_truncation(messages_dict):
-                    final_usage = model.context_manager.validate_messages(messages_dict)
+                if context_manager.needs_truncation(messages_dict):
+                    final_usage = context_manager.validate_messages(messages_dict)
                     logger.error(
                         f"CRITICAL: Still over context budget after all truncation: "
                         f"{final_usage.prompt_tokens} tokens > "
-                        f"{model.context_manager.budget.max_prompt_tokens} max"
+                        f"{context_manager.budget.max_prompt_tokens} max"
                     )
                     raise HTTPException(
                         status_code=400,
@@ -416,7 +450,7 @@ class ChatCompletionsService:
                             "message": (
                                 f"Failed to reduce context to fit within budget. "
                                 f"Current: {final_usage.prompt_tokens} tokens, "
-                                f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
+                                f"Max: {context_manager.budget.max_prompt_tokens} tokens. "
                                 "Try sending fewer or shorter messages."
                             ),
                             "context_usage": {
@@ -426,6 +460,25 @@ class ChatCompletionsService:
                             },
                         },
                     )
+
+                # Cap generation to what can actually fit after prompt accounting.
+                effective_max_tokens = min(
+                    total_max_tokens, context_usage_info.available_for_completion
+                )
+                if effective_max_tokens <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "error": "context_length_exceeded",
+                            "message": (
+                                "No completion budget remains after prompt allocation. "
+                                "Try sending fewer or shorter messages."
+                            ),
+                            "context_usage": context_usage_info.model_dump(),
+                        },
+                    )
+            else:
+                effective_max_tokens = total_max_tokens
 
             # Handle streaming if requested
             if chat_request.stream:
@@ -461,7 +514,7 @@ class ChatCompletionsService:
                             messages=messages_dict,
                             audio_data=audio_bytes,
                             audio_format=audio_format,
-                            max_tokens=total_max_tokens,
+                            max_tokens=effective_max_tokens,
                             temperature=chat_request.temperature
                             if chat_request.temperature is not None
                             else 0.7,
@@ -472,14 +525,14 @@ class ChatCompletionsService:
                         # Standard text generation (audio already transcribed if present)
                         token_stream = model.generate_stream(
                             messages=messages_dict,
-                            max_tokens=total_max_tokens,
+                            max_tokens=effective_max_tokens,
                             temperature=chat_request.temperature
                             if chat_request.temperature is not None
                             else 0.7,
                             top_p=chat_request.top_p,
                             stop=chat_request.stop,
                             thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                            tools=tools_dict,
+                            tools=tools_for_generation,
                             tool_choice=chat_request.tool_choice,
                         )
 
@@ -753,7 +806,7 @@ class ChatCompletionsService:
                     messages=messages_dict,
                     audio_data=audio_bytes,
                     audio_format=audio_format,
-                    max_tokens=total_max_tokens,
+                    max_tokens=effective_max_tokens,
                     temperature=chat_request.temperature
                     if chat_request.temperature is not None
                     else 0.7,
@@ -764,14 +817,14 @@ class ChatCompletionsService:
                 # Standard text generation (audio already transcribed if present)
                 response_text = await model.generate(
                     messages=messages_dict,
-                    max_tokens=total_max_tokens,
+                    max_tokens=effective_max_tokens,
                     temperature=chat_request.temperature
                     if chat_request.temperature is not None
                     else 0.7,
                     top_p=chat_request.top_p,
                     stop=chat_request.stop,
                     thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                    tools=tools_dict,
+                    tools=tools_for_generation,
                     tool_choice=chat_request.tool_choice,
                 )
 
@@ -891,6 +944,8 @@ class ChatCompletionsService:
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error in chat_completions: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e)) from e

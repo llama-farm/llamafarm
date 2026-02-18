@@ -14,6 +14,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from routers.chat_completions.service import ChatCompletionsService
 from routers.chat_completions.types import ChatCompletionRequest
@@ -331,6 +332,31 @@ class TestToolCallingE2E:
         assert len(tool_calls) == 1
         assert tool_calls[0]["function"]["name"] == "get_time"
         assert json.loads(tool_calls[0]["function"]["arguments"]) == {}
+
+    @pytest.mark.asyncio
+    async def test_http_exception_is_not_wrapped_as_500(self, service, mock_gguf_model):
+        """HTTPException should propagate unchanged through the service layer."""
+        context_error = HTTPException(
+            status_code=400,
+            detail={"error": "context_length_exceeded", "context_usage": {"total_context": 512}},
+        )
+        mock_gguf_model.generate = AsyncMock(side_effect=context_error)
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "Hello"}],
+            tools=None,
+            stream=False,
+        )
+
+        with (
+            patch.object(service, "load_language", return_value=mock_gguf_model),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await service.chat_completions(request)
+
+        assert exc_info.value.status_code == 400
+        assert isinstance(exc_info.value.detail, dict)
+        assert exc_info.value.detail["error"] == "context_length_exceeded"
 
 
 class TestToolCallingOpenAICompatibility:

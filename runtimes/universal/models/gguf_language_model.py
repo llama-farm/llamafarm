@@ -802,6 +802,28 @@ class GGUFLanguageModel(BaseModel):
         )
         return inject_tools_into_messages(messages, tools, tool_choice=tool_choice)
 
+    def prepare_messages_for_context_validation(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        tool_choice: str | dict | None = None,
+    ) -> tuple[list[dict], bool]:
+        """Prepare message shape for context checks and indicate if already injected.
+
+        Returns:
+            Tuple of (messages_for_context, already_injected).
+            - already_injected=True means tool content is already present in returned
+              messages and should not be injected again during generation.
+        """
+        if not tools:
+            return messages, False
+
+        # If the model supports native tool rendering, keep message shape unchanged.
+        if self._render_with_jinja2(messages, tools) is not None:
+            return messages, False
+
+        return self._prepare_messages_with_tools(messages, tools, tool_choice), True
+
     async def _generate_from_prompt(
         self,
         prompt: str,

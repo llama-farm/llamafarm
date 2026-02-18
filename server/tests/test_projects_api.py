@@ -182,6 +182,7 @@ class TestDeleteProjectAPI:
                 namespace=namespace,
                 project_id=project_id,
                 agent=mock_agent,
+                config_last_modified=None,
                 created_at=0.0,
                 last_used=0.0,
                 request_count=1,

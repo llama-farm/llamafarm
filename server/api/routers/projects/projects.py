@@ -340,6 +340,7 @@ class SessionRecord:
     namespace: str
     project_id: str
     agent: ChatOrchestratorAgent
+    config_last_modified: float | None
     created_at: float
     last_used: float
     request_count: int
@@ -351,6 +352,14 @@ _agent_sessions_lock = threading.RLock()
 
 def _session_key(namespace: str, project_id: str, session_id: str) -> str:
     return f"{namespace}:{project_id}:{session_id}"
+
+
+def _get_config_last_modified_timestamp(project_dir: str) -> float | None:
+    """Return config mtime snapshot for session cache invalidation."""
+    last_modified = ProjectService.get_project_last_modified(project_dir)
+    if last_modified is None:
+        return None
+    return last_modified.timestamp()
 
 
 def _cleanup_expired_sessions(now: float | None = None) -> None:
@@ -483,6 +492,7 @@ async def chat(
 
     now = time.time()
     stateless = x_no_session is not None
+    config_last_modified = _get_config_last_modified_timestamp(project_dir)
 
     if stateless:
         agent = await ChatOrchestratorAgentFactory.create_agent(
@@ -522,6 +532,26 @@ async def chat(
                     namespace=namespace,
                     project_id=project_id,
                     agent=agent,
+                    config_last_modified=config_last_modified,
+                    created_at=now,
+                    last_used=now,
+                    request_count=1,
+                )
+            elif record.config_last_modified != config_last_modified:
+                agent = await ChatOrchestratorAgentFactory.create_agent(
+                    project_config=project_config,
+                    project_dir=project_dir,
+                    model_name=request.model,
+                    session_id=session_id,
+                    active_project_namespace=active_project_namespace,
+                    active_project_name=active_project_name,
+                )
+                # Cache the agent in memory
+                agent_sessions[key] = SessionRecord(
+                    namespace=namespace,
+                    project_id=project_id,
+                    agent=agent,
+                    config_last_modified=config_last_modified,
                     created_at=now,
                     last_used=now,
                     request_count=1,
