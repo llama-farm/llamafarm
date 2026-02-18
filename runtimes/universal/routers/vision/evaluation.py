@@ -262,15 +262,6 @@ async def start_eval(request: EvalRequest) -> EvalJobResponse:
     return EvalJobResponse(**_eval_jobs[job_id])
 
 
-@router.get("/v1/vision/eval/{job_id}", response_model=EvalJobResponse)
-@handle_endpoint_errors("vision_eval_status")
-async def get_eval_status(job_id: str) -> EvalJobResponse:
-    """Poll eval job status and results."""
-    if job_id not in _eval_jobs:
-        raise HTTPException(404, f"Eval job not found: {job_id}")
-    return EvalJobResponse(**_eval_jobs[job_id])
-
-
 @router.post("/v1/vision/eval/compare", response_model=EvalJobResponse)
 @handle_endpoint_errors("vision_eval_compare")
 async def start_compare(request: EvalCompareRequest) -> EvalJobResponse:
@@ -316,3 +307,13 @@ async def model_history(model_name: str, limit: int = 50) -> list[dict[str, Any]
     if not history:
         raise HTTPException(404, f"No evaluations found for: {model_name}")
     return history
+
+
+# Parameterized path MUST come after specific paths to avoid route shadowing
+@router.get("/v1/vision/eval/{job_id}", response_model=EvalJobResponse)
+@handle_endpoint_errors("vision_eval_status")
+async def get_eval_status(job_id: str) -> EvalJobResponse:
+    """Poll eval job status and results."""
+    if job_id not in _eval_jobs:
+        raise HTTPException(404, f"Eval job not found: {job_id}")
+    return EvalJobResponse(**_eval_jobs[job_id])
