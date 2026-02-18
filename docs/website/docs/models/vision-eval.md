@@ -94,11 +94,11 @@ Start a model evaluation job.
 | `weights` | object | null | Custom scoring weight overrides |
 
 The `model` parameter accepts:
-- A **model name** — resolves to `~/.llamafarm/models/vision/{name}/current.pt`
+- A **model name** — resolves to `~/.llamafarm/models/vision/\{name\}/current.pt`
 - A **direct path** to a `.pt` file (e.g., `/path/to/best.pt`)
-- A **versioned model** — if no `current.pt`, uses the latest `v{n}.pt`
+- A **versioned model** — if no `current.pt`, uses the latest `v\{n\}.pt`
 
-### GET /v1/vision/eval/{job_id}
+### GET /v1/vision/eval/\{job_id\}
 
 Poll evaluation job status. Returns the same `EvalJobResponse` with `status` being one of: `queued`, `running`, `completed`, `failed`.
 
@@ -171,7 +171,7 @@ curl "http://localhost:14345/v1/vision/eval/leaderboard?dataset=/path/to/visdron
 ]
 ```
 
-### GET /v1/vision/eval/leaderboard/{model_name}
+### GET /v1/vision/eval/leaderboard/\{model_name\}
 
 Evaluation history for a specific model across all runs.
 
@@ -215,7 +215,7 @@ curl -X POST http://localhost:11540/v1/vision/train \
 ### What Happens
 
 1. **Train** — model trains for the specified epochs
-2. **Save** — versioned checkpoint saved as `v{n}.pt` + ONNX export
+2. **Save** — versioned checkpoint saved as `v\{n\}.pt` + ONNX export
 3. **Eval** — automatic `.val()` against the training dataset
 4. **Compare** — score compared against leaderboard best for that dataset
 5. **Promote** — if score is higher, `current.pt` is updated to the new model
