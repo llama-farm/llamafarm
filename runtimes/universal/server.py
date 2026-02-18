@@ -310,6 +310,10 @@ async def lifespan(app: FastAPI):
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
 
+    # Start vision streaming session cleanup (needs running event loop)
+    start_session_cleanup()
+    logger.info("Vision session cleanup task started")
+
     yield
 
     # Shutdown
@@ -1198,7 +1202,7 @@ set_detect_classify_loaders(load_detection_model, load_classification_model)
 set_streaming_detection_loader(load_detection_model)
 set_vision_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
-start_session_cleanup()
+# NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 
 # Vision training
 set_trainer_model_loader(load_detection_model)
