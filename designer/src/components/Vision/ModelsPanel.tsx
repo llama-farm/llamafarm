@@ -11,6 +11,41 @@ import { useToast } from '../ui/toast'
 import FontIcon from '../../common/FontIcon'
 import { useVisionModels, useLoadVisionModel, useExportVisionModel } from '../../hooks/useVision'
 
+const BUILTIN_MODELS = [
+  {
+    name: 'yolov8n',
+    displayName: 'YOLOv8 Nano',
+    description: 'Pre-trained object detection — 80 classes (person, car, dog, etc.). Fastest, ideal for real-time.',
+    task: 'detection',
+    builtin: true,
+    size: '~6 MB',
+  },
+  {
+    name: 'yolov8s',
+    displayName: 'YOLOv8 Small',
+    description: 'Pre-trained object detection — 80 classes. Good balance of speed and accuracy.',
+    task: 'detection',
+    builtin: true,
+    size: '~22 MB',
+  },
+  {
+    name: 'yolov8m',
+    displayName: 'YOLOv8 Medium',
+    description: 'Pre-trained object detection — 80 classes. Higher accuracy, more compute.',
+    task: 'detection',
+    builtin: true,
+    size: '~52 MB',
+  },
+  {
+    name: 'clip-vit-base',
+    displayName: 'CLIP ViT-Base',
+    description: 'Zero-shot image classification — understands natural language labels without training. Trained on 400M image-text pairs.',
+    task: 'classification',
+    builtin: true,
+    size: '~350 MB',
+  },
+]
+
 export function ModelsPanel() {
   const [search, setSearch] = useState('')
   const { data, isLoading, error } = useVisionModels()
@@ -18,17 +53,14 @@ export function ModelsPanel() {
   const exportModel = useExportVisionModel()
   const { toast } = useToast()
 
-  const models = data?.models ?? []
-  const filtered = models.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const customModels = data?.models ?? []
 
   const handleLoad = (name: string) => {
     loadModel.mutate(
       { name },
       {
-        onSuccess: () => toast({ message: `Model "${name}" loaded`, variant: 'default' }),
-        onError: (err: Error) => toast({ message: err.message, variant: 'destructive' }),
+        onSuccess: () => toast({ message: `Model "${name}" loaded` }),
+        onError: (err: Error) => toast({ message: err.message }),
       }
     )
   }
@@ -43,73 +75,93 @@ export function ModelsPanel() {
           a.href = url
           a.download = `${name}.zip`
           a.click()
-          // Delay revocation to give browser time to start download
           setTimeout(() => URL.revokeObjectURL(url), 30_000)
-          toast({ message: `Model "${name}" exported`, variant: 'default' })
+          toast({ message: `Model "${name}" exported` })
         },
-        onError: (err: Error) => toast({ message: err.message, variant: 'destructive' }),
+        onError: (err: Error) => toast({ message: err.message }),
       }
     )
   }
 
-  if (isLoading) {
-    return <div className="text-sm text-muted-foreground py-8 text-center">Loading models...</div>
-  }
+  const filteredBuiltin = BUILTIN_MODELS.filter(m =>
+    m.displayName.toLowerCase().includes(search.toLowerCase()) ||
+    m.name.toLowerCase().includes(search.toLowerCase()) ||
+    m.description.toLowerCase().includes(search.toLowerCase())
+  )
 
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted border border-border">
-          <span className="text-muted-foreground text-xl">!</span>
-        </div>
-        <p className="text-sm font-medium text-foreground mb-1">Couldn't load vision models</p>
-        <p className="text-sm text-muted-foreground">The Universal Runtime may not have any vision models yet. Train your first model from the Train tab to get started.</p>
-      </div>
-    )
-  }
+  const filteredCustom = customModels.filter(m =>
+    m.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">Browse and manage your trained vision models. Load models for inference, export to ONNX for edge deployment, or delete unused ones.</p>
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <FontIcon type="search" className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-          <Input
-            placeholder="Search models..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <p className="text-sm text-muted-foreground">
+        Models available for vision tasks. Built-in models are downloaded automatically on first use. Train custom models for domain-specific accuracy.
+      </p>
+
+      <div className="relative">
+        <FontIcon type="search" className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+        <Input
+          placeholder="Search models..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-sm text-muted-foreground">
-            {models.length === 0 ? 'No vision models saved yet. Train a model to get started.' : 'No models match your search.'}
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="grid grid-cols-12 items-center bg-secondary text-secondary-foreground text-xs px-3 py-3">
-            <div className="col-span-4">Name</div>
-            <div className="col-span-3">Task</div>
-            <div className="col-span-3">Created</div>
-            <div className="col-span-2" />
+      {/* Built-in Models */}
+      {filteredBuiltin.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium mb-2">Built-in Models</h3>
+          <p className="text-xs text-muted-foreground mb-3">These come with the Vision add-on. Downloaded automatically on first use — no setup needed.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filteredBuiltin.map(model => (
+              <div key={model.name} className="rounded-lg border border-border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{model.displayName}</span>
+                      <Badge variant="secondary" className="text-xs">{model.task}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{model.description}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Size: {model.size} · ID: <code className="text-xs">{model.name}</code></p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          {filtered.map(model => (
-            <div
-              key={model.name}
-              className="grid grid-cols-12 items-center px-3 py-3 text-sm border-t border-border hover:bg-accent/40"
-            >
-              <div className="col-span-4 font-medium truncate">{model.name}</div>
-              <div className="col-span-3">
-                <Badge variant="secondary">{model.task}</Badge>
-              </div>
-              <div className="col-span-3 text-muted-foreground text-xs">
-                {model.created_at ? new Date(model.created_at).toLocaleDateString() : '—'}
-              </div>
-              <div className="col-span-2 flex justify-end">
+        </div>
+      )}
+
+      {/* Custom Models */}
+      <div>
+        <h3 className="text-sm font-medium mb-2">Custom Models</h3>
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>
+        ) : error ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            No custom models found. Train a model from the Train tab to create one.
+          </p>
+        ) : filteredCustom.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            {customModels.length === 0
+              ? 'No custom models yet. Train a model to create one tailored to your use case.'
+              : 'No models match your search.'}
+          </p>
+        ) : (
+          <div className="rounded-lg border border-border overflow-hidden">
+            {filteredCustom.map(model => (
+              <div
+                key={model.name}
+                className="flex items-center justify-between px-3 py-3 text-sm border-b last:border-b-0 border-border hover:bg-accent/40"
+              >
+                <div>
+                  <span className="font-medium">{model.name}</span>
+                  <Badge variant="secondary" className="ml-2 text-xs">{model.task}</Badge>
+                  {model.created_at && (
+                    <span className="text-xs text-muted-foreground ml-2">{new Date(model.created_at).toLocaleDateString()}</span>
+                  )}
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="w-6 h-6 grid place-items-center rounded-md text-muted-foreground hover:bg-accent/30">
@@ -117,19 +169,15 @@ export function ModelsPanel() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleLoad(model.name)}>
-                      Load
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport(model.name)}>
-                      Export
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleLoad(model.name)}>Load</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport(model.name)}>Export</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
