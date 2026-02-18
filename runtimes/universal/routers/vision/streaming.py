@@ -4,6 +4,7 @@ Cascade: if confidence < threshold, try next model in chain.
 Chain can include "remote:{url}" entries for Atmosphere readiness.
 """
 
+import asyncio
 import logging
 import time
 import uuid
@@ -63,9 +64,38 @@ class StreamSession:
     escalations: int = 0
     created_at: float = field(default_factory=time.time)
     last_action_at: float = 0.0
+    last_frame_at: float = field(default_factory=time.time)
 
 _sessions: dict[str, StreamSession] = {}
 _http_client: httpx.AsyncClient | None = None
+_cleanup_task: asyncio.Task | None = None
+SESSION_TTL_SECONDS: float = 60.0  # Auto-expire after no frames for this long
+
+
+async def _session_cleanup_loop() -> None:
+    """Background task that expires orphaned streaming sessions."""
+    while True:
+        await asyncio.sleep(15)  # Check every 15 seconds
+        now = time.time()
+        expired = [
+            sid for sid, s in _sessions.items()
+            if (now - s.last_frame_at) > SESSION_TTL_SECONDS
+        ]
+        for sid in expired:
+            session = _sessions.pop(sid, None)
+            if session:
+                logger.info(
+                    f"Expired orphaned stream session {sid} "
+                    f"(idle {now - session.last_frame_at:.0f}s, "
+                    f"{session.frames_processed} frames processed)"
+                )
+
+
+def start_session_cleanup() -> None:
+    """Start the background session cleanup task. Call once at server startup."""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_session_cleanup_loop())
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -159,6 +189,7 @@ async def process_frame(request: StreamFrameRequest) -> StreamFrameResponse:
         raise HTTPException(status_code=500, detail="Detection loader not initialized")
 
     session.frames_processed += 1
+    session.last_frame_at = time.time()
     image_bytes = decode_base64_image(request.image)
 
     # Try each model in the cascade chain
@@ -202,6 +233,41 @@ async def stop_stream(request: StreamStopRequest) -> StreamStopResponse:
         escalations=session.escalations,
         duration_seconds=time.time() - session.created_at,
     )
+
+
+class SessionInfo(BaseModel):
+    session_id: str
+    frames_processed: int
+    actions_triggered: int
+    escalations: int
+    chain: list[str]
+    idle_seconds: float
+    duration_seconds: float
+
+
+class SessionsListResponse(BaseModel):
+    sessions: list[SessionInfo]
+    count: int
+
+
+@router.get("/v1/vision/stream/sessions", response_model=SessionsListResponse)
+@handle_endpoint_errors("vision_stream_sessions")
+async def list_sessions() -> SessionsListResponse:
+    """List active streaming sessions."""
+    now = time.time()
+    sessions = [
+        SessionInfo(
+            session_id=s.session_id,
+            frames_processed=s.frames_processed,
+            actions_triggered=s.actions_triggered,
+            escalations=s.escalations,
+            chain=s.cascade.chain,
+            idle_seconds=round(now - s.last_frame_at, 1),
+            duration_seconds=round(now - s.created_at, 1),
+        )
+        for s in _sessions.values()
+    ]
+    return SessionsListResponse(sessions=sessions, count=len(sessions))
 
 
 # =============================================================================

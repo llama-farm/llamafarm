@@ -10,6 +10,20 @@ class VisionPipelineService:
 
     # --- Streaming ---
 
+    # --- Detect + Classify ---
+
+    @staticmethod
+    async def detect_classify(payload: dict[str, Any]) -> dict[str, Any]:
+        return await UniversalRuntimeService._make_request(
+            "POST", "/v1/vision/detect_classify", json=payload)
+
+    # --- Streaming ---
+
+    @staticmethod
+    async def stream_sessions() -> dict[str, Any]:
+        return await UniversalRuntimeService._make_request(
+            "GET", "/v1/vision/stream/sessions")
+
     @staticmethod
     async def stream_start(config: dict[str, Any]) -> dict[str, Any]:
         return await UniversalRuntimeService._make_request(
