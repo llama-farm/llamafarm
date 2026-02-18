@@ -19,5 +19,5 @@ packages:
 
 hardware_notes:
   cuda: CUDA provides significant speedup for both YOLO detection and CLIP classification
-  mps: MPS acceleration available for YOLO; CLIP uses MPS via transformers
+  metal: Apple GPU (MPS) acceleration available for YOLO; CLIP uses MPS via transformers
   cpu: CPU works but is slower for real-time streaming
