@@ -104,7 +104,7 @@ class EvalDB:
     def __init__(self, db_path: Path | None = None):
         self._path = db_path or EVAL_DB_PATH
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(self._path))
+        self._db = sqlite3.connect(str(self._path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._init_tables()

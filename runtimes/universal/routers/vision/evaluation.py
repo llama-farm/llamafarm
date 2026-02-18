@@ -147,10 +147,10 @@ async def _run_eval(job_id: str, model_path: str, request: EvalRequest) -> None:
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         _eval_jobs[job_id]["result"] = result.to_dict()
     except Exception as e:
-        logger.error(f"Eval job {job_id} failed: {e}")
+        logger.error(f"Eval job {job_id} failed: {e}", exc_info=True)
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
-        _eval_jobs[job_id]["error"] = "Evaluation failed"
+        _eval_jobs[job_id]["error"] = str(e)
 
 
 async def _run_compare(
@@ -172,10 +172,10 @@ async def _run_compare(
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         _eval_jobs[job_id]["result"] = comparison
     except Exception as e:
-        logger.error(f"Compare job {job_id} failed: {e}")
+        logger.error(f"Compare job {job_id} failed: {e}", exc_info=True)
         _eval_jobs[job_id]["status"] = "failed"
         _eval_jobs[job_id]["completed_at"] = datetime.now().isoformat()
-        _eval_jobs[job_id]["error"] = "Comparison failed"
+        _eval_jobs[job_id]["error"] = str(e)
 
 
 # ── Auto-eval callback (called from training completion) ────────────────────
