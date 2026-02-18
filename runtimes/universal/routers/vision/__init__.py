@@ -16,6 +16,8 @@ from .router import router as legacy_ocr_router
 from .router import set_document_loader, set_file_image_getter, set_ocr_loader
 from .streaming import router as streaming_router
 from .streaming import set_streaming_detection_loader, start_session_cleanup
+from .tracking import router as tracking_router
+from .tracking import set_tracking_models_dir, start_tracking_cleanup
 from .training import router as training_router
 
 # Combined router
@@ -27,6 +29,7 @@ router.include_router(detect_classify_router)
 router.include_router(streaming_router)
 router.include_router(training_router)
 router.include_router(evaluation_router)
+router.include_router(tracking_router)
 router.include_router(models_router)
 
 __all__ = [
@@ -37,4 +40,5 @@ __all__ = [
     "set_streaming_detection_loader", "start_session_cleanup",
     "set_vision_models_dir", "set_model_export_loader",
     "set_eval_models_dir",
+    "set_tracking_models_dir", "start_tracking_cleanup",
 ]
