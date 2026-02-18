@@ -48,6 +48,7 @@ export function TrainingPanel() {
 
   return (
     <div className="max-w-2xl flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Train a custom vision model on your own data. Choose a base model, configure training parameters, and monitor progress. Trained models are saved for later use in detection and classification.</p>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-sm">Model Name</Label>

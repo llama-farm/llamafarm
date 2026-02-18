@@ -58,14 +58,19 @@ export function ModelsPanel() {
 
   if (error) {
     return (
-      <div className="text-sm text-destructive py-8 text-center">
-        Failed to load models: {(error as Error).message}
+      <div className="text-center py-12">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted border border-border">
+          <span className="text-muted-foreground text-xl">!</span>
+        </div>
+        <p className="text-sm font-medium text-foreground mb-1">Couldn't load vision models</p>
+        <p className="text-sm text-muted-foreground">The Universal Runtime may not have any vision models yet. Train your first model from the Train tab to get started.</p>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Browse and manage your trained vision models. Load models for inference, export to ONNX for edge deployment, or delete unused ones.</p>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <FontIcon type="search" className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
