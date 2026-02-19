@@ -2,7 +2,7 @@
  * Toggle component for switching between batch and streaming modes
  */
 
-import { Badge } from '../ui/badge'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '../../lib/utils'
 
 interface Props {

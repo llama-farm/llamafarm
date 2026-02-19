@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import { SearchInput } from '../ui/search-input'
+import { SearchInput } from '@/components/ui/search-input'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface DeviceModel {

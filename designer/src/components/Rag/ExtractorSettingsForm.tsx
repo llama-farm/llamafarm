@@ -1,14 +1,14 @@
 import { useMemo } from 'react'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { Switch } from '../ui/switch'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { Button } from '../ui/button'
+} from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
 // Import schema types from generated file
 import type { ExtractorSchema, SchemaField } from '@/types/ragTypes'
 

@@ -1,11 +1,11 @@
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import type { DeviceModel } from './DeviceModelsSection'

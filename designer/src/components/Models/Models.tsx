@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import FontIcon from '../../common/FontIcon'
@@ -10,8 +10,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { Input } from '../ui/input'
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { parsePromptSets } from '../../utils/promptSets'
@@ -35,13 +35,13 @@ import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
 import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-import { useToast } from '../ui/toast'
+import { useToast } from '@/components/ui/toast'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
+} from '@/components/ui/tooltip'
 import {
   sanitizeModelName,
   formatBytes,
@@ -59,16 +59,17 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '../ui/collapsible'
-import { Checkbox } from '../ui/checkbox'
-import { Label } from '../ui/label'
+} from '@/components/ui/collapsible'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../ui/select'
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { ChevronDown } from 'lucide-react'
 import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
@@ -1876,7 +1877,7 @@ export function AddOrChangeModels({
                   >
                     Description
                   </label>
-                  <textarea
+                  <Textarea
                     id="device-model-description"
                     rows={2}
                     placeholder="Enter model description"
@@ -2084,7 +2085,7 @@ export function AddOrChangeModels({
                       >
                         Description
                       </label>
-                      <textarea
+                      <Textarea
                         id="model-description"
                         rows={2}
                         placeholder="Enter model description"

@@ -10,7 +10,8 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
+} from '@/components/ui/tooltip'
+import { Textarea } from '@/components/ui/textarea'
 import { ClassifiedError } from '../../types/chat'
 import { getHealthSummary } from '../../utils/recoveryCommands'
 
@@ -523,7 +524,7 @@ function Chatbox({
           </div>
           <div className="flex flex-col gap-3 p-3 rounded-lg bg-secondary mt-auto sticky bottom-4">
             <div className="relative">
-              <textarea
+              <Textarea
                 value={inputValue}
                 onChange={e => updateInput(e.target.value)}
                 onKeyDown={handleKeyDown}
