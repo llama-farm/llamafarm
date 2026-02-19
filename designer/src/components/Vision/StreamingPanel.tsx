@@ -147,8 +147,11 @@ export function StreamingPanel() {
         Connect a live camera or video feed for real-time object detection. Set up detection cascades that trigger actions when objects are detected with high confidence.
       </PanelIntro>
 
-      {/* Hidden video/canvas always mounted so refs are available before streaming starts */}
-      <video ref={videoRef} className={cn('rounded-lg border border-border w-full', !isStreaming && 'hidden')} muted playsInline />
+      {/* Video always mounted to preserve ref/srcObject across state changes */}
+      <video ref={videoRef} className={cn(
+        'rounded-lg border border-border w-full',
+        !isStreaming && 'hidden'
+      )} muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
       {!isStreaming ? (
@@ -219,28 +222,30 @@ export function StreamingPanel() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 max-w-2xl">
-          {/* Stats bar */}
+        <div className="flex flex-col gap-3">
+          {/* Stats + controls */}
           <div className="flex items-center gap-4 text-sm">
             <span className="text-muted-foreground">Session <span className="font-mono text-xs text-foreground">{sessionId}</span></span>
-            <span className="text-muted-foreground">Frames <span className="text-foreground font-medium">{framesProcessed}</span></span>
-            <span className="text-muted-foreground">Detections <span className="text-foreground font-medium">{detections.length}</span></span>
+            <span className="text-muted-foreground">Frames <span className="font-medium text-foreground">{framesProcessed}</span></span>
             <Button onClick={handleStop} variant="destructive" size="sm" disabled={stopMutation.isPending} className="ml-auto">
               {stopMutation.isPending ? 'Stopping...' : 'Stop Stream'}
             </Button>
           </div>
 
-          {/* Detection list */}
+          {/* Detection chips — inline badges below video */}
           {detections.length > 0 && (
-            <div className="rounded-lg border border-border p-3">
-              <div className="flex flex-col gap-1">
-                {detections.map((d, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{d.class_name}</span>
-                    <span className="text-muted-foreground">{(d.confidence * 100).toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {detections.map((d, i) => (
+                <div key={i} className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm',
+                  d.confidence >= 0.8 ? 'bg-green-500/10 border-green-500/30 text-green-700' :
+                  d.confidence >= 0.5 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700' :
+                  'bg-red-500/10 border-red-500/30 text-red-700'
+                )}>
+                  <span className="font-medium">{d.class_name}</span>
+                  <span className="text-xs opacity-75">{(d.confidence * 100).toFixed(1)}%</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
