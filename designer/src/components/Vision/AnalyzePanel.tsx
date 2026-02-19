@@ -135,9 +135,9 @@ export function AnalyzePanel() {
   }
 
   const handleClassify = () => {
-    if (!imageBase64) return
+    if (!imageBase64 || classes.length === 0) return
     classifyMutation.mutate(
-      { image: imageBase64, classes: classes.length > 0 ? classes : undefined, top_k: 10 },
+      { image: imageBase64, classes, top_k: 10 },
       { onSuccess: setClassifyResult }
     )
   }
@@ -359,7 +359,7 @@ export function AnalyzePanel() {
       )}
 
       {/* Run button */}
-      <Button onClick={handleRun} disabled={!imageBase64 || isPending} className="w-fit">
+      <Button onClick={handleRun} disabled={!imageBase64 || isPending || ((mode === 'classify' || mode === 'detect-classify') && classes.length === 0)} className="w-fit">
         {runLabel}
       </Button>
 
