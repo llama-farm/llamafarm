@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
-import FontIcon from '../../common/FontIcon'
+// FontIcon not used — using text labels for action buttons
 import { useBundles, useDeleteBundle } from '../../hooks/useBundles'
 import { useBundleModal } from '../../contexts/BundleModalContext'
 import { getBundleDownloadUrl } from '../../api/bundleService'
@@ -137,7 +137,7 @@ const DeployPage = () => {
                           window.open(getBundleDownloadUrl(b.id), '_blank')
                         }
                       >
-                        <FontIcon type="download" className="w-4 h-4" />
+                        ⬇️
                       </button>
                       <button
                         type="button"
@@ -145,7 +145,7 @@ const DeployPage = () => {
                         aria-label="Delete bundle"
                         onClick={() => setToDelete(b)}
                       >
-                        <FontIcon type="trash" className="w-4 h-4" />
+                        🗑️
                       </button>
                     </div>
                   </td>
