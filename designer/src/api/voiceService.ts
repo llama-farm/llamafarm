@@ -29,7 +29,9 @@ function getApiHost(): string {
     // Also accept host[:port] values by inheriting current page protocol.
     if (typeof window !== 'undefined') {
       try {
-        const parsed = new URL(`${window.location.protocol}//${trimmed}`)
+        const parsed = new URL(window.location.origin)
+        parsed.host = trimmed
+        parsed.protocol = window.location.protocol
         return parsed.toString().replace(/\/$/, '')
       } catch {
         // Fall through to standard runtime fallback.
