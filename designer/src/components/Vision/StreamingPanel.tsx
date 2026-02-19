@@ -5,18 +5,17 @@ import { Slider } from '../ui/slider'
 import { cn } from '@/lib/utils'
 import { useStreamStart, useStreamFrame, useStreamStop, useStreamSessions } from '../../hooks/useVision'
 import visionService from '../../api/visionService'
-import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import { PanelIntro } from './PanelIntro'
 import FontIcon from '../../common/FontIcon'
 import type { Detection } from '../../types/vision'
 
 export function StreamingPanel() {
   const [targetFps, setTargetFps] = useState(5)
-  const [confidence, setConfidence] = useState(0.5)
+  const [confidence, setConfidence] = useState(0.25)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [detections, setDetections] = useState<Detection[]>([])
-  const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null)
+  const [, setFrameDataUrl] = useState<string | null>(null)
   const [framesProcessed, setFramesProcessed] = useState(0)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -214,24 +213,20 @@ export function StreamingPanel() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="flex flex-col gap-4">
-            <div className="rounded-lg border border-border p-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">Session</span>
-                <span className="truncate font-mono text-xs">{sessionId}</span>
-                <span className="text-muted-foreground">Frames</span>
-                <span>{framesProcessed}</span>
-                <span className="text-muted-foreground">Detections</span>
-                <span>{detections.length}</span>
-              </div>
-            </div>
-
-            <Button onClick={handleStop} variant="destructive" disabled={stopMutation.isPending} className="w-full">
+        <div className="flex flex-col gap-4 max-w-2xl">
+          {/* Stats bar */}
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-muted-foreground">Session <span className="font-mono text-xs text-foreground">{sessionId}</span></span>
+            <span className="text-muted-foreground">Frames <span className="text-foreground font-medium">{framesProcessed}</span></span>
+            <span className="text-muted-foreground">Detections <span className="text-foreground font-medium">{detections.length}</span></span>
+            <Button onClick={handleStop} variant="destructive" size="sm" disabled={stopMutation.isPending} className="ml-auto">
               {stopMutation.isPending ? 'Stopping...' : 'Stop Stream'}
             </Button>
+          </div>
 
-            {detections.length > 0 && (
+          {/* Detection list */}
+          {detections.length > 0 && (
+            <div className="rounded-lg border border-border p-3">
               <div className="flex flex-col gap-1">
                 {detections.map((d, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
@@ -240,18 +235,8 @@ export function StreamingPanel() {
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="flex flex-col items-center justify-start relative">
-            {frameDataUrl && detections.length > 0 && (
-              <BoundingBoxCanvas
-                imageSrc={frameDataUrl}
-                detections={detections}
-                className="rounded-lg border border-border w-full"
-              />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
