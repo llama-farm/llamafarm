@@ -34,6 +34,8 @@ class TrainingConfig:
     batch_size: int = 16
     learning_rate: float = 0.001
     validation_split: float = 0.2
+    imgsz: int = 640
+    patience: int = 50
 
 
 @dataclass
@@ -91,14 +93,23 @@ class IncrementalTrainer:
             from ultralytics import YOLO
             model_id = base_model or job.model_id
             model_path = model_id  # Could be a path or a variant name
-            device = 'cpu'
+            # Auto-detect best device: MPS (Apple GPU) > CUDA > CPU
+            import torch
+            if torch.cuda.is_available():
+                device = 'cuda'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                device = 'mps'
+            else:
+                device = 'cpu'
             
             # Try to get model path from cached model's info
             try:
                 cached = await self._model_loader(model_id)
                 if hasattr(cached, '_model_path') and cached._model_path:
                     model_path = cached._model_path
-                device = cached.device if hasattr(cached, 'device') else 'cpu'
+                # Use cached model's device if available
+                if hasattr(cached, 'device') and cached.device:
+                    device = cached.device
             except Exception:
                 pass
 
@@ -125,8 +136,8 @@ class IncrementalTrainer:
                 "epochs": job.config.epochs,
                 "batch": job.config.batch_size,
                 "device": device if device != "auto" else None,
-                "imgsz": 640,
-                "patience": 50,
+                "imgsz": job.config.imgsz,
+                "patience": job.config.patience,
                 "save": True,
                 "verbose": True,
             }
