@@ -56,15 +56,38 @@ class TrainingJob:
 
 
 class IncrementalTrainer:
-    """Manages async training jobs for vision models."""
+    """Manages async training jobs for vision models.
+
+    Jobs run sequentially (one at a time) to prevent OOM from concurrent
+    model training. New jobs are queued and start when the current job finishes.
+    """
 
     def __init__(self, model_loader: Callable | None = None):
         self._model_loader = model_loader
         self._jobs: dict[str, TrainingJob] = {}
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._queue: asyncio.Queue[tuple[TrainingJob, str | None, Callable | None]] = asyncio.Queue()
+        self._worker_task: asyncio.Task | None = None
 
     def set_model_loader(self, loader: Callable) -> None:
         self._model_loader = loader
+
+    def _ensure_worker(self) -> None:
+        """Start the sequential job worker if not running."""
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self._job_worker())
+
+    async def _job_worker(self) -> None:
+        """Process training jobs one at a time from the queue."""
+        while True:
+            job, base_model, on_complete = await self._queue.get()
+            try:
+                logger.info(f"Job worker: starting {job.job_id} ({job.model_id}), "
+                            f"{self._queue.qsize()} remaining in queue")
+                await self._run(job, base_model, on_complete)
+            except Exception as e:
+                logger.error(f"Job worker: unhandled error for {job.job_id}: {e}")
+            finally:
+                self._queue.task_done()
 
     async def start_training(self, model_id: str, dataset_path: str,
                              task: Literal["detection", "classification"],
@@ -76,12 +99,18 @@ class IncrementalTrainer:
         job = TrainingJob(job_id=job_id, model_id=model_id,
                           dataset_path=dataset_path, task=task, config=config)
         self._jobs[job_id] = job
-        self._tasks[job_id] = asyncio.create_task(self._run(job, base_model, on_complete))
-        logger.info(f"Started training job {job_id} for {model_id}")
+        await self._queue.put((job, base_model, on_complete))
+        self._ensure_worker()
+        queue_pos = self._queue.qsize()
+        logger.info(f"Queued training job {job_id} for {model_id} (position {queue_pos})")
         return job
 
     async def _run(self, job: TrainingJob, base_model: str | None,
                    on_complete: Callable | None = None) -> None:
+        # Skip if cancelled while queued
+        if job.status == TrainingStatus.CANCELLED:
+            logger.info(f"Skipping cancelled job {job.job_id}")
+            return
         try:
             job.status = TrainingStatus.RUNNING
             job.started_at = datetime.utcnow()
@@ -239,20 +268,24 @@ class IncrementalTrainer:
         job = self._jobs.get(job_id)
         if not job:
             return False
-        task = self._tasks.get(job_id)
-        if task and not task.done():
-            task.cancel()
+        if job.status in (TrainingStatus.QUEUED, TrainingStatus.RUNNING):
             job.status = TrainingStatus.CANCELLED
             job.completed_at = datetime.utcnow()
+            logger.info(f"Cancelled training job {job_id}")
             return True
         return False
 
     async def wait_for_job(self, job_id: str, timeout: float | None = None) -> TrainingJob | None:
-        task = self._tasks.get(job_id)
-        if task:
-            with contextlib.suppress(asyncio.TimeoutError):  # best-effort wait; training may outlast timeout
-                await asyncio.wait_for(task, timeout=timeout)
-        return self._jobs.get(job_id)
+        """Poll job status until complete or timeout."""
+        import time
+        deadline = time.time() + timeout if timeout else None
+        while True:
+            job = self._jobs.get(job_id)
+            if not job or job.status in (TrainingStatus.COMPLETED, TrainingStatus.FAILED, TrainingStatus.CANCELLED):
+                return job
+            if deadline and time.time() > deadline:
+                return job
+            await asyncio.sleep(1)
 
 
 _trainer: IncrementalTrainer | None = None
