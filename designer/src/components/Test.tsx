@@ -7,7 +7,7 @@ import { Checkbox } from './ui/checkbox'
 import { Switch } from './ui/switch'
 import ConfigEditor from './ConfigEditor/ConfigEditor'
 import TestChat from './TestChat/TestChat'
-import { usePackageModal } from '../contexts/PackageModalContext'
+import { useBundleModal } from '../contexts/BundleModalContext'
 import { Input } from './ui/input'
 import { useModeWithReset } from '../hooks/useModeWithReset'
 import { useConfigPointer } from '../hooks/useConfigPointer'
@@ -33,7 +33,7 @@ const SAMPLE_TEST_INPUTS: Record<string, string> = {
 const Test = () => {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { openPackageModal } = usePackageModal()
+  const { openBundleModal } = useBundleModal()
   const onboarding = useOnboardingContext()
 
   // Model type for Test page: 'inference' (default), 'anomaly', 'classifier', 'document_scanning', 'encoder', or 'speech'
@@ -289,10 +289,9 @@ const Test = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={openPackageModal}
-              disabled
+              onClick={openBundleModal}
             >
-              Package
+              Bundle
             </Button>
           </div>
         </div>
