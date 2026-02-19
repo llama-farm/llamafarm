@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PanelIntro } from './PanelIntro'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Badge } from '../ui/badge'
@@ -96,9 +97,9 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <PanelIntro title="Models">
         Models available for vision tasks. Built-in models are downloaded automatically on first use. Train custom models for domain-specific accuracy.
-      </p>
+      </PanelIntro>
 
       <div className="relative">
         <FontIcon type="search" className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />

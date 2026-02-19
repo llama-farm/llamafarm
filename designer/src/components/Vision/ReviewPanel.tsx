@@ -64,7 +64,7 @@ export function ReviewPanel() {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <PanelIntro>
+        <PanelIntro title="Review">
           Review low-confidence detections flagged by the system. Correct or confirm classifications to improve model accuracy over time.
         </PanelIntro>
         <div className="flex flex-col items-center justify-center py-16">
@@ -156,7 +156,7 @@ export function ReviewPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PanelIntro>
+      <PanelIntro title="Review">
         Review low-confidence detections flagged by the system. Sorted by lowest confidence first.
       </PanelIntro>
 

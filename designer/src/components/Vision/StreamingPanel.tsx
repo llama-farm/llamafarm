@@ -143,7 +143,7 @@ export function StreamingPanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      <PanelIntro>
+      <PanelIntro title="Stream">
         Connect a live camera or video feed for real-time object detection. Set up detection cascades that trigger actions when objects are detected with high confidence.
       </PanelIntro>
 

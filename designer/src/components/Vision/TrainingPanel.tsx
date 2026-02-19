@@ -14,6 +14,7 @@ import {
 } from '../ui/select'
 import { useStartTraining, useTrainingJobStatus, useSampleDataStatus, useCloneSampleData } from '../../hooks/useVision'
 import { Loader2 } from 'lucide-react'
+import { PanelIntro } from './PanelIntro'
 
 const SAMPLE_REPO = 'https://github.com/llama-farm/vision-sample-data'
 const SAMPLE_CATEGORIES = [
@@ -87,6 +88,9 @@ export function TrainingPanel() {
   if (hasJob && jobStatus) {
     return (
       <div className="max-w-2xl flex flex-col gap-4">
+        <PanelIntro title="Train">
+          Training a custom model for {task}.
+        </PanelIntro>
         <div className="rounded-lg border border-border p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -157,9 +161,9 @@ export function TrainingPanel() {
 
   return (
     <div className="max-w-2xl flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
+      <PanelIntro title="Train">
         Train a custom vision model when the built-in models aren't accurate enough for your specific use case. Start with the Analyze tab to test zero-shot capabilities first — you may not need custom training.
-      </p>
+      </PanelIntro>
 
       {/* Dataset guidance — collapsible, open by default */}
       <Collapsible defaultOpen>

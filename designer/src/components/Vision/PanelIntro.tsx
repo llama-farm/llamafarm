@@ -1,15 +1,16 @@
 interface PanelIntroProps {
+  title?: string
   children: React.ReactNode
 }
 
 /**
- * Subtle intro / guidance text at the top of each vision sub-panel.
- * Uses the same text-sm text-muted-foreground pattern as other Designer panels.
+ * Consistent title + subtitle at the top of each vision sub-panel.
  */
-export function PanelIntro({ children }: PanelIntroProps) {
+export function PanelIntro({ title, children }: PanelIntroProps) {
   return (
-    <p className="text-sm text-muted-foreground mb-4">
-      {children}
-    </p>
+    <div className="mb-1">
+      {title && <h2 className="text-lg font-semibold tracking-tight">{title}</h2>}
+      <p className="text-sm text-muted-foreground">{children}</p>
+    </div>
   )
 }

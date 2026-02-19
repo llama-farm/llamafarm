@@ -15,6 +15,7 @@ import { Upload, X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDetect, useClassify, useDetectClassify } from '../../hooks/useVision'
 import { useImageUpload } from './useImageUpload'
+import { PanelIntro } from './PanelIntro'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import type { Detection, ClassifyResponse, DetectClassifyResult } from '../../types/vision'
 
@@ -182,9 +183,9 @@ export function AnalyzePanel() {
       onPaste={handlePaste}
       tabIndex={0}
     >
-      <p className="text-sm text-muted-foreground">
+      <PanelIntro title="Analyze">
         Analyze images using state-of-the-art vision models. Your images are processed locally — nothing leaves your machine.
-      </p>
+      </PanelIntro>
 
       {/* Mode selector */}
       <div className="flex rounded-lg border border-border p-1 bg-muted/30 w-fit">
