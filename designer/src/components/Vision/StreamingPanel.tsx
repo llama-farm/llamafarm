@@ -78,7 +78,7 @@ export function StreamingPanel() {
             {
               onSuccess: data => {
                 frameInFlightRef.current = false
-                setDetections(data.detections)
+                setDetections(data.detections ?? [])
                 setFramesProcessed(prev => prev + 1)
               },
               onError: () => {
