@@ -50,7 +50,7 @@ export interface ClassScore {
 export interface ClassifyResponse {
   class_name: string
   confidence: number
-  all_scores: ClassScore[]
+  all_scores: Record<string, number>
 }
 
 // =============================================================================

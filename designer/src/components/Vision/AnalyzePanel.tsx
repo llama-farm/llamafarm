@@ -391,16 +391,18 @@ export function AnalyzePanel() {
             ({(classifyResult.confidence * 100).toFixed(1)}%)
           </p>
           <div className="flex flex-col gap-2">
-            {classifyResult.all_scores.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="text-sm w-24 truncate">{s.class_name}</span>
+            {Object.entries(classifyResult.all_scores)
+              .sort(([, a], [, b]) => b - a)
+              .map(([name, score], i) => (
+              <div key={name} className="flex items-center gap-2">
+                <span className="text-sm w-24 truncate">{name}</span>
                 <div className="flex-1 h-3 bg-secondary rounded-full overflow-hidden">
                   <div
                     className={cn('h-full rounded-full transition-all', i === 0 ? 'bg-primary' : 'bg-primary/60')}
-                    style={{ width: `${s.confidence * 100}%` }}
+                    style={{ width: `${score * 100}%` }}
                   />
                 </div>
-                <span className="text-xs text-muted-foreground w-12 text-right">{(s.confidence * 100).toFixed(1)}%</span>
+                <span className="text-xs text-muted-foreground w-12 text-right">{(score * 100).toFixed(1)}%</span>
               </div>
             ))}
           </div>
