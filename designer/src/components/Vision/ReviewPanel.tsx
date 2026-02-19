@@ -54,6 +54,9 @@ export function ReviewPanel() {
     setCorrectedClass('')
     if (currentIndex < items.length - 1) {
       setCurrentIndex(i => i + 1)
+    } else {
+      refetch()
+      setCurrentIndex(0)
     }
   }
 

@@ -4,6 +4,7 @@ import { Label } from '../ui/label'
 import { Slider } from '../ui/slider'
 import { cn } from '@/lib/utils'
 import { useStreamStart, useStreamFrame, useStreamStop, useStreamSessions } from '../../hooks/useVision'
+import visionService from '../../api/visionService'
 import { BoundingBoxCanvas } from './BoundingBoxCanvas'
 import { PanelIntro } from './PanelIntro'
 import FontIcon from '../../common/FontIcon'
@@ -17,11 +18,14 @@ export function StreamingPanel() {
   const [detections, setDetections] = useState<Detection[]>([])
   const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null)
   const [framesProcessed, setFramesProcessed] = useState(0)
+  const [startError, setStartError] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionIdRef = useRef<string | null>(null)
+  const frameInFlightRef = useRef(false)
 
   const startMutation = useStreamStart()
   const frameMutation = useStreamFrame()
@@ -45,6 +49,7 @@ export function StreamingPanel() {
   }, [])
 
   const handleStart = async () => {
+    setStartError(null)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
       streamRef.current = stream
@@ -59,24 +64,38 @@ export function StreamingPanel() {
       })
 
       setSessionId(result.session_id)
+      sessionIdRef.current = result.session_id
       setIsStreaming(true)
 
+      // Start sending frames with backpressure guard
       intervalRef.current = setInterval(() => {
+        if (frameInFlightRef.current) return // skip if previous frame still processing
         const b64 = captureFrame()
         if (b64 && result.session_id) {
+          frameInFlightRef.current = true
           frameMutation.mutate(
             { session_id: result.session_id, image: b64 },
             {
               onSuccess: data => {
+                frameInFlightRef.current = false
                 setDetections(data.detections)
                 setFramesProcessed(prev => prev + 1)
+              },
+              onError: () => {
+                frameInFlightRef.current = false
               },
             }
           )
         }
       }, 1000 / targetFps)
     } catch (err) {
-      console.error('Failed to start camera:', err)
+      // Clean up camera if API call failed after getUserMedia succeeded
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+      const message = err instanceof Error ? err.message : 'Failed to start camera'
+      setStartError(message)
     }
   }
 
@@ -92,19 +111,28 @@ export function StreamingPanel() {
     }
 
     if (sessionId) {
-      await stopMutation.mutateAsync({ session_id: sessionId })
+      try {
+        await stopMutation.mutateAsync({ session_id: sessionId })
+      } catch (err) {
+        console.error('Failed to stop stream session:', err)
+      }
     }
 
+    sessionIdRef.current = null
     setIsStreaming(false)
     setSessionId(null)
     setDetections([])
     setFramesProcessed(0)
   }
 
+  // Cleanup on unmount — also stop backend session
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      if (sessionIdRef.current) {
+        visionService.streamStop({ session_id: sessionIdRef.current }).catch(() => {})
+      }
     }
   }, [])
 
@@ -113,6 +141,10 @@ export function StreamingPanel() {
       <PanelIntro>
         Connect a live camera or video feed for real-time object detection. Set up detection cascades that trigger actions when objects are detected with high confidence.
       </PanelIntro>
+
+      {/* Hidden video/canvas always mounted so refs are available before streaming starts */}
+      <video ref={videoRef} className={cn('rounded-lg border border-border w-full', !isStreaming && 'hidden')} muted playsInline />
+      <canvas ref={canvasRef} className="hidden" />
 
       {!isStreaming ? (
         <div className="flex flex-col gap-6">
@@ -163,8 +195,10 @@ export function StreamingPanel() {
                 {startMutation.isPending ? 'Starting...' : 'Start Stream'}
               </Button>
 
-              {startMutation.isError && (
-                <p className="text-sm text-destructive">{(startMutation.error as Error).message}</p>
+              {(startMutation.isError || startError) && (
+                <p className="text-sm text-destructive">
+                  {startError ?? (startMutation.error as Error).message}
+                </p>
               )}
             </div>
 
@@ -210,14 +244,11 @@ export function StreamingPanel() {
           </div>
 
           <div className="flex flex-col items-center justify-start relative">
-            <video ref={videoRef} className="rounded-lg border border-border w-full" muted playsInline />
-            <canvas ref={canvasRef} className="hidden" />
-
             {frameDataUrl && detections.length > 0 && (
               <BoundingBoxCanvas
                 imageSrc={frameDataUrl}
                 detections={detections}
-                className="rounded-lg border border-border absolute inset-0 w-full"
+                className="rounded-lg border border-border w-full"
               />
             )}
           </div>

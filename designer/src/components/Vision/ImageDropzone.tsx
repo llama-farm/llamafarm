@@ -55,8 +55,11 @@ export function ImageDropzone({
     [onFileDirect]
   )
 
-  // Clipboard paste support
+  // Clipboard paste support — scoped to when dropzone container has focus
   useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items
       if (!items) return
@@ -69,8 +72,8 @@ export function ImageDropzone({
         }
       }
     }
-    document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
+    container.addEventListener('paste', handlePaste)
+    return () => container.removeEventListener('paste', handlePaste)
   }, [triggerFileFromFile])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -103,7 +106,7 @@ export function ImageDropzone({
   }
 
   return (
-    <div ref={containerRef} className={cn('flex flex-col gap-2', className)}>
+    <div ref={containerRef} tabIndex={-1} className={cn('flex flex-col gap-2 outline-none', className)}>
       <input
         ref={fileInputRef}
         type="file"

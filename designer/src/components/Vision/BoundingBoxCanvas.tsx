@@ -16,6 +16,8 @@ export function BoundingBoxCanvas({ imageSrc, detections, className }: BoundingB
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
   const prevSrcRef = useRef<string | null>(null)
+  const detectionsRef = useRef<Detection[]>(detections)
+  detectionsRef.current = detections
 
   // Load image only when imageSrc changes
   useEffect(() => {
@@ -25,7 +27,8 @@ export function BoundingBoxCanvas({ imageSrc, detections, className }: BoundingB
     img.onload = () => {
       imgRef.current = img
       prevSrcRef.current = imageSrc
-      drawDetections(img, detections)
+      // Use ref to get latest detections, avoiding stale closure
+      drawDetections(img, detectionsRef.current)
     }
     img.src = imageSrc
   // eslint-disable-next-line react-hooks/exhaustive-deps
