@@ -91,14 +91,23 @@ class IncrementalTrainer:
             from ultralytics import YOLO
             model_id = base_model or job.model_id
             model_path = model_id  # Could be a path or a variant name
-            device = 'cpu'
+            # Auto-detect best device: MPS (Apple GPU) > CUDA > CPU
+            import torch
+            if torch.cuda.is_available():
+                device = 'cuda'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                device = 'mps'
+            else:
+                device = 'cpu'
             
             # Try to get model path from cached model's info
             try:
                 cached = await self._model_loader(model_id)
                 if hasattr(cached, '_model_path') and cached._model_path:
                     model_path = cached._model_path
-                device = cached.device if hasattr(cached, 'device') else 'cpu'
+                # Use cached model's device if available
+                if hasattr(cached, 'device') and cached.device:
+                    device = cached.device
             except Exception:
                 pass
 
