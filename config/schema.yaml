@@ -22,6 +22,10 @@ properties:
     type: string
     description: Project namespace
     example: my-namespace
+  schema:
+    type: string
+    description: Pydantic schema to use for structured outputs (path::Class)
+    example: schemas/person.py::Person
   components:
     allOf:
       - $ref: "../rag/schema.yaml#/definitions/componentsDefinition"

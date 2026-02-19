@@ -94,8 +94,8 @@ class TestUniversalEmbedder:
 
         embedder = UniversalEmbedder()
         assert embedder.validate_config() is False
-        # Should have retried (4 attempts total = 3 sleeps)
-        assert mock_sleep.call_count == 3
+        # Should have slept 2 times (3 total attempts + 2 retries)
+        assert mock_sleep.call_count == 2
 
     @patch("time.sleep")
     @patch("requests.get")
@@ -105,8 +105,8 @@ class TestUniversalEmbedder:
 
         embedder = UniversalEmbedder()
         assert embedder.validate_config() is False
-        # Should have retried (4 attempts total = 3 sleeps)
-        assert mock_sleep.call_count == 3
+        # Should have slept 2 times (3 total attempts + 2 retries)
+        assert mock_sleep.call_count == 2
 
     @patch("time.sleep")
     @patch("requests.get")

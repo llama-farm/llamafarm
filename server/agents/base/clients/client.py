@@ -42,10 +42,15 @@ class LFAgentClient(ABC):
 
     _model_name: str
     _model_config: Model
+    _response_model: type[BaseModel] | None
 
     def __init__(self, *, model_config: Model):
         self._model_name = model_config.name
         self._model_config = model_config
+        self._response_model = None
+
+    def set_response_model(self, response_model: type[BaseModel] | None) -> None:
+        self._response_model = response_model
 
     @property
     def model_name(self) -> str:

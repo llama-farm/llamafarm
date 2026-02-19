@@ -3,6 +3,7 @@
 import time
 import uuid
 from datetime import datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from config.datamodel import (
@@ -408,3 +409,54 @@ def test_cached_session_agent_recreated_when_config_mtime_changes(app_client, mo
         second_record = projects.agent_sessions[first_key]
         assert second_record.agent is not first_agent
         assert second_record.request_count == 1
+
+
+def test_streaming_rejected_when_schema_configured(mocker):
+    schema_config = LlamaFarmConfig(
+        version="v1",
+        name="llamafarm-1",
+        namespace="default",
+        schema="schemas/person.py::Person",
+        prompts=[
+            PromptSet(
+                name="default",
+                messages=[
+                    PromptMessage(
+                        role="system", content="You are the default project assistant."
+                    )
+                ],
+            )
+        ],
+        runtime=Runtime(
+            models=[
+                Model(
+                    name="default",
+                    provider=Provider.ollama,
+                    model="dummy-model",
+                )
+            ]
+        ),
+    )
+
+    mocker.patch(
+        "api.routers.projects.projects.ProjectService.load_config",
+        return_value=schema_config,
+    )
+    mocker.patch(
+        "api.routers.projects.projects.ProjectService.get_project_dir",
+        return_value="/tmp",
+    )
+    mocker.patch(
+        "api.routers.projects.projects.ChatOrchestratorAgentFactory.create_agent",
+        new=AsyncMock(return_value=type("StubAgent", (), {"model_name": "stub"})()),
+    )
+
+    client = TestClient(llama_farm_api())
+    resp = client.post(
+        "/v1/projects/default/llamafarm-1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hello"}], "stream": True},
+        headers={"Content-Type": "application/json", "X-No-Session": "true"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Streaming is not supported when schema is configured."

@@ -67,6 +67,15 @@ class UniversalEmbedder(Embedder):
         self.timeout = config.get(
             "timeout", 120
         )  # Longer timeout for initial model loading
+        self.validation_timeout = max(
+            int(config.get("validation_timeout", 10)), 1
+        )
+        self.validation_retries = max(
+            int(config.get("validation_retries", 2)), 0
+        )
+        self.validation_retry_backoff = max(
+            float(config.get("validation_retry_backoff", 1.0)), 0.0
+        )
 
         # Normalization (Universal Runtime doesn't normalize by default)
         self.normalize = config.get("normalize", True)
@@ -80,58 +89,52 @@ class UniversalEmbedder(Embedder):
         Retries with exponential backoff to handle cases where the runtime
         is still loading models (e.g., embedding model on first request).
         """
-        max_retries = 4
-        base_delay = 2.0  # seconds
+        health_url = self.base_url.replace("/v1", "/health")
+        models_url = f"{self.base_url}/models"
+        last_error: Exception | None = None
+        max_attempts = self.validation_retries + 1
 
-        for attempt in range(max_retries):
+        for attempt in range(max_attempts):
             try:
                 # Check if server is available
-                health_url = self.base_url.replace("/v1", "/health")
-                response = requests.get(health_url, timeout=10)
+                response = requests.get(
+                    health_url, timeout=self.validation_timeout
+                )
                 if response.status_code != 200:
-                    logger.warning(f"Universal Runtime not available at {health_url}")
-                    if attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        logger.info(
-                            f"Retrying embedder validation in {delay:.0f}s "
-                            f"(attempt {attempt + 1}/{max_retries})"
-                        )
-                        time.sleep(delay)
-                        continue
-                    return False
-
-                # Check if embeddings endpoint is available by listing models
-                models_url = f"{self.base_url}/models"
-                response = requests.get(models_url, timeout=10)
-                if response.status_code == 200:
-                    logger.info(f"Universal Runtime available at {self.base_url}")
-                    return True
+                    logger.warning(
+                        f"Universal Runtime not available at {health_url}"
+                    )
                 else:
-                    logger.warning("Could not list models from Universal Runtime")
-                    if attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
+                    # Optionally check if embeddings endpoint is available
+                    # by listing models
+                    response = requests.get(
+                        models_url, timeout=self.validation_timeout
+                    )
+                    if response.status_code == 200:
                         logger.info(
-                            f"Retrying embedder validation in {delay:.0f}s "
-                            f"(attempt {attempt + 1}/{max_retries})"
+                            f"Universal Runtime available at {self.base_url}"
                         )
-                        time.sleep(delay)
-                        continue
-                    return False
-
+                        return True
+                    logger.warning("Could not list models from Universal Runtime")
             except Exception as e:
+                last_error = e
                 logger.warning(
                     f"Failed to validate Universal Runtime embedder config: {e}"
                 )
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    logger.info(
-                        f"Retrying embedder validation in {delay:.0f}s "
-                        f"(attempt {attempt + 1}/{max_retries})"
-                    )
-                    time.sleep(delay)
-                    continue
-                return False
 
+            if attempt < self.validation_retries:
+                backoff = self.validation_retry_backoff * (2**attempt)
+                if backoff > 0:
+                    logger.info(
+                        "Retrying embedder validation in "
+                        f"{backoff:.0f}s (attempt {attempt + 1}/{max_attempts})"
+                    )
+                    time.sleep(backoff)
+
+        if last_error is not None:
+            logger.warning(
+                "Universal Runtime validation failed after retries"
+            )
         return False
 
     def embed(self, texts: list[str]) -> list[list[float]]:

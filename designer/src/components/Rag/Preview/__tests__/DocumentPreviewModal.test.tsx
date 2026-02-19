@@ -13,7 +13,7 @@ import { DocumentPreviewModal } from '../DocumentPreviewModal'
 import { server } from '../../../../test/mocks/server'
 import { http, HttpResponse } from 'msw'
 
-const API_BASE = 'http://localhost:14345/v1'
+const API_BASE = '/api/v1'
 
 // Mock preview response
 const mockPreviewResponse = {
