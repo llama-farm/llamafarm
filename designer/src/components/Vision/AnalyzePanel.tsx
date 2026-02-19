@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
-import { Upload, X } from 'lucide-react'
+import { Upload, X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDetect, useClassify, useDetectClassify } from '../../hooks/useVision'
 import { useImageUpload } from './useImageUpload'
@@ -230,6 +230,17 @@ export function AnalyzePanel() {
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
         </label>
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground -mt-2">
+          <span>Need test images?</span>
+          <a
+            href="https://github.com/llama-farm/vision-sample-data"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            Sample data repo <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
       ) : (
         <div className="relative group">
           {activeDetections.length > 0 ? (

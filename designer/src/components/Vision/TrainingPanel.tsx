@@ -3,7 +3,8 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ExternalLink } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   Select,
   SelectContent,
@@ -12,6 +13,14 @@ import {
   SelectValue,
 } from '../ui/select'
 import { useStartTraining, useTrainingJobStatus } from '../../hooks/useVision'
+
+const SAMPLE_REPO = 'https://github.com/llama-farm/vision-sample-data'
+const SAMPLE_CATEGORIES = [
+  { id: 'cats', label: '🐱 cats', path: 'vision-sample-data/cats' },
+  { id: 'firetrucks', label: '🚒 firetrucks', path: 'vision-sample-data/firetrucks' },
+  { id: 'sunflowers', label: '🌻 sunflowers', path: 'vision-sample-data/sunflowers' },
+  { id: 'pizza', label: '🍕 pizza', path: 'vision-sample-data/pizza' },
+]
 
 const TASK_OPTIONS = [
   { value: 'detection', label: 'Object Detection' },
@@ -132,6 +141,40 @@ export function TrainingPanel() {
           className="mt-1"
           disabled={isTraining}
         />
+        <div className="mt-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
+            <span>Try sample data:</span>
+            <a
+              href={SAMPLE_REPO}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              vision-sample-data <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SAMPLE_CATEGORIES.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setDataset(cat.path)}
+                disabled={isTraining}
+                className={cn(
+                  'px-2.5 py-1 rounded-full border text-xs transition-colors',
+                  dataset === cat.path
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Clone first: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">git clone {SAMPLE_REPO}</code>
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
