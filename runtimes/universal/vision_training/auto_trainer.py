@@ -20,6 +20,7 @@ Integrates with:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -474,17 +475,13 @@ class AutoTrainer:
         """Stop background monitoring and cancel any in-progress training task."""
         if self._monitor_task:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
             self._monitor_task = None
         if self._background_task and not self._background_task.done():
             self._background_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._background_task
-            except asyncio.CancelledError:
-                pass
             self._background_task = None
         logger.info("Auto-training monitor stopped")
     

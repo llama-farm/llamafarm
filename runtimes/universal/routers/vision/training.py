@@ -114,11 +114,11 @@ async def list_training_jobs(
     if status:
         try:
             status_filter = TrainingStatus(status)
-        except ValueError:
+        except ValueError as err:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid status: {status}"
-            )
+            ) from err
     
     jobs = trainer.list_jobs(status=status_filter)
     

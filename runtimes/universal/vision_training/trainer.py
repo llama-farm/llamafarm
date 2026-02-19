@@ -10,6 +10,7 @@ Supports:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections.abc import Callable
@@ -330,10 +331,8 @@ class IncrementalTrainer:
         
         task = self._running_tasks.get(job_id)
         if task:
-            try:
+            with contextlib.suppress(asyncio.TimeoutError):
                 await asyncio.wait_for(task, timeout=timeout)
-            except asyncio.TimeoutError:
-                pass
         
         return self._jobs.get(job_id)
 

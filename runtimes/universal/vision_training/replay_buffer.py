@@ -11,6 +11,7 @@ Enhanced with:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import random
 from dataclasses import dataclass, field
@@ -495,10 +496,8 @@ class ReplayBufferPersistence:
 
                 created_at = datetime.utcnow()
                 if row["created_at"]:
-                    try:
+                    with contextlib.suppress(ValueError):
                         created_at = datetime.fromisoformat(row["created_at"])
-                    except ValueError:
-                        pass
 
                 samples.append(ReplaySample(
                     id=row["id"],

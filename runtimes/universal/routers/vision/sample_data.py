@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import random
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -10,8 +11,6 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["vision-sample-data"])
-
-import random
 
 SAMPLE_REPO = "https://github.com/llama-farm/vision-sample-data.git"
 _data_dir: Path = Path.home()  # will be overridden by set_data_dir
