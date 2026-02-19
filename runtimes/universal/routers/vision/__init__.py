@@ -13,6 +13,8 @@ from .router import set_document_loader, set_file_image_getter, set_ocr_loader
 from .streaming import router as streaming_router
 from .streaming import set_streaming_detection_loader
 from .training import router as training_router
+from .sample_data import router as sample_data_router
+from .sample_data import set_data_dir as set_sample_data_dir
 
 # Combined router
 router = APIRouter(tags=["vision"])
@@ -22,6 +24,7 @@ router.include_router(classification_router)
 router.include_router(streaming_router)
 router.include_router(training_router)
 router.include_router(models_router)
+router.include_router(sample_data_router)
 
 __all__ = [
     "router",
@@ -29,4 +32,5 @@ __all__ = [
     "set_detection_loader", "set_classification_loader",
     "set_streaming_detection_loader",
     "set_vision_models_dir", "set_model_export_loader",
+    "set_sample_data_dir",
 ]

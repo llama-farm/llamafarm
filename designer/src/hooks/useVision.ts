@@ -218,3 +218,26 @@ export function useReviewDecision() {
     },
   })
 }
+
+// =============================================================================
+// Sample Data
+// =============================================================================
+
+export function useSampleDataStatus() {
+  return useQuery({
+    queryKey: [...visionKeys.all, 'sampleData', 'status'],
+    queryFn: () => visionService.getSampleDataStatus(),
+    retry: false,
+    staleTime: 30_000,
+  })
+}
+
+export function useCloneSampleData() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => visionService.cloneSampleData(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...visionKeys.all, 'sampleData'] })
+    },
+  })
+}

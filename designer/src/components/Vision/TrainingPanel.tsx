@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
-import { useStartTraining, useTrainingJobStatus } from '../../hooks/useVision'
+import { useStartTraining, useTrainingJobStatus, useSampleDataStatus, useCloneSampleData } from '../../hooks/useVision'
+import { Loader2 } from 'lucide-react'
 
 const SAMPLE_REPO = 'https://github.com/llama-farm/vision-sample-data'
 const SAMPLE_CATEGORIES = [
@@ -39,6 +40,24 @@ export function TrainingPanel() {
 
   const startTraining = useStartTraining()
   const { data: jobStatus } = useTrainingJobStatus(jobId)
+  const { data: sampleStatus } = useSampleDataStatus()
+  const cloneMutation = useCloneSampleData()
+
+  const handleSampleClick = async (cat: typeof SAMPLE_CATEGORIES[number]) => {
+    if (!modelName.trim()) setModelName(cat.id)
+
+    // If sample data isn't cloned yet, clone first
+    if (sampleStatus && !sampleStatus.installed) {
+      const result = await cloneMutation.mutateAsync()
+      if (result.success) {
+        setDataset(`${result.path}/${cat.id}`)
+      }
+    } else if (sampleStatus?.installed) {
+      setDataset(`${sampleStatus.path}/${cat.id}`)
+    } else {
+      setDataset(cat.path)
+    }
+  }
 
   const handleTrain = () => {
     if (!modelName.trim() || !dataset.trim()) return
@@ -153,19 +172,16 @@ export function TrainingPanel() {
               vision-sample-data <ExternalLink className="w-3 h-3" />
             </a>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 items-center">
             {SAMPLE_CATEGORIES.map(cat => (
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => {
-                  setDataset(cat.path)
-                  if (!modelName.trim()) setModelName(cat.id)
-                }}
-                disabled={isTraining}
+                onClick={() => handleSampleClick(cat)}
+                disabled={isTraining || cloneMutation.isPending}
                 className={cn(
                   'px-2.5 py-1 rounded-full border text-xs transition-colors',
-                  dataset === cat.path
+                  dataset.endsWith(`/${cat.id}`)
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
                 )}
@@ -173,10 +189,17 @@ export function TrainingPanel() {
                 {cat.label}
               </button>
             ))}
+            {cloneMutation.isPending && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" /> Downloading sample data…
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1.5">
-            Clone first: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">git clone {SAMPLE_REPO}</code>
-          </p>
+          {cloneMutation.isError && (
+            <p className="text-xs text-destructive mt-1">
+              Failed to download sample data: {(cloneMutation.error as Error).message}
+            </p>
+          )}
         </div>
       </div>
 

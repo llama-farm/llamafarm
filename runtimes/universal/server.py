@@ -99,6 +99,7 @@ from routers.vision import (
     set_ocr_loader,
     set_streaming_detection_loader,
     set_vision_models_dir,
+    set_sample_data_dir,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -1194,6 +1195,7 @@ set_detection_loader(load_detection_model)
 set_classification_loader(load_classification_model)
 set_streaming_detection_loader(load_detection_model)
 set_vision_models_dir(VISION_MODELS_DIR)
+set_sample_data_dir(_LF_DATA_DIR)
 set_model_export_loader(load_detection_model)
 
 # Vision training

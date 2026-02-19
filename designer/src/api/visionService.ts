@@ -165,6 +165,32 @@ export async function submitReviewDecision(
 }
 
 // =============================================================================
+// Sample Data
+// =============================================================================
+
+export interface SampleDataStatus {
+  installed: boolean
+  path: string
+  categories: string[]
+}
+
+export interface CloneResponse {
+  success: boolean
+  path: string
+  message: string
+}
+
+export async function getSampleDataStatus(): Promise<SampleDataStatus> {
+  const response = await visionClient.get<SampleDataStatus>('/v1/vision/sample-data/status')
+  return response.data
+}
+
+export async function cloneSampleData(): Promise<CloneResponse> {
+  const response = await visionClient.post<CloneResponse>('/v1/vision/sample-data/clone')
+  return response.data
+}
+
+// =============================================================================
 // Default Export
 // =============================================================================
 
@@ -184,4 +210,6 @@ export default {
   exportModel,
   getPendingReviews,
   submitReviewDecision,
+  getSampleDataStatus,
+  cloneSampleData,
 }
