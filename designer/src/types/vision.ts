@@ -166,9 +166,12 @@ export interface StreamSessionsResponse {
 
 export interface VisionModel {
   name: string
-  task: string
+  task?: string
   created_at?: string
   size?: number
+  size_mb?: number
+  versions?: number
+  has_current?: boolean
   description?: string
 }
 

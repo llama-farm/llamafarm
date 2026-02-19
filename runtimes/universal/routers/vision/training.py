@@ -1,86 +1,158 @@
-"""Training router — /v1/vision/train endpoints"""
+"""Training router for vision model fine-tuning.
+
+Provides endpoints for:
+- Starting training jobs
+- Checking training status
+- Listing jobs
+"""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
+from api_types.vision import (
+    TrainRequest,
+    TrainResponse,
+    TrainStatusResponse,
+)
 from services.error_handler import handle_endpoint_errors
-from vision_training.trainer import TrainingConfig, get_trainer
+from vision_training.trainer import (
+    TrainingConfig,
+    TrainingStatus,
+    get_trainer,
+)
 
 logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["vision-training"])
-
-
-class TrainConfigRequest(BaseModel):
-    epochs: int = Field(default=10, ge=1, le=1000)
-    batch_size: int = Field(default=16, ge=1, le=256)
-    learning_rate: float = Field(default=0.001, gt=0.0)
-
-class TrainRequest(BaseModel):
-    model: str
-    dataset: str
-    task: Literal["detection", "classification"]
-    config: TrainConfigRequest = Field(default_factory=TrainConfigRequest)
-    base_model: str | None = None
-
-class TrainResponse(BaseModel):
-    job_id: str
-    status: str
-    progress: float = 0.0
-    metrics: dict | None = None
-
-class TrainStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    progress: float
-    current_epoch: int | None = None
-    total_epochs: int | None = None
-    metrics: dict | None = None
-    error: str | None = None
 
 
 @router.post("/v1/vision/train", response_model=TrainResponse)
 @handle_endpoint_errors("vision_train")
 async def start_training(request: TrainRequest) -> TrainResponse:
-    """Start a training job."""
+    """Start a training job for a vision model.
+    
+    Trains or fine-tunes a model on a custom dataset.
+    Training runs asynchronously - use the job_id to check status.
+    
+    Example:
+    ```json
+    {
+        "model": "yolov8n",
+        "dataset": "/path/to/dataset",
+        "task": "detection",
+        "config": {
+            "epochs": 10,
+            "batch_size": 16
+        }
+    }
+    ```
+    """
     trainer = get_trainer()
+    
+    # Convert API config to training config
     config = TrainingConfig(
         epochs=request.config.epochs,
         batch_size=request.config.batch_size,
         learning_rate=request.config.learning_rate,
+        use_ewc=request.config.use_ewc,
+        ewc_lambda=request.config.ewc_lambda,
+        use_replay=request.config.use_replay,
+        replay_ratio=request.config.replay_ratio,
+        validation_split=request.config.validation_split,
     )
+    
     job = await trainer.start_training(
-        model_id=request.model, dataset_path=request.dataset,
-        task=request.task, config=config, base_model=request.base_model,
+        model_id=request.model,
+        dataset_path=request.dataset,
+        task=request.task,
+        config=config,
+        base_model=request.base_model,
     )
-    return TrainResponse(job_id=job.job_id, status=job.status.value,
-                         progress=job.progress, metrics=job.metrics or None)
+    
+    return TrainResponse(
+        job_id=job.job_id,
+        status=job.status.value,
+        progress=job.progress,
+        metrics=job.metrics or None,
+    )
 
 
 @router.get("/v1/vision/train/{job_id}", response_model=TrainStatusResponse)
 @handle_endpoint_errors("vision_train_status")
 async def get_training_status(job_id: str) -> TrainStatusResponse:
-    """Get training job status."""
-    job = get_trainer().get_job(job_id)
-    if not job:
+    """Get the status of a training job."""
+    trainer = get_trainer()
+    job = trainer.get_job(job_id)
+    
+    if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
     return TrainStatusResponse(
-        job_id=job.job_id, status=job.status.value, progress=job.progress,
-        current_epoch=job.current_epoch, total_epochs=job.config.epochs,
-        metrics=job.metrics or None, error=job.error,
+        job_id=job.job_id,
+        status=job.status.value,
+        progress=job.progress,
+        current_epoch=job.current_epoch,
+        total_epochs=job.config.epochs,
+        metrics=job.metrics or None,
+        error=job.error,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
     )
+
+
+@router.get("/v1/vision/train")
+@handle_endpoint_errors("vision_train_list")
+async def list_training_jobs(
+    status: str | None = None,
+) -> dict[str, Any]:
+    """List training jobs."""
+    trainer = get_trainer()
+    
+    status_filter = None
+    if status:
+        try:
+            status_filter = TrainingStatus(status)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status: {status}"
+            )
+    
+    jobs = trainer.list_jobs(status=status_filter)
+    
+    return {
+        "jobs": [
+            {
+                "job_id": j.job_id,
+                "model_id": j.model_id,
+                "task": j.task,
+                "status": j.status.value,
+                "progress": j.progress,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+            for j in jobs
+        ],
+        "total": len(jobs),
+    }
 
 
 @router.delete("/v1/vision/train/{job_id}")
 @handle_endpoint_errors("vision_train_cancel")
 async def cancel_training(job_id: str) -> dict[str, Any]:
-    """Cancel a training job."""
+    """Cancel a running training job."""
     trainer = get_trainer()
-    if not await trainer.cancel_job(job_id):
+    
+    cancelled = await trainer.cancel_job(job_id)
+    
+    if not cancelled:
         job = trainer.get_job(job_id)
-        if not job:
+        if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-        raise HTTPException(status_code=400, detail=f"Cannot cancel (status: {job.status.value})")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job {job_id} cannot be cancelled (status: {job.status.value})"
+        )
+    
     return {"job_id": job_id, "cancelled": True}

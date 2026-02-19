@@ -166,11 +166,14 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
                 key={model.name}
                 className="flex items-center justify-between px-3 py-3 text-sm border-b last:border-b-0 border-border hover:bg-accent/40"
               >
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="font-medium">{model.name}</span>
-                  <Badge variant="secondary" className="ml-2 text-xs">{model.task}</Badge>
+                  {model.task && <Badge variant="secondary" className="text-xs">{model.task}</Badge>}
+                  {model.size_mb != null && (
+                    <span className="text-xs text-muted-foreground">{model.size_mb.toFixed(1)} MB</span>
+                  )}
                   {model.created_at && (
-                    <span className="text-xs text-muted-foreground ml-2">{new Date(model.created_at).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(model.created_at).toLocaleDateString()}</span>
                   )}
                 </div>
                 <DropdownMenu>
