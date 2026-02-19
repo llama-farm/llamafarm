@@ -58,6 +58,7 @@ function summarizeDetections(detections: Detection[]): string {
 export function AnalyzePanel() {
   const [mode, setMode] = useState<AnalyzeMode>('detect')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [previewError, setPreviewError] = useState(false)
 
   const { imageBase64, imagePreview, fileName, fileSize, handleFileDirect, clear } = useImageUpload()
 
@@ -89,6 +90,7 @@ export function AnalyzePanel() {
     setDetections([])
     setClassifyResult(null)
     setDcResults([])
+    setPreviewError(false)
     handleFileDirect(file)
   }
 
@@ -236,14 +238,21 @@ export function AnalyzePanel() {
               detections={activeDetections}
               className="rounded-lg border border-border w-full"
             />
+          ) : previewError ? (
+            <div className="w-full rounded-lg border border-border bg-muted/30 p-6 flex flex-col items-center gap-2">
+              <span className="text-2xl">📄</span>
+              <p className="text-sm font-medium">{fileName}</p>
+              <p className="text-xs text-muted-foreground">{fileSize ? `${(fileSize / 1024).toFixed(0)} KB` : ''} — Preview not available (file will still be sent for analysis)</p>
+            </div>
           ) : (
             <img
               src={imagePreview}
               alt="Uploaded"
               className="max-w-full max-h-[400px] rounded-lg border border-border"
+              onError={() => setPreviewError(true)}
             />
           )}
-          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-2 right-2 flex gap-1">
             <label className="p-1.5 rounded-md bg-background/80 backdrop-blur border border-border cursor-pointer hover:bg-background" title="Upload another image">
               <Upload className="w-4 h-4" />
               <input
