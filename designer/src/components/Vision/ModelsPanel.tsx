@@ -139,22 +139,24 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
         <h3 className="text-sm font-medium mb-2">Custom Models</h3>
         {isLoading ? (
           <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>
-        ) : error ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            No custom models found. Train a model from the Train tab to create one.
-          </p>
-        ) : filteredCustom.length === 0 ? (
-          <div className="text-center py-4">
-            <p className="text-sm text-muted-foreground">
-              {customModels.length === 0
-                ? 'No custom models yet. Train a model to create one tailored to your specific use case.'
-                : 'No models match your search.'}
+        ) : (error || filteredCustom.length === 0) && customModels.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-6 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+              <span className="text-lg">🧠</span>
+            </div>
+            <p className="text-sm font-medium text-foreground mb-1">No custom models yet</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Train a model on your own data to create one tailored to your specific use case.
             </p>
-            {customModels.length === 0 && onNavigateToTrain && (
-              <Button variant="outline" size="sm" className="mt-3" onClick={onNavigateToTrain}>
-                Train your first model
+            {onNavigateToTrain && (
+              <Button variant="outline" size="sm" onClick={onNavigateToTrain}>
+                Go to Train
               </Button>
             )}
+          </div>
+        ) : filteredCustom.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-4 text-center">
+            <p className="text-sm text-muted-foreground">No models match your search.</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
