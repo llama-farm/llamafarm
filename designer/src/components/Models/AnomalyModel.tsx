@@ -1719,23 +1719,18 @@ MX`}
                                         }}
                                         className="flex-1 px-2 py-1.5 bg-transparent border-0 outline-none text-xs font-medium focus:bg-background"
                                       />
-                                      <select
+                                      <Selector
                                         value={col.type}
-                                        onChange={e =>
+                                        onChange={v =>
                                           handleColumnTypeChange(
                                             col.name,
-                                            e.target.value as FeatureEncodingType
+                                            v as FeatureEncodingType
                                           )
                                         }
-                                        className="pl-1 pr-1 py-1 bg-transparent border-0 outline-none text-[10px] text-muted-foreground cursor-pointer hover:text-foreground"
-                                        title="Column type"
-                                      >
-                                        {ENCODING_TYPE_OPTIONS.map(opt => (
-                                          <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                        options={ENCODING_TYPE_OPTIONS}
+                                        variant="minimal"
+                                        size="sm"
+                                      />
                                       <button
                                         onClick={() => handleRemoveColumn(idx)}
                                         className="ml-1 p-0.5 text-muted-foreground/50 hover:text-destructive"

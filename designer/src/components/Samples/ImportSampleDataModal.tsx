@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
+import { Selector } from '../ui/selector'
 
 type SubmitPayload = {
   target: 'new' | 'existing'
@@ -160,18 +161,13 @@ function ImportSampleDataModal({
                   No existing projects available.
                 </div>
               ) : (
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Selector
                   value={existingName}
-                  onChange={e => setExistingName(e.target.value)}
+                  onChange={v => setExistingName(v)}
+                  options={projects.map(name => ({ value: name, label: name }))}
                   disabled={projects.length === 0}
-                >
-                  {projects.map(name => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select a project"
+                />
               )}
             </div>
           )}
