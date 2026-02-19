@@ -51,13 +51,17 @@ export function TrainingPanel() {
     if (sampleStatus && !sampleStatus.installed) {
       const result = await cloneMutation.mutateAsync()
       if (result.success) {
-        setDataset(`${result.path}/${cat.id}`)
+        // For classification, point at parent dir (has train/val with all categories)
+        // For detection, point at specific category folder
+        setDataset(task === 'classification' ? result.path : `${result.path}/${cat.id}`)
       }
     } else if (sampleStatus?.installed) {
-      setDataset(`${sampleStatus.path}/${cat.id}`)
+      setDataset(task === 'classification' ? sampleStatus.path : `${sampleStatus.path}/${cat.id}`)
     } else {
       setDataset(cat.path)
     }
+    // Auto-set task to classification for sample data (no YOLO labels)
+    if (task === 'detection') setTask('classification')
   }
 
   const handleTrain = () => {

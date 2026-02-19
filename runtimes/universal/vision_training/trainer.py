@@ -87,7 +87,13 @@ class IncrementalTrainer:
 
             # Load a FRESH model for training — don't corrupt inference cache
             from ultralytics import YOLO
-            model_id = base_model or job.model_id
+            # Default base model by task if not specified
+            task_defaults = {
+                "detection": "yolov8n.pt",
+                "classification": "yolov8n-cls.pt",
+                "segmentation": "yolov8n-seg.pt",
+            }
+            model_id = base_model or task_defaults.get(job.task, "yolov8n.pt")
             model_path = model_id  # Could be a path or a variant name
             device = 'cpu'
             

@@ -11,8 +11,12 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["vision-sample-data"])
 
+import random
+
 SAMPLE_REPO = "https://github.com/llama-farm/vision-sample-data.git"
 _data_dir: Path = Path.home()  # will be overridden by set_data_dir
+
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def set_data_dir(path: Path) -> None:
@@ -22,6 +26,38 @@ def set_data_dir(path: Path) -> None:
 
 def _sample_dir() -> Path:
     return _data_dir / "vision-sample-data"
+
+
+def _create_train_val_split(sd: Path, train_ratio: float = 0.8) -> None:
+    """Create train/val symlink split for YOLO classification."""
+    train_dir = sd / "train"
+    val_dir = sd / "val"
+    if train_dir.exists():
+        return  # already created
+
+    categories = [d for d in sd.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    rng = random.Random(42)
+
+    for cat in categories:
+        images = sorted(f for f in cat.iterdir() if f.suffix.lower() in IMAGE_EXTS)
+        if not images:
+            continue
+        rng.shuffle(images)
+        split = max(1, int(len(images) * train_ratio))
+
+        (train_dir / cat.name).mkdir(parents=True, exist_ok=True)
+        (val_dir / cat.name).mkdir(parents=True, exist_ok=True)
+
+        for img in images[:split]:
+            dest = train_dir / cat.name / img.name
+            if not dest.exists():
+                os.symlink(img.resolve(), dest)
+        for img in images[split:]:
+            dest = val_dir / cat.name / img.name
+            if not dest.exists():
+                os.symlink(img.resolve(), dest)
+
+    logger.info(f"Created train/val split in {sd}")
 
 
 class SampleDataStatus(BaseModel):
@@ -66,6 +102,8 @@ async def clone_sample_data() -> CloneResponse:
         if proc.returncode != 0:
             err = stderr.decode().strip() if stderr else "Unknown error"
             return CloneResponse(success=False, path=str(sd), message=f"Clone failed: {err}")
+        # Create train/val split for YOLO classification compatibility
+        _create_train_val_split(sd)
         return CloneResponse(success=True, path=str(sd), message="Cloned successfully")
     except asyncio.TimeoutError:
         return CloneResponse(success=False, path=str(sd), message="Clone timed out (120s)")
