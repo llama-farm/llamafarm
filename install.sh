@@ -194,10 +194,12 @@ install_cli() {
         local pyapp_dest="$bin_dir/llamafarm-${component}"
 
         info "  Downloading $component..."
-        download_file "$pyapp_url" "$temp_dir/$pyapp_name" 2>/dev/null && {
+        if download_file "$pyapp_url" "$temp_dir/$pyapp_name" 2>/dev/null; then
             cp "$temp_dir/$pyapp_name" "$pyapp_dest"
             chmod +x "$pyapp_dest"
-        } || warning "  Failed to download $component (may not be available for this platform)"
+        else
+            warning "  Failed to download $component (may not be available for this platform)"
+        fi
     done
 
     success "LlamaFarm installed successfully!"
