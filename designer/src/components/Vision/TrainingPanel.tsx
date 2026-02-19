@@ -34,6 +34,7 @@ export function TrainingPanel() {
   const [modelName, setModelName] = useState('')
   const [task, setTask] = useState('detection')
   const [dataset, setDataset] = useState('')
+  const [baseModel, setBaseModel] = useState('yolov8n')
   const [epochs, setEpochs] = useState(10)
   const [batchSize, setBatchSize] = useState(16)
   const [learningRate, setLearningRate] = useState(0.001)
@@ -71,6 +72,7 @@ export function TrainingPanel() {
         model: modelName.trim(),
         dataset: dataset.trim(),
         task,
+        base_model: baseModel,
         config: { epochs, batch_size: batchSize, learning_rate: learningRate },
       },
       { onSuccess: data => setJobId(data.job_id) }
@@ -210,7 +212,7 @@ export function TrainingPanel() {
         </div>
       </Collapsible>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <Label className="text-sm">Model Name</Label>
           <Input
@@ -220,6 +222,19 @@ export function TrainingPanel() {
             className="mt-1"
             disabled={isTraining}
           />
+        </div>
+        <div>
+          <Label className="text-sm">Base Model</Label>
+          <Select value={baseModel} onValueChange={setBaseModel} disabled={isTraining}>
+            <SelectTrigger className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="yolov8n">YOLOv8 Nano (fastest)</SelectItem>
+              <SelectItem value="yolov8s">YOLOv8 Small</SelectItem>
+              <SelectItem value="yolov8m">YOLOv8 Medium</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label className="text-sm">Task</Label>

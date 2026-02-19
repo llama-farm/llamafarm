@@ -89,6 +89,7 @@ export interface TrainRequest {
   model: string
   dataset: string
   task: string
+  base_model?: string
   config?: TrainingConfig
 }
 
