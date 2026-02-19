@@ -207,40 +207,42 @@ export function AnalyzePanel() {
 
       {/* Image area — drop zone that becomes the preview */}
       {!imagePreview ? (
-        <label
-          className={cn(
-            'relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors',
-            isDragOver
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-primary/50 hover:bg-muted/30'
-          )}
-          onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-        >
-          <Upload className="w-8 h-8 text-muted-foreground" />
-          <div className="text-center">
-            <p className="text-sm font-medium text-foreground">Drop an image here, click to browse, or paste from clipboard</p>
-            <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, WEBP, GIF</p>
-          </div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleNewFile(f) }}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          />
-        </label>
-        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground -mt-2">
-          <span>Need test images?</span>
-          <a
-            href="https://github.com/llama-farm/vision-sample-data"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
+        <>
+          <label
+            className={cn(
+              'relative flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors',
+              isDragOver
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50 hover:bg-muted/30'
+            )}
+            onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
           >
-            Sample data repo <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
+            <Upload className="w-8 h-8 text-muted-foreground" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">Drop an image here, click to browse, or paste from clipboard</p>
+              <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, WEBP, GIF</p>
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleNewFile(f) }}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
+          <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground -mt-2">
+            <span>Need test images?</span>
+            <a
+              href="https://github.com/llama-farm/vision-sample-data"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Sample data repo <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </>
       ) : (
         <div className="relative group">
           {activeDetections.length > 0 ? (
