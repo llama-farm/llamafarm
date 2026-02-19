@@ -60,6 +60,7 @@ export function StreamingPanel() {
       const result = await startMutation.mutateAsync({
         config: { confidence_threshold: confidence },
         target_fps: targetFps,
+        cooldown_seconds: 0.5,
       })
 
       setSessionId(result.session_id)
@@ -77,7 +78,12 @@ export function StreamingPanel() {
             {
               onSuccess: data => {
                 frameInFlightRef.current = false
-                setDetections(data.detections ?? [])
+                // Only update detections when the backend actually returns them;
+                // cooldown-suppressed frames return status:"ok" with no detections
+                // and we don't want to flash-clear the display
+                if (data.detections && data.detections.length > 0) {
+                  setDetections(data.detections)
+                }
                 setFramesProcessed(prev => prev + 1)
               },
               onError: () => {

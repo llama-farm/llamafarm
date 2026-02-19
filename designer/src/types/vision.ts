@@ -122,6 +122,7 @@ export interface StreamConfig {
 export interface StreamStartRequest {
   config?: StreamConfig
   target_fps?: number
+  cooldown_seconds?: number
 }
 
 export interface StreamStartResponse {
