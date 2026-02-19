@@ -75,6 +75,85 @@ export function TrainingPanel() {
   const isTraining = jobStatus?.status === 'running' || jobStatus?.status === 'pending'
   const isComplete = jobStatus?.status === 'completed'
   const isFailed = jobStatus?.status === 'failed'
+  const hasJob = !!jobId
+
+  const handleReset = () => {
+    setJobId(null)
+    setModelName('')
+    setDataset('')
+  }
+
+  // When a job is active/complete/failed, show progress view
+  if (hasJob && jobStatus) {
+    return (
+      <div className="max-w-2xl flex flex-col gap-4">
+        <div className="rounded-lg border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-medium">Training: {modelName || jobStatus.job_id}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {task} · {dataset.split('/').pop()} dataset
+              </p>
+            </div>
+            <span className={cn(
+              'text-xs font-medium px-2.5 py-1 rounded-full',
+              isComplete ? 'bg-green-500/15 text-green-700' :
+              isFailed ? 'bg-red-500/15 text-red-700' :
+              'bg-blue-500/15 text-blue-700'
+            )}>
+              {jobStatus.status}
+            </span>
+          </div>
+
+          {jobStatus.progress !== undefined && (
+            <div className="mb-3">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>
+                  {jobStatus.epoch !== undefined && jobStatus.total_epochs
+                    ? `Epoch ${jobStatus.epoch}/${jobStatus.total_epochs}`
+                    : 'Progress'}
+                </span>
+                <span>{Math.round(jobStatus.progress * 100)}%</span>
+              </div>
+              <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full transition-all duration-300',
+                    isFailed ? 'bg-destructive' : 'bg-primary'
+                  )}
+                  style={{ width: `${Math.max(jobStatus.progress * 100, isFailed ? 100 : 0)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {jobStatus.loss !== undefined && (
+            <p className="text-xs text-muted-foreground">Loss: {jobStatus.loss.toFixed(4)}</p>
+          )}
+
+          {jobStatus.message && (
+            <p className="text-xs text-muted-foreground mt-1">{jobStatus.message}</p>
+          )}
+
+          {isComplete && (
+            <p className="text-sm text-green-700 mt-3">
+              ✓ Model saved! Check the <strong>Models</strong> tab to view and manage it.
+            </p>
+          )}
+
+          {isFailed && (
+            <p className="text-sm text-destructive mt-3">
+              Training failed. This usually means the dataset format doesn't match the expected structure, or the training backend isn't available on this runtime.
+            </p>
+          )}
+        </div>
+
+        <Button onClick={handleReset} variant="outline" className="w-full">
+          {isComplete ? 'Train Another Model' : isFailed ? 'Try Again' : 'Cancel & Start Over'}
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-2xl flex flex-col gap-4">
@@ -250,49 +329,6 @@ export function TrainingPanel() {
 
       {startTraining.isError && (
         <p className="text-sm text-destructive">{(startTraining.error as Error).message}</p>
-      )}
-
-      {/* Training progress */}
-      {jobStatus && (
-        <div className="rounded-lg border border-border p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Training Job: {jobStatus.job_id}</span>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-              isComplete ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-              isFailed ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-              'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-            }`}>
-              {jobStatus.status}
-            </span>
-          </div>
-
-          {jobStatus.progress !== undefined && (
-            <div className="mb-2">
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>
-                  {jobStatus.epoch !== undefined && jobStatus.total_epochs
-                    ? `Epoch ${jobStatus.epoch}/${jobStatus.total_epochs}`
-                    : 'Progress'}
-                </span>
-                <span>{Math.round(jobStatus.progress * 100)}%</span>
-              </div>
-              <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${jobStatus.progress * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {jobStatus.loss !== undefined && (
-            <p className="text-xs text-muted-foreground">Loss: {jobStatus.loss.toFixed(4)}</p>
-          )}
-
-          {jobStatus.message && (
-            <p className="text-xs text-muted-foreground mt-1">{jobStatus.message}</p>
-          )}
-        </div>
       )}
     </div>
   )
