@@ -147,10 +147,10 @@ export function StreamingPanel() {
         Connect a live camera or video feed for real-time object detection. Set up detection cascades that trigger actions when objects are detected with high confidence.
       </PanelIntro>
 
-      {/* Video always mounted to preserve ref/srcObject across state changes */}
+      {/* Always-mounted video (hidden when not streaming) + hidden canvas for frame capture */}
       <video ref={videoRef} className={cn(
-        'rounded-lg border border-border w-full',
-        !isStreaming && 'hidden'
+        'rounded-lg border border-border object-contain bg-black',
+        isStreaming ? 'max-h-[240px] w-full' : 'hidden'
       )} muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
@@ -223,31 +223,52 @@ export function StreamingPanel() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {/* Stats + controls */}
+          {/* Stats bar */}
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-muted-foreground">Session <span className="font-mono text-xs text-foreground">{sessionId}</span></span>
-            <span className="text-muted-foreground">Frames <span className="font-medium text-foreground">{framesProcessed}</span></span>
+            <span className="text-muted-foreground text-xs">Session <span className="font-mono text-foreground">{sessionId?.slice(0, 8)}</span></span>
             <Button onClick={handleStop} variant="destructive" size="sm" disabled={stopMutation.isPending} className="ml-auto">
               {stopMutation.isPending ? 'Stopping...' : 'Stop Stream'}
             </Button>
           </div>
 
-          {/* Detection chips — inline badges below video */}
-          {detections.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {detections.map((d, i) => (
-                <div key={i} className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm',
-                  d.confidence >= 0.8 ? 'bg-green-500/10 border-green-500/30 text-green-700' :
-                  d.confidence >= 0.5 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700' :
-                  'bg-red-500/10 border-red-500/30 text-red-700'
-                )}>
-                  <span className="font-medium">{d.class_name}</span>
-                  <span className="text-xs opacity-75">{(d.confidence * 100).toFixed(1)}%</span>
-                </div>
-              ))}
+          {/* Detection list — compact table below video */}
+          <div className="rounded-lg border border-border overflow-hidden flex flex-col max-h-[200px]">
+            <div className="px-3 py-1.5 border-b border-border bg-secondary/30 flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                {detections.length} object{detections.length !== 1 ? 's' : ''} detected
+              </span>
+              <span className="text-xs text-muted-foreground font-mono">{framesProcessed} frames</span>
             </div>
-          )}
+            {detections.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground p-4">
+                Waiting for detections…
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto divide-y divide-border">
+                {detections.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        'w-2 h-2 rounded-full shrink-0',
+                        d.confidence >= 0.8 ? 'bg-green-500' :
+                        d.confidence >= 0.5 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      )} />
+                      <span className="font-medium">{d.class_name}</span>
+                    </div>
+                    <span className={cn(
+                      'text-xs font-mono',
+                      d.confidence >= 0.8 ? 'text-green-600' :
+                      d.confidence >= 0.5 ? 'text-yellow-600' :
+                      'text-red-600'
+                    )}>
+                      {(d.confidence * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
