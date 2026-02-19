@@ -48,21 +48,21 @@ export function TrainingPanel() {
   const handleSampleClick = async (cat: typeof SAMPLE_CATEGORIES[number]) => {
     if (!modelName.trim()) setModelName(cat.id)
 
+    // Sample data has no YOLO labels, so always use classification
+    const effectiveTask = 'classification'
+    if (task !== effectiveTask) setTask(effectiveTask)
+
     // If sample data isn't cloned yet, clone first
     if (sampleStatus && !sampleStatus.installed) {
       const result = await cloneMutation.mutateAsync()
       if (result.success) {
-        // For classification, point at parent dir (has train/val with all categories)
-        // For detection, point at specific category folder
-        setDataset(task === 'classification' ? result.path : `${result.path}/${cat.id}`)
+        setDataset(effectiveTask === 'classification' ? result.path : `${result.path}/${cat.id}`)
       }
     } else if (sampleStatus?.installed) {
-      setDataset(task === 'classification' ? sampleStatus.path : `${sampleStatus.path}/${cat.id}`)
+      setDataset(effectiveTask === 'classification' ? sampleStatus.path : `${sampleStatus.path}/${cat.id}`)
     } else {
       setDataset(cat.path)
     }
-    // Auto-set task to classification for sample data (no YOLO labels)
-    if (task === 'detection') setTask('classification')
   }
 
   const handleTrain = () => {
