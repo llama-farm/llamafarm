@@ -158,7 +158,10 @@ export function TrainingPanel() {
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setDataset(cat.path)}
+                onClick={() => {
+                  setDataset(cat.path)
+                  if (!modelName.trim()) setModelName(cat.id)
+                }}
                 disabled={isTraining}
                 className={cn(
                   'px-2.5 py-1 rounded-full border text-xs transition-colors',
