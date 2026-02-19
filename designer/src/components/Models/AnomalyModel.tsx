@@ -3,27 +3,27 @@ import { SAMPLE_DATASETS } from './sampleData'
 import StreamingModeToggle from './StreamingModeToggle'
 import StreamingModePanel from './StreamingModePanel'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { Selector } from '../ui/selector'
-import { Textarea } from '../ui/textarea'
-import { Badge } from '../ui/badge'
-import { Checkbox } from '../ui/checkbox'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Selector } from '@/components/ui/selector'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dropdown-menu'
+import { useToast } from '@/components/ui/toast'
 import FontIcon from '../../common/FontIcon'
 import TrainingLoadingOverlay from './TrainingLoadingOverlay'
 import type { AnomalyTestResult } from './types'

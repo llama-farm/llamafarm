@@ -1,6 +1,6 @@
 import RateOutput from '../RateOutput'
-import { Textarea } from '../../ui/textarea'
-import { Button } from '../../ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
 
 const Evaluate = () => {
   const tempOutputs = [

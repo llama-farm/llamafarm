@@ -5,8 +5,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/toast'
 import type { Database } from '../../hooks/useDatabaseManager'
 
 export type DatabaseModalMode = 'create' | 'edit'

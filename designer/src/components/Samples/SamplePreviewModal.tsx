@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 
 type Props = {
   open: boolean

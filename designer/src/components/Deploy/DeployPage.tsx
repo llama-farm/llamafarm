@@ -1,26 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 // FontIcon not used — using text labels for action buttons
 import { useBundles, useDeleteBundle } from '../../hooks/useBundles'
 import { useBundleModal } from '../../contexts/BundleModalContext'
 import { getBundleDownloadUrl } from '../../api/bundleService'
 import type { BundleSummary } from '../../api/bundleService'
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
+import { formatBytes } from '../../utils/formatBytes'
 
 function formatDate(iso: string): string {
   try {

@@ -27,6 +27,7 @@ import {
 import { useEstimateBundleSize } from '../hooks/useBundles'
 import { useQueryClient } from '@tanstack/react-query'
 import { bundleKeys } from '../hooks/useBundles'
+import { formatBytes } from '../utils/formatBytes'
 
 type BundleModalContextValue = {
   openBundleModal: () => void
@@ -102,14 +103,6 @@ function detectArch(): Arch {
     return 'arm64'
   }
   return 'x86_64'
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 type ProviderProps = { children: React.ReactNode }

@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import type { RagStrategy } from '../Rag/strategies'
 import {
   Dialog,
@@ -26,15 +26,16 @@ import {
   DialogFooter,
   DialogTrigger,
   DialogClose,
-} from '../ui/dialog'
-import { Button } from '../ui/button'
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import ImportSampleDatasetModal from './ImportSampleDatasetModal'
 import { useImportExampleDataset } from '../../hooks/useExamples'
 import PageActions from '../common/PageActions'
-import { Input } from '../ui/input'
-import { Badge } from '../ui/badge'
-import { Switch } from '../ui/switch'
-import { useToast } from '../ui/toast'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { useToast } from '@/components/ui/toast'
+import { Textarea } from '@/components/ui/textarea'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import {
@@ -2308,7 +2309,7 @@ const Data = () => {
               <label className="text-xs text-muted-foreground">
                 Description
               </label>
-              <textarea
+              <Textarea
                 rows={4}
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
                 placeholder="Add a brief description"
@@ -2542,7 +2543,7 @@ const Data = () => {
               <label className="text-xs text-muted-foreground">
                 Description
               </label>
-              <textarea
+              <Textarea
                 rows={4}
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
                 placeholder="Add a brief description"

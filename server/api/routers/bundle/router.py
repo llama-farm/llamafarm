@@ -10,7 +10,7 @@ from .types import BundleEstimate, BundleRequest, BundleSummary
 
 logger = FastAPIStructLogger()
 
-router = APIRouter(prefix="/v1/bundle", tags=["bundle"])
+router = APIRouter(prefix="/bundle", tags=["bundle"])
 
 
 @router.post("", response_class=StreamingResponse)

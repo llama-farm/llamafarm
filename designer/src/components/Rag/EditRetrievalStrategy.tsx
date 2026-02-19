@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
-import { useToast } from '../ui/toast'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
+import { useToast } from '@/components/ui/toast'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   getDefaultConfigForRetrieval,
   parseWeightsList,

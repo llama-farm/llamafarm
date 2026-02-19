@@ -299,23 +299,6 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _build_steps(req: BundleRequest) -> list[dict]:
-    """Build the list of download steps for the bundle."""
-    steps: list[dict] = [
-        {"name": "cli", "fn": _download_cli},
-        {"name": "server", "fn": _download_pyapp},
-        {"name": "rag", "fn": _download_pyapp},
-        {"name": "runtime", "fn": _download_pyapp},
-    ]
-    if req.accelerator != "cpu":
-        steps.append({"name": "torch", "fn": _download_torch})
-    for addon in req.addons:
-        steps.append(
-            {"name": addon, "fn": _make_addon_downloader(addon)}
-        )
-    return steps
-
-
 async def _download_cli(
     client: httpx.AsyncClient,
     ver: str,
@@ -328,21 +311,6 @@ async def _download_cli(
     if req.platform == "windows":
         name += ".exe"
     return await _download_asset(client, ver, name, tmp_dir / name)
-
-
-async def _download_pyapp(
-    client: httpx.AsyncClient,
-    ver: str,
-    go_os: str,
-    go_arch: str,
-    req: BundleRequest,
-    tmp_dir: Path,
-) -> int:
-    # Determine component from the step — caller passes via step dict
-    # We use a trick: the function is reused, component is inferred
-    # from caller context. Actually we need separate fns or a factory.
-    # For simplicity, use the _download_pyapp_component factory below.
-    raise NotImplementedError
 
 
 def _make_pyapp_downloader(component: str):
@@ -402,8 +370,7 @@ def _create_tar_gz(output_path: str, source_dir: str) -> None:
             tar.add(str(entry), arcname=entry.name)
 
 
-# Fix _build_steps to use factories
-def _build_steps(req: BundleRequest) -> list[dict]:  # noqa: F811
+def _build_steps(req: BundleRequest) -> list[dict]:
     steps: list[dict] = [
         {"name": "cli", "fn": _download_cli},
         {"name": "server", "fn": _make_pyapp_downloader("server")},

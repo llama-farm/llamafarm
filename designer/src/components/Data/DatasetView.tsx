@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Badge } from '../ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { validateDatasetNameWithDuplicateCheck } from '../../utils/datasetValidation'
 import { getDatabaseColor } from '../../utils/databaseColors'
 import {
@@ -12,8 +12,8 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
-import SearchInput from '../ui/search-input'
+} from '@/components/ui/tooltip'
+import SearchInput from '@/components/ui/search-input'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   Dialog,
@@ -22,20 +22,20 @@ import {
   DialogTitle,
   DialogClose,
   DialogFooter,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '../ui/collapsible'
-import { Textarea } from '../ui/textarea'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/collapsible'
+import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/components/ui/toast'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectSwitchNavigation } from '../../hooks/useProjectSwitchNavigation'
 import { useProject } from '../../hooks/useProjects'
