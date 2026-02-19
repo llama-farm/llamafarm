@@ -79,10 +79,18 @@ export function useTrainingJobStatus(
 export function useStreamSessions(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: visionKeys.streamSessions(),
-    queryFn: () => visionService.listStreamSessions(),
+    queryFn: async () => {
+      try {
+        return await visionService.listStreamSessions()
+      } catch {
+        // Endpoint may not exist on older runtimes — return empty
+        return { sessions: [] }
+      }
+    },
     enabled: options?.enabled !== false,
     refetchInterval: 5_000,
     staleTime: 2_000,
+    retry: false,
   })
 }
 
