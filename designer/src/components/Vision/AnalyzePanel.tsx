@@ -245,15 +245,15 @@ export function AnalyzePanel() {
           </div>
         </>
       ) : (
-        <div className="relative group">
+        <div className="relative group max-h-[350px] overflow-hidden rounded-lg border border-border">
           {activeDetections.length > 0 ? (
             <BoundingBoxCanvas
               imageSrc={imagePreview}
               detections={activeDetections}
-              className="rounded-lg border border-border w-full"
+              className="w-full max-h-[350px] object-contain"
             />
           ) : previewError ? (
-            <div className="w-full rounded-lg border border-border bg-muted/30 p-6 flex flex-col items-center gap-2">
+            <div className="w-full bg-muted/30 p-6 flex flex-col items-center gap-2">
               <span className="text-2xl">📄</span>
               <p className="text-sm font-medium">{fileName}</p>
               <p className="text-xs text-muted-foreground">{fileSize ? `${(fileSize / 1024).toFixed(0)} KB` : ''} — Preview not available (file will still be sent for analysis)</p>
@@ -262,7 +262,7 @@ export function AnalyzePanel() {
             <img
               src={imagePreview}
               alt="Uploaded"
-              className="max-w-full max-h-[400px] rounded-lg border border-border"
+              className="w-full max-h-[350px] object-contain"
               onError={() => setPreviewError(true)}
             />
           )}
