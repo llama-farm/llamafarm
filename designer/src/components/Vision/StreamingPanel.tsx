@@ -150,7 +150,7 @@ export function StreamingPanel() {
       {/* Always-mounted video (hidden when not streaming) + hidden canvas for frame capture */}
       <video ref={videoRef} className={cn(
         'rounded-lg border border-border object-contain bg-black',
-        isStreaming ? 'max-h-[240px] w-full' : 'hidden'
+        isStreaming ? 'max-h-[360px] w-full' : 'hidden'
       )} muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
@@ -232,7 +232,7 @@ export function StreamingPanel() {
           </div>
 
           {/* Detection list — compact table below video */}
-          <div className="rounded-lg border border-border overflow-hidden flex flex-col max-h-[200px]">
+          <div className="rounded-lg border border-border overflow-hidden flex flex-col max-h-[280px]">
             <div className="px-3 py-1.5 border-b border-border bg-secondary/30 flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">
                 {detections.length} object{detections.length !== 1 ? 's' : ''} detected

@@ -75,71 +75,69 @@ export function ReviewPanel() {
     )
   }
 
-  // Empty state (only show when no cached items AND no error, or no items at all)
-  if (items.length === 0 && !error) {
+  // Empty state — shared between no-error and error-with-no-items
+  if (items.length === 0) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
-          Review is the human-in-the-loop step that makes your models smarter over time.
-        </p>
-        <div className="py-8 max-w-lg mx-auto">
-          <p className="text-sm font-medium text-foreground mb-4">Nothing to review yet</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Review items appear when streaming detects objects it isn't confident about. Here's how it works:
-          </p>
-          <ol className="text-sm text-muted-foreground space-y-3 list-none">
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">1</span>
-              <span><span className="text-foreground font-medium">Start a stream</span> — connect a camera or video feed in the Stream tab and set a confidence threshold.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">2</span>
-              <span><span className="text-foreground font-medium">Uncertain detections get queued</span> — when the model detects something but isn't confident enough (e.g. 40% confidence vs your 70% threshold), it flags it for review instead of discarding it.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">3</span>
-              <span><span className="text-foreground font-medium">You confirm or correct</span> — accept ("yes, that's a truck"), reject ("no, that's a shadow"), or re-label ("that's actually a van"). These corrections become training data.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">4</span>
-              <span><span className="text-foreground font-medium">Retrain</span> — use your reviewed data to fine-tune the model. Each cycle makes it more accurate for your specific use case.</span>
-            </li>
-          </ol>
-        </div>
-      </div>
-    )
-  }
+        <PanelIntro title="Review">
+          Correct the model's mistakes to make it smarter. When streaming flags a detection it isn't sure about, it shows up here for you to confirm, reject, or re-label.
+        </PanelIntro>
 
-  // If error but no items at all, show the empty state with walkthrough
-  if (error && items.length === 0) {
-    return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
-          Review is the human-in-the-loop step that makes your models smarter over time.
-        </p>
-        <div className="py-8 max-w-lg mx-auto">
-          <p className="text-sm font-medium text-foreground mb-4">Nothing to review yet</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Review items appear when streaming detects objects it isn't confident about. Here's how it works:
+        {error && (
+          <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-700">
+            Could not reach the review queue — this feature requires the streaming backend to persist low-confidence detections.
+          </div>
+        )}
+
+        {/* Visual flow diagram */}
+        <div className="rounded-lg border border-border p-6">
+          <p className="text-sm font-medium text-foreground mb-4">How the learning loop works</p>
+          <div className="flex items-center gap-2 flex-wrap text-xs mb-6">
+            <span className="px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-700 font-medium">Stream</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="px-3 py-1.5 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-yellow-700 font-medium">Low-confidence flagged</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20 text-primary font-medium">You review here</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="px-3 py-1.5 rounded-md bg-green-500/10 border border-green-500/20 text-green-700 font-medium">Retrain with corrections</span>
+          </div>
+
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <div className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center mt-0.5">1</span>
+              <div>
+                <span className="text-foreground font-medium">Start a stream</span> in the Stream tab. As the model detects objects, anything below the confidence threshold gets saved for review.
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center mt-0.5">2</span>
+              <div>
+                <span className="text-foreground font-medium">Items appear here</span> — you'll see the image, what the model thinks it detected, and a confidence score. The least confident items come first.
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center mt-0.5">3</span>
+              <div>
+                <span className="text-foreground font-medium">You decide</span> — <span className="text-green-600">Accept</span> if the model got it right, <span className="text-red-600">Reject</span> if it's wrong, or <span className="text-foreground">Edit</span> to provide the correct label (e.g. "that's a van, not a truck").
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center mt-0.5">4</span>
+              <div>
+                <span className="text-foreground font-medium">Retrain</span> — your corrections become labeled training data. Go to the Train tab to fine-tune the model with this data, making it more accurate for your use case.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={cn(
+          'rounded-lg border-2 border-dashed border-border py-8',
+          'flex flex-col items-center justify-center text-center gap-2'
+        )}>
+          <p className="text-sm font-medium text-muted-foreground">No items to review yet</p>
+          <p className="text-xs text-muted-foreground max-w-sm">
+            Start a streaming session and detections below the confidence threshold will appear here automatically.
           </p>
-          <ol className="text-sm text-muted-foreground space-y-3 list-none">
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">1</span>
-              <span><span className="text-foreground font-medium">Start a stream</span> — connect a camera or video feed in the Stream tab and set a confidence threshold.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">2</span>
-              <span><span className="text-foreground font-medium">Uncertain detections get queued</span> — when the model detects something but isn't confident enough, it flags it for review.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">3</span>
-              <span><span className="text-foreground font-medium">You confirm or correct</span> — accept, reject, or re-label. These corrections become training data.</span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex items-center justify-center">4</span>
-              <span><span className="text-foreground font-medium">Retrain</span> — use your reviewed data to fine-tune the model. Each cycle makes it more accurate.</span>
-            </li>
-          </ol>
         </div>
       </div>
     )
