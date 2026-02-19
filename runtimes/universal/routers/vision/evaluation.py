@@ -96,12 +96,16 @@ class LeaderboardEntry(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _resolve_model_path(model: str) -> str:
+def _resolve_model_path(model: str) -> str:  # lgtm[py/path-injection]
     """Resolve model name to .pt path.
 
     Accepts:
     - Model names (looked up in VISION_MODELS_DIR)
     - Absolute .pt paths (must be within ~/.llamafarm or cwd)
+
+    Security: All paths are validated against traversal (reject .., \\, :)
+    and containment-checked via resolve() + is_relative_to() before use.
+    CodeQL flags these as py/path-injection but the checks are present.
     """
     # Reject traversal characters in all cases
     if ".." in model or "\\" in model:
@@ -122,16 +126,17 @@ def _resolve_model_path(model: str) -> str:
 
     # Model name lookup in vision models directory
     if _VISION_MODELS_DIR:
+        # basename-only: reject anything with path separators or special chars
         safe_name = Path(model).name
         if safe_name != model or ":" in model:
             raise HTTPException(400, "Invalid model name")
 
-        current = _VISION_MODELS_DIR / safe_name / "current.pt"
+        current = _VISION_MODELS_DIR / safe_name / "current.pt"  # safe_name is basename-only
         if current.exists():
             return str(current)
 
         # Check versioned — find latest
-        model_dir = _VISION_MODELS_DIR / safe_name
+        model_dir = _VISION_MODELS_DIR / safe_name  # safe_name is basename-only
         if model_dir.is_dir():
             versions = sorted(model_dir.glob("v*.pt"), reverse=True)
             if versions:
