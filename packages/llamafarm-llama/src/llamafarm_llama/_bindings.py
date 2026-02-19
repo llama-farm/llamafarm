@@ -312,6 +312,16 @@ LLAMA_CDEF = """
     void llama_memory_seq_keep(llama_memory_t mem, llama_seq_id seq_id);
     void llama_memory_seq_add(llama_memory_t mem, llama_seq_id seq_id, llama_pos p0, llama_pos p1, llama_pos delta);
 
+    // State save/load — serialize KV cache to/from bytes
+    size_t llama_state_get_size(const struct llama_context * ctx);
+    size_t llama_state_get_data(struct llama_context * ctx, uint8_t * dst, size_t size);
+    size_t llama_state_set_data(struct llama_context * ctx, const uint8_t * src, size_t size);
+
+    // Per-sequence state save/load — serialize a single sequence's KV cache
+    size_t llama_state_seq_get_size(struct llama_context * ctx, llama_seq_id seq_id);
+    size_t llama_state_seq_get_data(struct llama_context * ctx, uint8_t * dst, size_t size, llama_seq_id seq_id);
+    size_t llama_state_seq_set_data(struct llama_context * ctx, const uint8_t * src, size_t size, llama_seq_id seq_id);
+
     // Decoding
     int32_t llama_decode(struct llama_context * ctx, struct llama_batch batch);
 

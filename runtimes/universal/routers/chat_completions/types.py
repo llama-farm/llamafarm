@@ -103,6 +103,10 @@ class ChatCompletionRequest(BaseModel):
     # When reached, model is nudged to close </think> and provide answer
     thinking_budget: int | None = None
 
+    # KV Cache parameters
+    cache_key: str | None = None  # Cache key from /v1/cache/prepare or previous response
+    return_cache_key: bool | None = None  # Return a cache_key in the response for multi-turn chaining
+
     # Context management parameters
     # Whether to automatically truncate messages if context is exceeded
     auto_truncate: bool | None = True

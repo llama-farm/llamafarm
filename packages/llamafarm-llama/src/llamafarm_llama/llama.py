@@ -1248,6 +1248,8 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        kv_cache_data: Optional[bytes] = None,
+        kv_cache_tokens: int = 0,
         **kwargs,
     ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
         """
@@ -1265,6 +1267,8 @@ class Llama:
             stream: Stream the response.
             seed: Random seed.
             logits_processor: Custom logits processor (for ThinkingBudgetProcessor).
+            kv_cache_data: Serialized KV cache state to restore (skips prefix decode).
+            kv_cache_tokens: Number of tokens in the cached prefix.
 
         Returns:
             Chat completion response or stream of chunks.
@@ -1286,14 +1290,46 @@ class Llama:
         # Clear KV cache
         self._lib.llama_memory_clear(self._memory, True)
 
-        # Decode prompt (this is the main TTFT cost)
-        if not self._decode_batch(tokens):
-            raise RuntimeError("Failed to decode prompt")
-        t_prompt = time.perf_counter()
+        # KV cache restore path: load cached prefix, decode only delta tokens
+        # Note: kv_cache_tokens may exceed len(tokens) when the cached state includes
+        # generated tokens (e.g., thinking tags) that aren't in the new prompt.
+        # In that case, we still restore the full KV state (which is a superset)
+        # and decode no delta tokens — the model picks up from where it left off.
+        if kv_cache_data and kv_cache_tokens > 0:
+            consumed = self.state_seq_load(kv_cache_data, 0)
+            if consumed > 0:
+                # Clamp: if cached tokens > prompt tokens, no delta needed
+                effective_cached = min(kv_cache_tokens, len(tokens))
+                delta_tokens = tokens[effective_cached:]
+                if delta_tokens:
+                    if not self._decode_batch(delta_tokens):
+                        raise RuntimeError("Failed to decode delta tokens after KV restore")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"KV restore ({kv_cache_tokens} cached, {effective_cached} used): {(t_prompt - t_tokenize)*1000:.1f}ms, "
+                    f"Delta decode ({len(delta_tokens)} new tokens)"
+                )
+            else:
+                # Restore failed, fall back to full decode
+                logger.warning("KV cache restore failed, falling back to full decode")
+                self._lib.llama_memory_clear(self._memory, True)
+                if not self._decode_batch(tokens):
+                    raise RuntimeError("Failed to decode prompt")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms [cache restore failed]"
+                )
+        else:
+            # Standard path: decode all tokens
+            if not self._decode_batch(tokens):
+                raise RuntimeError("Failed to decode prompt")
+            t_prompt = time.perf_counter()
 
-        logger.info(
-            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
-            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+            logger.info(
+                f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
         )
 
         # Create sampler
@@ -1325,6 +1361,8 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        kv_cache_data: Optional[bytes] = None,
+        kv_cache_tokens: int = 0,
         **kwargs,
     ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
         """
@@ -1363,15 +1401,40 @@ class Llama:
         # Clear KV cache
         self._lib.llama_memory_clear(self._memory, True)
 
-        # Decode prompt (this is the main TTFT cost)
-        if not self._decode_batch(tokens):
-            raise RuntimeError("Failed to decode prompt")
-        t_prompt = time.perf_counter()
-
-        logger.info(
-            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
-            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
-        )
+        # KV cache restore path: load cached prefix, decode only delta tokens
+        if kv_cache_data and kv_cache_tokens > 0:
+            consumed = self.state_seq_load(kv_cache_data, 0)
+            if consumed > 0:
+                effective_cached = min(kv_cache_tokens, len(tokens))
+                delta_tokens = tokens[effective_cached:]
+                if delta_tokens:
+                    if not self._decode_batch(delta_tokens):
+                        raise RuntimeError("Failed to decode delta tokens after KV restore")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"KV restore ({kv_cache_tokens} cached, {effective_cached} used): {(t_prompt - t_tokenize)*1000:.1f}ms, "
+                    f"Delta ({len(delta_tokens)} new tokens)"
+                )
+            else:
+                logger.warning("KV cache restore failed, falling back to full decode")
+                self._lib.llama_memory_clear(self._memory, True)
+                if not self._decode_batch(tokens):
+                    raise RuntimeError("Failed to decode prompt")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms [fallback]"
+                )
+        else:
+            # Standard path: decode all tokens
+            if not self._decode_batch(tokens):
+                raise RuntimeError("Failed to decode prompt")
+            t_prompt = time.perf_counter()
+            logger.info(
+                f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+            )
 
         # Create sampler
         self._create_sampler(
@@ -1738,6 +1801,80 @@ class Llama:
         self._lib.llama_memory_clear(self._memory, True)
         if self._sampler is not None:
             self._lib.llama_sampler_reset(self._sampler)
+
+    # ── KV Cache State Serialization ────────────────────────────────────────
+
+    def state_seq_get_size(self, seq_id: int = 0) -> int:
+        """Get the size in bytes needed to serialize a sequence's KV cache state."""
+        return self._lib.llama_state_seq_get_size(self._ctx, seq_id)
+
+    def state_seq_save(self, seq_id: int = 0) -> bytes:
+        """Serialize a sequence's KV cache state to bytes.
+
+        Returns the KV cache state as a bytes object that can be restored later
+        with state_seq_load(). This captures the attention key/value tensors
+        for all tokens processed under the given sequence ID.
+        """
+        size = self._lib.llama_state_seq_get_size(self._ctx, seq_id)
+        if size == 0:
+            return b""
+        buf = ffi.new(f"uint8_t[{size}]")
+        written = self._lib.llama_state_seq_get_data(self._ctx, buf, size, seq_id)
+        if written == 0:
+            return b""
+        return ffi.buffer(buf, written)[:]
+
+    def state_seq_load(self, data: bytes, seq_id: int = 0) -> int:
+        """Restore a sequence's KV cache state from bytes.
+
+        Loads previously saved KV cache state into the given sequence ID.
+        Returns the number of bytes consumed, or 0 on failure.
+
+        The sequence's existing KV cache is replaced by the loaded state.
+        """
+        if not data:
+            return 0
+        buf = ffi.new(f"uint8_t[{len(data)}]")
+        ffi.memmove(buf, data, len(data))
+        return self._lib.llama_state_seq_set_data(self._ctx, buf, len(data), seq_id)
+
+    def state_get_size(self) -> int:
+        """Get the size in bytes needed to serialize the full context state."""
+        return self._lib.llama_state_get_size(self._ctx)
+
+    def state_save(self) -> bytes:
+        """Serialize the full context state (all sequences) to bytes."""
+        size = self._lib.llama_state_get_size(self._ctx)
+        if size == 0:
+            return b""
+        buf = ffi.new(f"uint8_t[{size}]")
+        written = self._lib.llama_state_get_data(self._ctx, buf, size)
+        if written == 0:
+            return b""
+        return ffi.buffer(buf, written)[:]
+
+    def state_load(self, data: bytes) -> int:
+        """Restore the full context state (all sequences) from bytes.
+
+        Returns the number of bytes consumed, or 0 on failure.
+        """
+        if not data:
+            return 0
+        buf = ffi.new(f"uint8_t[{len(data)}]")
+        ffi.memmove(buf, data, len(data))
+        return self._lib.llama_state_set_data(self._ctx, buf, len(data))
+
+    def memory_seq_cp(self, src_seq_id: int, dst_seq_id: int, p0: int = 0, p1: int = -1) -> None:
+        """Copy KV cache from one sequence to another."""
+        self._lib.llama_memory_seq_cp(self._memory, src_seq_id, dst_seq_id, p0, p1)
+
+    def memory_seq_rm(self, seq_id: int, p0: int = 0, p1: int = -1) -> bool:
+        """Remove KV cache entries for a sequence in position range [p0, p1)."""
+        return self._lib.llama_memory_seq_rm(self._memory, seq_id, p0, p1)
+
+    def memory_seq_keep(self, seq_id: int) -> None:
+        """Keep only the KV cache for the given sequence, remove all others."""
+        self._lib.llama_memory_seq_keep(self._memory, seq_id)
 
     def close(self):
         """Explicitly close and free resources."""

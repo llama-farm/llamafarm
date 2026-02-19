@@ -57,7 +57,10 @@ from routers.audio import router as audio_router
 from routers.audio import set_speech_loader
 from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
+from routers.cache import router as cache_router
+from routers.cache import set_cache_manager, set_cache_language_loader
 from routers.chat_completions import router as chat_completions_router
+from routers.chat_completions.service import ChatCompletionsService
 from routers.classifier import (
     router as classifier_router,
 )
@@ -308,6 +311,16 @@ async def lifespan(app: FastAPI):
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
 
+    # Start KV cache manager + GC
+    from utils.kv_cache_manager import KVCacheManager, start_kv_cache_gc
+    global _kv_cache_manager
+    _kv_cache_manager = KVCacheManager()
+    set_cache_manager(_kv_cache_manager)
+    set_cache_language_loader(load_language)
+    ChatCompletionsService.set_cache_manager(_kv_cache_manager)
+    start_kv_cache_gc(_kv_cache_manager)
+    logger.info("KV cache manager started")
+
     yield
 
     # Shutdown
@@ -372,6 +385,7 @@ if _HAS_EXPLAIN:
 app.include_router(audio_router)
 app.include_router(audio_speech_router)
 app.include_router(audio_chat_router)
+app.include_router(cache_router)
 app.include_router(chat_completions_router)
 app.include_router(classifier_router)
 app.include_router(files_router)
@@ -407,6 +421,7 @@ _current_device = None
 # Feature encoder cache for anomaly detection with mixed data types
 _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
+_kv_cache_manager = None
 
 # Data directories
 _LF_DATA_DIR = get_data_dir()
