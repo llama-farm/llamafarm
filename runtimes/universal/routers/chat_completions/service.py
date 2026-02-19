@@ -20,7 +20,12 @@ from openai.types.chat.chat_completion_chunk import (
 )
 
 from models import GGUFLanguageModel
-from utils.context_manager import ContextBudget, ContextManager, TruncationStrategy
+from utils.context_manager import (
+    ContextBudget,
+    ContextManager,
+    ContextUsage,
+    TruncationStrategy,
+)
 from utils.context_summarizer import ContextSummarizer
 from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
@@ -298,10 +303,12 @@ class ChatCompletionsService:
                 # If tools are injected into the prompt path, validate against the same
                 # message shape to avoid undercounting prompt tokens.
                 messages_for_context = messages_dict
+                native_rendered_prompt: str | None = None
                 if tools_dict:
                     (
                         messages_for_context,
                         tools_already_injected,
+                        native_rendered_prompt,
                     ) = model.prepare_messages_for_context_validation(
                         messages_dict,
                         tools_dict,
@@ -312,9 +319,26 @@ class ChatCompletionsService:
                         tools_for_generation = None
 
                 # Validate context and truncate if needed
-                usage = context_manager.validate_messages(messages_for_context)
+                if native_rendered_prompt is not None:
+                    prompt_tokens = model.token_counter.count_tokens(native_rendered_prompt)
+                    available_for_completion = max(
+                        0,
+                        context_manager.budget.total_context
+                        - prompt_tokens
+                        - context_manager.budget.safety_margin,
+                    )
+                    usage = ContextUsage(
+                        total_context=context_manager.budget.total_context,
+                        prompt_tokens=prompt_tokens,
+                        available_for_completion=available_for_completion,
+                        truncated=False,
+                        truncated_messages=0,
+                        strategy_used=None,
+                    )
+                else:
+                    usage = context_manager.validate_messages(messages_for_context)
 
-                if context_manager.needs_truncation(messages_for_context):
+                if usage.prompt_tokens > context_manager.budget.max_prompt_tokens:
                     auto_truncate = chat_request.auto_truncate
                     if auto_truncate is None:
                         auto_truncate = True  # Default to auto-truncate
@@ -329,6 +353,26 @@ class ChatCompletionsService:
                                     f"Prompt ({usage.prompt_tokens} tokens) exceeds "
                                     f"context limit ({usage.total_context} tokens). "
                                     "Set auto_truncate=true to automatically truncate."
+                                ),
+                                "context_usage": {
+                                    "total_context": usage.total_context,
+                                    "prompt_tokens": usage.prompt_tokens,
+                                    "available_for_completion": usage.available_for_completion,
+                                },
+                            },
+                        )
+
+                    # Native Jinja2 rendering produces a single raw prompt string.
+                    # We cannot safely truncate it with message-based strategies.
+                    if native_rendered_prompt is not None:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "context_length_exceeded",
+                                "message": (
+                                    f"Rendered prompt ({usage.prompt_tokens} tokens) exceeds "
+                                    f"context limit ({usage.total_context} tokens). "
+                                    "Reduce message/tool size and retry."
                                 ),
                                 "context_usage": {
                                     "total_context": usage.total_context,
@@ -423,20 +467,32 @@ class ChatCompletionsService:
                         )
 
                 # Use the validated/truncated message set for generation.
-                messages_dict = messages_for_context
+                if native_rendered_prompt is None:
+                    messages_dict = messages_for_context
+
+                # Track the true remaining completion budget (not reserved target).
+                real_available_for_completion = max(
+                    0,
+                    context_manager.budget.total_context
+                    - usage.prompt_tokens
+                    - context_manager.budget.safety_margin,
+                )
 
                 # Store context usage for response
                 context_usage_info = ContextUsageInfo(
                     total_context=usage.total_context,
                     prompt_tokens=usage.prompt_tokens,
-                    available_for_completion=usage.available_for_completion,
+                    available_for_completion=real_available_for_completion,
                     truncated=usage.truncated,
                     truncated_messages=usage.truncated_messages,
                     strategy_used=usage.strategy_used,
                 )
 
                 # Final safety check: ensure we're actually under budget
-                if context_manager.needs_truncation(messages_dict):
+                if (
+                    native_rendered_prompt is None
+                    and context_manager.needs_truncation(messages_dict)
+                ):
                     final_usage = context_manager.validate_messages(messages_dict)
                     logger.error(
                         f"CRITICAL: Still over context budget after all truncation: "
@@ -463,7 +519,7 @@ class ChatCompletionsService:
 
                 # Cap generation to what can actually fit after prompt accounting.
                 effective_max_tokens = min(
-                    total_max_tokens, context_usage_info.available_for_completion
+                    total_max_tokens, real_available_for_completion
                 )
                 if effective_max_tokens <= 0:
                     raise HTTPException(

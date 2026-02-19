@@ -480,6 +480,7 @@ async def chat(
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
+    config_last_modified = _get_config_last_modified_timestamp(project_dir)
     project_config = ProjectService.load_config(namespace, project_id)
 
     # Parse active project from header (format: "namespace/project")
@@ -492,7 +493,6 @@ async def chat(
 
     now = time.time()
     stateless = x_no_session is not None
-    config_last_modified = _get_config_last_modified_timestamp(project_dir)
 
     if stateless:
         agent = await ChatOrchestratorAgentFactory.create_agent(
@@ -518,26 +518,7 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or request.model != record.agent.model_name:
-                agent = await ChatOrchestratorAgentFactory.create_agent(
-                    project_config=project_config,
-                    project_dir=project_dir,
-                    model_name=request.model,
-                    session_id=session_id,
-                    active_project_namespace=active_project_namespace,
-                    active_project_name=active_project_name,
-                )
-                # Cache the agent in memory
-                agent_sessions[key] = SessionRecord(
-                    namespace=namespace,
-                    project_id=project_id,
-                    agent=agent,
-                    config_last_modified=config_last_modified,
-                    created_at=now,
-                    last_used=now,
-                    request_count=1,
-                )
-            elif record.config_last_modified != config_last_modified:
+            if record is None or request.model != record.agent.model_name or record.config_last_modified != config_last_modified:
                 agent = await ChatOrchestratorAgentFactory.create_agent(
                     project_config=project_config,
                     project_dir=project_dir,
