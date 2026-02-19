@@ -17,6 +17,8 @@ class TrainConfigRequest(BaseModel):
     epochs: int = Field(default=10, ge=1, le=1000)
     batch_size: int = Field(default=16, ge=1, le=256)
     learning_rate: float = Field(default=0.001, gt=0.0)
+    imgsz: int = Field(default=640, ge=320, le=2560, description="Training image size (px)")
+    patience: int = Field(default=50, ge=0, le=500, description="Early stopping patience (0=disabled)")
 
 class TrainRequest(BaseModel):
     model: str
@@ -56,6 +58,8 @@ async def start_training(request: TrainRequest) -> TrainResponse:
         epochs=request.config.epochs,
         batch_size=request.config.batch_size,
         learning_rate=request.config.learning_rate,
+        imgsz=request.config.imgsz,
+        patience=request.config.patience,
     )
 
     # auto_promote implies auto_eval

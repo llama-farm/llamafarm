@@ -34,6 +34,8 @@ class TrainingConfig:
     batch_size: int = 16
     learning_rate: float = 0.001
     validation_split: float = 0.2
+    imgsz: int = 640
+    patience: int = 50
 
 
 @dataclass
@@ -134,8 +136,8 @@ class IncrementalTrainer:
                 "epochs": job.config.epochs,
                 "batch": job.config.batch_size,
                 "device": device if device != "auto" else None,
-                "imgsz": 640,
-                "patience": 50,
+                "imgsz": job.config.imgsz,
+                "patience": job.config.patience,
                 "save": True,
                 "verbose": True,
             }
