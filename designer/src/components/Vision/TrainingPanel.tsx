@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible'
+import { ChevronDown } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -52,37 +54,46 @@ export function TrainingPanel() {
         Train a custom vision model when the built-in models aren't accurate enough for your specific use case. Start with the Analyze tab to test zero-shot capabilities first — you may not need custom training.
       </p>
 
-      {/* Dataset guidance */}
-      <div className="rounded-lg border border-border bg-muted/20 p-3">
-        <p className="text-sm font-medium mb-2">Dataset requirements</p>
-        <p className="text-xs text-muted-foreground mb-2">Provide a path to a local folder on this machine containing your training data. Supported formats:</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
-          <div className="rounded border border-border bg-background p-2">
-            <p className="font-medium text-foreground mb-1">YOLO Format</p>
-            <code className="block text-xs">
-              dataset/<br/>
-              ├── images/<br/>
-              │   ├── photo1.jpg<br/>
-              │   └── photo2.jpg<br/>
-              └── labels/<br/>
-              {'    '}├── photo1.txt<br/>
-              {'    '}└── photo2.txt
-            </code>
-            <p className="mt-1">Each .txt: <code>class x_center y_center width height</code> (normalized 0-1)</p>
-          </div>
-          <div className="rounded border border-border bg-background p-2">
-            <p className="font-medium text-foreground mb-1">COCO Format</p>
-            <code className="block text-xs">
-              dataset/<br/>
-              ├── images/<br/>
-              │   ├── photo1.jpg<br/>
-              │   └── photo2.jpg<br/>
-              └── annotations.json
-            </code>
-            <p className="mt-1">Standard COCO JSON with categories, images, and annotations arrays.</p>
-          </div>
+      {/* Dataset guidance — collapsible, open by default */}
+      <Collapsible defaultOpen>
+        <div className="rounded-lg border border-border bg-muted/20">
+          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 text-left">
+            <p className="text-sm font-medium">Dataset requirements</p>
+            <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform [[data-state=closed]_&]:rotate-[-90deg]" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-3 pb-3">
+              <p className="text-xs text-muted-foreground mb-2">Provide a path to a local folder on this machine containing your training data. Supported formats:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div className="rounded border border-border bg-background p-2">
+                  <p className="font-medium text-foreground mb-1">YOLO Format</p>
+                  <code className="block text-xs">
+                    dataset/<br/>
+                    ├── images/<br/>
+                    │   ├── photo1.jpg<br/>
+                    │   └── photo2.jpg<br/>
+                    └── labels/<br/>
+                    {'    '}├── photo1.txt<br/>
+                    {'    '}└── photo2.txt
+                  </code>
+                  <p className="mt-1">Each .txt: <code>class x_center y_center width height</code> (normalized 0-1)</p>
+                </div>
+                <div className="rounded border border-border bg-background p-2">
+                  <p className="font-medium text-foreground mb-1">COCO Format</p>
+                  <code className="block text-xs">
+                    dataset/<br/>
+                    ├── images/<br/>
+                    │   ├── photo1.jpg<br/>
+                    │   └── photo2.jpg<br/>
+                    └── annotations.json
+                  </code>
+                  <p className="mt-1">Standard COCO JSON with categories, images, and annotations arrays.</p>
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
         </div>
-      </div>
+      </Collapsible>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
