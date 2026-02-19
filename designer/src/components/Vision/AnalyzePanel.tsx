@@ -4,6 +4,13 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Slider } from '../ui/slider'
 import { Badge } from '../ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
 import { Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDetect, useClassify, useDetectClassify } from '../../hooks/useVision'
@@ -265,15 +272,16 @@ export function AnalyzePanel() {
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <Label className="text-sm">Model</Label>
-            <select
-              value={detectModel}
-              onChange={e => setDetectModel(e.target.value)}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {YOLO_MODELS.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
+            <Select value={detectModel} onValueChange={setDetectModel}>
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YOLO_MODELS.map(m => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex-1">
             <Label className="text-sm">Confidence: {(confidence * 100).toFixed(0)}%</Label>
