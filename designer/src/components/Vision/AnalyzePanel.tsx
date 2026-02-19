@@ -142,21 +142,70 @@ export function AnalyzePanel() {
     )
   }
 
-  const handleDetectClassify = () => {
+  const [dcPending, setDcPending] = useState(false)
+  const [dcError, setDcError] = useState<Error | null>(null)
+
+  const handleDetectClassify = async () => {
     if (!imageBase64) return
-    dcMutation.mutate(
-      {
-        image: imageBase64,
-        detect_model: detectModel || undefined,
-        confidence_threshold: confidence,
-        classify_classes: classes.length > 0 ? classes : undefined,
-      },
-      { onSuccess: data => setDcResults(data.results) }
-    )
+    setDcPending(true)
+    setDcError(null)
+    setDcResults([])
+    try {
+      // Try combo endpoint first (available when PR #774 is merged)
+      dcMutation.mutate(
+        {
+          image: imageBase64,
+          detect_model: detectModel || undefined,
+          confidence_threshold: confidence,
+          classify_classes: classes.length > 0 ? classes : undefined,
+        },
+        {
+          onSuccess: data => { setDcResults(data.results); setDcPending(false) },
+          onError: async () => {
+            // Fallback: run detect then classify sequentially
+            try {
+              const { detect, classify } = await import('../../api/visionService')
+              const detectRes = await detect({
+                image: imageBase64,
+                model: detectModel || undefined,
+                confidence_threshold: confidence,
+              })
+              const detectedObjects = detectRes.detections || []
+              if (detectedObjects.length === 0) {
+                setDcResults([])
+                setDcPending(false)
+                return
+              }
+              // Classify the whole image with detected class names + user classes
+              const detectedClasses = [...new Set(detectedObjects.map(d => d.class_name))]
+              const allClasses = [...new Set([...detectedClasses, ...classes])]
+              const classifyRes = await classify({
+                image: imageBase64,
+                classes: allClasses.length > 0 ? allClasses : ['object'],
+                top_k: 10,
+              })
+              // Merge: each detection gets the classification result
+              const results: DetectClassifyResult[] = detectedObjects.map(det => ({
+                detection: det,
+                classification: classifyRes,
+              }))
+              setDcResults(results)
+            } catch (fallbackErr) {
+              setDcError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)))
+            } finally {
+              setDcPending(false)
+            }
+          },
+        }
+      )
+    } catch (err) {
+      setDcError(err instanceof Error ? err : new Error(String(err)))
+      setDcPending(false)
+    }
   }
 
-  const isPending = detectMutation.isPending || classifyMutation.isPending || dcMutation.isPending
-  const mutationError = detectMutation.error || classifyMutation.error || dcMutation.error
+  const isPending = detectMutation.isPending || classifyMutation.isPending || dcMutation.isPending || dcPending
+  const mutationError = detectMutation.error || classifyMutation.error || dcError
 
   const handleRun = () => {
     if (mode === 'detect') handleDetect()
@@ -169,7 +218,7 @@ export function AnalyzePanel() {
       ? detectMutation.isPending ? 'Detecting...' : 'Detect'
       : mode === 'classify'
         ? classifyMutation.isPending ? 'Classifying...' : 'Classify'
-        : dcMutation.isPending ? 'Processing...' : 'Detect + Classify'
+        : (dcMutation.isPending || dcPending) ? 'Processing...' : 'Detect + Classify'
 
   const dcDetections: Detection[] = dcResults.map(r => ({
     ...r.detection,
