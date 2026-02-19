@@ -16,8 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from models.gguf_language_model import GGUFLanguageModel
 from routers.chat_completions.service import ChatCompletionsService
 from routers.chat_completions.types import ChatCompletionRequest
+from utils.context_manager import ContextBudget, ContextUsage
 
 # Simple tool definitions for testing
 CALCULATOR_TOOL = {
@@ -357,6 +359,96 @@ class TestToolCallingE2E:
         assert exc_info.value.status_code == 400
         assert isinstance(exc_info.value.detail, dict)
         assert exc_info.value.detail["error"] == "context_length_exceeded"
+
+    @pytest.mark.asyncio
+    async def test_effective_max_tokens_uses_real_remaining_context(self, service):
+        """Generation cap should use real remaining space, not reserved cap."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=2048,
+                    max_prompt_tokens=1536,
+                    reserved_completion=512,
+                    safety_margin=102,
+                )
+
+            def validate_messages(self, _messages):
+                # Simulate legacy reserved-completion-limited availability.
+                return ContextUsage(
+                    total_context=2048,
+                    prompt_tokens=100,
+                    available_for_completion=512,
+                )
+
+            def needs_truncation(self, _messages):
+                return False
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = None
+        model.generate = AsyncMock(return_value="ok")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "Hello"}],
+            tools=None,
+            stream=False,
+        )
+        request.max_tokens = 1200
+
+        with patch.object(service, "load_language", return_value=model):
+            await service.chat_completions(request)
+
+        assert model.generate.await_count == 1
+        assert model.generate.await_args.kwargs["max_tokens"] == 1200
+
+    @pytest.mark.asyncio
+    async def test_native_rendered_prompt_is_counted_for_context_budget(self, service):
+        """Native-rendered tool prompts should be validated by rendered size."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=1000,
+                    max_prompt_tokens=700,
+                    reserved_completion=200,
+                    safety_margin=50,
+                )
+
+            def validate_messages(self, _messages):
+                raise AssertionError("native path should bypass message validation")
+
+            def needs_truncation(self, _messages):
+                return False
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = MagicMock()
+        model._token_counter.count_tokens.return_value = 900
+        model.prepare_messages_for_context_validation = MagicMock(
+            return_value=(
+                [{"role": "user", "content": "short"}],
+                False,
+                "x" * 5000,
+            )
+        )
+        model.generate = AsyncMock(return_value="should not run")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "short"}],
+            tools=[CALCULATOR_TOOL],
+            stream=False,
+        )
+
+        with (
+            patch.object(service, "load_language", return_value=model),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await service.chat_completions(request)
+
+        assert exc_info.value.status_code == 400
+        assert "Rendered prompt" in exc_info.value.detail["message"]
+        assert model.generate.await_count == 0
 
 
 class TestToolCallingOpenAICompatibility:
