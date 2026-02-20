@@ -13,6 +13,13 @@ logger = FastAPIStructLogger()
 router = APIRouter(prefix="/bundle", tags=["bundle"])
 
 
+@router.get("/version")
+async def get_bundle_version():
+    """Get the version that will be used for bundling."""
+    ver = await service.get_latest_version()
+    return {"version": ver}
+
+
 @router.post("", response_class=StreamingResponse)
 async def create_bundle(request: BundleRequest):
     """Create a new bundle. Returns SSE stream of progress events."""
@@ -32,7 +39,7 @@ async def create_bundle(request: BundleRequest):
 
 
 @router.post("/estimate", response_model=BundleEstimate)
-async def estimate_bundle_size(request: BundleRequest):
+def estimate_bundle_size(request: BundleRequest):
     """Estimate bundle size based on configuration."""
     error = service.validate_request(request)
     if error:
@@ -46,13 +53,13 @@ async def estimate_bundle_size(request: BundleRequest):
 
 
 @router.get("s", response_model=list[BundleSummary])
-async def list_bundles():
+def list_bundles():
     """List all completed bundles."""
     return service.list_bundles()
 
 
 @router.get("s/{bundle_id}/download")
-async def download_bundle(bundle_id: str):
+def download_bundle(bundle_id: str):
     """Download a bundle archive."""
     path = service.get_bundle_path(bundle_id)
     if not path:
@@ -66,7 +73,7 @@ async def download_bundle(bundle_id: str):
 
 
 @router.delete("s/{bundle_id}")
-async def delete_bundle(bundle_id: str):
+def delete_bundle(bundle_id: str):
     """Delete a bundle."""
     if not service.delete_bundle(bundle_id):
         raise HTTPException(404, f"Bundle '{bundle_id}' not found")

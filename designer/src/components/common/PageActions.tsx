@@ -25,7 +25,7 @@ const PageActions: React.FC<PageActionsProps> = ({
   packageLabel = 'Bundle',
   onPackageClick,
   className,
-  packageDisabled = true,
+  packageDisabled = false,
 }) => {
   const { openBundleModal } = useBundleModal()
 

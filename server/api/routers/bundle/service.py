@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import shutil
 import tarfile
 import tempfile
@@ -35,6 +36,45 @@ logger = FastAPIStructLogger()
 
 REPO_OWNER = os.getenv("LF_ADDON_REPO_OWNER", "llama-farm")
 REPO_NAME = os.getenv("LF_ADDON_REPO_NAME", "llamafarm")
+DRY_RUN = os.getenv("LF_BUNDLE_DRY_RUN", "").lower() in ("1", "true", "yes")
+
+_latest_release_cache: dict[str, str | None] = {}
+
+_VERSION_RE = re.compile(r'^v?\d+\.\d+\.\d+')
+
+
+def _is_valid_version(ver: str) -> bool:
+    """Check if a version string looks like a semver release."""
+    return bool(_VERSION_RE.match(ver))
+
+
+async def _get_latest_release_tag() -> str | None:
+    """Fetch the latest release tag from GitHub. Cached for the process lifetime."""
+    if "tag" in _latest_release_cache:
+        return _latest_release_cache["tag"]
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest",
+                headers={"Accept": "application/vnd.github+json"},
+            )
+            resp.raise_for_status()
+            tag = resp.json().get("tag_name")
+            _latest_release_cache["tag"] = tag
+            return tag
+    except Exception as exc:
+        logger.warning(f"Failed to fetch latest release: {exc}")
+        _latest_release_cache["tag"] = None
+        return None
+
+
+async def get_latest_version() -> str:
+    """Return the version to use for bundling (current or latest release)."""
+    ver = current_version
+    if not _is_valid_version(ver):
+        tag = await _get_latest_release_tag()
+        return tag or "dev"
+    return ver
 
 
 def _bundles_dir() -> Path:
@@ -90,6 +130,13 @@ async def _download_asset(
     dest: Path,
 ) -> int:
     """Download a GitHub release asset. Returns bytes written."""
+    if DRY_RUN:
+        # Simulate download with a small placeholder file
+        await asyncio.sleep(0.5)  # simulate network delay
+        dest.write_bytes(b"dry-run-placeholder")
+        size = SIZE_ESTIMATES.get(asset_name.split("-")[0], 50_000_000)
+        return size
+
     url = (
         f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
         f"/releases/download/{version}/{asset_name}"
@@ -109,9 +156,12 @@ async def create_bundle(
 ) -> AsyncGenerator[str, None]:
     """Execute the bundle process, yielding SSE-formatted events."""
     ver = req.version or current_version
-    if ver == "dev":
-        yield _sse("error", {"message": "Cannot bundle dev version"})
-        return
+    if not _is_valid_version(ver):
+        # Running from source/branch — resolve latest release from GitHub
+        ver = await _get_latest_release_tag()
+        if not ver:
+            yield _sse("error", {"message": "Cannot bundle dev version — specify a version or ensure GitHub releases exist"})
+            return
     if not ver.startswith("v"):
         ver = f"v{ver}"
 

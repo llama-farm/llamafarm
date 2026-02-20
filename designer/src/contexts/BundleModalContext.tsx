@@ -8,6 +8,7 @@ import React, {
   useState,
 } from 'react'
 import confetti from 'canvas-confetti'
+import FontIcon from '../common/FontIcon'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import { Checkbox } from '../components/ui/checkbox'
 import {
   createBundleStream,
   getBundleDownloadUrl,
+  getBundleVersion,
   type BundleRequest,
 } from '../api/bundleService'
 import { useEstimateBundleSize } from '../hooks/useBundles'
@@ -120,6 +122,8 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
   const [version, setVersion] = useState('')
   const estimateMutation = useEstimateBundleSize()
 
+  const [bundleError, setBundleError] = useState<string | null>(null)
+
   // Progress state
   const [steps, setSteps] = useState<Step[]>([])
   const [overallProgress, setOverallProgress] = useState(0)
@@ -158,6 +162,10 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
     setPhase('wizard')
     setIsMinimized(false)
     setIsOpen(true)
+    // Fetch latest version from server
+    getBundleVersion().then((v) => {
+      if (v && v !== 'dev') setVersion(v)
+    }).catch(() => {})
   }, [])
 
   const closeBundleModal = useCallback(() => setIsOpen(false), [])
@@ -169,6 +177,7 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
 
   const startBundle = useCallback(async () => {
     const req: BundleRequest = { platform, arch, accelerator, addons, version }
+    setBundleError(null)
     setPhase('progress')
     setOverallProgress(0)
     setStartTime(Date.now())
@@ -213,8 +222,8 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
         queryClient.invalidateQueries({ queryKey: bundleKeys.list() })
       },
       (msg) => {
-        // On error, stay on progress with an alert
         console.error('Bundle error:', msg)
+        setBundleError(typeof msg === 'string' ? msg : String(msg))
         setPhase('wizard')
       }
     )
@@ -291,6 +300,12 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
               </DialogHeader>
 
               <div className="flex flex-col gap-5 mt-2">
+                {bundleError && (
+                  <div className="rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                    <div className="font-medium mb-1">Bundle failed</div>
+                    <div className="text-xs break-all">{bundleError}</div>
+                  </div>
+                )}
                 {/* Platform */}
                 <div>
                   <label className="text-sm font-medium text-foreground">
@@ -481,12 +496,12 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
                       key={step.name}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <span className="w-5 text-center">
+                      <span className="w-5 text-center flex items-center justify-center">
                         {step.status === 'complete'
-                          ? '✓'
+                          ? <span className="w-4 h-4 text-green-500"><FontIcon type="checkmark-filled" /></span>
                           : step.status === 'downloading'
-                            ? '⟳'
-                            : '○'}
+                            ? <span className="w-4 h-4 animate-spin"><FontIcon type="loading" /></span>
+                            : <span className="w-3 h-3 rounded-full border border-muted-foreground" />}
                       </span>
                       <span
                         className={
@@ -532,7 +547,7 @@ export const BundleModalProvider: React.FC<ProviderProps> = ({ children }) => {
             <>
               <DialogHeader>
                 <DialogTitle className="text-lg text-foreground">
-                  🎉 Bundle ready!
+                  Bundle ready!
                 </DialogTitle>
                 <DialogDescription>
                   {completedBundle.filename}

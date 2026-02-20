@@ -622,7 +622,7 @@ const Dashboard = () => {
                 </button>
               )}
             </div>
-            <PageActions mode={mode} onModeChange={handleModeChange} />
+            <PageActions mode={mode} onModeChange={handleModeChange} showPackage />
           </div>
         )}
 
@@ -740,7 +740,7 @@ const Dashboard = () => {
               aria-label="Bundle for deployment"
             >
               <div className="flex items-center gap-3">
-                <span className="text-2xl">📦</span>
+                <span className="w-6 h-6 text-muted-foreground"><FontIcon type="rocket" /></span>
                 <div>
                   <div className="text-sm font-medium text-foreground">Bundle for deployment</div>
                   <div className="text-xs text-muted-foreground">

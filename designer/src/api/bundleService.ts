@@ -25,6 +25,11 @@ export interface BundleEstimate {
   components: Record<string, number>
 }
 
+export async function getBundleVersion(): Promise<string> {
+  const { data } = await apiClient.get<{ version: string }>('/bundle/version')
+  return data.version
+}
+
 export async function listBundles(): Promise<BundleSummary[]> {
   const { data } = await apiClient.get<BundleSummary[]>('/bundles')
   return data

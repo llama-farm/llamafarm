@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-// FontIcon not used — using text labels for action buttons
+import FontIcon from '../../common/FontIcon'
 import { useBundles, useDeleteBundle } from '../../hooks/useBundles'
 import { useBundleModal } from '../../contexts/BundleModalContext'
 import { getBundleDownloadUrl } from '../../api/bundleService'
@@ -72,14 +72,16 @@ const DeployPage = () => {
       {isLoading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : !bundles || bundles.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="text-4xl mb-4">📦</div>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-12 h-12 mb-5 text-muted-foreground/60 mx-auto">
+            <FontIcon type="rocket" />
+          </div>
           <div className="text-lg font-medium text-foreground mb-2">
             No bundles yet
           </div>
-          <div className="text-sm text-muted-foreground mb-6 max-w-md">
-            Bundles are distributable archives of LlamaFarm that you can
-            transfer to remote or air-gapped machines.
+          <div className="text-sm text-muted-foreground mb-6 max-w-sm leading-relaxed">
+            Bundle LlamaFarm into a portable archive you can transfer to
+            remote or air-gapped machines — no internet required on the target.
           </div>
           <Button onClick={openBundleModal}>Create your first bundle</Button>
         </div>
@@ -124,21 +126,21 @@ const DeployPage = () => {
                     <div className="flex justify-end gap-1">
                       <button
                         type="button"
-                        className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input hover:bg-accent/30"
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input hover:bg-accent/30 text-muted-foreground hover:text-foreground"
                         aria-label="Download bundle"
                         onClick={() =>
                           window.open(getBundleDownloadUrl(b.id), '_blank')
                         }
                       >
-                        ⬇️
+                        <span className="w-4 h-4"><FontIcon type="download" /></span>
                       </button>
                       <button
                         type="button"
-                        className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input hover:bg-accent/30 text-red-500"
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-input hover:bg-accent/30 text-muted-foreground hover:text-red-500"
                         aria-label="Delete bundle"
                         onClick={() => setToDelete(b)}
                       >
-                        🗑️
+                        <span className="w-4 h-4"><FontIcon type="trashcan" /></span>
                       </button>
                     </div>
                   </td>

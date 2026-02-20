@@ -30,7 +30,9 @@ const ThumbsDown = lazy(() => import('../assets/icons/ThumbsDown'))
 const ThumbsDownFilled = lazy(() => import('../assets/icons/ThumbsDownFilled'))
 const ThumbsUp = lazy(() => import('../assets/icons/ThumbsUp'))
 const ThumbsUpFilled = lazy(() => import('../assets/icons/ThumbsUpFilled'))
+const Rocket = lazy(() => import('../assets/icons/Rocket'))
 const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
+const Download = lazy(() => import('../assets/icons/Download'))
 const Upload = lazy(() => import('../assets/icons/Upload'))
 const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 const Info = lazy(() => import('../assets/icons/Info'))
@@ -56,6 +58,8 @@ type FontIconTypes =
   | 'code'
   | 'dashboard'
   | 'data'
+  | 'download'
+  | 'rocket'
   | 'tools-alt'
   | 'edit'
   | 'fade'
@@ -136,6 +140,10 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Dashboard />
       case 'data':
         return <Data />
+      case 'download':
+        return <Download />
+      case 'rocket':
+        return <Rocket />
       case 'tools-alt':
         return <ToolsAlt />
       case 'edit':
