@@ -54,8 +54,8 @@ export function Selector({
 
   const triggerClasses =
     variant === 'minimal'
-      ? `w-full ${sizeClasses[size]} bg-transparent border-0 outline-none text-left flex items-center justify-between gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:text-foreground`
-      : `w-full ${sizeClasses[size]} rounded-lg border border-input bg-background text-left flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed`
+      ? `w-full ${sizeClasses[size]} bg-transparent border-0 outline-none text-left flex items-center justify-between gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+      : `w-full ${sizeClasses[size]} rounded-lg border border-input bg-background text-left flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
 
   return (
     <div className={className}>
