@@ -31,6 +31,11 @@ const sizeClasses = {
   sm: 'h-7 px-2 text-xs',
 }
 
+const textClasses = {
+  default: 'text-sm',
+  sm: 'text-xs',
+}
+
 export function Selector({
   value,
   options,
@@ -66,7 +71,7 @@ export function Selector({
             disabled={disabled || loading}
             className={triggerClasses}
           >
-            <span className={`truncate text-sm ${!selectedOption ? 'text-muted-foreground' : ''}`}>
+            <span className={`truncate ${textClasses[size]} ${!selectedOption ? 'text-muted-foreground' : ''}`}>
               {loading ? 'Loading...' : displayText}
             </span>
             {loading ? (
@@ -89,7 +94,7 @@ export function Selector({
                 onClick={() => onChange(option.value)}
               >
                 <div className="flex flex-col">
-                  <span className="text-sm">{option.label}</span>
+                  <span className={textClasses[size]}>{option.label}</span>
                   {option.description && (
                     <span className="text-xs text-muted-foreground">
                       {option.description}
