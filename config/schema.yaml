@@ -130,6 +130,25 @@ properties:
             api_key:
               type: string
               description: API key for the provider
+            
+            # ═══════════════════════════════════════════════════════════════
+            # FOR MODEL PRELOADING
+            # ═══════════════════════════════════════════════════════════════
+            preload:
+              type: boolean
+              description: |
+                Load this model into memory at server startup to eliminate cold-start latency.
+                When true, the model is loaded before the first request arrives.
+                When false (default), the model loads on-demand when first requested.
+                Only applicable to 'universal' provider models.
+              default: false
+            
+            pin:
+              type: boolean
+              description: Prevent this model from being evicted from the cache. This field only has effect if the model is loaded (either via preload: true or on-demand).
+              default: false
+            # ═══════════════════════════════════════════════════════════════
+            
             instructor_mode:
               type: string
               description: "Instructor mode to use for structured output (e.g., tools, json, md_json)"
