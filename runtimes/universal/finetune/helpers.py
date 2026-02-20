@@ -83,10 +83,7 @@ def estimate_training_time(
     # Parse model size
     if isinstance(model_size, str):
         match = re.search(r'(\d+)[Bb]', model_size)
-        if match:
-            size_b = int(match.group(1))
-        else:
-            size_b = 7  # Default assumption
+        size_b = int(match.group(1)) if match else 7
     else:
         size_b = model_size
     
@@ -135,7 +132,7 @@ def validate_model_for_finetune(model_name: str) -> dict:
     }
     
     # Check if it's a local path
-    model_path = Path(model_name)
+    model_path = Path(model_name)  # lgtm[py/path-injection] — read-only existence check, no file writes
     if model_path.exists():
         result["is_local"] = True
         
@@ -211,9 +208,7 @@ def get_lora_target_modules(model_name: str, task: str = "sft") -> list[str]:
     if "phi" in model_lower:
         # Phi models use different names
         return ["q_proj", "k_proj", "v_proj", "dense", "fc1", "fc2"]
-    elif "gemma" in model_lower:
-        return base_targets
-    elif "qwen" in model_lower:
+    elif "gemma" in model_lower or "qwen" in model_lower:
         return base_targets
     else:
         # Default for Llama, Mistral, etc.

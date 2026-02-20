@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +89,7 @@ def validate_sft_dataset(data: list[dict], expected_format: str | None = None) -
                     continue
                 if "from" not in turn or "value" not in turn:
                     errors.append(f"Example {i}, turn {j}: missing 'from' or 'value'")
-                if turn.get("from") not in ["human", "gpt", "system"]:
+                elif turn.get("from") not in ["human", "gpt", "system"]:
                     warnings.append(f"Example {i}, turn {j}: unusual 'from' value: {turn.get('from')}")
     
     elif format_to_use == "chat":
@@ -110,7 +109,7 @@ def validate_sft_dataset(data: list[dict], expected_format: str | None = None) -
                     continue
                 if "role" not in msg or "content" not in msg:
                     errors.append(f"Example {i}, message {j}: missing 'role' or 'content'")
-                if msg.get("role") not in ["user", "assistant", "system"]:
+                elif msg.get("role") not in ["user", "assistant", "system"]:
                     warnings.append(f"Example {i}, message {j}: unusual role: {msg.get('role')}")
     
     elif format_to_use == "alpaca":
@@ -221,14 +220,22 @@ def format_alpaca(data: list[dict]) -> list[dict]:
             output = ""
             input_text = ""
             
+            system_text = ""
             for msg in msgs:
-                if msg["role"] == "user":
+                role = msg.get("role", "")
+                if role == "system":
+                    system_text = msg["content"]
+                elif role == "user":
                     if not instruction:
                         instruction = msg["content"]
                     else:
                         input_text += msg["content"] + "\n"
-                elif msg["role"] == "assistant":
+                elif role == "assistant":
                     output = msg["content"]
+            
+            # Prepend system message to instruction if present
+            if system_text:
+                instruction = f"{system_text}\n\n{instruction}"
             
             result.append({
                 "instruction": instruction,

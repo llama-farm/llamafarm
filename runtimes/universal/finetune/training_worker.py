@@ -89,9 +89,13 @@ def main():
         start_time = time.time()
         
         # Import training libraries
+        from finetune.data_prep import (
+            auto_detect_format,
+            format_raw_text,
+            format_sharegpt,
+        )
+        from finetune.helpers import get_lora_target_modules, resolve_gguf_to_hf
         from finetune.trainer import detect_backend, import_training_libs
-        from finetune.helpers import resolve_gguf_to_hf, get_lora_target_modules
-        from finetune.data_prep import format_sharegpt, format_raw_text, auto_detect_format
         
         backend = detect_backend()
         FastLanguageModel, SFTTrainer, actual_backend = import_training_libs(backend)
@@ -204,7 +208,7 @@ def main():
         epochs = config.get('epochs', 3)
         batch_size = config.get('batch_size', 2)
         learning_rate = config.get('learning_rate', 2e-4)
-        max_steps = config.get('max_steps', -1)
+        max_steps = config.get('max_steps') or -1
         warmup_steps = config.get('warmup_steps', 10)
         gradient_accumulation_steps = config.get('gradient_accumulation_steps', 2)
         
@@ -216,7 +220,7 @@ def main():
             num_train_epochs=epochs,
             max_steps=max_steps,
             learning_rate=learning_rate,
-            fp16=not (actual_backend == "mlx"),  # MLX doesn't use fp16 flag
+            fp16=actual_backend != "mlx",  # MLX doesn't use fp16 flag
             bf16=False,
             logging_steps=10,
             optim="adamw_8bit",
@@ -266,7 +270,7 @@ def main():
                         final_loss = float(m.group(1))
                         break
                     m = re.search(r'Val loss (\d+\.\d+)', line)
-                    if m and final_loss == 0.0:
+                    if m:
                         final_loss = float(m.group(1))
                         break
                 # Parse step count
@@ -319,7 +323,7 @@ def main():
                     # Step 1: Merge LoRA into full HF model
                     merged_dir = Path(config['output_dir']) / "merged_hf"
                     merged_dir.mkdir(parents=True, exist_ok=True)
-                    logger.info(f"Merging LoRA adapter into base model...")
+                    logger.info("Merging LoRA adapter into base model...")
 
                     if hasattr(model, 'save_pretrained_merged'):
                         model.save_pretrained_merged(str(merged_dir), tokenizer)

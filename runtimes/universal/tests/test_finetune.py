@@ -1,33 +1,29 @@
 """Unit tests for fine-tuning addon."""
 
-import pytest
+import importlib.util
 
-# Check if unsloth is available
-try:
-    import unsloth_mlx
-    HAS_UNSLOTH = True
-except ImportError:
-    try:
-        import unsloth
-        HAS_UNSLOTH = True
-    except ImportError:
-        HAS_UNSLOTH = False
+import pytest
 
 from finetune.data_prep import (
     auto_detect_format,
-    validate_sft_dataset,
-    validate_cpt_dataset,
-    format_sharegpt,
     format_alpaca,
     format_raw_text,
+    format_sharegpt,
+    validate_cpt_dataset,
+    validate_sft_dataset,
 )
 from finetune.helpers import (
-    get_supported_templates,
     check_template_compatibility,
     estimate_training_time,
-    validate_model_for_finetune,
-    resolve_gguf_to_hf,
     get_lora_target_modules,
+    get_supported_templates,
+    resolve_gguf_to_hf,
+    validate_model_for_finetune,
+)
+
+HAS_UNSLOTH = (
+    importlib.util.find_spec("unsloth_mlx") is not None
+    or importlib.util.find_spec("unsloth") is not None
 )
 
 
@@ -356,7 +352,7 @@ class TestTrainerWithUnsloth:
     
     def test_import_training_libs(self):
         """Test importing training libraries."""
-        from finetune.trainer import import_training_libs, detect_backend
+        from finetune.trainer import detect_backend, import_training_libs
         
         backend = detect_backend()
         FastLanguageModel, SFTTrainer, actual_backend = import_training_libs(backend)

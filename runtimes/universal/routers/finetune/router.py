@@ -3,28 +3,26 @@
 from __future__ import annotations
 
 import logging
-import time
 import uuid
 
 from fastapi import APIRouter, HTTPException
 
-from finetune.data_prep import validate_sft_dataset, validate_cpt_dataset
+from finetune.data_prep import validate_cpt_dataset, validate_sft_dataset
 from finetune.helpers import (
-    get_supported_templates,
     check_template_compatibility,
+    get_supported_templates,
     validate_model_for_finetune,
 )
 from finetune.trainer import (
+    CPTJobConfig,
     FineTuneTrainer,
     SFTJobConfig,
-    CPTJobConfig,
-    JobStatus as TrainerJobStatus,
 )
 from routers.finetune.types import (
-    SFTRequest,
     CPTRequest,
-    ValidateRequest,
     JobStatus,
+    SFTRequest,
+    ValidateRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,7 +42,7 @@ def set_trainer(trainer: FineTuneTrainer):
 def get_trainer() -> FineTuneTrainer:
     """Get the global trainer instance."""
     if _trainer is None:
-        raise RuntimeError("Fine-tuning trainer not initialized")
+        raise HTTPException(status_code=503, detail="Fine-tuning service not available")
     return _trainer
 
 

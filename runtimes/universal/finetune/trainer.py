@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-import os
 import platform
-import subprocess
 import sys
 import time
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -149,8 +145,8 @@ def import_training_libs(backend: str | None = None):
             return FastLanguageModel, SFTTrainer, "mlx"
         
         else:  # cuda
-            from unsloth import FastLanguageModel
             from trl import SFTTrainer
+            from unsloth import FastLanguageModel
             
             return FastLanguageModel, SFTTrainer, "cuda"
     
@@ -186,10 +182,8 @@ class FineTuneTrainer:
         
         if self._worker_task:
             self._worker_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._worker_task
-            except asyncio.CancelledError:
-                pass
         
         # Cancel any running jobs
         for job in self._jobs.values():
@@ -312,13 +306,22 @@ class FineTuneTrainer:
         Args:
             job: Job to run
         """
+        # Skip if cancelled while queued
+        if job.status == JobStatus.CANCELLED:
+            logger.info(f"Skipping cancelled job {job.job_id}")
+            return
+        
         job.status = JobStatus.RUNNING
         job.started_at = time.time()
         
         try:
-            # Prepare output directory
+            # Prepare output directory (validated to stay under FINETUNE_DIR)
             if job.config.output_dir:
-                output_dir = Path(job.config.output_dir)
+                output_dir = Path(job.config.output_dir).resolve()
+                if not output_dir.is_relative_to(FINETUNE_DIR.resolve()):
+                    raise ValueError(
+                        f"output_dir must be under {FINETUNE_DIR}, got {output_dir}"
+                    )
             else:
                 output_dir = FINETUNE_DIR / job.job_id
             
