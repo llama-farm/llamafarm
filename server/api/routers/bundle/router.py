@@ -61,9 +61,13 @@ def list_bundles():
 @router.get("s/{bundle_id}/download")
 def download_bundle(bundle_id: str):
     """Download a bundle archive."""
-    path = service.get_bundle_path(bundle_id)
+    try:
+        path = service.get_bundle_path(bundle_id)
+    except Exception:
+        logger.exception("Error retrieving bundle path")
+        raise HTTPException(500, "Internal server error")
     if not path:
-        raise HTTPException(404, f"Bundle '{bundle_id}' not found")
+        raise HTTPException(404, "Bundle not found")
 
     return FileResponse(
         path=str(path),
@@ -75,6 +79,11 @@ def download_bundle(bundle_id: str):
 @router.delete("s/{bundle_id}")
 def delete_bundle(bundle_id: str):
     """Delete a bundle."""
-    if not service.delete_bundle(bundle_id):
-        raise HTTPException(404, f"Bundle '{bundle_id}' not found")
+    try:
+        deleted = service.delete_bundle(bundle_id)
+    except Exception:
+        logger.exception("Error deleting bundle")
+        raise HTTPException(500, "Internal server error")
+    if not deleted:
+        raise HTTPException(404, "Bundle not found")
     return {"status": "deleted"}

@@ -196,11 +196,12 @@ async def create_bundle(
                     manifest_data[step_name] = step.get("asset", step_name)
                 except Exception as exc:
                     logger.error(
-                        f"Bundle step {step_name} failed: {exc}"
+                        f"Bundle step {step_name} failed: {exc}",
+                        exc_info=True,
                     )
                     yield _sse(
                         "error",
-                        {"message": f"Failed at {step_name}: {exc}"},
+                        {"message": f"Failed at step '{step_name}'. Check server logs for details."},
                     )
                     return
 
@@ -311,32 +312,49 @@ def list_bundles() -> list[BundleSummary]:
             data = json.loads(manifest_file.read_text())
             results.append(BundleSummary(**data))
         except Exception:
+            logger.warning(f"Skipping invalid bundle manifest: {manifest_file}")
             continue
 
     return sorted(results, key=lambda b: b.created_at, reverse=True)
 
 
+def _safe_bundle_dir(bundle_id: str) -> Path | None:
+    """Resolve a bundle directory, returning None if the ID attempts path traversal."""
+    bundles_dir = _bundles_dir()
+    bundle_dir = (bundles_dir / bundle_id).resolve()
+    if not str(bundle_dir).startswith(str(bundles_dir) + os.sep) and bundle_dir != bundles_dir:
+        logger.warning(f"Path traversal attempt blocked for bundle_id: {bundle_id!r}")
+        return None
+    return bundle_dir
+
+
 def get_bundle_path(bundle_id: str) -> Path | None:
     """Get the archive path for a bundle."""
-    bundle_dir = _bundles_dir() / bundle_id
+    bundle_dir = _safe_bundle_dir(bundle_id)
+    if bundle_dir is None or not bundle_dir.exists():
+        return None
     manifest_file = bundle_dir / "manifest.json"
     if not manifest_file.exists():
         return None
     try:
         data = json.loads(manifest_file.read_text())
         filename = data.get("filename", "")
+        if not filename or os.sep in filename or "/" in filename:
+            return None
         archive = bundle_dir / filename
+        if not archive.resolve().parent == bundle_dir.resolve():
+            return None
         if archive.exists():
             return archive
     except Exception:
-        pass
+        logger.exception(f"Failed to read manifest for bundle {bundle_id!r}")
     return None
 
 
 def delete_bundle(bundle_id: str) -> bool:
     """Delete a bundle directory. Returns True if deleted."""
-    bundle_dir = _bundles_dir() / bundle_id
-    if not bundle_dir.exists():
+    bundle_dir = _safe_bundle_dir(bundle_id)
+    if bundle_dir is None or not bundle_dir.exists():
         return False
     shutil.rmtree(bundle_dir, ignore_errors=True)
     return True
