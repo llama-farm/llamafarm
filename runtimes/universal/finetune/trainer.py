@@ -20,7 +20,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Output directory for fine-tuned models
-FINETUNE_DIR = Path.home() / ".llamafarm" / "finetune"
+FINETUNE_DIR = Path.home() / ".llamafarm" / "models" / "llm"
 
 
 class JobStatus(str, Enum):

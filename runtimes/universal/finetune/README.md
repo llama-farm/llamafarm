@@ -141,10 +141,10 @@ The addon supports multiple dataset formats with automatic detection:
 
 ## Output Structure
 
-Training outputs are saved to `~/.llamafarm/finetune/{job_id}/`:
+Training outputs are saved to `~/.llamafarm/models/llm/{job_id}/`:
 
 ```
-~/.llamafarm/finetune/{job_id}/
+~/.llamafarm/models/llm/{job_id}/
   config.json          # Job configuration
   job_config.json      # Detailed training config
   checkpoints/         # Training checkpoints
