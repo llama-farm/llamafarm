@@ -165,20 +165,13 @@ async def _download_asset(
     return total
 
 
-async def create_bundle(
+def _run_bundle_sync(
     req: BundleRequest,
-) -> AsyncGenerator[str, None]:
-    """Execute the bundle process, yielding SSE-formatted events."""
-    ver = req.version or current_version
-    if not _is_valid_version(ver):
-        # Running from source/branch — resolve latest release from GitHub
-        ver = await _get_latest_release_tag()
-        if not ver:
-            yield _sse("error", {"message": "Cannot bundle dev version — specify a version or ensure GitHub releases exist"})
-            return
-    if not ver.startswith("v"):
-        ver = f"v{ver}"
-
+    ver: str,
+    queue: "asyncio.Queue[str | None]",
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Run the bundle process synchronously in a thread, pushing SSE events to queue."""
     go_os = PLATFORM_TO_GOOS[req.platform]
     go_arch = ARCH_TO_GOARCH[req.arch]
     bundle_id = str(uuid.uuid4())[:8]
@@ -188,77 +181,55 @@ async def create_bundle(
     steps = _build_steps(req)
     total_steps = len(steps)
 
+    def emit(event: str, data: dict) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, _sse(event, data))
+
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
+        import httpx as _httpx
+
+        with _httpx.Client(timeout=300) as client:
             for i, step in enumerate(steps):
                 step_name = step["name"]
-                yield _sse(
-                    "progress",
-                    {
-                        "step": step_name,
-                        "status": "downloading",
-                        "progress": i / total_steps,
-                        "stepIndex": i,
-                        "totalSteps": total_steps,
-                    },
-                )
+                emit("progress", {
+                    "step": step_name, "status": "downloading",
+                    "progress": i / total_steps,
+                    "stepIndex": i, "totalSteps": total_steps,
+                })
 
                 try:
-                    size = await step["fn"](
-                        client, ver, go_os, go_arch, req, tmp_dir
+                    size = _download_asset_sync(
+                        client, ver, step, go_os, go_arch, req, tmp_dir
                     )
                     manifest_data[step_name] = step.get("asset", step_name)
                 except Exception as exc:
-                    logger.error(
-                        f"Bundle step {step_name} failed: {exc}",
-                        exc_info=True,
-                    )
-                    yield _sse(
-                        "error",
-                        {"message": f"Failed at step '{step_name}'. Check server logs for details."},
-                    )
+                    logger.error(f"Bundle step {step_name} failed: {exc}", exc_info=True)
+                    emit("error", {"message": f"Failed at step '{step_name}'. Check server logs for details."})
                     return
 
-                yield _sse(
-                    "progress",
-                    {
-                        "step": step_name,
-                        "status": "complete",
-                        "progress": (i + 1) / total_steps,
-                        "size": size,
-                        "stepIndex": i,
-                        "totalSteps": total_steps,
-                    },
-                )
+                emit("progress", {
+                    "step": step_name, "status": "complete",
+                    "progress": (i + 1) / total_steps,
+                    "size": size, "stepIndex": i, "totalSteps": total_steps,
+                })
 
             # Write manifest
             manifest = BundleManifest(
-                id=bundle_id,
-                version=ver,
-                platform=req.platform,
-                arch=req.arch,
+                id=bundle_id, version=ver,
+                platform=req.platform, arch=req.arch,
                 accelerator=req.accelerator,
-                components=manifest_data,
-                addons=req.addons,
+                components=manifest_data, addons=req.addons,
                 created_at=datetime.now(UTC).isoformat(),
             )
-
-            manifest_path = tmp_dir / "manifest.json"
-            manifest_path.write_text(
+            (tmp_dir / "manifest.json").write_text(
                 json.dumps(manifest.model_dump(), indent=2)
             )
 
             # Package step
-            yield _sse(
-                "progress",
-                {
-                    "step": "packaging",
-                    "status": "downloading",
-                    "progress": (total_steps) / (total_steps + 1),
-                    "stepIndex": total_steps,
-                    "totalSteps": total_steps + 1,
-                },
-            )
+            emit("progress", {
+                "step": "packaging", "status": "downloading",
+                "progress": total_steps / (total_steps + 1),
+                "stepIndex": total_steps, "totalSteps": total_steps + 1,
+            })
 
             filename = (
                 f"llamafarm-{ver}-{req.platform}-{req.arch}"
@@ -270,45 +241,131 @@ async def create_bundle(
             bundle_dir.mkdir(parents=True, exist_ok=True)
 
             archive_path = bundle_dir / filename
-            await asyncio.to_thread(
-                _create_tar_gz, str(archive_path), str(tmp_dir)
-            )
+            _create_tar_gz(str(archive_path), str(tmp_dir))
 
             archive_size = archive_path.stat().st_size
             manifest.size = archive_size
             manifest.filename = filename
 
-            # Write final manifest to bundle dir
             (bundle_dir / "manifest.json").write_text(
                 json.dumps(manifest.model_dump(), indent=2)
             )
 
-            yield _sse(
-                "progress",
-                {
-                    "step": "packaging",
-                    "status": "complete",
-                    "progress": 1.0,
-                    "stepIndex": total_steps,
-                    "totalSteps": total_steps + 1,
-                },
-            )
+            emit("progress", {
+                "step": "packaging", "status": "complete",
+                "progress": 1.0,
+                "stepIndex": total_steps, "totalSteps": total_steps + 1,
+            })
 
-            yield _sse(
-                "complete",
-                {
-                    "id": bundle_id,
-                    "filename": filename,
-                    "size": archive_size,
-                    "version": ver,
-                    "platform": req.platform,
-                    "arch": req.arch,
-                    "accelerator": req.accelerator,
-                },
-            )
-
+            emit("complete", {
+                "id": bundle_id, "filename": filename,
+                "size": archive_size, "version": ver,
+                "platform": req.platform, "arch": req.arch,
+                "accelerator": req.accelerator,
+            })
+    except Exception as exc:
+        logger.error(f"Bundle failed: {exc}", exc_info=True)
+        emit("error", {"message": "Bundle failed unexpectedly. Check server logs."})
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        loop.call_soon_threadsafe(queue.put_nowait, None)  # signal done
+
+
+def _download_asset_sync(
+    client: "httpx.Client",
+    ver: str,
+    step: dict,
+    go_os: str,
+    go_arch: str,
+    req: BundleRequest,
+    tmp_dir: Path,
+) -> int:
+    """Synchronous version of asset download for thread-based bundle."""
+    import time as _time
+
+    step_name = step["name"]
+
+    if DRY_RUN:
+        _time.sleep(0.3)
+        placeholder = tmp_dir / f"{step_name}-placeholder"
+        placeholder.write_bytes(b"dry-run")
+        return SIZE_ESTIMATES.get(step_name, 50_000_000)
+
+    # Build asset name based on step
+    if step_name == "cli":
+        name = f"lf-{go_os}-{ARCH_TO_GOARCH[req.arch]}"
+        if req.platform == "windows":
+            name += ".exe"
+    elif step_name == "torch":
+        name = f"torch-{req.accelerator}-{req.platform}-{req.arch}.tar.gz"
+        dest_dir = tmp_dir / "torch"
+        dest_dir.mkdir(exist_ok=True)
+        return _download_release_sync(client, ver, name, dest_dir / name)
+    elif step_name in ("server", "rag", "runtime"):
+        platform_str = f"{go_os}-{req.arch}"
+        name = f"llamafarm-{step_name}-{platform_str}"
+        if req.platform == "windows":
+            name += ".exe"
+    else:
+        # Addon
+        addon_dir = tmp_dir / "addons"
+        addon_dir.mkdir(exist_ok=True)
+        plat = _addon_platform_string(req.platform, req.arch)
+        name = f"{step_name}-wheels-{plat}.tar.gz"
+        return _download_release_sync(client, ver, name, addon_dir / name)
+
+    return _download_release_sync(client, ver, name, tmp_dir / name)
+
+
+def _download_release_sync(
+    client: "httpx.Client",
+    version: str,
+    asset_name: str,
+    dest: Path,
+) -> int:
+    """Download a GitHub release asset synchronously."""
+    url = (
+        f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+        f"/releases/download/{version}/{asset_name}"
+    )
+    with client.stream("GET", url, follow_redirects=True) as resp:
+        resp.raise_for_status()
+        total = 0
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_bytes(chunk_size=65536):
+                f.write(chunk)
+                total += len(chunk)
+    return total
+
+
+async def create_bundle(
+    req: BundleRequest,
+) -> AsyncGenerator[str, None]:
+    """Execute the bundle process, yielding SSE-formatted events.
+
+    Runs the actual work in a background thread to avoid blocking the event loop.
+    """
+    ver = req.version or current_version
+    if not _is_valid_version(ver):
+        ver = await _get_latest_release_tag()
+        if not ver:
+            yield _sse("error", {"message": "Cannot bundle dev version — specify a version or ensure GitHub releases exist"})
+            return
+    if not ver.startswith("v"):
+        ver = f"v{ver}"
+
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    # Run bundle work in a thread so the event loop stays free
+    loop.run_in_executor(None, _run_bundle_sync, req, ver, queue, loop)
+
+    # Yield SSE events as they arrive from the thread
+    while True:
+        event = await queue.get()
+        if event is None:
+            break
+        yield event
 
 
 def list_bundles() -> list[BundleSummary]:
@@ -471,15 +528,13 @@ def _create_tar_gz(output_path: str, source_dir: str) -> None:
 
 def _build_steps(req: BundleRequest) -> list[dict]:
     steps: list[dict] = [
-        {"name": "cli", "fn": _download_cli},
-        {"name": "server", "fn": _make_pyapp_downloader("server")},
-        {"name": "rag", "fn": _make_pyapp_downloader("rag")},
-        {"name": "runtime", "fn": _make_pyapp_downloader("runtime")},
+        {"name": "cli"},
+        {"name": "server"},
+        {"name": "rag"},
+        {"name": "runtime"},
     ]
     if req.accelerator != "cpu":
-        steps.append({"name": "torch", "fn": _download_torch})
+        steps.append({"name": "torch"})
     for addon in req.addons:
-        steps.append(
-            {"name": addon, "fn": _make_addon_downloader(addon)}
-        )
+        steps.append({"name": addon})
     return steps
