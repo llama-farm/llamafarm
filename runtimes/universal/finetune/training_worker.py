@@ -3,6 +3,7 @@
 
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -14,6 +15,57 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
+
+# ── GGUF conversion helpers ──────────────────────────────────────────────
+
+_GGUF_QUANT_MAP = {
+    "f16": "f16", "f32": "f32",
+    "q8_0": "q8_0", "q4_0": "q4_0", "q4_1": "q4_1",
+    "q5_0": "q5_0", "q5_1": "q5_1",
+    "q4_k_m": "q8_0",  # convert as q8_0, quantize separately
+    "q4_k_s": "q8_0",
+}
+
+
+def _quant_to_gguf_type(quant: str) -> str:
+    """Map quantization name to convert_hf_to_gguf.py --outtype value."""
+    return _GGUF_QUANT_MAP.get(quant.lower(), "q8_0")
+
+
+def _find_hf_to_gguf_converter() -> Path | None:
+    """Find convert_hf_to_gguf.py from llama.cpp."""
+    import os
+
+    # Check env var first
+    llama_dir = os.environ.get("LLAMA_CPP_DIR")
+    if llama_dir:
+        p = Path(llama_dir) / "convert_hf_to_gguf.py"
+        if p.exists():
+            return p
+
+    # Check common locations
+    candidates = [
+        Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
+        Path("/tmp/llama_cpp_conv/convert_hf_to_gguf.py"),
+        Path("/opt/llama.cpp/convert_hf_to_gguf.py"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+
+    # Try to find via pip-installed gguf package
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec("gguf")
+        if spec and spec.origin:
+            gguf_dir = Path(spec.origin).parent.parent
+            p = gguf_dir / "convert_hf_to_gguf.py"
+            if p.exists():
+                return p
+    except Exception:
+        pass
+
+    return None
 
 
 def main():
@@ -236,26 +288,99 @@ def main():
         # Export to GGUF if requested
         gguf_path = None
         if config.get('output_gguf', True):
+            quantization = config.get('quantization', 'q8_0')
+            gguf_dir = Path(config['output_dir']) / "gguf"
+            gguf_dir.mkdir(parents=True, exist_ok=True)
+            gguf_file = gguf_dir / f"model-{quantization}.gguf"
+
+            # Strategy 1: Try unsloth's built-in GGUF export
             try:
-                gguf_dir = Path(config['output_dir']) / "gguf"
-                gguf_dir.mkdir(parents=True, exist_ok=True)
-                
-                quantization = config.get('quantization', 'q8_0')
-                
-                logger.info(f"Exporting to GGUF format ({quantization})...")
-                
-                # Unsloth GGUF export
+                logger.info(f"Exporting to GGUF via unsloth ({quantization})...")
                 model.save_pretrained_gguf(
                     str(gguf_dir),
                     tokenizer,
-                    quantization_method=quantization
+                    quantization_method=quantization,
                 )
-                
-                gguf_path = str(gguf_dir)
-                logger.info(f"GGUF export completed: {gguf_path}")
-            
+                # Find the output file
+                for f in gguf_dir.iterdir():
+                    if f.suffix == ".gguf":
+                        gguf_path = str(f)
+                        break
+                if gguf_path:
+                    logger.info(f"GGUF export completed: {gguf_path}")
             except Exception as e:
-                logger.warning(f"GGUF export failed: {e}")
+                logger.warning(f"Unsloth GGUF export failed: {e}")
+
+            # Strategy 2: Merge to HF format, then use convert_hf_to_gguf.py
+            if not gguf_path:
+                try:
+                    logger.info("Trying merge → convert_hf_to_gguf.py fallback...")
+
+                    # Step 1: Merge LoRA into full HF model
+                    merged_dir = Path(config['output_dir']) / "merged_hf"
+                    merged_dir.mkdir(parents=True, exist_ok=True)
+                    logger.info(f"Merging LoRA adapter into base model...")
+
+                    if hasattr(model, 'save_pretrained_merged'):
+                        model.save_pretrained_merged(str(merged_dir), tokenizer)
+                    else:
+                        # CUDA unsloth: merge_and_unload
+                        merged_model = model.merge_and_unload()
+                        merged_model.save_pretrained(str(merged_dir))
+                        tokenizer.save_pretrained(str(merged_dir))
+
+                    logger.info(f"Merged model saved to {merged_dir}")
+
+                    # Step 2: Find convert_hf_to_gguf.py
+                    converter = _find_hf_to_gguf_converter()
+                    if converter is None:
+                        raise FileNotFoundError(
+                            "convert_hf_to_gguf.py not found. "
+                            "Install llama.cpp or set LLAMA_CPP_DIR."
+                        )
+
+                    # Step 3: Convert to GGUF
+                    logger.info(f"Converting to GGUF ({quantization})...")
+                    import subprocess as sp
+                    cmd = [
+                        sys.executable, str(converter),
+                        str(merged_dir),
+                        "--outfile", str(gguf_file),
+                        "--outtype", _quant_to_gguf_type(quantization),
+                    ]
+                    # Ensure converter can find matching gguf package
+                    env = dict(os.environ)
+                    converter_gguf_py = converter.parent / "gguf-py"
+                    if converter_gguf_py.exists():
+                        pp = env.get("PYTHONPATH", "")
+                        env["PYTHONPATH"] = f"{converter_gguf_py}:{pp}"
+
+                    result = sp.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                        env=env,
+                    )
+                    if result.returncode == 0 and gguf_file.exists():
+                        gguf_path = str(gguf_file)
+                        size_mb = gguf_file.stat().st_size / (1024 * 1024)
+                        logger.info(
+                            f"GGUF export completed: {gguf_path} "
+                            f"({size_mb:.1f} MB)"
+                        )
+                    else:
+                        logger.error(
+                            f"convert_hf_to_gguf.py failed: {result.stderr[-500:]}"
+                        )
+                except Exception as e:
+                    logger.warning(f"GGUF fallback export failed: {e}")
+
+            if not gguf_path:
+                logger.warning(
+                    "GGUF export not available. LoRA adapter saved — "
+                    "convert manually with: convert_hf_to_gguf.py"
+                )
         
         # Save training log
         log_path = Path(config['output_dir']) / "training_log.jsonl"
