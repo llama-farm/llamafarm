@@ -28,6 +28,7 @@ lf init [path] [flags]
 - Ensures the API server is reachable (auto-starts locally if needed).
 - Creates the target directory (if missing) and writes `llamafarm.yaml` using the server’s `project.config` response.
 - Fails if a LlamaFarm config already exists in the directory.
+- Scaffolds `schemas/example.py` for structured output schemas.
 
 ## Example
 

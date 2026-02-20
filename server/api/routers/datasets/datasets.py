@@ -1,5 +1,5 @@
 import json
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from config.datamodel import Dataset
@@ -127,7 +127,7 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-class DatasetActionType(str, Enum):
+class DatasetActionType(StrEnum):
     PROCESS = "process"
     DELETE_FILE_CHUNKS = "delete_file_chunks"
     DELETE_DATASET_CHUNKS = "delete_dataset_chunks"

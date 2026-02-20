@@ -2142,6 +2142,7 @@ definitions:
     description: Retrieval type
 
   DatabaseEmbeddingStrategy:
+    title: DatabaseEmbeddingStrategy
     type: object
     required: [name, type]
     additionalProperties: false
@@ -2164,6 +2165,7 @@ definitions:
         description: Priority for automatic selection
 
   DatabaseRetrievalStrategy:
+    title: DatabaseRetrievalStrategy
     type: object
     required: [name, type]
     additionalProperties: false
@@ -2226,6 +2228,7 @@ definitions:
         description: Name of the default retrieval strategy to use
 
   dataProcessingStrategyDefinition:
+    title: DataProcessingStrategyDefinition
     type: object
     description: Processing pipeline configuration for parsers and extractors
     required: [name, parsers]

@@ -20,6 +20,7 @@ var (
 	runRAGScoreThreshold float64
 	runModel             string
 	dryRun               bool
+	runStructured        bool
 )
 
 // chatCmd represents the `lf chat` command
@@ -143,6 +144,18 @@ Examples:
 		ns = serverCfg.Namespace
 		proj = serverCfg.Project
 
+		if runStructured {
+			schemaRef, err := config.LoadSchemaRef(cwd)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			if strings.TrimSpace(schemaRef) == "" {
+				fmt.Fprintln(os.Stderr, "Error: --structured requires schema to be set in llamafarm.yaml")
+				os.Exit(1)
+			}
+		}
+
 		// Construct configuration for ChatManager
 		cfg := &ChatConfig{
 			ServerURL:            serverURL,
@@ -157,6 +170,7 @@ Examples:
 			RAGRetrievalStrategy: runRetrievalStrategy,
 			RAGTopK:              runRAGTopK,
 			RAGScoreThreshold:    runRAGScoreThreshold,
+			Structured:           runStructured,
 		}
 
 		// Create ChatManager
@@ -214,6 +228,7 @@ func init() {
 	chatCmd.Flags().IntVar(&runRAGTopK, "rag-top-k", 5, "Number of RAG results to retrieve")
 	chatCmd.Flags().Float64Var(&runRAGScoreThreshold, "rag-score-threshold", 0.0, "Minimum score threshold for RAG results")
 	chatCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the equivalent curl command instead of executing the request")
+	chatCmd.Flags().BoolVar(&runStructured, "structured", false, "Use configured schema for structured output (non-streaming)")
 
 	rootCmd.AddCommand(chatCmd)
 }

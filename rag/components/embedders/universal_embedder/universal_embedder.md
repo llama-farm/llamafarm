@@ -52,6 +52,9 @@ embedder:
     api_key: universal
     batch_size: 16
     timeout: 120
+    validation_timeout: 10
+    validation_retries: 2
+    validation_retry_backoff: 1.0
     normalize: true
 ```
 
@@ -64,6 +67,9 @@ embedder:
 | `api_key` | string | `universal` | API key (optional) |
 | `batch_size` | integer | `32` | Batch processing size (1-128) |
 | `timeout` | integer | `120` | Request timeout in seconds |
+| `validation_timeout` | integer | `10` | Validation timeout in seconds |
+| `validation_retries` | integer | `2` | Validation retry count |
+| `validation_retry_backoff` | number | `1.0` | Validation retry backoff seconds |
 | `normalize` | boolean | `true` | Normalize embeddings to unit length |
 
 ## Supported Models
@@ -279,6 +285,11 @@ timeout: 120
 
 # Slow connection
 timeout: 300
+
+# Validation checks (health/models)
+validation_timeout: 10
+validation_retries: 2
+validation_retry_backoff: 1.0
 ```
 
 ## Troubleshooting

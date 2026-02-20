@@ -9,7 +9,7 @@ import logging
 import subprocess
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from .turn_detector import EndOfTurnDetector, TurnDetectorConfig
@@ -26,7 +26,7 @@ MAX_ENCODED_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB max for streaming decode
 ALLOWED_FFMPEG_FORMATS = frozenset({"webm", "ogg", "mp3", "flac", "aiff", "wav", "m4a", "mp4", "opus"})
 
 
-class AudioFormat(str, Enum):
+class AudioFormat(StrEnum):
     """Detected audio format."""
 
     PCM = "pcm"  # Raw PCM 16-bit

@@ -13,6 +13,7 @@ Every LlamaFarm project is defined by a single file: `llamafarm.yaml`. The serve
 version: v1
 name: my-project
 namespace: default
+schema: schemas/example.py::Person
 runtime: { ... }
 prompts: [...]
 rag: { ... }
@@ -22,11 +23,12 @@ voice: { ... }
 
 ### Metadata
 
-| Field       | Type   | Required  | Notes                                              |
-| ----------- | ------ | --------- | -------------------------------------------------- |
-| `version`   | string | ✅ (`v1`) | Schema version.                                    |
-| `name`      | string | ✅        | Project identifier.                                |
-| `namespace` | string | ✅        | Grouping for isolation (matches server namespace). |
+| Field       | Type   | Required  | Notes                                                       |
+| ----------- | ------ | --------- | ----------------------------------------------------------- |
+| `version`   | string | ✅ (`v1`) | Schema version.                                             |
+| `name`      | string | ✅        | Project identifier.                                         |
+| `namespace` | string | ✅        | Grouping for isolation (matches server namespace).          |
+| `schema`    | string | Optional  | Pydantic schema for structured outputs (`schemas/...::Class`) |
 
 ### Runtime
 
@@ -128,6 +130,34 @@ The resolution priority for RAG parameters is:
 1. **Request parameters** (highest priority) — `rag_enabled`, `database` in the API call
 2. **Model defaults** — `rag_enabled`, `target_database` on the model config
 3. **Project defaults** — `rag.default_database`, or first database when databases exist
+
+### Structured Outputs
+
+Structured outputs require two settings:
+
+1. **Top-level schema**: Point to a Pydantic model inside your project’s `schemas/` directory.
+2. **Instructor mode**: Set `instructor_mode` on the target model (for example, `tools` or `json`).
+
+Example:
+
+```yaml
+schema: schemas/example.py::Person
+
+runtime:
+  models:
+    - name: vllm-model
+      provider: openai
+      model: qwen2.5:7b
+      base_url: http://localhost:8000/v1
+      api_key: ${VLLM_API_KEY}
+      instructor_mode: tools
+      default: true
+```
+
+Notes:
+
+- Schema paths must be relative, use a `.py` file, and live under `schemas/`.
+- Streaming is not supported when `schema` is configured. Use non-streaming requests (for example, `lf chat --structured`).
 
 **extra_body fields (Universal runtime):**
 
