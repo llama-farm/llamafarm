@@ -152,7 +152,7 @@ func resolveDeployTarget(cfg *config.LlamaFarmConfig, args []string) (targetURL 
 			return "", false, false, "", resolveErr
 		}
 		targetURL = dc.ServerURL
-		deployModels = dc.DeployModels
+		deployModels = dc.DeployModelsOrDefault()
 		deployData = dc.DeployData
 	} else {
 		// Use --server-url flag (which defaults to localhost:14345)

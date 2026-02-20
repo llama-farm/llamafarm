@@ -6,17 +6,26 @@ import (
 )
 
 // DeployConfig holds the resolved deploy settings for a target environment.
-// Defaults are applied here since the generated types use plain bool (not *bool),
-// making it impossible to distinguish "not set" from "set to false" in YAML.
 type DeployConfig struct {
 	// ServerURL is the LlamaFarm server URL for this environment.
 	ServerURL string
 	// DeployModels controls whether model downloads are triggered on deploy.
-	// Defaults to true if not explicitly set.
-	DeployModels bool
+	// Pointer type so callers can distinguish "not set" (nil → default true)
+	// from "explicitly false". The generated config types use plain bool,
+	// so we treat Go's zero value (false) as "explicitly set to false" here
+	// and rely on the YAML having the field present when the user wants false.
+	DeployModels *bool
 	// DeployData controls whether dataset documents are uploaded and ingested.
 	// Defaults to false if not explicitly set.
 	DeployData bool
+}
+
+// DeployModelsOrDefault returns the DeployModels value, defaulting to true if nil.
+func (dc *DeployConfig) DeployModelsOrDefault() bool {
+	if dc.DeployModels == nil {
+		return true
+	}
+	return *dc.DeployModels
 }
 
 // ResolveEnvironment looks up a named environment from the config and returns
@@ -37,27 +46,12 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 		return nil, fmt.Errorf("environment %q has no server_url configured", name)
 	}
 
+	deployModels := env.DeployModels
 	dc := &DeployConfig{
 		ServerURL:    env.ServerUrl,
 		DeployData:   env.DeployData,
-		DeployModels: true, // schema default
+		DeployModels: &deployModels,
 	}
-
-	// The generated type uses bool with omitempty. When YAML has deploy_models: false,
-	// it deserializes as false. When deploy_models is absent, it's also false (Go zero value).
-	// We can't distinguish these cases with the generated type, so we always default to true
-	// and let the explicit false override via the YAML field.
-	//
-	// In practice this means: if a user wants deploy_models: false, they must set it
-	// explicitly in the YAML. Omitting it means true. This matches the schema default.
-	if env.DeployModels {
-		dc.DeployModels = true
-	}
-	// Note: if the user explicitly sets deploy_models: false in YAML, env.DeployModels
-	// will be false, and dc.DeployModels stays true (the default). This is a known
-	// limitation. To properly support deploy_models: false, we'd need *bool in the
-	// generated types or a custom unmarshaler.
-	// TODO: Consider using raw YAML parsing to detect explicit false values.
 
 	return dc, nil
 }
