@@ -192,7 +192,38 @@ def main():
         train_result = trainer.train()
         
         logger.info("Training completed!")
-        logger.info(f"Training loss: {train_result.training_loss:.4f}")
+        # unsloth-mlx returns dict or CompletedProcess, unsloth returns TrainOutput
+        if isinstance(train_result, dict):
+            final_loss = train_result.get("training_loss", train_result.get("loss", 0.0))
+            global_step = train_result.get("global_step", 0)
+        elif hasattr(train_result, "training_loss"):
+            final_loss = train_result.training_loss
+            global_step = getattr(train_result, "global_step", 0)
+        else:
+            final_loss = 0.0
+            global_step = 0
+
+        # Parse actual loss from training log if not captured from return value
+        if final_loss == 0.0:
+            log_path = Path(config['output_dir']) / "training.log"
+            if log_path.exists():
+                import re
+                for line in reversed(log_path.read_text().splitlines()):
+                    m = re.search(r'Train loss (\d+\.\d+)', line)
+                    if m:
+                        final_loss = float(m.group(1))
+                        break
+                    m = re.search(r'Val loss (\d+\.\d+)', line)
+                    if m and final_loss == 0.0:
+                        final_loss = float(m.group(1))
+                        break
+                # Parse step count
+                for line in reversed(log_path.read_text().splitlines()):
+                    m = re.search(r'Iter (\d+):', line)
+                    if m:
+                        global_step = int(m.group(1))
+                        break
+        logger.info(f"Training loss: {final_loss:.4f}")
         
         # Save LoRA adapter
         lora_dir = Path(config['output_dir']) / "lora_adapter"
@@ -230,9 +261,9 @@ def main():
         log_path = Path(config['output_dir']) / "training_log.jsonl"
         with open(log_path, "w") as f:
             log_entry = {
-                "final_loss": float(train_result.training_loss),
+                "final_loss": float(final_loss),
                 "epochs": epochs,
-                "steps": train_result.global_step,
+                "steps": global_step,
             }
             json.dump(log_entry, f)
             f.write("\n")
@@ -243,9 +274,9 @@ def main():
         result = {
             "status": "completed",
             "metrics": {
-                "final_loss": float(train_result.training_loss),
+                "final_loss": float(final_loss),
                 "epochs": epochs,
-                "steps": train_result.global_step,
+                "steps": global_step,
                 "lora_adapter": str(lora_dir),
                 "gguf_path": gguf_path,
             },
