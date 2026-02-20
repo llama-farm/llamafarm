@@ -353,7 +353,11 @@ def get_rag_health_cache() -> RAGHealthCache:
 
     if _rag_health_cache is None:
         _rag_health_cache = RAGHealthCache()
-        _rag_health_cache.start_background_updates()
+        # NOTE: Background updates disabled — the filesystem broker Celery
+        # ping blocks the Python GIL for 60+ seconds, starving the uvicorn
+        # event loop even from a background thread.  RAG health will show
+        # "unhealthy" until this is replaced with a non-blocking check.
+        # _rag_health_cache.start_background_updates()
 
     return _rag_health_cache
 
