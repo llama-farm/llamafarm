@@ -364,12 +364,18 @@ def run_prepare_benchmark(base_url: str):
     # ── Pre-warm the system prompt ───────────────────────────────────────
     print(f"\n[Prepare] Pre-warming ~4000-token system prompt + RAG context...")
     t0 = time.perf_counter()
-    resp = httpx.post(f"{base_url}/v1/cache/prepare", json={
-        "model": MODEL,
-        "messages": [system_msg],
-        "warm": True,
-        "pinned": True,
-    }, timeout=120.0)
+    try:
+        resp = httpx.post(f"{base_url}/v1/cache/prepare", json={
+            "model": MODEL,
+            "messages": [system_msg],
+            "warm": True,
+            "pinned": True,
+        }, timeout=120.0)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"  ⚠️  /prepare failed: {e}")
+        print(f"  Skipping pre-warm benchmark (runtime may have crashed under memory pressure)")
+        return
     t1 = time.perf_counter()
     prep = resp.json()
     ck_warm = prep["cache_key"]
