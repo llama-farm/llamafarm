@@ -85,10 +85,13 @@ export async function createBundleStream(
       const decoder = new TextDecoder()
       let buffer = ''
 
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
+        const chunk = decoder.decode(value, { stream: true })
+        console.debug('[bundle-sse] chunk:', chunk)
+        buffer += chunk
 
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
@@ -100,6 +103,7 @@ export async function createBundleStream(
           } else if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              console.debug('[bundle-sse] event:', currentEvent, data)
               if (currentEvent === 'progress') {
                 onProgress(data)
               } else if (currentEvent === 'complete') {

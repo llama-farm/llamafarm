@@ -261,16 +261,15 @@ class RAGHealthCache:
             )
 
             if self.cache is None:
-                # No cache yet, try immediate check with short timeout
-                immediate_health = self._perform_quick_check()
+                # No cache yet — return unhealthy immediately.
+                # Background thread will populate the cache shortly.
+                # Do NOT perform sync checks here as they block the event loop.
                 return {
-                    "status": "degraded" if immediate_health else "unhealthy",
-                    "message": "RAG worker responding"
-                    if immediate_health
-                    else "RAG worker not responding",
+                    "status": "unhealthy",
+                    "message": "RAG worker not responding (waiting for background check)",
                     "timestamp": int(now),
                     "cache_age_seconds": 0,
-                    "source": "immediate_check",
+                    "source": "initial",
                 }
 
             # Return cached data with metadata
