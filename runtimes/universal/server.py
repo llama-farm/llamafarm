@@ -312,7 +312,7 @@ async def lifespan(app: FastAPI):
     logger.info("Model cleanup background task started")
 
     # Start KV cache manager + GC
-    from utils.kv_cache_manager import KVCacheManager, start_kv_cache_gc
+    from utils.kv_cache_manager import KVCacheManager, start_kv_cache_gc, stop_kv_cache_gc
     global _kv_cache_manager
     _kv_cache_manager = KVCacheManager()
     set_cache_manager(_kv_cache_manager)
@@ -325,6 +325,9 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Universal Runtime")
+
+    # Stop KV cache GC task
+    await stop_kv_cache_gc()
 
     # Stop cleanup task
     if _cleanup_task is not None:

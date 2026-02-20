@@ -528,7 +528,7 @@ class ChatCompletionsService:
                                 "reused_tokens": entry.token_count,
                                 "has_kv_data": bool(kv_data),
                             }
-                            logger.info(f"KV cache hit (streaming): {_s_cache_key}, kv_data={'yes' if kv_data else 'no'}")
+                            logger.info(f"KV cache hit (streaming): {_s_cache_key[:8]}…, kv_data={'yes' if kv_data else 'no'}")
                         else:
                             _stream_cache_info = {
                                 "hit": False, "status": match["status"],
@@ -937,7 +937,7 @@ class ChatCompletionsService:
                             "time_saved_ms": round((_time.time() - _cache_start) * 1000, 2),
                         }
                         logger.info(
-                            f"KV cache hit: {cache_key}, "
+                            f"KV cache hit: {cache_key[:8]}…, "
                             f"{entry.token_count} tokens, "
                             f"kv_data={'yes' if kv_data else 'no'}"
                         )

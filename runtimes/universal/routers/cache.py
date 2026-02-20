@@ -36,13 +36,33 @@ def _get_manager():
 # ── Request/Response models ─────────────────────────────────────────────────
 
 
+MAX_PREPARE_MESSAGES = 200
+MAX_PREPARE_TOOLS = 128
+MAX_MESSAGE_CONTENT_CHARS = 200_000  # ~50k tokens
+
+
 class CachePrepareRequest(BaseModel):
     model: str = Field(..., description="Model ID to prepare cache for")
-    messages: list[dict] = Field(..., description="Messages to cache (system prompt, etc)")
-    tools: list[dict] | None = Field(None, description="Tool definitions to include")
-    pinned: bool = Field(False, description="Pin cache (won't be evicted by GC)")
-    ttl: float | None = Field(None, description="TTL in seconds (None = use default)")
-    warm: bool = Field(True, description="If true, loads model and pre-computes KV state (slower but instant cache hits). If false, segment-only indexing.")
+    messages: list[dict] = Field(
+        ..., description="Messages to cache (system prompt, etc)"
+    )
+    tools: list[dict] | None = Field(
+        None, description="Tool definitions to include"
+    )
+    pinned: bool = Field(
+        False, description="Pin cache (won't be evicted by GC)"
+    )
+    ttl: float | None = Field(
+        None, description="TTL in seconds (None = use default)"
+    )
+    warm: bool = Field(
+        True,
+        description=(
+            "If true, loads model and pre-computes KV state "
+            "(slower but instant cache hits). "
+            "If false, segment-only indexing."
+        ),
+    )
 
 
 class CachePrepareResponse(BaseModel):
@@ -86,6 +106,29 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
     Set warm=false for lightweight segment-only indexing (no model load).
     """
     manager = _get_manager()
+
+    # Input validation
+    if len(request.messages) > MAX_PREPARE_MESSAGES:
+        raise HTTPException(
+            400,
+            f"Too many messages ({len(request.messages)}), "
+            f"max {MAX_PREPARE_MESSAGES}",
+        )
+    if request.tools and len(request.tools) > MAX_PREPARE_TOOLS:
+        raise HTTPException(
+            400,
+            f"Too many tools ({len(request.tools)}), "
+            f"max {MAX_PREPARE_TOOLS}",
+        )
+    total_chars = sum(
+        len(m.get("content", "") or "") for m in request.messages
+    )
+    if total_chars > MAX_MESSAGE_CONTENT_CHARS:
+        raise HTTPException(
+            400,
+            f"Total message content too large ({total_chars} chars), "
+            f"max {MAX_MESSAGE_CONTENT_CHARS}",
+        )
 
     model = None
     if request.warm:

@@ -1,46 +1,48 @@
-"""Quick standalone test of KV cache save/load on Llama."""
-import sys
-sys.path.insert(0, "/Users/robthelen/clawd/projects/llamafarm-core/packages/llamafarm-llama/src")
+"""Live KV cache save/load test — requires a GGUF model on disk.
 
-from llamafarm_llama import Llama
+Skip gracefully if no model is available. Not run in CI.
+Usage: pytest tests/test_kv_live.py -v -k kv_live (with model present)
+"""
 
-model_path = "/Users/robthelen/.cache/huggingface/hub/models--Qwen--Qwen3-8B-GGUF/snapshots/7c41481f57cb95916b40956ab2f0b139b296d974/Qwen3-8B-Q4_K_M.gguf"
+import os
 
-print("Loading model...")
-llm = Llama(model_path=model_path, n_ctx=4096, n_gpu_layers=-1)
-print("Model loaded.")
+import pytest
 
-# Tokenize a system prompt
-prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-tokens = llm.tokenize(prompt, add_special=False, parse_special=True)
-print(f"Tokenized: {len(tokens)} tokens")
 
-# Decode to populate KV cache
-llm.reset()
-ok = llm._decode_batch(tokens)
-print(f"Decode OK: {ok}")
+GGUF_MODEL_PATH = os.environ.get("KV_TEST_MODEL_PATH", "")
 
-# Get state size
-size = llm.state_seq_get_size(0)
-print(f"State seq size: {size} bytes ({size/1024/1024:.1f}MB)")
 
-# Save state
-print("Saving state...")
-data = llm.state_seq_save(0)
-print(f"Saved: {len(data)} bytes ({len(data)/1024/1024:.1f}MB)")
+@pytest.fixture
+def llama_model():
+    """Load a Llama model for KV testing, skip if unavailable."""
+    if not GGUF_MODEL_PATH or not os.path.isfile(GGUF_MODEL_PATH):
+        pytest.skip(
+            "Set KV_TEST_MODEL_PATH to a .gguf file to run live KV tests"
+        )
 
-# Reset and verify empty
-llm.reset()
-print("Reset done.")
+    try:
+        from llamafarm_llama import Llama
+    except ImportError:
+        pytest.skip("llamafarm_llama not installed")
 
-# Restore state
-print("Restoring state...")
-consumed = llm.state_seq_load(data, 0)
-print(f"Restored: {consumed} bytes consumed")
+    return Llama(model_path=GGUF_MODEL_PATH, n_ctx=2048, n_gpu_layers=-1)
 
-# Generate a token to verify it works
-llm._create_sampler(temperature=0.7, top_p=0.95, top_k=40)
-tok = llm._sample_token()
-print(f"Sampled token after restore: {tok}")
 
-print("\nSUCCESS: KV cache save/load works!")
+def test_kv_live_save_restore(llama_model):
+    """Verify KV state round-trips through save/load."""
+    llm = llama_model
+
+    prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+    tokens = llm.tokenize(prompt, add_special=False, parse_special=True)
+    assert len(tokens) > 0
+
+    assert llm._decode_batch(tokens), "decode_batch failed"
+
+    kv_data = llm.state_seq_save(0)
+    assert len(kv_data) > 0, "state_seq_save returned empty"
+
+    consumed = llm.state_seq_load(kv_data)
+    assert consumed > 0, "state_seq_load consumed 0 bytes"
+    assert consumed == len(kv_data), (
+        f"state_seq_load consumed {consumed} != {len(kv_data)}"
+    )

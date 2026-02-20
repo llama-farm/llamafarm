@@ -60,9 +60,16 @@ def hash_messages_segments(messages: list[dict], tools: list[dict] | None = None
             "content": system_content,
         })
 
-    # Tools as a segment (sorted for deterministic hashing)
+    # Tools as a segment (canonical order for deterministic hashing)
     if tools:
-        tools_content = json.dumps(tools, sort_keys=True, separators=(",", ":"))
+        sorted_tools = sorted(
+            tools,
+            key=lambda t: (
+                t.get("type", ""),
+                t.get("function", {}).get("name", ""),
+            ),
+        )
+        tools_content = json.dumps(sorted_tools, sort_keys=True, separators=(",", ":"))
         segments.append({
             "type": "tools",
             "hash": hash_segment(tools_content),
@@ -169,8 +176,8 @@ class CacheEntry:
 
 
 def _generate_cache_key() -> str:
-    """Generate a short unique cache key."""
-    return hashlib.sha256(os.urandom(16)).hexdigest()[:12]
+    """Generate a unique cache key (24 hex chars = 96 bits of entropy)."""
+    return hashlib.sha256(os.urandom(32)).hexdigest()[:24]
 
 
 @dataclass
@@ -244,7 +251,7 @@ class KVCacheManager:
                 if existing_key in self._entries:
                     entry = self._entries[existing_key]
                     entry.touch()
-                    logger.info(f"Cache dedup hit: {entry.cache_key} (content_hash={content_hash[:8]})")
+                    logger.info(f"Cache dedup hit: {entry.cache_key[:8]}… (content_hash={content_hash[:8]})")
                     return entry
 
         kv_data = b""
@@ -299,7 +306,7 @@ class KVCacheManager:
             content_hash=content_hash,
             token_count=token_count,
             pinned=pinned,
-            ttl=ttl or (None if pinned else self._budget.default_ttl),
+            ttl=ttl if ttl is not None else (None if pinned else self._budget.default_ttl),
             tier="ram",
             kv_data=kv_data,
             size_bytes=size_bytes,
@@ -311,7 +318,7 @@ class KVCacheManager:
             self._enforce_budget()
 
         logger.info(
-            f"Prepared cache {cache_key}: {token_count} tokens, "
+            f"Prepared cache {cache_key[:8]}…: {token_count} tokens, "
             f"{size_bytes / 1024:.1f}KB, warm={'yes' if kv_data else 'no'}, "
             f"segments={[s['type'] for s in segments]}"
         )
@@ -323,7 +330,7 @@ class KVCacheManager:
         if entry is None:
             return None
         if entry.is_expired:
-            logger.debug(f"Cache {cache_key} expired")
+            logger.debug(f"Cache {cache_key[:8]}… expired")
             return None
         return entry
 
@@ -420,7 +427,7 @@ class KVCacheManager:
             if not entry.kv_data and not entry.disk_path:
                 entry.touch()
                 logger.info(
-                    f"Cache validated (segment-only): {entry.cache_key}, "
+                    f"Cache validated (segment-only): {entry.cache_key[:8]}…, "
                     f"{entry.token_count} prefix tokens confirmed unchanged"
                 )
                 return True
@@ -430,28 +437,28 @@ class KVCacheManager:
                     entry.kv_data = Path(entry.disk_path).read_bytes()
                     entry.tier = "ram"
                 else:
-                    logger.warning(f"Cache {entry.cache_key} disk path missing")
+                    logger.warning(f"Cache {entry.cache_key[:8]}… disk path missing")
                     return False
 
             if not entry.kv_data:
-                logger.warning(f"Cache {entry.cache_key} has no KV data")
+                logger.warning(f"Cache {entry.cache_key[:8]}… has no KV data")
                 return False
 
             model.memory_seq_rm(seq_id)
             consumed = model.state_seq_load(entry.kv_data, seq_id)
             if consumed == 0:
-                logger.error(f"Failed to restore cache {entry.cache_key}")
+                logger.error(f"Failed to restore cache {entry.cache_key[:8]}…")
                 return False
 
             entry.touch()
             logger.info(
-                f"Restored cache {entry.cache_key}: {entry.token_count} tokens, "
+                f"Restored cache {entry.cache_key[:8]}…: {entry.token_count} tokens, "
                 f"{consumed} bytes into seq_id={seq_id}"
             )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to restore cache {entry.cache_key}: {e}")
+            logger.error(f"Failed to restore cache {entry.cache_key[:8]}…: {e}")
             return False
 
     async def save_after_generation(
@@ -526,7 +533,7 @@ class KVCacheManager:
             self._content_index[content_hash] = cache_key
             self._enforce_budget()
 
-        logger.info(f"Saved post-generation cache {cache_key}: ~{token_count} tokens, {len(kv_data) / 1024:.1f}KB")
+        logger.info(f"Saved post-generation cache {cache_key[:8]}…: ~{token_count} tokens, {len(kv_data) / 1024:.1f}KB")
         return entry
 
     # ── Cache Management ─────────────────────────────────────────────────
@@ -571,7 +578,7 @@ class KVCacheManager:
                 Path(entry.disk_path).unlink(missing_ok=True)
             except Exception:
                 pass
-        logger.info(f"Evicted cache {cache_key}")
+        logger.info(f"Evicted cache {cache_key[:8]}…")
         return True
 
     def gc(self) -> int:
@@ -625,9 +632,9 @@ class KVCacheManager:
             entry.disk_path = str(disk_path)
             entry.kv_data = b""  # Free RAM
             entry.tier = "disk"
-            logger.debug(f"Demoted cache {entry.cache_key} to disk: {disk_path}")
+            logger.debug(f"Demoted cache {entry.cache_key[:8]}… to disk: {disk_path}")
         except Exception as e:
-            logger.error(f"Failed to demote cache {entry.cache_key} to disk: {e}")
+            logger.error(f"Failed to demote cache {entry.cache_key[:8]}… to disk: {e}")
 
 
 # ── Background GC Task ──────────────────────────────────────────────────────
@@ -650,3 +657,16 @@ def start_kv_cache_gc(manager: KVCacheManager) -> None:
     global _gc_task
     if _gc_task is None or _gc_task.done():
         _gc_task = asyncio.create_task(_gc_loop(manager))
+
+
+async def stop_kv_cache_gc() -> None:
+    """Cancel the background GC task (call during shutdown)."""
+    global _gc_task
+    if _gc_task is not None and not _gc_task.done():
+        _gc_task.cancel()
+        try:
+            await _gc_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("KV cache GC task stopped")
+    _gc_task = None
