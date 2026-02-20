@@ -137,6 +137,16 @@ if _HAS_CATBOOST:
     from routers.catboost import router as catboost_router
     from routers.catboost import set_catboost_state
 
+# Conditional import for fine-tuning addon (requires unsloth or unsloth_mlx)
+_HAS_FINETUNE = (
+    importlib.util.find_spec("unsloth_mlx") is not None or 
+    importlib.util.find_spec("unsloth") is not None
+)
+if _HAS_FINETUNE:
+    from finetune.trainer import FineTuneTrainer
+    from routers.finetune import router as finetune_router
+    from routers.finetune.router import set_trainer
+
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
 # released before interpreter shutdown. The OS kernel cleans these up on process exit —
@@ -278,7 +288,7 @@ _patch_cache_artifact_factory()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
-    global _cleanup_task
+    global _cleanup_task, _finetune_trainer
 
     # Startup
     logger.info("Starting Universal Runtime")
@@ -304,6 +314,18 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("CatBoost addon unavailable (catboost not installed)")
 
+    if _HAS_FINETUNE:
+        logger.info("Fine-tuning addon available (unsloth installed)")
+    else:
+        logger.info("Fine-tuning addon unavailable (unsloth not installed)")
+
+    # Start fine-tuning worker if available
+    if _HAS_FINETUNE:
+        _finetune_trainer = FineTuneTrainer()
+        await _finetune_trainer.start()
+        set_trainer(_finetune_trainer)
+        logger.info("Fine-tuning worker started")
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -312,6 +334,12 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Universal Runtime")
+
+    # Stop fine-tuning worker
+    if _HAS_FINETUNE and _finetune_trainer is not None:
+        logger.info("Stopping fine-tuning worker")
+        await _finetune_trainer.stop()
+        logger.info("Fine-tuning worker stopped")
 
     # Stop cleanup task
     if _cleanup_task is not None:
@@ -389,6 +417,8 @@ if _HAS_DRIFT:
     app.include_router(drift_router)
 if _HAS_CATBOOST:
     app.include_router(catboost_router)
+if _HAS_FINETUNE:
+    app.include_router(finetune_router)
 
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
@@ -407,6 +437,7 @@ _current_device = None
 # Feature encoder cache for anomaly detection with mixed data types
 _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
+_finetune_trainer: "FineTuneTrainer | None" = None
 
 # Data directories
 _LF_DATA_DIR = get_data_dir()
