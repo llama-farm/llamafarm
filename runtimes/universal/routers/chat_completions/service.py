@@ -315,6 +315,7 @@ class ChatCompletionsService:
                     # If tools are injected into the prompt path, validate against the same
                     # message shape to avoid undercounting prompt tokens.
                     messages_for_context = prepared_messages
+                    tools_already_injected = False
                     native_rendered_prompt: str | None = None
                     if tools_dict:
                         (
@@ -332,6 +333,17 @@ class ChatCompletionsService:
 
                     # Validate context and truncate if needed
                     if native_rendered_prompt is not None:
+                        if model.token_counter is None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail={
+                                    "error": "context_validation_unavailable",
+                                    "message": (
+                                        "Unable to validate native-rendered prompt context "
+                                        "because token counting is unavailable."
+                                    ),
+                                },
+                            )
                         prompt_tokens = model.token_counter.count_tokens(
                             native_rendered_prompt
                         )
@@ -410,6 +422,18 @@ class ChatCompletionsService:
                                 strategy = TruncationStrategy.SUMMARIZE
                         else:
                             strategy = TruncationStrategy.SUMMARIZE  # Default
+
+                        # Sliding-window can drop injected tool instructions (often in
+                        # the first system message). Preserve system messages in this case.
+                        if (
+                            tools_already_injected
+                            and strategy == TruncationStrategy.SLIDING_WINDOW
+                        ):
+                            logger.info(
+                                "Switching truncation strategy from sliding_window to "
+                                "keep_system to preserve injected tool definitions"
+                            )
+                            strategy = TruncationStrategy.KEEP_SYSTEM_SLIDING
 
                         # Handle summarization strategy (async, needs special handling)
                         if strategy == TruncationStrategy.SUMMARIZE:
