@@ -216,6 +216,10 @@ POLLUTER_MESSAGES = [
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+MODEL = "Qwen/Qwen3-8B-GGUF"  # overridden by --model
+N_CTX = None  # overridden by --n-ctx
+
+
 def make_request(
     base_url: str,
     messages: list[dict],
@@ -225,12 +229,14 @@ def make_request(
 ) -> dict:
     """Make a streaming chat completion request. Returns TTFT and cache info."""
     payload = {
-        "model": "Qwen/Qwen3-8B-GGUF",
+        "model": MODEL,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.7,
         "stream": True,
     }
+    if N_CTX:
+        payload["n_ctx"] = N_CTX
     if cache_key:
         payload["cache_key"] = cache_key
     if return_cache_key:
@@ -359,7 +365,7 @@ def run_prepare_benchmark(base_url: str):
     print(f"\n[Prepare] Pre-warming ~4000-token system prompt + RAG context...")
     t0 = time.perf_counter()
     resp = httpx.post(f"{base_url}/v1/cache/prepare", json={
-        "model": "Qwen/Qwen3-8B-GGUF",
+        "model": MODEL,
         "messages": [system_msg],
         "warm": True,
         "pinned": True,
@@ -415,9 +421,40 @@ def main():
         default="http://localhost:11540",
         help="Base URL of the Universal Runtime (default: http://localhost:11540)",
     )
+    parser.add_argument(
+        "--model",
+        default="Qwen/Qwen3-8B-GGUF",
+        help="Model ID to benchmark (default: Qwen/Qwen3-8B-GGUF)",
+    )
+    parser.add_argument(
+        "--n-ctx",
+        type=int,
+        default=None,
+        help="Context size override (useful for models with large default ctx)",
+    )
+    parser.add_argument(
+        "--unload-first",
+        action="store_true",
+        help="Unload all models before starting (frees memory for large models)",
+    )
     args = parser.parse_args()
 
+    global MODEL, N_CTX
+    MODEL = args.model
+    N_CTX = args.n_ctx
+
     print(f"Target: {args.base_url}")
+    print(f"Model:  {MODEL}")
+
+    if args.unload_first:
+        print("Unloading all models to free memory...")
+        try:
+            r = httpx.post(f"{args.base_url}/v1/models/unload", timeout=30)
+            data = r.json()
+            print(f"  Unloaded {data.get('unloaded', 0)} model(s)")
+        except Exception as e:
+            print(f"  Unload failed (may not be supported): {e}")
+
     print(f"Warming up model...")
     warmup = make_request(args.base_url, [
         {"role": "user", "content": "Say hello"},

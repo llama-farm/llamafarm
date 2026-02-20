@@ -404,6 +404,39 @@ if _HAS_DRIFT:
 if _HAS_CATBOOST:
     app.include_router(catboost_router)
 
+
+
+# ── Model management endpoints ──────────────────────────────────────────────
+
+@app.post("/v1/models/unload", tags=["models"])
+async def unload_all_models():
+    """Unload all loaded models to free memory.
+
+    Useful before loading a large model, or between benchmark runs
+    to ensure a clean memory state.
+    """
+    unloaded = []
+    for cache_key, model in list(_models.items()):
+        try:
+            await model.unload()
+            unloaded.append(cache_key)
+        except Exception as e:
+            logger.error(f"Error unloading {cache_key}: {e}")
+    _models.clear()
+
+    # Also clear classifier cache
+    for cache_key, model in list(_classifiers.items()):
+        try:
+            await model.unload()
+            unloaded.append(cache_key)
+        except Exception as e:
+            logger.error(f"Error unloading classifier {cache_key}: {e}")
+    _classifiers.clear()
+
+    logger.info(f"Unloaded {len(unloaded)} models: {unloaded}")
+    return {"unloaded": len(unloaded), "models": unloaded}
+
+
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
 MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))

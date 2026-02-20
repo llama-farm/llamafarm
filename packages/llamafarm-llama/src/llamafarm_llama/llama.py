@@ -1296,7 +1296,30 @@ class Llama:
         # In that case, we still restore the full KV state (which is a superset)
         # and decode no delta tokens — the model picks up from where it left off.
         if kv_cache_data and kv_cache_tokens > 0:
-            consumed = self.state_seq_load(kv_cache_data, 0)
+            # Memory safety check: KV restore writes into GPU/system memory.
+            # If the data is too large relative to available memory, skip restore
+            # to avoid SEGFAULT from Metal/CUDA allocation failure.
+            kv_data_mb = len(kv_cache_data) / (1024 * 1024)
+            skip_restore = False
+            try:
+                import psutil
+                available_mb = psutil.virtual_memory().available / (1024 * 1024)
+                # Require at least 2x the KV data size as headroom
+                if kv_data_mb > available_mb * 0.4:
+                    logger.warning(
+                        f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
+                        f"{available_mb:.0f}MB available (need 40% headroom). "
+                        f"Falling back to full decode to avoid potential SEGFAULT."
+                    )
+                    skip_restore = True
+            except ImportError:
+                pass  # psutil not available, proceed without check
+
+            if not skip_restore:
+                consumed = self.state_seq_load(kv_cache_data, 0)
+            else:
+                consumed = 0
+
             if consumed > 0:
                 # Clamp: if cached tokens > prompt tokens, no delta needed
                 effective_cached = min(kv_cache_tokens, len(tokens))
@@ -1311,8 +1334,8 @@ class Llama:
                     f"Delta decode ({len(delta_tokens)} new tokens)"
                 )
             else:
-                # Restore failed, fall back to full decode
-                logger.warning("KV cache restore failed, falling back to full decode")
+                # Restore failed or skipped, fall back to full decode
+                logger.warning("KV cache restore failed or skipped, falling back to full decode")
                 self._lib.llama_memory_clear(self._memory, True)
                 if not self._decode_batch(tokens):
                     raise RuntimeError("Failed to decode prompt")
@@ -1403,7 +1426,22 @@ class Llama:
 
         # KV cache restore path: load cached prefix, decode only delta tokens
         if kv_cache_data and kv_cache_tokens > 0:
-            consumed = self.state_seq_load(kv_cache_data, 0)
+            # Memory safety check (same as create_chat_completion)
+            kv_data_mb = len(kv_cache_data) / (1024 * 1024)
+            skip_restore = False
+            try:
+                import psutil
+                available_mb = psutil.virtual_memory().available / (1024 * 1024)
+                if kv_data_mb > available_mb * 0.4:
+                    logger.warning(
+                        f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
+                        f"{available_mb:.0f}MB available. Falling back to full decode."
+                    )
+                    skip_restore = True
+            except ImportError:
+                pass
+
+            consumed = 0 if skip_restore else self.state_seq_load(kv_cache_data, 0)
             if consumed > 0:
                 effective_cached = min(kv_cache_tokens, len(tokens))
                 delta_tokens = tokens[effective_cached:]
@@ -1417,7 +1455,7 @@ class Llama:
                     f"Delta ({len(delta_tokens)} new tokens)"
                 )
             else:
-                logger.warning("KV cache restore failed, falling back to full decode")
+                logger.warning("KV cache restore failed or skipped, falling back to full decode")
                 self._lib.llama_memory_clear(self._memory, True)
                 if not self._decode_batch(tokens):
                     raise RuntimeError("Failed to decode prompt")

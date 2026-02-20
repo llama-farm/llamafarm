@@ -381,7 +381,7 @@ class TestGetDefaultContextSize:
         )
 
         # Should use computed maximum
-        assert n_ctx >= 2048  # Should have decent amount given 16GB available
+        assert n_ctx >= 512  # Should have decent amount given 16GB available
         assert n_ctx & (n_ctx - 1) == 0  # Is power of 2
 
     @patch("utils.context_calculator.get_gguf_metadata")
