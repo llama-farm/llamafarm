@@ -104,6 +104,33 @@ class TestConvertCocoToYolo:
                      list((out / "images" / "val").glob("*"))
         assert len(all_images) == 0
 
+    def test_basename_collision_detected(self, tmp_path: Path):
+        """Same basename from different subdirs → second is skipped."""
+        images = [
+            {"id": 1, "file_name": "subdir_a/photo.jpg", "width": 100, "height": 100},
+            {"id": 2, "file_name": "subdir_b/photo.jpg", "width": 100, "height": 100},
+        ]
+        categories = [{"id": 1, "name": "x"}]
+        annotations = [
+            {"id": 1, "image_id": 1, "category_id": 1, "bbox": [10, 10, 20, 20]},
+            {"id": 2, "image_id": 2, "category_id": 1, "bbox": [10, 10, 20, 20]},
+        ]
+        images_dir = tmp_path / "images"
+        for sub in ["subdir_a", "subdir_b"]:
+            (images_dir / sub).mkdir(parents=True)
+            (images_dir / sub / "photo.jpg").write_bytes(b"\xff\xd8fake")
+
+        json_path = tmp_path / "ann.json"
+        json_path.write_text(json.dumps({
+            "images": images, "annotations": annotations, "categories": categories
+        }))
+        out = tmp_path / "out"
+        convert_coco_to_yolo(json_path, out, images_dir)
+        # Only first should be converted, second skipped as collision
+        all_images = list((out / "images" / "train").glob("*")) + \
+                     list((out / "images" / "val").glob("*"))
+        assert len(all_images) == 1
+
     def test_zero_dimensions_skipped(self, tmp_path: Path):
         images = [{"id": 1, "file_name": "a.jpg", "width": 0, "height": 480}]
         json_path, images_dir = _make_coco(tmp_path, images, annotations=[])

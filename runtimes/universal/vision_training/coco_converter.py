@@ -81,6 +81,7 @@ def convert_coco_to_yolo(
 
     converted = 0
     skipped = 0
+    seen_basenames: dict[str, str] = {}  # basename → original raw_filename (collision detection)
 
     for img_id, img_info in images_by_id.items():
         raw_filename = img_info["file_name"]
@@ -90,6 +91,16 @@ def convert_coco_to_yolo(
             logger.warning(f"Skipping image with suspicious filename: {raw_filename!r}")
             skipped += 1
             continue
+
+        # Detect basename collisions from different subdirectories
+        if filename in seen_basenames and seen_basenames[filename] != raw_filename:
+            logger.warning(
+                f"Skipping {raw_filename!r}: basename {filename!r} collides with "
+                f"{seen_basenames[filename]!r}"
+            )
+            skipped += 1
+            continue
+        seen_basenames[filename] = raw_filename
         img_w = img_info.get("width", 0)
         img_h = img_info.get("height", 0)
 
