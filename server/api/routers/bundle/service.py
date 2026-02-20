@@ -332,11 +332,25 @@ def list_bundles() -> list[BundleSummary]:
     return sorted(results, key=lambda b: b.created_at, reverse=True)
 
 
+def _safe_bundle_id(bundle_id: str) -> str | None:
+    """Validate bundle_id is a safe filename (alphanumeric + hyphens only)."""
+    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9\-]{0,63}', bundle_id):
+        logger.warning(f"Invalid bundle_id rejected: {bundle_id!r}")
+        return None
+    return bundle_id
+
+
 def _safe_bundle_dir(bundle_id: str) -> Path | None:
     """Resolve a bundle directory, returning None if the ID attempts path traversal."""
+    safe_id = _safe_bundle_id(bundle_id)
+    if safe_id is None:
+        return None
     bundles_dir = _bundles_dir()
-    bundle_dir = (bundles_dir / bundle_id).resolve()
-    if not str(bundle_dir).startswith(str(bundles_dir) + os.sep) and bundle_dir != bundles_dir:
+    bundle_dir = bundles_dir / safe_id
+    # Verify resolved path is inside bundles_dir
+    try:
+        bundle_dir.resolve().relative_to(bundles_dir.resolve())
+    except ValueError:
         logger.warning(f"Path traversal attempt blocked for bundle_id: {bundle_id!r}")
         return None
     return bundle_dir
@@ -353,10 +367,13 @@ def get_bundle_path(bundle_id: str) -> Path | None:
     try:
         data = json.loads(manifest_file.read_text())
         filename = data.get("filename", "")
-        if not filename or os.sep in filename or "/" in filename:
+        # Only allow safe filenames (no path separators, no traversal)
+        if not filename or not re.fullmatch(r'[a-zA-Z0-9._\-]+', filename):
             return None
         archive = bundle_dir / filename
-        if archive.resolve().parent != bundle_dir.resolve():
+        try:
+            archive.resolve().relative_to(bundle_dir.resolve())
+        except ValueError:
             return None
         if archive.exists():
             return archive
