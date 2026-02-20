@@ -1,10 +1,15 @@
 """Tests for COCO JSON → YOLO format converter."""
 
 import json
-import pytest
 from pathlib import Path
 
-from vision_training.coco_converter import convert_coco_to_yolo, is_coco_format, _validate_coco
+import pytest
+
+from vision_training.coco_converter import (
+    _validate_coco,
+    convert_coco_to_yolo,
+    is_coco_format,
+)
 
 
 def _make_coco(tmp_path: Path, images: list[dict] | None = None,

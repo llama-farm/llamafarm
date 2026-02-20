@@ -1,31 +1,35 @@
 """Tests for streaming vision sessions (cascade, TTL cleanup, session management)."""
 
-import asyncio
 import time
-import pytest
 from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
+import pytest
+
 from routers.vision.streaming import (
-    StreamStartRequest,
-    StreamFrameRequest,
-    StreamStopRequest,
-    CascadeConfigRequest,
-    start_stream,
-    process_frame,
-    stop_stream,
-    list_sessions,
-    start_session_cleanup,
-    set_streaming_detection_loader,
-    _sessions,
     SESSION_TTL_SECONDS,
+    CascadeConfigRequest,
+    StreamFrameRequest,
+    StreamStartRequest,
+    StreamStopRequest,
+    _sessions,
+    list_sessions,
+    process_frame,
+    set_streaming_detection_loader,
+    start_stream,
+    stop_stream,
 )
 
 
 @dataclass
 class FakeBox:
-    x1: float; y1: float; x2: float; y2: float
-    class_name: str; class_id: int; confidence: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    class_name: str
+    class_id: int
+    confidence: float
 
 
 @dataclass
@@ -58,7 +62,7 @@ class TestStreamLifecycle:
             await stop_stream(StreamStopRequest(session_id="nonexistent"))
 
     async def test_max_sessions(self):
-        for i in range(100):
+        for _i in range(100):
             await start_stream(StreamStartRequest())
         from fastapi import HTTPException
         with pytest.raises(HTTPException, match="Max 100"):

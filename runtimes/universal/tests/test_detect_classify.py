@@ -1,19 +1,16 @@
 """Tests for the detect+classify combo endpoint."""
 
 import io
-import pytest
 from dataclasses import dataclass
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
-from fastapi.testclient import TestClient
+import pytest
 
 from routers.vision.detect_classify import (
     DetectClassifyRequest,
-    DetectClassifyResponse,
     detect_and_classify,
     set_detect_classify_loaders,
 )
-
 
 # =============================================================================
 # Fixtures / helpers
@@ -21,8 +18,13 @@ from routers.vision.detect_classify import (
 
 @dataclass
 class FakeBox:
-    x1: float; y1: float; x2: float; y2: float
-    class_name: str; class_id: int; confidence: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    class_name: str
+    class_id: int
+    confidence: float
 
 
 @dataclass
@@ -33,12 +35,15 @@ class FakeDetResult:
 
 @dataclass
 class FakeClsResult:
-    class_name: str; confidence: float; all_scores: dict
+    class_name: str
+    confidence: float
+    all_scores: dict
 
 
 def _make_red_png_b64() -> str:
     """Create a tiny valid PNG as base64."""
     import base64
+
     from PIL import Image
     img = Image.new("RGB", (100, 100), color="red")
     buf = io.BytesIO()
@@ -49,6 +54,7 @@ def _make_red_png_b64() -> str:
 def _make_rgba_png_b64() -> str:
     """Create a tiny RGBA PNG as base64."""
     import base64
+
     from PIL import Image
     img = Image.new("RGBA", (100, 100), color=(255, 0, 0, 128))
     buf = io.BytesIO()
