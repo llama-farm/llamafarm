@@ -81,6 +81,20 @@ def _bundles_dir() -> Path:
     return Path(settings.lf_data_dir).resolve() / "bundles"
 
 
+def _safe_bundle_dir(bundle_id: str) -> Path | None:
+    """Return the bundle directory, or None if the id is invalid/traversal."""
+    # Only allow alphanumeric + hyphens (uuid fragments)
+    if not re.match(r'^[a-zA-Z0-9\-]+$', bundle_id):
+        return None
+    bundle_dir = _bundles_dir() / bundle_id
+    # Ensure resolved path is still under bundles dir
+    try:
+        bundle_dir.resolve().relative_to(_bundles_dir().resolve())
+    except ValueError:
+        return None
+    return bundle_dir
+
+
 def _addon_platform_string(platform: str, arch: str) -> str:
     """Get the addon wheel archive platform string."""
     if platform == "darwin":
@@ -342,7 +356,7 @@ def get_bundle_path(bundle_id: str) -> Path | None:
         if not filename or os.sep in filename or "/" in filename:
             return None
         archive = bundle_dir / filename
-        if not archive.resolve().parent == bundle_dir.resolve():
+        if archive.resolve().parent != bundle_dir.resolve():
             return None
         if archive.exists():
             return archive

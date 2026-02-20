@@ -63,9 +63,9 @@ def download_bundle(bundle_id: str):
     """Download a bundle archive."""
     try:
         path = service.get_bundle_path(bundle_id)
-    except Exception:
+    except Exception as err:
         logger.exception("Error retrieving bundle path")
-        raise HTTPException(500, "Internal server error")
+        raise HTTPException(500, "Internal server error") from err
     if not path:
         raise HTTPException(404, "Bundle not found")
 
@@ -81,9 +81,9 @@ def delete_bundle(bundle_id: str):
     """Delete a bundle."""
     try:
         deleted = service.delete_bundle(bundle_id)
-    except Exception:
+    except Exception as err:
         logger.exception("Error deleting bundle")
-        raise HTTPException(500, "Internal server error")
+        raise HTTPException(500, "Internal server error") from err
     if not deleted:
         raise HTTPException(404, "Bundle not found")
     return {"status": "deleted"}
