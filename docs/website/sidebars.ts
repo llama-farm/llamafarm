@@ -93,6 +93,17 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Fine-Tuning (Alpha)',
+      link: { type: 'doc', id: 'fine-tuning/index' },
+      items: [
+        { type: 'doc', id: 'fine-tuning/sft', label: 'SFT Training' },
+        { type: 'doc', id: 'fine-tuning/cpt', label: 'CPT Training' },
+        { type: 'doc', id: 'fine-tuning/datasets', label: 'Dataset Formats' },
+        { type: 'doc', id: 'fine-tuning/api', label: 'API Reference' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Prompts',
       link: { type: 'doc', id: 'prompts/index' },
       items: [],
