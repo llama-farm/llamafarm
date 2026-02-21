@@ -1,0 +1,80 @@
+"""LlamaFarm Python SDK — local AI infrastructure."""
+
+from .client import (
+    ADTKAPI,
+    AnomalyAPI,
+    CacheAPI,
+    CatBoostAPI,
+    ClassifierAPI,
+    DatasetsAPI,
+    DriftAPI,
+    ExplainAPI,
+    FineTuneAPI,
+    LlamaFarm,
+    NLPAPI,
+    PolarsAPI,
+    ProjectHandle,
+    RAGAPI,
+    TimeSeriesAPI,
+    VisionAPI,
+)
+from .errors import ConnectionError, LlamaFarmError, NotFoundError, ServerError, ValidationError
+from .types import (
+    CacheStats,
+    ChatMessage,
+    ChatResponse,
+    ClassifyResponse,
+    DatabaseInfo,
+    Detection,
+    DetectResponse,
+    FineTuneJob,
+    FineTuneTemplate,
+    ProjectInfo,
+    QueryResponse,
+    RAGResult,
+    StreamChunk,
+    build_project_config,
+)
+
+__version__ = "0.1.0a1"
+
+__all__ = [
+    # Client
+    "LlamaFarm",
+    "ProjectHandle",
+    "RAGAPI",
+    "DatasetsAPI",
+    "VisionAPI",
+    "FineTuneAPI",
+    "CacheAPI",
+    "NLPAPI",
+    "AnomalyAPI",
+    "ClassifierAPI",
+    "TimeSeriesAPI",
+    "ADTKAPI",
+    "CatBoostAPI",
+    "DriftAPI",
+    "ExplainAPI",
+    "PolarsAPI",
+    # Types
+    "ChatMessage",
+    "ChatResponse",
+    "StreamChunk",
+    "ProjectInfo",
+    "QueryResponse",
+    "RAGResult",
+    "DatabaseInfo",
+    "DetectResponse",
+    "Detection",
+    "ClassifyResponse",
+    "FineTuneJob",
+    "FineTuneTemplate",
+    "CacheStats",
+    "build_project_config",
+    # Errors
+    "LlamaFarmError",
+    "ConnectionError",
+    "NotFoundError",
+    "ValidationError",
+    "ServerError",
+]
