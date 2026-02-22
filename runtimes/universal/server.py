@@ -113,11 +113,19 @@ from routers.vision import (
     stop_session_cleanup,
     stop_tracking_cleanup,
 )
+from utils.concurrent_loader import (
+    ConcurrentModelLoader,
+)
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
+from utils.resource_detect import (
+    get_concurrency_override,
+    get_resource_info,
+    log_resource_summary,
+)
 from utils.safe_home import get_data_dir
 from vision_training.trainer import set_trainer_model_loader
 
@@ -913,12 +921,13 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
     """Preload models marked with preload: true in llamafarm.yaml.
 
     This function:
-    1. Reads the LlamaFarm config
-    2. Filters models with preload: true
-    3. Loads them concurrently (respects optimal concurrency)
-    4. Pins models with pin: true
-    5. Returns per-model status
-
+    1. Detects system resources (CPU/RAM/VRAM)
+    2. Calculates optimal concurrency
+    3. Reads the LlamaFarm config
+    4. Filters models with preload: true
+    5. Loads them concurrently using ConcurrentModelLoader
+    6. Pins models with pin: true
+    7. Returns detailed per-model status
     Args:
         config_path: Optional path to llamafarm.yaml. If None, searches current directory.
 
@@ -926,20 +935,29 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
         Dictionary with results:
         {
             "results": {
-                "model-name": {"status": "loaded|failed|skipped", "pinned": bool, ...}
+                "model-name": {
+                    "status": "loaded|failed|already_loaded|skipped",
+                    "pinned": bool,
+                    "load_time_seconds": float,
+                    "error_message": str (if failed),
+                }
             },
             "summary": {
                 "loaded": int,
                 "failed": int,
+                "already_loaded": int,
                 "skipped": int,
                 "total_time_seconds": float,
-                "concurrency_used": int
+                "concurrency_used": int,
+            },
+            "resources": {
+                "device": str,
+                "cpu_count": int,
+                "available_ram_gb": float,
+                "available_vram_gb": float,
             }
         }
     """
-    import asyncio
-    import multiprocessing
-    import time
     from pathlib import Path
 
     try:
@@ -951,11 +969,29 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
             "summary": {
                 "loaded": 0,
                 "failed": 0,
+                "already_loaded": 0,
                 "skipped": 0,
                 "message": "Config loader not available",
                 "total_time_seconds": 0.0,
             },
         }
+
+    device = get_device()
+    resource_info = get_resource_info(device)
+    log_resource_summary(resource_info)
+
+    # Determine concurrency (allow env override)
+    concurrency = get_concurrency_override()
+    if concurrency is None:
+        concurrency = resource_info.optimal_concurrency
+    else:
+        # Cap user override at max safe concurrency
+        if concurrency > resource_info.max_concurrency:
+            logger.warning(
+                f"Concurrency override {concurrency} exceeds safe maximum "
+                f"{resource_info.max_concurrency}, using maximum instead"
+            )
+            concurrency = resource_info.max_concurrency
 
     try:
         if config_path:
@@ -969,6 +1005,7 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
             "summary": {
                 "loaded": 0,
                 "failed": 0,
+                "already_loaded": 0,
                 "skipped": 0,
                 "message": f"Config load failed: {e}",
                 "total_time_seconds": 0.0,
@@ -976,129 +1013,205 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
         }
 
     # extract models with preload: true
-    models_to_load = []
+    models_to_load: list[tuple[str, str, bool, dict]] = []
+
     if hasattr(config, "runtime") and hasattr(config.runtime, "models"):
         for model_cfg in config.runtime.models:
             # only preload universal provider models with preload: true
-            if getattr(model_cfg, "provider", None) == "universal" and getattr(
-                model_cfg, "preload", False
-            ):
-                model_name = getattr(model_cfg, "name", "unknown")
-                model_id = getattr(model_cfg, "model", None)
-                pin = getattr(model_cfg, "pin", False)
+            provider = getattr(model_cfg, "provider", None)
+            preload = getattr(model_cfg, "preload", False)
 
-                if not model_id:
-                    logger.warning(
-                        f"Model '{model_name}' has preload: true but no model ID"
-                    )
-                    continue
+            if provider != "universal" or not preload:
+                continue
 
-                models_to_load.append(
-                    {
-                        "name": model_name,
-                        "id": model_id,
-                        "pin": pin,
-                        "config": model_cfg,
-                    }
+            model_name = getattr(model_cfg, "name", "unknown")
+            model_id = getattr(model_cfg, "model", None)
+            pin = getattr(model_cfg, "pin", False)
+
+            if not model_id:
+                logger.warning(
+                    f"Model '{model_name}' has preload: true but no model ID"
                 )
+                continue
+
+            # Extract extra_body params for GGUF models
+            extra_body = {}
+            if hasattr(model_cfg, "extra_body") and model_cfg.extra_body:
+                extra_body = model_cfg.extra_body
+                # Convert Pydantic model to dict if needed
+                if hasattr(extra_body, "model_dump"):
+                    extra_body = extra_body.model_dump()
+                elif not isinstance(extra_body, dict):
+                    extra_body = {}
+
+            models_to_load.append((model_name, model_id, pin, extra_body))
 
     if not models_to_load:
+        logger.info("No models configured for preload")
         return {
             "results": {},
             "summary": {
                 "loaded": 0,
                 "failed": 0,
+                "already_loaded": 0,
                 "skipped": 0,
                 "message": "No models configured for preload",
                 "total_time_seconds": 0.0,
+                "concurrency_used": 0,
+            },
+            "resources": {
+                "device": resource_info.device,
+                "cpu_count": resource_info.cpu_count,
+                "available_ram_gb": resource_info.available_ram_gb,
+                "available_vram_gb": resource_info.available_vram_gb,
             },
         }
 
-    # determine optimal concurrency
-    cpu_count = multiprocessing.cpu_count()
-    concurrency = min(4, max(1, cpu_count // 2))
     logger.info(
         f"Preloading {len(models_to_load)} models with concurrency={concurrency}"
     )
 
-    # create semaphore for concurrency control
-    semaphore = asyncio.Semaphore(concurrency)
+    # create concurrent loader
+    loader = ConcurrentModelLoader(concurrency=concurrency)
 
-    async def load_one_model(model_info: dict) -> tuple[str, dict]:
-        """Load a single model with semaphore control."""
-        async with semaphore:
-            model_name = model_info["name"]
-            model_id = model_info["id"]
-            pin = model_info["pin"]
+    async def load_model_wrapper(model_path: str, pin: bool, extra_body: dict) -> None:
+        """Wrapper that calls appropriate load function based on model format."""
 
-            start = time.perf_counter()
+        # Detect model format to determine if it's a language or encoder model
+        # For now, assume language models (CausalLM)
+        # TODO for later: add encoder model detection and loading
 
-            try:
-                # Determine model type and load accordingly
-                # For now, assume CausalLM if no specific type is set
-                # TODO for later: add logic to detect encoder models, etc.
+        # Extract GGUF-specific parameters from extra_body
+        n_ctx = extra_body.get("n_ctx")
+        n_batch = extra_body.get("n_batch")
+        n_gpu_layers = extra_body.get("n_gpu_layers")
+        n_threads = extra_body.get("n_threads")
+        flash_attn = extra_body.get("flash_attn")
+        use_mmap = extra_body.get("use_mmap")
+        use_mlock = extra_body.get("use_mlock")
+        cache_type_k = extra_body.get("cache_type_k")
+        cache_type_v = extra_body.get("cache_type_v")
+        preferred_quantization = extra_body.get("preferred_quantization")
 
-                await load_language(
-                    model_id=model_id,
-                    pin=pin,
-                )
+        await load_language(
+            model_id=model_path,
+            n_ctx=n_ctx,
+            n_batch=n_batch,
+            n_gpu_layers=n_gpu_layers,
+            n_threads=n_threads,
+            flash_attn=flash_attn,
+            use_mmap=use_mmap,
+            use_mlock=use_mlock,
+            cache_type_k=cache_type_k,
+            cache_type_v=cache_type_v,
+            preferred_quantization=preferred_quantization,
+            pin=pin,
+        )
 
-                elapsed = time.perf_counter() - start
-                logger.info(
-                    f"Preloaded model '{model_name}' in {elapsed:.2f}s (pinned={pin})"
-                )
+    # Check if model is already loaded
+    def is_model_loaded(model_path: str) -> bool:
+        """Check if model is already in cache."""
+        # Generate cache key to check
+        cache_key = _make_language_cache_key(model_path)
+        return cache_key in _models
 
-                return model_name, {
-                    "status": "loaded",
-                    "pinned": pin,
-                    "load_time_seconds": round(elapsed, 2),
-                }
+    # Prepare models for batch loading
+    # Format: [(name, path, pin), ...]
 
-            except Exception as e:
-                elapsed = time.perf_counter() - start
-                logger.error(f"Failed to preload model '{model_name}': {e}")
+    # Create per-model load functions with extra_body
+    # We need to curry the extra_body into each load call
+    async def create_load_fn(model_path: str, pin: bool, extra_body: dict):
+        """Create a load function for a specific model."""
+        return await load_model_wrapper(model_path, pin, extra_body)
 
-                return model_name, {
-                    "status": "failed",
-                    "reason": str(e),
-                    "pinned": False,
-                }
+    # Since load_many expects a single load_fn, we need to handle this differently
+    # Let's load models one by one but with concurrent execution
 
-    # load all models concurrently
+    tasks = []
+    for name, path, pin, extra_body in models_to_load:
+
+        async def load_task(n=name, p=path, pn=pin, eb=extra_body):
+            return await loader.load_one(
+                model_name=n,
+                model_path=p,
+                pin=pn,
+                load_fn=lambda mp, pn: load_model_wrapper(mp, pn, eb),
+                is_loaded_fn=is_model_loaded,
+            )
+
+        tasks.append(load_task())
+
+    # Execute all tasks concurrently
+    import time
+
     start_time = time.perf_counter()
-    tasks = [load_one_model(model_info) for model_info in models_to_load]
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
     total_time = time.perf_counter() - start_time
 
-    # process results
+    # Process results
     results = {}
-    for item in results_list:
-        if isinstance(item, tuple):
-            model_name, result = item
-            results[model_name] = result
-        else:
-            results["unknown"] = {
+    loaded_count = 0
+    failed_count = 0
+    already_loaded_count = 0
+    skipped_count = 0
+
+    for i, result in enumerate(results_list):
+        model_name = models_to_load[i][0]
+
+        if isinstance(result, Exception):
+            logger.error(f"Unexpected exception loading '{model_name}': {result}")
+            results[model_name] = {
                 "status": "failed",
-                "reason": str(item),
+                "pinned": False,
+                "error_message": str(result),
+            }
+            failed_count += 1
+        else:
+            # Convert ModelLoadResult to dict
+            result_dict = {
+                "status": result.status.value,
+                "pinned": result.pinned,
             }
 
-    loaded = sum(1 for r in results.values() if r.get("status") == "loaded")
-    failed = sum(1 for r in results.values() if r.get("status") == "failed")
-    skipped = sum(1 for r in results.values() if r.get("status") == "skipped")
+            if result.load_time_seconds is not None:
+                result_dict["load_time_seconds"] = result.load_time_seconds
+
+            if result.error_message:
+                result_dict["error_message"] = result.error_message
+
+            results[model_name] = result_dict
+
+            if result.status.value == "loaded":
+                loaded_count += 1
+            elif result.status.value == "failed":
+                failed_count += 1
+            elif result.status.value == "already_loaded":
+                already_loaded_count += 1
+            elif result.status.value == "skipped":
+                skipped_count += 1
 
     logger.info(
-        f"Preload complete: {loaded} loaded, {failed} failed, {skipped} skipped "
+        f"Preload complete: {loaded_count} loaded, {failed_count} failed, "
+        f"{already_loaded_count} already loaded, {skipped_count} skipped "
         f"in {total_time:.2f}s"
     )
 
     return {
         "results": results,
         "summary": {
-            "loaded": loaded,
-            "failed": failed,
-            "skipped": skipped,
+            "loaded": loaded_count,
+            "failed": failed_count,
+            "already_loaded": already_loaded_count,
+            "skipped": skipped_count,
             "total_time_seconds": round(total_time, 2),
             "concurrency_used": concurrency,
+        },
+        "resources": {
+            "device": resource_info.device,
+            "cpu_count": resource_info.cpu_count,
+            "available_ram_gb": round(resource_info.available_ram_gb, 1),
+            "available_vram_gb": round(resource_info.available_vram_gb, 1),
+            "gpu_name": resource_info.gpu_name,
         },
     }
 
