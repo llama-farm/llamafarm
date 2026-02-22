@@ -46,7 +46,9 @@ async def get_runtime_client() -> httpx.AsyncClient:
             return _http_client
 
         base_url = f"http://{settings.universal_host}:{settings.universal_port}"
-        logger.info(f"Creating persistent HTTP client for Universal Runtime at {base_url}")
+        logger.info(
+            f"Creating persistent HTTP client for Universal Runtime at {base_url}"
+        )
 
         # Configure connection pool limits
         # max_connections: Total connections across all hosts
@@ -63,9 +65,9 @@ async def get_runtime_client() -> httpx.AsyncClient:
             limits=limits,
             timeout=httpx.Timeout(
                 connect=10.0,  # Connection timeout
-                read=300.0,    # Read timeout (5 min for ML ops)
-                write=60.0,    # Write timeout
-                pool=10.0,     # Pool checkout timeout
+                read=300.0,  # Read timeout (5 min for ML ops)
+                write=60.0,  # Write timeout
+                pool=10.0,  # Pool checkout timeout
             ),
             # Enable HTTP/2 for multiplexing (requires httpx[http2])
             http2=True,
@@ -610,6 +612,44 @@ class UniversalRuntimeService:
         return await cls._make_request("DELETE", f"/v1/drift/models/{model_name}")
 
     # =========================================================================
+    # Model Preloading
+    # =========================================================================
+
+    @classmethod
+    async def trigger_preload(
+        cls,
+        config_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Trigger model preloading in Universal Runtime.
+
+        Args:
+           config_path: Optional path to llamafarm.yaml
+
+        Returns:
+           Preload result with status, results, summary, resources
+        """
+        payload = {}
+        if config_path:
+            payload["config_path"] = config_path
+
+        return await cls._make_request(
+            "POST",
+            "/v1/preload",
+            json=payload,
+            timeout=600.0,  # 10 minutes for preload
+        )
+
+    @classmethod
+    async def get_preload_status(cls) -> dict[str, Any]:
+        """Get preload status from Universal Runtime."""
+        return await cls._make_request("GET", "/v1/preload/status", timeout=10.0)
+
+    @classmethod
+    async def get_preload_resources(cls) -> dict[str, Any]:
+        """Get resource information from Universal Runtime."""
+        return await cls._make_request("GET", "/v1/preload/resources", timeout=10.0)
+
+    # =========================================================================
     # CatBoost Gradient Boosting
     # =========================================================================
 
@@ -918,7 +958,9 @@ class UniversalRuntimeService:
             )
 
             t_response = time.perf_counter()
-            logger.info(f"⏱️ STT HTTP: Response in {(t_response - t_start)*1000:.1f}ms for {audio_kb:.1f}KB")
+            logger.info(
+                f"⏱️ STT HTTP: Response in {(t_response - t_start) * 1000:.1f}ms for {audio_kb:.1f}KB"
+            )
 
             if response.status_code >= 400:
                 try:
@@ -997,7 +1039,9 @@ class UniversalRuntimeService:
         try:
             async with websockets.connect(ws_url) as ws:
                 t_connected = time.perf_counter()
-                logger.info(f"⏱️ STT WS: Connected in {(t_connected - t_start)*1000:.1f}ms")
+                logger.info(
+                    f"⏱️ STT WS: Connected in {(t_connected - t_start) * 1000:.1f}ms"
+                )
 
                 # Send all audio at once (it's already collected by VAD)
                 await ws.send(audio_bytes)
@@ -1005,7 +1049,9 @@ class UniversalRuntimeService:
                 await ws.send("END")
                 t_audio_sent = time.perf_counter()
                 audio_kb = len(audio_bytes) / 1024
-                logger.info(f"⏱️ STT WS: Audio sent ({audio_kb:.1f}KB) in {(t_audio_sent - t_connected)*1000:.1f}ms")
+                logger.info(
+                    f"⏱️ STT WS: Audio sent ({audio_kb:.1f}KB) in {(t_audio_sent - t_connected) * 1000:.1f}ms"
+                )
 
                 # Receive segments as they're transcribed
                 while True:
@@ -1018,11 +1064,15 @@ class UniversalRuntimeService:
                             if not first_segment_logged:
                                 t_first_segment = time.perf_counter()
                                 first_segment_logged = True
-                                logger.info(f"⏱️ STT WS: First segment in {(t_first_segment - t_start)*1000:.1f}ms total, {(t_first_segment - t_audio_sent)*1000:.1f}ms processing")
+                                logger.info(
+                                    f"⏱️ STT WS: First segment in {(t_first_segment - t_start) * 1000:.1f}ms total, {(t_first_segment - t_audio_sent) * 1000:.1f}ms processing"
+                                )
                             yield data
                         elif msg_type == "done":
                             t_done = time.perf_counter()
-                            logger.info(f"⏱️ STT WS: Complete in {(t_done - t_start)*1000:.1f}ms total")
+                            logger.info(
+                                f"⏱️ STT WS: Complete in {(t_done - t_start) * 1000:.1f}ms total"
+                            )
                             break
                         elif msg_type == "error":
                             logger.error(f"STT stream error: {data.get('message')}")
@@ -1183,7 +1233,9 @@ class UniversalRuntimeService:
         if with_features:
             params.append("with_features=true")
         query = f"?{'&'.join(params)}" if params else ""
-        return await cls._make_request("GET", f"/v1/polars/buffers/{buffer_id}/data{query}")
+        return await cls._make_request(
+            "GET", f"/v1/polars/buffers/{buffer_id}/data{query}"
+        )
 
     # =========================================================================
     # SHAP Explainability
