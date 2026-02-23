@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import re
 import shutil
@@ -148,8 +147,9 @@ class IncrementalTrainer:
             dataset_path = job.dataset_path
             from vision_training.coco_converter import is_coco_format
             if is_coco_format(dataset_path):
-                from vision_training.coco_converter import convert_coco_to_yolo
                 from pathlib import Path as _Path
+
+                from vision_training.coco_converter import convert_coco_to_yolo
                 coco_out = _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
                 logger.info(f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}")
                 data_yaml = await asyncio.to_thread(
@@ -170,8 +170,16 @@ class IncrementalTrainer:
                 "save": True,
                 "verbose": True,
             }
+            # Register cancellation callback — checked between epochs
+            def _check_cancelled(trainer_obj):
+                if job.status == TrainingStatus.CANCELLED:
+                    logger.info(f"Job {job.job_id} cancelled — stopping training")
+                    raise KeyboardInterrupt("Training cancelled")
+
+            training_yolo.add_callback("on_train_epoch_end", _check_cancelled)
+
             results = await asyncio.to_thread(training_yolo.train, **train_args)
-            
+
             metrics = {}
             if hasattr(results, "results_dict"):
                 metrics = results.results_dict
@@ -203,7 +211,16 @@ class IncrementalTrainer:
                         except Exception as cb_err:
                             logger.error(f"on_complete callback failed for {job.job_id}: {cb_err}")
 
+        except KeyboardInterrupt:
+            # Raised by cancellation callback
+            if job.status != TrainingStatus.CANCELLED:
+                job.status = TrainingStatus.CANCELLED
+                job.completed_at = datetime.utcnow()
+            logger.info(f"Training job {job.job_id} stopped by cancellation")
         except Exception as e:
+            if job.status == TrainingStatus.CANCELLED:
+                logger.info(f"Training job {job.job_id} stopped by cancellation")
+                return
             logger.error(f"Training job {job.job_id} failed: {e}")
             job.status = TrainingStatus.FAILED
             job.error = str(e)
@@ -265,13 +282,28 @@ class IncrementalTrainer:
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 
     async def cancel_job(self, job_id: str) -> bool:
+        """Cancel a training job.
+
+        QUEUED jobs are cancelled immediately. RUNNING jobs are marked
+        for cancellation — the training loop checks this flag between
+        epochs and will stop at the next checkpoint.
+        """
         job = self._jobs.get(job_id)
         if not job:
             return False
-        if job.status in (TrainingStatus.QUEUED, TrainingStatus.RUNNING):
+        if job.status == TrainingStatus.QUEUED:
             job.status = TrainingStatus.CANCELLED
             job.completed_at = datetime.utcnow()
-            logger.info(f"Cancelled training job {job_id}")
+            logger.info(f"Cancelled queued job {job_id}")
+            return True
+        if job.status == TrainingStatus.RUNNING:
+            # Mark for cancellation — _run() checks this between epochs
+            job.status = TrainingStatus.CANCELLED
+            job.completed_at = datetime.utcnow()
+            logger.info(
+                f"Marked running job {job_id} for cancellation "
+                f"(will stop at next epoch boundary)"
+            )
             return True
         return False
 

@@ -59,6 +59,7 @@ class TrackSession:
     total_tracks_created: int = 0
     created_at: float = field(default_factory=time.time)
     last_frame_at: float = field(default_factory=time.time)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)  # Prevent concurrent frame races
 
 
 _sessions: dict[str, TrackSession] = {}
@@ -199,10 +200,10 @@ class TrackStopResponse(BaseModel):
 
 def _run_track(session: TrackSession, image_bytes: bytes) -> tuple[list[TrackedDetection], TracksSummary, float, float]:
     """Run model.track() synchronously. Called via asyncio.to_thread()."""
-    from ultralytics import YOLO
+    import io
+
     import numpy as np
     from PIL import Image
-    import io
 
     img = Image.open(io.BytesIO(image_bytes))
     if img.mode != "RGB":
@@ -275,9 +276,9 @@ async def start_tracking(request: TrackStartRequest) -> TrackStartResponse:
 
     model_path = _resolve_model_path(request.model)
 
-    # Load a fresh YOLO model for this session (each session needs its own tracker state)
+    # Load a fresh YOLO model in thread pool to avoid blocking the event loop
     from ultralytics import YOLO
-    yolo_model = YOLO(model_path)
+    yolo_model = await asyncio.to_thread(YOLO, model_path)
 
     sid = str(uuid.uuid4())[:8]
     session = TrackSession(
@@ -322,12 +323,15 @@ async def track_frame(request: TrackFrameRequest) -> TrackFrameResponse:
         raise HTTPException(404, "Tracking session not found")
 
     image_bytes = decode_base64_image(request.image)
-    session.frames_processed += 1
-    session.last_frame_at = time.time()
 
-    detections, summary, inf_ms, trk_ms = await asyncio.to_thread(
-        _run_track, session, image_bytes
-    )
+    # Lock per-session to prevent concurrent frames racing on tracker state
+    async with session.lock:
+        session.frames_processed += 1
+        session.last_frame_at = time.time()
+
+        detections, summary, inf_ms, trk_ms = await asyncio.to_thread(
+            _run_track, session, image_bytes
+        )
 
     return TrackFrameResponse(
         detections=detections,
