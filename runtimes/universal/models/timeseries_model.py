@@ -80,11 +80,29 @@ class BackendInfo:
     requires_training: bool
     supports_confidence_intervals: bool
     speed: str  # "fast", "medium", "slow"
+    available: bool = True
+    unavailable_reason: str | None = None
+
+
+def _check_backend_available(name: str) -> tuple[bool, str | None]:
+    """Check if a backend's dependencies are installed."""
+    import importlib.util
+
+    if name in ("arima", "exponential_smoothing", "theta"):
+        if importlib.util.find_spec("darts") is None:
+            return False, "darts is not installed (pip install darts)"
+        # ARIMA specifically needs statsforecast
+        if name == "arima" and importlib.util.find_spec("statsforecast") is None:
+            return False, "statsforecast is not installed (pip install statsforecast)"
+    elif name in ("chronos", "chronos-bolt"):
+        if importlib.util.find_spec("chronos") is None:
+            return False, "chronos is not installed (pip install chronos-forecasting)"
+    return True, None
 
 
 def get_backends_info() -> list[BackendInfo]:
     """Get information about all available backends."""
-    return [
+    backends = [
         BackendInfo(
             name="arima",
             description="Auto-ARIMA for stationary time series, handles trend and seasonality",
@@ -121,6 +139,11 @@ def get_backends_info() -> list[BackendInfo]:
             speed="fast",
         ),
     ]
+    for b in backends:
+        available, reason = _check_backend_available(b.name)
+        b.available = available
+        b.unavailable_reason = reason
+    return backends
 
 
 @dataclass
