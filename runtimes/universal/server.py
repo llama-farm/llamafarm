@@ -104,6 +104,8 @@ from routers.vision import (
     set_drone_detection_loader,
     set_drone_export_loader,
     set_drone_models_dir,
+    set_deployments_models_dir,
+    set_corrections_models_dir,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -1208,6 +1210,8 @@ set_model_export_loader(load_detection_model)
 set_drone_detection_loader(load_detection_model)
 set_drone_export_loader(load_detection_model)
 set_drone_models_dir(VISION_MODELS_DIR)
+set_deployments_models_dir(VISION_MODELS_DIR)
+set_corrections_models_dir(VISION_MODELS_DIR)
 # NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 
 # Vision training

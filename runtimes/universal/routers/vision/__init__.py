@@ -17,6 +17,10 @@ from .streaming import set_streaming_detection_loader, start_session_cleanup
 from .training import router as training_router
 from .drone import router as drone_router
 from .drone import set_drone_detection_loader, set_drone_export_loader, set_drone_models_dir
+from .deployments import router as deployments_router
+from .deployments import set_deployments_models_dir
+from .corrections import router as corrections_router
+from .corrections import set_corrections_models_dir, set_retrain_callback
 
 # Combined router
 router = APIRouter(tags=["vision"])
@@ -28,6 +32,8 @@ router.include_router(streaming_router)
 router.include_router(training_router)
 router.include_router(models_router)
 router.include_router(drone_router)
+router.include_router(deployments_router)
+router.include_router(corrections_router)
 
 __all__ = [
     "router",
@@ -37,4 +43,6 @@ __all__ = [
     "set_streaming_detection_loader", "start_session_cleanup",
     "set_vision_models_dir", "set_model_export_loader",
     "set_drone_detection_loader", "set_drone_export_loader", "set_drone_models_dir",
+    "set_deployments_models_dir",
+    "set_corrections_models_dir", "set_retrain_callback",
 ]
