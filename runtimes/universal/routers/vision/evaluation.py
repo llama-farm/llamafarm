@@ -119,7 +119,7 @@ def _resolve_model_path(model: str) -> str:  # lgtm[py/path-injection]
     # If it looks like a path (has separators or .pt suffix), validate containment
     if p.suffix == ".pt" and p.is_absolute():
         resolved = p.resolve()
-        home_llamafarm = Path.home() / ".llamafarm"
+        home_llamafarm = (Path.home() / ".llamafarm").resolve()
         cwd = Path.cwd().resolve()
         if not (
             resolved.is_relative_to(home_llamafarm) or resolved.is_relative_to(cwd)

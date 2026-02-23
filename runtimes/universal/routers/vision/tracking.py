@@ -96,7 +96,7 @@ def _resolve_model_path(model: str) -> str:
     if p.exists() and p.suffix == ".pt":
         # Containment check
         resolved = p.resolve()
-        home_lf = Path.home() / ".llamafarm"
+        home_lf = (Path.home() / ".llamafarm").resolve()
         cwd = Path.cwd().resolve()
         if not (resolved.is_relative_to(home_lf) or resolved.is_relative_to(cwd)):
             raise HTTPException(400, "Model path outside allowed directories")
@@ -289,7 +289,10 @@ async def start_tracking(request: TrackStartRequest) -> TrackStartResponse:
 
     yolo_model = await asyncio.to_thread(YOLO, model_path)
 
+    # Collision-safe short ID (MAX_SESSIONS=50, so collisions are rare but possible)
     sid = str(uuid.uuid4())[:8]
+    while sid in _sessions:
+        sid = str(uuid.uuid4())[:8]
     session = TrackSession(
         session_id=sid,
         model_id=request.model,
