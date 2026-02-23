@@ -202,8 +202,26 @@ install_cli() {
         fi
     done
 
+    # Bootstrap PyApp binaries
+    bootstrap_services
+
     success "LlamaFarm installed successfully!"
     verify_installation
+}
+
+# Bootstrap PyApp binaries (trigger first-run extraction)
+bootstrap_services() {
+    info "Bootstrapping service binaries (this may take a moment)..."
+    if command_exists "$BINARY_NAME"; then
+        "$BINARY_NAME" bundle bootstrap || {
+            warning "Bootstrap failed. Services will extract on first run instead."
+        }
+    else
+        # CLI not in PATH yet, use the install dir directly
+        "$INSTALL_DIR/$BINARY_NAME" bundle bootstrap || {
+            warning "Bootstrap failed. Services will extract on first run instead."
+        }
+    fi
 }
 
 # Verify installation
@@ -364,9 +382,12 @@ install_from_bundle() {
     # 4. Install addons (if present)
     install_bundle_addons "$temp_dir/addons" "$temp_dir/addons-registry"
 
+    # 5. Bootstrap PyApp binaries
+    bootstrap_services
+
     success "LlamaFarm installed from bundle!"
 
-    # 5. Verify installation
+    # 6. Verify installation
     verify_installation
 }
 
