@@ -39,8 +39,22 @@ def main():
     # --- Classifier ---
     print("\n=== Classifier API ===")
     safe_call("models", lf.classifier.models)
-    safe_call("fit", lf.classifier.fit, [[1, 0], [0, 1], [1, 1]], [0, 1, 1])
-    safe_call("predict", lf.classifier.predict, [[1, 0], [0, 1]])
+    safe_call(
+        "fit",
+        lf.classifier.fit,
+        "intent-demo",
+        [
+            {"text": "I want to cancel my trip", "label": "cancel"},
+            {"text": "Please cancel the booking", "label": "cancel"},
+            {"text": "Book me a hotel", "label": "book"},
+            {"text": "Reserve a flight", "label": "book"},
+            {"text": "What's the status?", "label": "status"},
+            {"text": "Check my order", "label": "status"},
+            {"text": "I need to cancel", "label": "cancel"},
+            {"text": "Make a reservation", "label": "book"},
+        ],
+    )
+    safe_call("predict", lf.classifier.predict, "intent-demo", ["Cancel my flight", "Book a room"])
 
     # --- Time Series ---
     print("\n=== Time Series API ===")

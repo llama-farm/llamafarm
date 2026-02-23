@@ -292,6 +292,18 @@ class VisionAPI:
         _raise_for_status(r)
         return r.json()
 
+    def models(self) -> dict[str, Any]:
+        """List all saved vision models."""
+        r = self._client.get(f"{self._base}/models")
+        _raise_for_status(r)
+        return r.json()
+
+    async def amodels(self) -> dict[str, Any]:
+        """List all saved vision models (async)."""
+        r = await self._aclient.get(f"{self._base}/models")
+        _raise_for_status(r)
+        return r.json()
+
     def train(self, model: str, dataset: str, **kwargs: Any) -> dict[str, Any]:
         body: dict[str, Any] = {"model": model, "dataset": dataset, **kwargs}
         r = self._client.post(f"{self._base}/train", json=body)
@@ -570,35 +582,64 @@ class AnomalyAPI:
 
 
 class ClassifierAPI:
-    """ML classifier operations."""
+    """ML text classifier operations (SetFit few-shot learning)."""
 
     def __init__(self, client: httpx.Client, aclient: httpx.AsyncClient, base_url: str):
         self._client = client
         self._aclient = aclient
         self._base = f"{base_url}/ml/classifier"
 
-    def fit(self, data: list, labels: list, **kwargs: Any) -> dict[str, Any]:
-        body: dict[str, Any] = {"data": data, "labels": labels, **kwargs}
+    def fit(
+        self,
+        model: str,
+        training_data: list[dict[str, str]],
+        *,
+        base_model: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Fit a text classifier using SetFit few-shot learning.
+
+        Args:
+            model: Model identifier (for caching/saving).
+            training_data: List of ``{"text": ..., "label": ...}`` examples.
+            base_model: Optional base sentence-transformer model.
+        """
+        body: dict[str, Any] = {"model": model, "training_data": training_data, **kwargs}
+        if base_model:
+            body["base_model"] = base_model
         r = self._client.post(f"{self._base}/fit", json=body)
         _raise_for_status(r)
         return r.json()
 
-    async def afit(self, data: list, labels: list, **kwargs: Any) -> dict[str, Any]:
-        body: dict[str, Any] = {"data": data, "labels": labels, **kwargs}
+    async def afit(
+        self,
+        model: str,
+        training_data: list[dict[str, str]],
+        *,
+        base_model: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"model": model, "training_data": training_data, **kwargs}
+        if base_model:
+            body["base_model"] = base_model
         r = await self._aclient.post(f"{self._base}/fit", json=body)
         _raise_for_status(r)
         return r.json()
 
-    def predict(self, data: list, *, model: str | None = None, **kwargs: Any) -> dict[str, Any]:
-        body: dict[str, Any] = {"data": data, **kwargs}
-        if model:
-            body["model"] = model
+    def predict(self, model: str, texts: list[str], **kwargs: Any) -> dict[str, Any]:
+        """Classify texts using a fitted model.
+
+        Args:
+            model: Model identifier (must be fitted first via :meth:`fit`).
+            texts: List of texts to classify.
+        """
+        body: dict[str, Any] = {"model": model, "texts": texts, **kwargs}
         r = self._client.post(f"{self._base}/predict", json=body)
         _raise_for_status(r)
         return r.json()
 
-    async def apredict(self, data: list, **kwargs: Any) -> dict[str, Any]:
-        body: dict[str, Any] = {"data": data, **kwargs}
+    async def apredict(self, model: str, texts: list[str], **kwargs: Any) -> dict[str, Any]:
+        body: dict[str, Any] = {"model": model, "texts": texts, **kwargs}
         r = await self._aclient.post(f"{self._base}/predict", json=body)
         _raise_for_status(r)
         return r.json()

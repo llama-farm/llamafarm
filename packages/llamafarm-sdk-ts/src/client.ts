@@ -371,6 +371,11 @@ class VisionAPI {
       time_ms: (data.time_ms ?? 0) as number,
     }
   }
+
+  /** List all saved vision models. */
+  async models(): Promise<Record<string, unknown>> {
+    return this.client._req('GET', '/v1/vision/models') as Promise<Record<string, unknown>>
+  }
 }
 
 class FineTuneAPI {
@@ -523,16 +528,18 @@ class AnomalyAPI {
 class ClassifierAPI {
   constructor(private readonly client: LlamaFarm) {}
 
-  async fit(X: number[][], y: (string | number)[], options: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-    return this.client._req('POST', '/v1/ml/classifier/fit', { X, y, ...options }) as Promise<Record<string, unknown>>
+  /** Fit a text classifier using SetFit few-shot learning. */
+  async fit(model: string, trainingData: { text: string; label: string }[], options: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    return this.client._req('POST', '/v1/ml/classifier/fit', { model, training_data: trainingData, ...options }) as Promise<Record<string, unknown>>
   }
 
-  async predict(X: number[][], options: { model?: string } = {}): Promise<Record<string, unknown>> {
-    return this.client._req('POST', '/v1/ml/classifier/predict', { X, ...options }) as Promise<Record<string, unknown>>
+  /** Classify texts using a fitted model. */
+  async predict(model: string, texts: string[], options: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    return this.client._req('POST', '/v1/ml/classifier/predict', { model, texts, ...options }) as Promise<Record<string, unknown>>
   }
 
-  async load(modelPath: string): Promise<Record<string, unknown>> {
-    return this.client._req('POST', '/v1/ml/classifier/load', { model_path: modelPath }) as Promise<Record<string, unknown>>
+  async load(model: string): Promise<Record<string, unknown>> {
+    return this.client._req('POST', '/v1/ml/classifier/load', { model }) as Promise<Record<string, unknown>>
   }
 
   async models(): Promise<Record<string, unknown>[]> {

@@ -468,21 +468,25 @@ describe('anomaly', () => {
 // ---------------------------------------------------------------------------
 
 describe('classifier', () => {
-  it('fit sends X and y', async () => {
-    const f = mockFetch(200, { model_id: 'clf-1', accuracy: 0.95 })
+  it('fit sends model and training_data', async () => {
+    const f = mockFetch(200, { model: 'intent', labels: ['cancel', 'book'] })
     vi.stubGlobal('fetch', f)
     const lf = new LlamaFarm()
-    await lf.classifier.fit([[1], [2], [3]], [0, 1, 0])
+    await lf.classifier.fit('intent', [
+      { text: 'cancel trip', label: 'cancel' },
+      { text: 'book hotel', label: 'book' },
+    ])
     const body = JSON.parse(f.mock.calls[0][1].body)
-    expect(body.X).toHaveLength(3)
-    expect(body.y).toEqual([0, 1, 0])
+    expect(body.model).toBe('intent')
+    expect(body.training_data).toHaveLength(2)
+    expect(body.training_data[0].text).toBe('cancel trip')
     vi.unstubAllGlobals()
   })
 
-  it('predict returns predictions', async () => {
-    vi.stubGlobal('fetch', mockFetch(200, { predictions: [0, 1] }))
+  it('predict sends model and texts', async () => {
+    vi.stubGlobal('fetch', mockFetch(200, { predictions: ['cancel', 'book'] }))
     const lf = new LlamaFarm()
-    const r = await lf.classifier.predict([[1], [2]])
+    const r = await lf.classifier.predict('intent', ['cancel my flight', 'book a room'])
     expect(r.predictions).toBeDefined()
     vi.unstubAllGlobals()
   })
