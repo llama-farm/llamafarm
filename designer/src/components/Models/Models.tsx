@@ -75,13 +75,14 @@ import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
 import { VisionPanel } from '../Vision/VisionPanel'
 import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { AddonsLink } from '../speech/AddonsLink'
 import { AddonInstallProgress } from '../Addons'
 import { AddonInstallSidePane } from '../Addons'
 
 interface TabBarProps {
   activeTab: string
   onChange: (tabId: string) => void
-  tabs: { id: string; label: string }[]
+  tabs: { id: string; label: React.ReactNode }[]
 }
 
 function TabBar({ activeTab, onChange, tabs }: TabBarProps) {
@@ -3250,7 +3251,7 @@ const Models = () => {
             tabs={[
               { id: 'project', label: 'Inference models' },
               { id: 'training', label: 'Trained models' },
-              { id: 'vision', label: 'Vision' },
+              { id: 'vision', label: <span className="flex items-center gap-1.5">Vision <AddonsLink /></span> },
             ]}
           />
 
