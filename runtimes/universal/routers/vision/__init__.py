@@ -15,6 +15,8 @@ from .router import set_document_loader, set_file_image_getter, set_ocr_loader
 from .streaming import router as streaming_router
 from .streaming import set_streaming_detection_loader, start_session_cleanup
 from .training import router as training_router
+from .drone import router as drone_router
+from .drone import set_drone_detection_loader, set_drone_export_loader, set_drone_models_dir
 
 # Combined router
 router = APIRouter(tags=["vision"])
@@ -25,6 +27,7 @@ router.include_router(detect_classify_router)
 router.include_router(streaming_router)
 router.include_router(training_router)
 router.include_router(models_router)
+router.include_router(drone_router)
 
 __all__ = [
     "router",
@@ -33,4 +36,5 @@ __all__ = [
     "set_detect_classify_loaders",
     "set_streaming_detection_loader", "start_session_cleanup",
     "set_vision_models_dir", "set_model_export_loader",
+    "set_drone_detection_loader", "set_drone_export_loader", "set_drone_models_dir",
 ]
