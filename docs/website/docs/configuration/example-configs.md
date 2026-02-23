@@ -200,6 +200,7 @@ See [Lemonade Quickstart](../models#quick-setup) for detailed setup.
 version: v1
 name: llm-gateway
 namespace: enterprise
+schema: schemas/compliance.py::ComplianceSummary
 
 runtime:
   default_model: vllm-model

@@ -178,7 +178,7 @@ class IncrementalTrainer:
                 raise RuntimeError("Model loader not configured")
             
             model = await self._model_loader(base_model or job.model_id)
-            
+
             # Run training (delegates to model's train method)
             if job.task == "detection":
                 metrics = await self._train_detection(model, job)

@@ -14,9 +14,12 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
+from models.gguf_language_model import GGUFLanguageModel
 from routers.chat_completions.service import ChatCompletionsService
 from routers.chat_completions.types import ChatCompletionRequest
+from utils.context_manager import ContextBudget, ContextUsage, TruncationStrategy
 
 # Simple tool definitions for testing
 CALCULATOR_TOOL = {
@@ -102,7 +105,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify response structure
@@ -140,7 +144,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What's the weather in NY and LA?"}]
         request = self.create_request(messages, tools=[GET_WEATHER_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify multiple tool calls
@@ -167,7 +172,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify normal response (no tool calls)
@@ -188,7 +194,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "Hello"}]
         request = self.create_request(messages, tools=None)  # No tools
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Tool call should be ignored and returned as regular content
@@ -228,7 +235,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What is 2+2?"}]
         request = self.create_request(messages, tools=[CALCULATOR_TOOL], stream=True)
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Response should be a StreamingResponse
@@ -298,7 +306,8 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "Schedule a team meeting"}]
         request = self.create_request(messages, tools=[complex_tool])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # Verify complex arguments are preserved
@@ -324,13 +333,244 @@ class TestToolCallingE2E:
         messages = [{"role": "user", "content": "What time is it?"}]
         request = self.create_request(messages, tools=[no_args_tool])
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         tool_calls = response["choices"][0]["message"]["tool_calls"]
         assert len(tool_calls) == 1
         assert tool_calls[0]["function"]["name"] == "get_time"
         assert json.loads(tool_calls[0]["function"]["arguments"]) == {}
+
+    @pytest.mark.asyncio
+    async def test_http_exception_is_not_wrapped_as_500(self, service, mock_gguf_model):
+        """HTTPException should propagate unchanged through the service layer."""
+        context_error = HTTPException(
+            status_code=400,
+            detail={"error": "context_length_exceeded", "context_usage": {"total_context": 512}},
+        )
+        mock_gguf_model.generate = AsyncMock(side_effect=context_error)
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "Hello"}],
+            tools=None,
+            stream=False,
+        )
+
+        with (
+            patch.object(service, "load_language", return_value=mock_gguf_model),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await service.chat_completions(request)
+
+        assert exc_info.value.status_code == 400
+        assert isinstance(exc_info.value.detail, dict)
+        assert exc_info.value.detail["error"] == "context_length_exceeded"
+
+    @pytest.mark.asyncio
+    async def test_effective_max_tokens_uses_real_remaining_context(self, service):
+        """Generation cap should use real remaining space, not reserved cap."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=2048,
+                    max_prompt_tokens=1536,
+                    reserved_completion=512,
+                    safety_margin=102,
+                )
+
+            def validate_messages(self, _messages):
+                # Simulate legacy reserved-completion-limited availability.
+                return ContextUsage(
+                    total_context=2048,
+                    prompt_tokens=100,
+                    available_for_completion=512,
+                )
+
+            def needs_truncation(self, _messages):
+                return False
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = None
+        model.generate = AsyncMock(return_value="ok")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "Hello"}],
+            tools=None,
+            stream=False,
+        )
+        request.max_tokens = 1200
+
+        with patch.object(service, "load_language", return_value=model):
+            await service.chat_completions(request)
+
+        assert model.generate.await_count == 1
+        assert model.generate.await_args.kwargs["max_tokens"] == 1200
+
+    @pytest.mark.asyncio
+    async def test_native_rendered_prompt_is_counted_for_context_budget(self, service):
+        """Native-rendered tool prompts should be validated by rendered size."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=1000,
+                    max_prompt_tokens=700,
+                    reserved_completion=200,
+                    safety_margin=50,
+                )
+
+            def validate_messages(self, _messages):
+                raise AssertionError("native path should bypass message validation")
+
+            def needs_truncation(self, _messages):
+                return False
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = MagicMock()
+        model._token_counter.count_tokens.return_value = 900
+        model.prepare_messages_for_context_validation = MagicMock(
+            return_value=(
+                [{"role": "user", "content": "short"}],
+                False,
+                "x" * 5000,
+            )
+        )
+        model.generate = AsyncMock(return_value="should not run")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "short"}],
+            tools=[CALCULATOR_TOOL],
+            stream=False,
+        )
+
+        with (
+            patch.object(service, "load_language", return_value=model),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await service.chat_completions(request)
+
+        assert exc_info.value.status_code == 400
+        assert "Rendered prompt" in exc_info.value.detail["message"]
+        assert model.generate.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_native_rendered_prompt_without_token_counter_returns_400(self, service):
+        """Missing token counter on native path should return controlled HTTP error."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=1000,
+                    max_prompt_tokens=700,
+                    reserved_completion=200,
+                    safety_margin=50,
+                )
+
+            def validate_messages(self, _messages):
+                raise AssertionError("should fail before message validation fallback")
+
+            def needs_truncation(self, _messages):
+                return False
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = None
+        model.prepare_messages_for_context_validation = MagicMock(
+            return_value=(
+                [{"role": "user", "content": "short"}],
+                False,
+                "rendered native prompt",
+            )
+        )
+        model.generate = AsyncMock(return_value="should not run")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "short"}],
+            tools=[CALCULATOR_TOOL],
+            stream=False,
+        )
+
+        with (
+            patch.object(service, "load_language", return_value=model),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await service.chat_completions(request)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail["error"] == "context_validation_unavailable"
+        assert "token counting is unavailable" in exc_info.value.detail["message"]
+        assert model.generate.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_injected_tools_force_keep_system_over_sliding_window(self, service):
+        """Injected tools should force system-preserving truncation strategy."""
+
+        class FakeContextManager:
+            def __init__(self):
+                self.budget = ContextBudget(
+                    total_context=1000,
+                    max_prompt_tokens=700,
+                    reserved_completion=200,
+                    safety_margin=50,
+                )
+                self.last_strategy = None
+
+            def validate_messages(self, _messages):
+                return ContextUsage(
+                    total_context=1000,
+                    prompt_tokens=900,
+                    available_for_completion=50,
+                )
+
+            def needs_truncation(self, _messages):
+                return False
+
+            def truncate_if_needed(self, messages, strategy):
+                self.last_strategy = strategy
+                return (
+                    messages,
+                    ContextUsage(
+                        total_context=1000,
+                        prompt_tokens=600,
+                        available_for_completion=200,
+                        truncated=True,
+                        truncated_messages=1,
+                        strategy_used=strategy.value,
+                    ),
+                )
+
+        model = GGUFLanguageModel("test/model", "cpu")
+        model._context_manager = FakeContextManager()
+        model._token_counter = None
+        model.prepare_messages_for_context_validation = MagicMock(
+            return_value=(
+                [
+                    {"role": "system", "content": "<tools>calculator</tools>"},
+                    {"role": "user", "content": "short"},
+                ],
+                True,
+                None,
+            )
+        )
+        model.generate = AsyncMock(return_value="ok")
+
+        request = self.create_request(
+            messages=[{"role": "user", "content": "short"}],
+            tools=[CALCULATOR_TOOL],
+            stream=False,
+        )
+        request.truncation_strategy = "sliding_window"
+
+        with patch.object(service, "load_language", return_value=model):
+            await service.chat_completions(request)
+
+        assert model._context_manager.last_strategy == TruncationStrategy.KEEP_SYSTEM_SLIDING
+        assert model.generate.await_args.kwargs["tools"] is None
+        assert model.generate.await_args.kwargs["messages"][0]["role"] == "system"
 
 
 class TestToolCallingOpenAICompatibility:
@@ -370,7 +610,8 @@ class TestToolCallingOpenAICompatibility:
             max_tokens=100,
         )
 
-        with patch.object(service, "load_language", return_value=mock_gguf_model):
+        with patch("server.load_language", return_value=mock_gguf_model) as mock_loader:
+            service.load_language = mock_loader
             response = await service.chat_completions(request)
 
         # This should not raise - validates OpenAI SDK compatibility

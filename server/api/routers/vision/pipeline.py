@@ -33,7 +33,6 @@ async def detect_classify(
     if not cls_list:
         raise HTTPException(status_code=422, detail="classes must contain at least one non-empty value")
     det_cls = [c.strip() for c in detection_classes.split(",") if c.strip()] if detection_classes else None
-    # Cap top_k to available classes (identified by cubic)
     top_k = min(top_k, len(cls_list))
     return await VisionPipelineService.detect_classify({
         "image": image,

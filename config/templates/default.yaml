@@ -1,6 +1,9 @@
 version: v1
 name: default-project
 namespace: default
+# `lf init` creates `schemas/` with `schemas/example.py` for structured outputs.
+# Uncomment and point to your model class to enable:
+# schema: schemas/example.py::Person
 
 # =============================================================================
 # RUNTIME CONFIGURATION
