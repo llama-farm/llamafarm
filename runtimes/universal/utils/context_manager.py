@@ -66,13 +66,25 @@ class ContextBudget:
         Returns:
             A ContextBudget instance with calculated allocations.
         """
-        safety_margin = int(n_ctx * safety_margin_pct)
-        max_prompt = n_ctx - max_completion_tokens - safety_margin
+        safe_n_ctx = max(1, n_ctx)
+        safety_margin = max(0, int(safe_n_ctx * safety_margin_pct))
+
+        # Keep enough room for both prompt and completion even on small context windows.
+        max_safe_margin = max(0, safe_n_ctx - 2)
+        safety_margin = min(safety_margin, max_safe_margin)
+
+        completion_target = max(1, max_completion_tokens)
+        available_after_safety = max(2, safe_n_ctx - safety_margin)
+
+        # Avoid hard-reserving large completion windows on tiny contexts.
+        adaptive_completion_cap = max(1, available_after_safety // 2)
+        reserved_completion = min(completion_target, adaptive_completion_cap)
+        max_prompt = max(1, safe_n_ctx - safety_margin - reserved_completion)
 
         return cls(
-            total_context=n_ctx,
+            total_context=safe_n_ctx,
             max_prompt_tokens=max_prompt,
-            reserved_completion=max_completion_tokens,
+            reserved_completion=reserved_completion,
             safety_margin=safety_margin,
         )
 
@@ -122,6 +134,13 @@ class ContextManager:
         """Get the context budget."""
         return self._budget
 
+    def _available_for_completion(self, prompt_tokens: int) -> int:
+        """Calculate completion tokens available under current budget assumptions."""
+        available = (
+            self._budget.total_context - prompt_tokens - self._budget.safety_margin
+        )
+        return max(0, min(self._budget.reserved_completion, available))
+
     def validate_messages(self, messages: list[dict]) -> ContextUsage:
         """Validate messages fit within context budget.
 
@@ -134,12 +153,11 @@ class ContextManager:
             ContextUsage with token counts and overflow status.
         """
         prompt_tokens = self._counter.estimate_prompt_tokens(messages)
-        available = self._budget.total_context - prompt_tokens
 
         return ContextUsage(
             total_context=self._budget.total_context,
             prompt_tokens=prompt_tokens,
-            available_for_completion=max(0, available - self._budget.safety_margin),
+            available_for_completion=self._available_for_completion(prompt_tokens),
             truncated=False,
             truncated_messages=0,
             strategy_used=None,
@@ -176,12 +194,10 @@ class ContextManager:
 
         if prompt_tokens <= self._budget.max_prompt_tokens:
             # No truncation needed
-            # Calculate available tokens consistently with validate_messages (subtract safety_margin)
-            available = self._budget.total_context - prompt_tokens
             return messages, ContextUsage(
                 total_context=self._budget.total_context,
                 prompt_tokens=prompt_tokens,
-                available_for_completion=max(0, available - self._budget.safety_margin),
+                available_for_completion=self._available_for_completion(prompt_tokens),
                 truncated=False,
                 truncated_messages=0,
                 strategy_used=None,
@@ -219,12 +235,10 @@ class ContextManager:
             f"({prompt_tokens} -> {new_tokens} tokens), strategy={strategy.value}"
         )
 
-        # Calculate available tokens consistently with validate_messages (subtract safety_margin)
-        available = self._budget.total_context - new_tokens
         return truncated, ContextUsage(
             total_context=self._budget.total_context,
             prompt_tokens=new_tokens,
-            available_for_completion=max(0, available - self._budget.safety_margin),
+            available_for_completion=self._available_for_completion(new_tokens),
             truncated=True,
             truncated_messages=messages_removed,
             strategy_used=strategy.value,

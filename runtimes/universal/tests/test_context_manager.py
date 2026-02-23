@@ -101,6 +101,13 @@ class TestContextBudget:
         expected_margin = int(10000 * 0.05)
         assert budget.safety_margin == expected_margin
 
+    def test_small_context_never_produces_negative_prompt_budget(self):
+        """Small context windows should still produce a valid prompt budget."""
+        budget = ContextBudget.from_context_size(512)
+        assert budget.max_prompt_tokens > 0
+        assert budget.reserved_completion > 0
+        assert budget.max_prompt_tokens + budget.reserved_completion + budget.safety_margin <= 512
+
 
 class TestContextManager:
     """Tests for ContextManager class."""
@@ -120,6 +127,21 @@ class TestContextManager:
         assert usage.total_context == 1000
         assert usage.prompt_tokens > 0
         assert usage.truncated is False
+
+    def test_available_for_completion_matches_budget_assumptions(self, manager):
+        """Usage should align with reserved completion and safety margin rules."""
+        messages = [{"role": "user", "content": "Hello world"}]
+        usage = manager.validate_messages(messages)
+        expected = max(
+            0,
+            min(
+                manager.budget.reserved_completion,
+                manager.budget.total_context
+                - usage.prompt_tokens
+                - manager.budget.safety_margin,
+            ),
+        )
+        assert usage.available_for_completion == expected
 
     def test_needs_truncation_false_for_small_messages(self, manager):
         """Test needs_truncation returns False for small messages."""

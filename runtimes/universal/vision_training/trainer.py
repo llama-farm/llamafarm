@@ -101,11 +101,25 @@ class IncrementalTrainer:
                 pass
 
             training_yolo = YOLO(model_path)
-            
+
+            # Auto-convert COCO JSON to YOLO format if needed
+            dataset_path = job.dataset_path
+            from vision_training.coco_converter import is_coco_format
+            if is_coco_format(dataset_path):
+                from vision_training.coco_converter import convert_coco_to_yolo
+                from pathlib import Path as _Path
+                coco_out = _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
+                logger.info(f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}")
+                data_yaml = await asyncio.to_thread(
+                    convert_coco_to_yolo, dataset_path, coco_out,
+                )
+                dataset_path = str(data_yaml)
+                logger.info(f"COCO conversion complete: {dataset_path}")
+
             # Train using the fresh YOLO instance
             logger.info(f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}")
             train_args = {
-                "data": job.dataset_path,
+                "data": dataset_path,
                 "epochs": job.config.epochs,
                 "batch": job.config.batch_size,
                 "device": device if device != "auto" else None,

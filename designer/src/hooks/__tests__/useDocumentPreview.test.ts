@@ -11,7 +11,7 @@ import { useDocumentPreview } from '../useDocumentPreview'
 import { server } from '../../test/mocks/server'
 import { http, HttpResponse } from 'msw'
 
-const API_BASE = 'http://localhost:14345/v1'
+const API_BASE = '/api/v1'
 
 const mockPreviewResponse = {
   original_text: 'This is test content for the preview.',
@@ -132,8 +132,10 @@ describe('useDocumentPreview', () => {
       })
     })
 
-    // Should be loading
-    expect(result.current.isPending).toBe(true)
+    // Mutation state updates asynchronously; wait until pending is observable.
+    await waitFor(() => {
+      expect(result.current.isPending).toBe(true)
+    })
 
     // Wait for completion
     await waitFor(() => {

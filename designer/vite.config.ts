@@ -66,6 +66,13 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Proxy /v1/* (including voice WebSocket paths) to the backend server
+      '/v1': {
+        target: process.env.API_URL || 'http://localhost:14345',
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+      },
       // Proxy all /api/* requests to the backend server
       // Rewrite /api/v1/* to /v1/* since backend doesn't have /api prefix
       '/api': {

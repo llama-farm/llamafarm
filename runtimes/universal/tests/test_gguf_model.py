@@ -61,6 +61,60 @@ class TestGGUFLanguageModel:
         assert "User: Thanks" in prompt
         assert prompt.endswith("Assistant:")
 
+    def test_prepare_messages_for_context_validation_no_tools(self):
+        """No tools should leave messages unchanged."""
+        model = GGUFLanguageModel("test/model", "cpu")
+        messages = [{"role": "user", "content": "Hello"}]
+
+        prepared, already_injected, native_prompt = (
+            model.prepare_messages_for_context_validation(messages)
+        )
+
+        assert prepared == messages
+        assert already_injected is False
+        assert native_prompt is None
+
+    def test_prepare_messages_for_context_validation_native_tools(self):
+        """Native Jinja2 tool rendering should return rendered prompt metadata."""
+        model = GGUFLanguageModel("test/model", "cpu")
+        messages = [{"role": "user", "content": "Use a tool"}]
+        tools = [{"type": "function", "function": {"name": "calculator"}}]
+
+        with patch.object(model, "_render_with_jinja2", return_value="native prompt"):
+            prepared, already_injected, native_prompt = (
+                model.prepare_messages_for_context_validation(messages, tools)
+            )
+
+        assert prepared == messages
+        assert already_injected is False
+        assert native_prompt == "native prompt"
+
+    def test_prepare_messages_for_context_validation_injected_tools(self):
+        """Prompt-injection tool path should mark messages as already injected."""
+        model = GGUFLanguageModel("test/model", "cpu")
+        messages = [{"role": "user", "content": "Use a tool"}]
+        tools = [{"type": "function", "function": {"name": "calculator"}}]
+        injected_messages = [{"role": "system", "content": "Injected tools"}]
+
+        with (
+            patch.object(model, "_render_with_jinja2", return_value=None),
+            patch.object(
+                model,
+                "_prepare_messages_with_tools",
+                return_value=injected_messages,
+            ) as injected_mock,
+        ):
+            prepared, already_injected, native_prompt = (
+                model.prepare_messages_for_context_validation(
+                    messages, tools, "required"
+                )
+            )
+
+        injected_mock.assert_called_once_with(messages, tools, "required")
+        assert prepared == injected_messages
+        assert already_injected is True
+        assert native_prompt is None
+
     @pytest.mark.asyncio
     async def test_load_model_cpu(self, tmp_path):
         """Test loading GGUF model for CPU."""

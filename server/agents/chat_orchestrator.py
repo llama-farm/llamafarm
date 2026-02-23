@@ -1,3 +1,5 @@
+import importlib.util
+import inspect
 import json
 import os
 import time
@@ -23,6 +25,7 @@ from openai.types.chat.chat_completion_message import (
 from openai.types.chat.chat_completion_message_tool_call_param import (
     Function,
 )
+from pydantic import BaseModel
 
 from agents.base.agent import LFAgent, LFAgentConfig
 from agents.base.clients.client import LFChatCompletion, LFChatCompletionChunk
@@ -93,6 +96,7 @@ class ChatOrchestratorAgent(LFAgent):
         history = self._get_history(project_config)
         provider = RuntimeService.get_provider(model_config)
         client = provider.get_client()
+        self._apply_response_model(client)
 
         system_prompt_generator = LFAgentSystemPromptGenerator(
             prompts=self._get_prompt_messages_for_model(model_config.name)
@@ -104,6 +108,95 @@ class ChatOrchestratorAgent(LFAgent):
         )
 
         super().__init__(config=config)
+
+    def _apply_response_model(self, client: Any) -> None:
+        schema_ref = getattr(self._project_config, "schema_", None)
+        if not schema_ref:
+            return
+
+        response_model = self._load_response_model(schema_ref)
+        if hasattr(client, "set_response_model"):
+            client.set_response_model(response_model)
+            return
+        if hasattr(client, "response_model"):
+            client.response_model = response_model
+            return
+        raise TypeError(
+            f"Client {type(client).__name__} does not support structured output"
+        )
+
+    def _load_response_model(self, schema_ref: str) -> type[BaseModel]:
+        """Load a Pydantic model from a user schema file.
+
+        Security: Only loads files from schemas/ directory within project.
+        Prevents directory traversal and arbitrary code execution.
+        """
+        if "::" not in schema_ref:
+            raise ValueError(
+                "Schema must be in the format 'schemas/file.py::ClassName'"
+            )
+
+        schema_path, class_name = schema_ref.split("::", 1)
+
+        # Security: Reject obviously malicious paths early
+        if schema_path.startswith("/") or ".." in Path(schema_path).parts:
+            raise ValueError(
+                "Schema path must be relative and cannot contain '..'"
+            )
+
+        # Security: Only allow loading from schemas/ directory
+        if not schema_path.startswith("schemas/"):
+            raise ValueError(
+                f"Schema must be in schemas/ directory. Got: {schema_path}"
+            )
+
+        schemas_dir = (Path(self._project_dir) / "schemas").resolve()
+        relative_schema_path = Path(schema_path).relative_to("schemas")
+        module_path = (schemas_dir / relative_schema_path).resolve()
+
+        # Security: Verify final path is still inside schemas/
+        if not module_path.is_relative_to(schemas_dir):
+            raise ValueError(
+                f"Schema must be in schemas/ directory. Got: {schema_path}"
+            )
+
+        # Security: Only allow .py files
+        if module_path.suffix != ".py":
+            raise ValueError("Schema file must be a .py file")
+
+        if not module_path.exists():
+            raise FileNotFoundError(f"Schema file not found: {module_path}")
+
+        # Safe to load now
+        spec = importlib.util.spec_from_file_location(
+            f"llamafarm_user_schema_{module_path.stem}", module_path
+        )
+        if not spec or not spec.loader:
+            raise ValueError(f"Could not load schema module from {module_path}")
+
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to load schema module {module_path}: {e}"
+            ) from e
+
+        response_model = getattr(module, class_name, None)
+        if response_model is None or not inspect.isclass(response_model):
+            raise ValueError(
+                f"Schema reference '{class_name}' is not a valid class in {module_path}"
+            )
+
+        # Security: Verify it's actually a BaseModel
+        if not isinstance(response_model, type) or not issubclass(
+            response_model, BaseModel
+        ):
+            raise TypeError(
+                f"{class_name} must be a Pydantic BaseModel class"
+            )
+
+        return response_model
 
     @property
     def config_tools(self) -> list["ToolDefinition"]:

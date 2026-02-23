@@ -92,6 +92,7 @@ from routers.vision import (
 )
 from routers.vision import (
     set_classification_loader,
+    set_detect_classify_loaders,
     set_detection_loader,
     set_document_loader,
     set_file_image_getter,
@@ -99,6 +100,7 @@ from routers.vision import (
     set_ocr_loader,
     set_streaming_detection_loader,
     set_vision_models_dir,
+    start_session_cleanup,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -307,6 +309,10 @@ async def lifespan(app: FastAPI):
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
+
+    # Start vision streaming session cleanup (needs running event loop)
+    start_session_cleanup()
+    logger.info("Vision session cleanup task started")
 
     yield
 
@@ -1192,9 +1198,11 @@ set_document_loader(load_document)
 set_file_image_getter(get_file_images)
 set_detection_loader(load_detection_model)
 set_classification_loader(load_classification_model)
+set_detect_classify_loaders(load_detection_model, load_classification_model)
 set_streaming_detection_loader(load_detection_model)
 set_vision_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
+# NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 
 # Vision training
 set_trainer_model_loader(load_detection_model)

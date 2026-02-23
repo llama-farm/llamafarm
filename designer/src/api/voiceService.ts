@@ -10,8 +10,51 @@ import { runtimeClient } from './client'
 import { devToolsEmitter } from '../utils/devToolsEmitter'
 
 // Server URL for voice WebSocket (goes through API gateway)
-// Use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues on macOS
-const API_HOST = (import.meta.env as Record<string, string>).VITE_APP_API_URL || 'http://127.0.0.1:14345'
+function getApiHost(): string {
+  // 1) Explicit URL from env (for custom deployments)
+  const envUrl = (import.meta.env as Record<string, string>).VITE_APP_API_URL
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    const trimmed = envUrl.trim()
+
+    // Accept full absolute URLs directly.
+    try {
+      const parsed = new URL(trimmed)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.toString().replace(/\/$/, '')
+      }
+    } catch {
+      // Fall through to protocol-normalized parsing below.
+    }
+
+    // Also accept host[:port] values by inheriting current page protocol.
+    if (typeof window !== 'undefined') {
+      try {
+        const parsed = new URL(window.location.origin)
+        parsed.host = trimmed
+        parsed.protocol = window.location.protocol
+        return parsed.toString().replace(/\/$/, '')
+      } catch {
+        // Fall through to standard runtime fallback.
+      }
+    }
+  }
+
+  // 2) Default to backend port on current hostname for split-origin dev setups
+  if (typeof window !== 'undefined') {
+    const apiUrl = new URL(window.location.origin)
+    // Use 127.0.0.1 to avoid localhost IPv6 resolution issues on macOS.
+    if (apiUrl.hostname === 'localhost') {
+      apiUrl.hostname = '127.0.0.1'
+    }
+    apiUrl.port = '14345'
+    return apiUrl.toString().replace(/\/$/, '')
+  }
+
+  // 3) Fallback for SSR or edge cases
+  return 'http://127.0.0.1:14345'
+}
+
+const API_HOST = getApiHost()
 
 // =============================================================================
 // Types
@@ -274,9 +317,8 @@ export function createVoiceChatConnection(
   callbacks: VoiceChatCallbacks
 ): WebSocket {
   // Build WebSocket URL with query params
-  const wsProtocol = API_HOST.startsWith('https') ? 'wss' : 'ws'
-  const wsHost = API_HOST.replace(/^https?:\/\//, '')
-  const url = new URL(`${wsProtocol}://${wsHost}/v1/${namespace}/${project}/voice/chat`)
+  const url = new URL(`/v1/${namespace}/${project}/voice/chat`, API_HOST)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 
   // Add query parameters
   if (config.sessionId) url.searchParams.set('session_id', config.sessionId)

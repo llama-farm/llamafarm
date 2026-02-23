@@ -25,6 +25,10 @@ async def detect_classify(
     top_k: int = Form(default=3),
 ) -> dict[str, Any]:
     """Detect objects then classify each crop — single round-trip."""
+    if not detection_model or not detection_model.strip():
+        raise HTTPException(status_code=422, detail="detection_model must not be empty")
+    if not classification_model or not classification_model.strip():
+        raise HTTPException(status_code=422, detail="classification_model must not be empty")
     cls_list = [c.strip() for c in classes.split(",") if c.strip()]
     if not cls_list:
         raise HTTPException(status_code=422, detail="classes must contain at least one non-empty value")
