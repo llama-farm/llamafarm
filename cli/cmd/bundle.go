@@ -36,6 +36,7 @@ var bundleFlags struct {
 	addons      string
 	version     string
 	output      string
+	localCLI    string
 }
 
 // validPlatforms lists supported OS targets.
@@ -88,8 +89,18 @@ Examples:
 	RunE: runBundle,
 }
 
+// bootstrapCmd triggers PyApp first-run extraction for all installed service binaries.
+var bootstrapCmd = &cobra.Command{
+	Use:    "bootstrap",
+	Short:  "Pre-extract PyApp service binaries",
+	Long:   "Triggers first-run extraction for all installed PyApp service binaries so users don't wait on first launch.",
+	Hidden: true,
+	RunE:   runBootstrap,
+}
+
 func init() {
 	rootCmd.AddCommand(bundleCmd)
+	bundleCmd.AddCommand(bootstrapCmd)
 
 	bundleCmd.Flags().StringVar(&bundleFlags.platform, "platform", "", "Target OS: linux, darwin, windows (required)")
 	bundleCmd.Flags().StringVar(&bundleFlags.arch, "arch", "", "Target architecture: x86_64, arm64 (required)")
@@ -97,11 +108,48 @@ func init() {
 	bundleCmd.Flags().StringVar(&bundleFlags.addons, "addons", "", "Comma-separated addon names to include (e.g., stt,tts)")
 	bundleCmd.Flags().StringVar(&bundleFlags.version, "version", "", "LlamaFarm version to bundle (default: current CLI version)")
 	bundleCmd.Flags().StringVarP(&bundleFlags.output, "output", "o", "", "Output file path (required)")
+	bundleCmd.Flags().StringVar(&bundleFlags.localCLI, "local-cli", "", "Path to a local CLI binary to include instead of downloading")
 
 	bundleCmd.MarkFlagRequired("platform")
 	bundleCmd.MarkFlagRequired("arch")
 	bundleCmd.MarkFlagRequired("accelerator")
 	bundleCmd.MarkFlagRequired("output")
+}
+
+// bootstrapServices are the service names used by ResolveBinaryPath.
+var bootstrapServices = []string{"server", "rag", "universal-runtime"}
+
+func runBootstrap(cmd *cobra.Command, args []string) error {
+	fmt.Println("Bootstrapping PyApp service binaries...")
+
+	var failed []string
+	for _, svc := range bootstrapServices {
+		binaryPath, err := orchestrator.ResolveBinaryPath(svc)
+		if err != nil {
+			fmt.Printf("  Skipping %s (not installed)\n", svc)
+			continue
+		}
+
+		fmt.Printf("  Extracting %s...\n", svc)
+		restore := exec.Command(binaryPath, "self", "restore")
+		restore.Stdout = os.Stdout
+		restore.Stderr = os.Stderr
+		if err := restore.Run(); err != nil {
+			fmt.Printf("  Warning: %s bootstrap failed: %v\n", svc, err)
+			failed = append(failed, svc)
+		} else {
+			fmt.Printf("  %s ready\n", svc)
+		}
+	}
+
+	if len(failed) > 0 {
+		fmt.Printf("\nSome services failed to bootstrap: %s\n", strings.Join(failed, ", "))
+		fmt.Println("They will extract on first run instead.")
+	} else {
+		fmt.Println("All service binaries bootstrapped successfully.")
+	}
+
+	return nil
 }
 
 func runBundle(cmd *cobra.Command, args []string) error {
@@ -114,7 +162,11 @@ func runBundle(cmd *cobra.Command, args []string) error {
 	if ver == "" {
 		ver = buildinfo.CurrentVersion
 		if ver == "" || ver == "dev" {
-			return fmt.Errorf("cannot determine version; specify --version explicitly")
+			if bundleFlags.localCLI != "" {
+				ver = "v0.0.0-dev"
+			} else {
+				return fmt.Errorf("cannot determine version; specify --version explicitly")
+			}
 		}
 	}
 	// Ensure version has v prefix for GitHub release tags
@@ -143,14 +195,24 @@ func runBundle(cmd *cobra.Command, args []string) error {
 		Addons:      []string{},
 	}
 
-	// Download CLI binary
+	// Include CLI binary (local copy or download)
 	cliBinaryName := fmt.Sprintf("lf-%s-%s", goOS, goArch)
 	if bundleFlags.platform == "windows" {
 		cliBinaryName += ".exe"
 	}
-	fmt.Printf("  Downloading CLI binary (%s)...\n", cliBinaryName)
-	if err := downloadReleaseAsset(ver, cliBinaryName, filepath.Join(tmpDir, cliBinaryName)); err != nil {
-		return fmt.Errorf("failed to download CLI binary: %w", err)
+	if bundleFlags.localCLI != "" {
+		if _, err := os.Stat(bundleFlags.localCLI); err != nil {
+			return fmt.Errorf("local CLI binary not found: %w", err)
+		}
+		fmt.Printf("  Copying local CLI binary (%s)...\n", cliBinaryName)
+		if err := utils.CopyFile(bundleFlags.localCLI, filepath.Join(tmpDir, cliBinaryName)); err != nil {
+			return fmt.Errorf("failed to copy local CLI binary: %w", err)
+		}
+	} else {
+		fmt.Printf("  Downloading CLI binary (%s)...\n", cliBinaryName)
+		if err := downloadReleaseAsset(ver, cliBinaryName, filepath.Join(tmpDir, cliBinaryName)); err != nil {
+			return fmt.Errorf("failed to download CLI binary: %w", err)
+		}
 	}
 	manifest.Components["cli"] = cliBinaryName
 
@@ -257,9 +319,25 @@ func runBundle(cmd *cobra.Command, args []string) error {
 	if len(manifest.Addons) > 0 {
 		fmt.Printf("  Addons:      %s\n", strings.Join(manifest.Addons, ", "))
 	}
-	fmt.Println("\nInstall on target machine with: ./install.sh", filepath.Base(bundleFlags.output))
+	printDeployHint(bundleFlags.platform, filepath.Base(bundleFlags.output))
 
 	return nil
+}
+
+// printDeployHint prints platform-appropriate instructions for transferring and installing a bundle.
+func printDeployHint(platform, bundleFile string) {
+	fmt.Println("\nTo deploy on a remote machine:")
+	switch platform {
+	case "windows":
+		fmt.Printf("  scp %s user@host:C:\\Users\\user\\\n", bundleFile)
+		fmt.Printf("  ssh user@host \"tar xzf %s && .\\install.ps1 %s\"\n", bundleFile, bundleFile)
+	case "darwin":
+		fmt.Printf("  scp %s user@host:~\n", bundleFile)
+		fmt.Printf("  ssh user@host 'tar xzf %s && bash install.sh %s'\n", bundleFile, bundleFile)
+	default: // linux
+		fmt.Printf("  scp %s user@host:~\n", bundleFile)
+		fmt.Printf("  ssh user@host 'tar xzf %s && ./install.sh %s'\n", bundleFile, bundleFile)
+	}
 }
 
 func validateBundleFlags() error {
