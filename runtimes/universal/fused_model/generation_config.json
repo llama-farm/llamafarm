@@ -1,0 +1,14 @@
+{
+  "bos_token_id": 2,
+  "do_sample": true,
+  "eos_token_id": [
+    1,
+    50,
+    106
+  ],
+  "max_length": 32768,
+  "pad_token_id": 0,
+  "top_k": 64,
+  "top_p": 0.95,
+  "transformers_version": "4.57.3"
+}
