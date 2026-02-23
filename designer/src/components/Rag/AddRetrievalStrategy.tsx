@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/checkbox'
 import FontIcon from '../../common/FontIcon'
 import {
   getDefaultConfigForRetrieval,
@@ -751,10 +752,9 @@ function AddRetrievalStrategy() {
         </div>
         <div className="mt-3">
           <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={makeDefault}
-              onChange={e => setMakeDefault(e.target.checked)}
+              onCheckedChange={(checked) => setMakeDefault(checked === true)}
             />
             <span>Make default</span>
           </label>

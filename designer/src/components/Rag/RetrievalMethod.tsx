@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
@@ -503,12 +504,11 @@ function RetrievalMethod() {
                       const onlyOne = list.length <= 1
                       return (
                         <label className="inline-flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={isDefault}
                             disabled={isDefault || onlyOne}
-                            onChange={e => {
-                              if (e.target.checked && strategyId) {
+                            onCheckedChange={(checked) => {
+                              if (checked === true && strategyId) {
                                 setDefaultRetrieval(strategyId)
                               }
                             }}

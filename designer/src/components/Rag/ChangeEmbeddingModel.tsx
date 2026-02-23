@@ -28,6 +28,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { getClientSideSecret } from '../../utils/crypto'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
@@ -1301,10 +1302,9 @@ function ChangeEmbeddingModel() {
               </div>
               {!isDefaultStrategy && (
                 <label className="text-xs flex items-center gap-2 select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={makeDefault}
-                    onChange={e => setMakeDefault(e.target.checked)}
+                    onCheckedChange={(checked) => setMakeDefault(checked === true)}
                   />
                   Make default
                 </label>
@@ -1451,10 +1451,9 @@ function ChangeEmbeddingModel() {
             {!isDefaultStrategy && (
               <div className="flex items-center gap-2">
                 <label className="text-xs flex items-center gap-2 select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={makeDefault}
-                    onChange={e => setMakeDefault(e.target.checked)}
+                    onCheckedChange={(checked) => setMakeDefault(checked === true)}
                   />
                   Make default strategy
                 </label>

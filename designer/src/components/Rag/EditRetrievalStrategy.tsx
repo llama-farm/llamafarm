@@ -7,6 +7,7 @@ import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { useToast } from '@/components/ui/toast'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   getDefaultConfigForRetrieval,
   parseWeightsList,
@@ -578,11 +579,9 @@ function EditRetrievalStrategy() {
           </div>
           <div className="flex items-end">
             <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={makeDefault}
-                onChange={e => setMakeDefault(e.target.checked)}
-                className="rounded"
+                onCheckedChange={(checked) => setMakeDefault(checked === true)}
               />
               Set as default
             </label>

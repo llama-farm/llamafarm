@@ -20,7 +20,12 @@ from openai.types.chat.chat_completion_chunk import (
 )
 
 from models import GGUFLanguageModel
-from utils.context_manager import TruncationStrategy
+from utils.context_manager import (
+    ContextBudget,
+    ContextManager,
+    ContextUsage,
+    TruncationStrategy,
+)
 from utils.context_summarizer import ContextSummarizer
 from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
@@ -167,8 +172,10 @@ class ChatCompletionsService:
             tools_dict = None
             if chat_request.tools:
                 tools_dict = [dict(tool) for tool in chat_request.tools]
+            tools_for_generation = tools_dict
 
             async def prepare_generation():
+                nonlocal tools_for_generation
                 model = await self.load_language(
                     model_id,
                     n_ctx=n_ctx,
@@ -284,22 +291,85 @@ class ChatCompletionsService:
 
                 # Context management for GGUF models
                 context_usage_info = None
+                effective_max_tokens = total_max_tokens
 
                 if is_gguf and model.context_manager:
+                    context_manager = model.context_manager
+
+                    # Build a request-aware budget so context checks reserve the same
+                    # completion budget we intend to generate (answer + thinking).
+                    if model.token_counter:
+                        base_budget = context_manager.budget
+                        context_manager = ContextManager(
+                            model.token_counter,
+                            ContextBudget.from_context_size(
+                                base_budget.total_context,
+                                max_completion_tokens=total_max_tokens,
+                            ),
+                        )
+
                     # Apply history compression to reduce token usage
                     compressor = HistoryCompressor(model.token_counter)
                     prepared_messages = compressor.compress(prepared_messages)
 
-                    # Validate context and truncate if needed
-                    usage = model.context_manager.validate_messages(prepared_messages)
+                    # If tools are injected into the prompt path, validate against the same
+                    # message shape to avoid undercounting prompt tokens.
+                    messages_for_context = prepared_messages
+                    tools_already_injected = False
+                    native_rendered_prompt: str | None = None
+                    if tools_dict:
+                        (
+                            messages_for_context,
+                            tools_already_injected,
+                            native_rendered_prompt,
+                        ) = model.prepare_messages_for_context_validation(
+                            prepared_messages,
+                            tools_dict,
+                            chat_request.tool_choice,
+                        )
+                        if tools_already_injected:
+                            prepared_messages = messages_for_context
+                            tools_for_generation = None
 
-                    if model.context_manager.needs_truncation(prepared_messages):
+                    # Validate context and truncate if needed
+                    if native_rendered_prompt is not None:
+                        if model.token_counter is None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail={
+                                    "error": "context_validation_unavailable",
+                                    "message": (
+                                        "Unable to validate native-rendered prompt context "
+                                        "because token counting is unavailable."
+                                    ),
+                                },
+                            )
+                        prompt_tokens = model.token_counter.count_tokens(
+                            native_rendered_prompt
+                        )
+                        available_for_completion = max(
+                            0,
+                            context_manager.budget.total_context
+                            - prompt_tokens
+                            - context_manager.budget.safety_margin,
+                        )
+                        usage = ContextUsage(
+                            total_context=context_manager.budget.total_context,
+                            prompt_tokens=prompt_tokens,
+                            available_for_completion=available_for_completion,
+                            truncated=False,
+                            truncated_messages=0,
+                            strategy_used=None,
+                        )
+                    else:
+                        usage = context_manager.validate_messages(messages_for_context)
+
+                    if usage.prompt_tokens > context_manager.budget.max_prompt_tokens:
                         auto_truncate = chat_request.auto_truncate
                         if auto_truncate is None:
                             auto_truncate = True  # Default to auto-truncate
 
                         if not auto_truncate:
-                            # Return error instead of truncating
                             raise HTTPException(
                                 status_code=400,
                                 detail={
@@ -308,6 +378,26 @@ class ChatCompletionsService:
                                         f"Prompt ({usage.prompt_tokens} tokens) exceeds "
                                         f"context limit ({usage.total_context} tokens). "
                                         "Set auto_truncate=true to automatically truncate."
+                                    ),
+                                    "context_usage": {
+                                        "total_context": usage.total_context,
+                                        "prompt_tokens": usage.prompt_tokens,
+                                        "available_for_completion": usage.available_for_completion,
+                                    },
+                                },
+                            )
+
+                        # Native Jinja2 rendering produces a single raw prompt string.
+                        # We cannot safely truncate it with message-based strategies.
+                        if native_rendered_prompt is not None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail={
+                                    "error": "context_length_exceeded",
+                                    "message": (
+                                        f"Rendered prompt ({usage.prompt_tokens} tokens) exceeds "
+                                        f"context limit ({usage.total_context} tokens). "
+                                        "Reduce message/tool size and retry."
                                     ),
                                     "context_usage": {
                                         "total_context": usage.total_context,
@@ -333,6 +423,18 @@ class ChatCompletionsService:
                         else:
                             strategy = TruncationStrategy.SUMMARIZE  # Default
 
+                        # Sliding-window can drop injected tool instructions (often in
+                        # the first system message). Preserve system messages in this case.
+                        if (
+                            tools_already_injected
+                            and strategy == TruncationStrategy.SLIDING_WINDOW
+                        ):
+                            logger.info(
+                                "Switching truncation strategy from sliding_window to "
+                                "keep_system to preserve injected tool definitions"
+                            )
+                            strategy = TruncationStrategy.KEEP_SYSTEM_SLIDING
+
                         # Handle summarization strategy (async, needs special handling)
                         if strategy == TruncationStrategy.SUMMARIZE:
                             try:
@@ -340,28 +442,24 @@ class ChatCompletionsService:
                                 summarizer = ContextSummarizer(
                                     load_language=self.load_language
                                 )
-                                prepared_messages = (
-                                    await summarizer.summarize_messages(
-                                        prepared_messages
-                                    )
+                                messages_for_context = await summarizer.summarize_messages(
+                                    messages_for_context
                                 )
                                 # Re-validate after summarization
-                                usage = model.context_manager.validate_messages(
-                                    prepared_messages
+                                usage = context_manager.validate_messages(
+                                    messages_for_context
                                 )
 
                                 # Check if we STILL need truncation after summarization
                                 # (e.g., if recent messages are still too large)
-                                if model.context_manager.needs_truncation(
-                                    prepared_messages
-                                ):
+                                if context_manager.needs_truncation(messages_for_context):
                                     logger.warning(
                                         f"Still over budget after summarization "
                                         f"({usage.prompt_tokens} tokens), applying fallback truncation"
                                     )
-                                    prepared_messages, usage = (
-                                        model.context_manager.truncate_if_needed(
-                                            prepared_messages,
+                                    messages_for_context, usage = (
+                                        context_manager.truncate_if_needed(
+                                            messages_for_context,
                                             TruncationStrategy.KEEP_SYSTEM_SLIDING,
                                         )
                                     )
@@ -389,43 +487,54 @@ class ChatCompletionsService:
                                 logger.warning(
                                     f"Summarization failed: {e}, falling back to keep_system"
                                 )
-                                prepared_messages, usage = (
-                                    model.context_manager.truncate_if_needed(
-                                        prepared_messages,
+                                messages_for_context, usage = (
+                                    context_manager.truncate_if_needed(
+                                        messages_for_context,
                                         TruncationStrategy.KEEP_SYSTEM_SLIDING,
                                     )
                                 )
                         else:
                             # Use regular truncation strategy
-                            prepared_messages, usage = (
-                                model.context_manager.truncate_if_needed(
-                                    prepared_messages, strategy
-                                )
+                            messages_for_context, usage = context_manager.truncate_if_needed(
+                                messages_for_context, strategy
                             )
                             logger.info(
                                 f"Context truncated: {usage.truncated_messages} messages removed, "
                                 f"strategy={usage.strategy_used}"
                             )
 
+                    # Use the validated/truncated message set for generation.
+                    if native_rendered_prompt is None:
+                        prepared_messages = messages_for_context
+
+                    # Track the true remaining completion budget (not reserved target).
+                    real_available_for_completion = max(
+                        0,
+                        context_manager.budget.total_context
+                        - usage.prompt_tokens
+                        - context_manager.budget.safety_margin,
+                    )
+
                     # Store context usage for response
                     context_usage_info = ContextUsageInfo(
                         total_context=usage.total_context,
                         prompt_tokens=usage.prompt_tokens,
-                        available_for_completion=usage.available_for_completion,
+                        available_for_completion=real_available_for_completion,
                         truncated=usage.truncated,
                         truncated_messages=usage.truncated_messages,
                         strategy_used=usage.strategy_used,
                     )
 
                     # Final safety check: ensure we're actually under budget
-                    if model.context_manager.needs_truncation(prepared_messages):
-                        final_usage = model.context_manager.validate_messages(
-                            prepared_messages
-                        )
+                    if (
+                        native_rendered_prompt is None
+                        and context_manager.needs_truncation(prepared_messages)
+                    ):
+                        final_usage = context_manager.validate_messages(prepared_messages)
                         logger.error(
                             f"CRITICAL: Still over context budget after all truncation: "
                             f"{final_usage.prompt_tokens} tokens > "
-                            f"{model.context_manager.budget.max_prompt_tokens} max"
+                            f"{context_manager.budget.max_prompt_tokens} max"
                         )
                         raise HTTPException(
                             status_code=400,
@@ -434,7 +543,7 @@ class ChatCompletionsService:
                                 "message": (
                                     f"Failed to reduce context to fit within budget. "
                                     f"Current: {final_usage.prompt_tokens} tokens, "
-                                    f"Max: {model.context_manager.budget.max_prompt_tokens} tokens. "
+                                    f"Max: {context_manager.budget.max_prompt_tokens} tokens. "
                                     "Try sending fewer or shorter messages."
                                 ),
                                 "context_usage": {
@@ -442,6 +551,23 @@ class ChatCompletionsService:
                                     "prompt_tokens": final_usage.prompt_tokens,
                                     "available_for_completion": final_usage.available_for_completion,
                                 },
+                            },
+                        )
+
+                    # Cap generation to what can actually fit after prompt accounting.
+                    effective_max_tokens = min(
+                        total_max_tokens, real_available_for_completion
+                    )
+                    if effective_max_tokens <= 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "context_length_exceeded",
+                                "message": (
+                                    "No completion budget remains after prompt allocation. "
+                                    "Try sending fewer or shorter messages."
+                                ),
+                                "context_usage": context_usage_info.model_dump(),
                             },
                         )
 
@@ -453,10 +579,10 @@ class ChatCompletionsService:
                     audio_bytes,
                     audio_format,
                     total_max_tokens,
+                    effective_max_tokens,
                     thinking_tokens,
                     context_usage_info,
                 )
-
             # Handle streaming if requested
             if chat_request.stream:
                 logger.info(
@@ -471,6 +597,7 @@ class ChatCompletionsService:
                     audio_bytes,
                     audio_format,
                     total_max_tokens,
+                    effective_max_tokens,
                     thinking_tokens,
                     _,
                 ) = await prepare_generation()
@@ -505,7 +632,7 @@ class ChatCompletionsService:
                             messages=prepared_messages,
                             audio_data=audio_bytes,
                             audio_format=audio_format,
-                            max_tokens=total_max_tokens,
+                            max_tokens=effective_max_tokens,
                             temperature=chat_request.temperature
                             if chat_request.temperature is not None
                             else 0.7,
@@ -516,14 +643,14 @@ class ChatCompletionsService:
                         # Standard text generation (audio already transcribed if present)
                         token_stream = model.generate_stream(
                             messages=prepared_messages,
-                            max_tokens=total_max_tokens,
+                            max_tokens=effective_max_tokens,
                             temperature=chat_request.temperature
                             if chat_request.temperature is not None
                             else 0.7,
                             top_p=chat_request.top_p,
                             stop=chat_request.stop,
                             thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                            tools=tools_dict,
+                            tools=tools_for_generation,
                             tool_choice=chat_request.tool_choice,
                         )
 
@@ -799,6 +926,7 @@ class ChatCompletionsService:
                 audio_bytes,
                 audio_format,
                 total_max_tokens,
+                effective_max_tokens,
                 thinking_tokens,
                 context_usage_info,
             ) = await prepare_generation()
@@ -809,7 +937,7 @@ class ChatCompletionsService:
                     messages=prepared_messages,
                     audio_data=audio_bytes,
                     audio_format=audio_format,
-                    max_tokens=total_max_tokens,
+                    max_tokens=effective_max_tokens,
                     temperature=chat_request.temperature
                     if chat_request.temperature is not None
                     else 0.7,
@@ -820,14 +948,14 @@ class ChatCompletionsService:
                 # Standard text generation (audio already transcribed if present)
                 response_text = await model.generate(
                     messages=prepared_messages,
-                    max_tokens=total_max_tokens,
+                    max_tokens=effective_max_tokens,
                     temperature=chat_request.temperature
                     if chat_request.temperature is not None
                     else 0.7,
                     top_p=chat_request.top_p,
                     stop=chat_request.stop,
                     thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                    tools=tools_dict,
+                    tools=tools_for_generation,
                     tool_choice=chat_request.tool_choice,
                 )
 
@@ -947,6 +1075,8 @@ class ChatCompletionsService:
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error in chat_completions: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e)) from e

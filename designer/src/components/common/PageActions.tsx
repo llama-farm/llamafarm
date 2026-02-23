@@ -3,6 +3,7 @@ import ModeToggle, { Mode } from '../ModeToggle'
 import { Button } from '@/components/ui/button'
 import { useBundleModal } from '../../contexts/BundleModalContext'
 
+
 interface PageActionsProps {
   mode?: Mode
   onModeChange?: (m: Mode) => void

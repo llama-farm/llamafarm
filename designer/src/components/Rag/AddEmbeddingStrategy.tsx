@@ -20,6 +20,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
 import { validateStrategyName } from '../../utils/security'
@@ -1805,11 +1806,10 @@ function AddEmbeddingStrategy() {
                     ) : null}
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs">
-                    <input
+                    <Checkbox
                       id="make-default"
-                      type="checkbox"
                       checked={makeDefault}
-                      onChange={e => setMakeDefault(e.target.checked)}
+                      onCheckedChange={(checked) => setMakeDefault(checked === true)}
                     />
                     <label htmlFor="make-default">Make default strategy</label>
                   </div>

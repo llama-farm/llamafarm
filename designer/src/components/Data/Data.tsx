@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/components/ui/toast'
+import { Selector } from '@/components/ui/selector'
 import { Textarea } from '@/components/ui/textarea'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -1698,48 +1699,31 @@ const Data = () => {
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs text-muted-foreground">
-                            Data Processing Strategy
-                          </label>
-                          <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={newDatasetDataProcessingStrategy}
-                            onChange={e =>
-                              setNewDatasetDataProcessingStrategy(
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="">Select a strategy...</option>
-                            {availableOptions?.data_processing_strategies?.map(
-                              strategy => (
-                                <option key={strategy} value={strategy}>
-                                  {strategy}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="text-xs text-muted-foreground">
-                            Database
-                          </label>
-                          <select
-                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            value={newDatasetDatabase}
-                            onChange={e =>
-                              setNewDatasetDatabase(e.target.value)
-                            }
-                          >
-                            <option value="">Select a database...</option>
-                            {availableOptions?.databases?.map(database => (
-                              <option key={database} value={database}>
-                                {database}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <Selector
+                          label="Data Processing Strategy"
+                          value={newDatasetDataProcessingStrategy}
+                          onChange={v => setNewDatasetDataProcessingStrategy(v)}
+                          placeholder="Select a strategy..."
+                          options={[
+                            { value: '', label: 'Select a strategy...' },
+                            ...(availableOptions?.data_processing_strategies?.map(
+                              strategy => ({ value: strategy, label: strategy })
+                            ) || []),
+                          ]}
+                        />
+                        <Selector
+                          label="Database"
+                          value={newDatasetDatabase}
+                          onChange={v => setNewDatasetDatabase(v)}
+                          placeholder="Select a database..."
+                          options={[
+                            { value: '', label: 'Select a database...' },
+                            ...(availableOptions?.databases?.map(database => ({
+                              value: database,
+                              label: database,
+                            })) || []),
+                          ]}
+                        />
                       </div>
                       <DialogFooter>
                         <DialogClose
@@ -2512,33 +2496,27 @@ const Data = () => {
                 })}
               </div>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Copy from existing (optional)
-              </label>
-              <select
-                className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
-                value={strategyCopyFromId}
-                onChange={e => {
-                  const v = e.target.value
-                  setStrategyCopyFromId(v)
-                  const found = displayStrategies.find(x => x.id === v)
-                  if (found) {
-                    setStrategyCreateDescription(found.description || '')
-                    if (strategyCreateName.trim().length === 0) {
-                      setStrategyCreateName(`${found.name} (copy)`)
-                    }
+            <Selector
+              label="Copy from existing (optional)"
+              value={strategyCopyFromId}
+              onChange={v => {
+                setStrategyCopyFromId(v)
+                const found = displayStrategies.find(x => x.id === v)
+                if (found) {
+                  setStrategyCreateDescription(found.description || '')
+                  if (strategyCreateName.trim().length === 0) {
+                    setStrategyCreateName(`${found.name} (copy)`)
                   }
-                }}
-              >
-                <option value="">None</option>
-                {displayStrategies.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+                }
+              }}
+              options={[
+                { value: '', label: 'None' },
+                ...displayStrategies.map(s => ({
+                  value: s.id,
+                  label: s.name,
+                })),
+              ]}
+            />
             <div>
               <label className="text-xs text-muted-foreground">
                 Description

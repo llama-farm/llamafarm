@@ -2,6 +2,7 @@
 
 import time
 import uuid
+from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -370,6 +371,44 @@ def test_stream_empty_output_uses_fallback(app_client):
     streamed = _stream_chat(app_client, "default", "llamafarm-1", payload)
     # Empty output from stub agent should trigger fallback
     assert streamed == FALLBACK_ECHO_RESPONSE
+
+
+def test_cached_session_agent_recreated_when_config_mtime_changes(app_client, mocker):
+    """Config updates should invalidate cached session agents."""
+    from api.routers.projects import projects
+
+    mocker.patch(
+        "api.routers.projects.projects.ProjectService.get_project_last_modified",
+        side_effect=[
+            datetime.fromtimestamp(1000),
+            datetime.fromtimestamp(1001),
+        ],
+    )
+
+    payload = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "test-model",
+    }
+    session_id = "sess-mtime"
+
+    first = _post_chat(
+        app_client, "default", "llamafarm-1", payload, session=session_id
+    )
+    assert first.status_code == 200
+    first_key = "default:llamafarm-1:sess-mtime"
+
+    with projects._agent_sessions_lock:  # noqa: SLF001
+        first_agent = projects.agent_sessions[first_key].agent
+
+    second = _post_chat(
+        app_client, "default", "llamafarm-1", payload, session=session_id
+    )
+    assert second.status_code == 200
+
+    with projects._agent_sessions_lock:  # noqa: SLF001
+        second_record = projects.agent_sessions[first_key]
+        assert second_record.agent is not first_agent
+        assert second_record.request_count == 1
 
 
 def test_streaming_rejected_when_schema_configured(mocker):

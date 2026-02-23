@@ -340,6 +340,7 @@ class SessionRecord:
     namespace: str
     project_id: str
     agent: ChatOrchestratorAgent
+    config_last_modified: float | None
     created_at: float
     last_used: float
     request_count: int
@@ -351,6 +352,14 @@ _agent_sessions_lock = threading.RLock()
 
 def _session_key(namespace: str, project_id: str, session_id: str) -> str:
     return f"{namespace}:{project_id}:{session_id}"
+
+
+def _get_config_last_modified_timestamp(project_dir: str) -> float | None:
+    """Return config mtime snapshot for session cache invalidation."""
+    last_modified = ProjectService.get_project_last_modified(project_dir)
+    if last_modified is None:
+        return None
+    return last_modified.timestamp()
 
 
 def _cleanup_expired_sessions(now: float | None = None) -> None:
@@ -471,6 +480,7 @@ async def chat(
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
+    config_last_modified = _get_config_last_modified_timestamp(project_dir)
     project_config = ProjectService.load_config(namespace, project_id)
     schema_ref = getattr(project_config, "schema_", None)
     schema_enabled = bool(schema_ref)
@@ -510,7 +520,7 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or request.model != record.agent.model_name:
+            if record is None or request.model != record.agent.model_name or record.config_last_modified != config_last_modified:
                 agent = await ChatOrchestratorAgentFactory.create_agent(
                     project_config=project_config,
                     project_dir=project_dir,
@@ -524,6 +534,7 @@ async def chat(
                     namespace=namespace,
                     project_id=project_id,
                     agent=agent,
+                    config_last_modified=config_last_modified,
                     created_at=now,
                     last_used=now,
                     request_count=1,
