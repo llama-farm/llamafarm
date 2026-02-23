@@ -58,7 +58,7 @@ from routers.audio import set_speech_loader
 from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
 from routers.cache import router as cache_router
-from routers.cache import set_cache_manager, set_cache_language_loader
+from routers.cache import set_cache_language_loader, set_cache_manager
 from routers.chat_completions import router as chat_completions_router
 from routers.chat_completions.service import ChatCompletionsService
 from routers.classifier import (
@@ -73,6 +73,7 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
+
 try:
     from routers.explain import router as explain_router
     from routers.explain import set_explain_state, set_model_getter
@@ -312,7 +313,11 @@ async def lifespan(app: FastAPI):
     logger.info("Model cleanup background task started")
 
     # Start KV cache manager + GC
-    from utils.kv_cache_manager import KVCacheManager, start_kv_cache_gc, stop_kv_cache_gc
+    from utils.kv_cache_manager import (
+        KVCacheManager,
+        start_kv_cache_gc,
+        stop_kv_cache_gc,
+    )
     global _kv_cache_manager
     _kv_cache_manager = KVCacheManager()
     set_cache_manager(_kv_cache_manager)

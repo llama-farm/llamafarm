@@ -493,7 +493,7 @@ class ChatCompletionsService:
                 _stream_cache_manager = self._get_cache_manager()
                 if _stream_cache_manager and is_gguf:
                     import time as _time
-                    _s_cache_start = _time.time()
+                    _s_cache_start = _time.time()  # noqa: F841 — reserved for future cache timing metrics
 
                     _s_cache_key = chat_request.cache_key
                     if _s_cache_key is None and chat_request.extra_body:
@@ -843,26 +843,34 @@ class ChatCompletionsService:
                     await asyncio.sleep(0)
 
                     # ── KV Cache: save post-generation state (streaming) ──
-                    if _stream_cache_manager and is_gguf:
-                        if _s_return_cache_key or _stream_cache_info:
-                            try:
-                                full_msgs = list(messages_dict) + [
-                                    {"role": "assistant", "content": accumulated_content}
-                                ]
-                                new_entry = await _stream_cache_manager.save_after_generation(
-                                    model=model.llama,
-                                    model_id=chat_request.model,
-                                    parent_key=chat_request.cache_key,
-                                    messages=full_msgs,
-                                    tools=tools_dict,
-                                )
-                                # Emit cache info as a custom SSE event
-                                cache_event = _stream_cache_info or {}
-                                cache_event["new_cache_key"] = new_entry.cache_key
-                                cache_event["cached_tokens"] = new_entry.token_count
-                                yield f"data: {json.dumps({'x_cache': cache_event})}\n\n".encode()
-                                await asyncio.sleep(0)
-                            except Exception as e:
+                    if _stream_cache_manager and is_gguf and (_s_return_cache_key or _stream_cache_info):
+                        try:
+                            full_msgs = list(messages_dict) + [
+                                {"role": "assistant", "content": accumulated_content}
+                            ]
+                            new_entry = await _stream_cache_manager.save_after_generation(
+                                model=model.llama,
+                                model_id=chat_request.model,
+                                parent_key=chat_request.cache_key,
+                                messages=full_msgs,
+                                tools=tools_dict,
+                            )
+                            # Emit cache info in a valid ChatCompletionChunk envelope
+                            # so OpenAI SDK clients can parse it without errors
+                            cache_event = _stream_cache_info or {}
+                            cache_event["new_cache_key"] = new_entry.cache_key
+                            cache_event["cached_tokens"] = new_entry.token_count
+                            cache_chunk = {
+                                "id": f"chatcmpl-cache-{new_entry.cache_key[:8]}",
+                                "object": "chat.completion.chunk",
+                                "created": int(_time.time()),
+                                "model": chat_request.model,
+                                "choices": [],
+                                "x_cache": cache_event,
+                            }
+                            yield f"data: {json.dumps(cache_chunk)}\n\n".encode()
+                            await asyncio.sleep(0)
+                        except Exception as e:
                                 logger.warning(f"Failed to save streaming post-gen cache: {e}")
 
                     yield b"data: [DONE]\n\n"

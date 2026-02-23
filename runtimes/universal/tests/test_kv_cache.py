@@ -3,9 +3,7 @@
 import asyncio
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
-
-import pytest
+from unittest.mock import MagicMock
 
 from utils.kv_cache_manager import (
     CacheBudget,
@@ -15,7 +13,6 @@ from utils.kv_cache_manager import (
     hash_messages_segments,
     hash_segment,
 )
-
 
 # ── Segment Hashing ─────────────────────────────────────────────────────────
 
@@ -232,8 +229,9 @@ def test_validate_full_hit():
     mgr = KVCacheManager()
     msgs = [{"role": "system", "content": "You are helpful."}]
     segments = hash_messages_segments(msgs)
-    from utils.kv_cache_manager import hash_segment as _hs
     import json
+
+    from utils.kv_cache_manager import hash_segment as _hs
     content_hash = _hs(json.dumps([s["hash"] for s in segments]))
 
     entry = CacheEntry(
@@ -254,8 +252,9 @@ def test_validate_partial_hit_tools_changed():
     tools_new = [{"type": "function", "function": {"name": "new_tool"}}]
 
     segments = hash_messages_segments(msgs, tools_old)
-    from utils.kv_cache_manager import hash_segment as _hs
     import json
+
+    from utils.kv_cache_manager import hash_segment as _hs
     content_hash = _hs(json.dumps([s["hash"] for s in segments]))
 
     entry = CacheEntry(

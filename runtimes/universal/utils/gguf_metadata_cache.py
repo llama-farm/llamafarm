@@ -119,12 +119,14 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                 f"GGUF tensor parsing failed ({e}), retrying with metadata-only read"
             )
             try:
-                _orig_build_tensors = GGUFReader._build_tensors
-                GGUFReader._build_tensors = lambda self, *a, **kw: None
-                try:
-                    reader = GGUFReader(gguf_path)
-                finally:
-                    GGUFReader._build_tensors = _orig_build_tensors
+                # Use lock to prevent concurrent monkey-patch conflicts
+                with _cache_lock:
+                    _orig_build_tensors = GGUFReader._build_tensors
+                    GGUFReader._build_tensors = lambda self, *a, **kw: None
+                    try:
+                        reader = GGUFReader(gguf_path)
+                    finally:
+                        GGUFReader._build_tensors = _orig_build_tensors
                 if reader is not None:
                     reader.tensors = []
             except Exception as inner_e:

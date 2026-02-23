@@ -1312,7 +1312,7 @@ class Llama:
                         f"Falling back to full decode to avoid potential SEGFAULT."
                     )
                     skip_restore = True
-            except ImportError:
+            except ImportError:  # psutil not required — memory check is best-effort
                 pass  # psutil not available, proceed without check
 
             if not skip_restore:

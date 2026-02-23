@@ -62,7 +62,6 @@ first-token sampling time.
 
 import argparse
 import json
-import sys
 import time
 
 import httpx
@@ -292,19 +291,19 @@ def run_benchmark(base_url: str):
 
     # ── Turn 1: Cold start ───────────────────────────────────────────────
     history.append({"role": "user", "content": TURN1_USER})
-    print(f"\n[Turn 1] ~4000-token system+RAG context + user question (cold start)")
+    print("\n[Turn 1] ~4000-token system+RAG context + user question (cold start)")
     r1 = make_request(base_url, history, return_cache_key=True)
     print(f"  TTFT: {r1['ttft_ms']}ms")
     print(f"  cache_key_1 = {r1['cache_key']}")
     history.append({"role": "assistant", "content": r1["full_content"]})
 
     # ── Pollute ──────────────────────────────────────────────────────────
-    print(f"\n  ↳ [polluter] Different agent call (cooking assistant) trashes model KV")
+    print("\n  ↳ [polluter] Different agent call (cooking assistant) trashes model KV")
     pollute(base_url)
 
     # ── Turn 2: Cached ───────────────────────────────────────────────────
     history.append({"role": "user", "content": TURN2_USER})
-    print(f"\n[Turn 2] Full history + follow-up (~20 new tokens), sends cache_key_1")
+    print("\n[Turn 2] Full history + follow-up (~20 new tokens), sends cache_key_1")
     r2 = make_request(base_url, history, cache_key=r1["cache_key"], return_cache_key=True)
     xc2 = r2.get("x_cache", {})
     print(f"  TTFT: {r2['ttft_ms']}ms")
@@ -313,7 +312,7 @@ def run_benchmark(base_url: str):
     history.append({"role": "assistant", "content": r2["full_content"]})
 
     # ── Pollute ──────────────────────────────────────────────────────────
-    print(f"\n  ↳ [polluter] Different agent call trashes model KV")
+    print("\n  ↳ [polluter] Different agent call trashes model KV")
     pollute(base_url)
 
     # ── Turn 3: Cached ───────────────────────────────────────────────────
@@ -326,7 +325,7 @@ def run_benchmark(base_url: str):
     print(f"  Cache: hit={xc3.get('hit')}, reused_tokens={xc3.get('reused_tokens')}")
 
     # ── Pollute ──────────────────────────────────────────────────────────
-    print(f"\n  ↳ [polluter] Different agent call trashes model KV")
+    print("\n  ↳ [polluter] Different agent call trashes model KV")
     pollute(base_url)
 
     # ── Turn 3 Baseline: No cache ────────────────────────────────────────
@@ -341,7 +340,7 @@ def run_benchmark(base_url: str):
     t3b = r3_base["ttft_ms"]
 
     print(f"\n{'─'*70}")
-    print(f"  RESULTS (TTFT, streaming)")
+    print("  RESULTS (TTFT, streaming)")
     print(f"{'─'*70}")
     print(f"  {'Step':<35} {'TTFT':>8}  {'vs baseline':>12}")
     print(f"  {'─'*35} {'─'*8}  {'─'*12}")
@@ -362,7 +361,7 @@ def run_prepare_benchmark(base_url: str):
     system_msg = {"role": "system", "content": SYSTEM_PROMPT}
 
     # ── Pre-warm the system prompt ───────────────────────────────────────
-    print(f"\n[Prepare] Pre-warming ~4000-token system prompt + RAG context...")
+    print("\n[Prepare] Pre-warming ~4000-token system prompt + RAG context...")
     t0 = time.perf_counter()
     try:
         resp = httpx.post(f"{base_url}/v1/cache/prepare", json={
@@ -374,7 +373,7 @@ def run_prepare_benchmark(base_url: str):
         resp.raise_for_status()
     except Exception as e:
         print(f"  ⚠️  /prepare failed: {e}")
-        print(f"  Skipping pre-warm benchmark (runtime may have crashed under memory pressure)")
+        print("  Skipping pre-warm benchmark (runtime may have crashed under memory pressure)")
         return
     t1 = time.perf_counter()
     prep = resp.json()
@@ -384,23 +383,23 @@ def run_prepare_benchmark(base_url: str):
     print(f"  cache_key = {ck_warm}")
 
     # ── Pollute ──────────────────────────────────────────────────────────
-    print(f"\n  ↳ [polluter] Different agent call trashes model KV")
+    print("\n  ↳ [polluter] Different agent call trashes model KV")
     pollute(base_url)
 
     # ── First user message WITH pre-warmed cache ─────────────────────────
     msgs_cached = [system_msg, {"role": "user", "content": TURN1_USER}]
-    print(f"\n[Turn 1 — pre-warmed] System+RAG + user question, sends prepare cache_key")
+    print("\n[Turn 1 — pre-warmed] System+RAG + user question, sends prepare cache_key")
     r_warm = make_request(base_url, msgs_cached, cache_key=ck_warm, return_cache_key=True)
     print(f"  TTFT: {r_warm['ttft_ms']}ms")
     xc = r_warm.get("x_cache", {})
     print(f"  Cache: hit={xc.get('hit')}, reused_tokens={xc.get('reused_tokens')}")
 
     # ── Pollute ──────────────────────────────────────────────────────────
-    print(f"\n  ↳ [polluter] Different agent call trashes model KV")
+    print("\n  ↳ [polluter] Different agent call trashes model KV")
     pollute(base_url)
 
     # ── Same message WITHOUT cache (baseline) ────────────────────────────
-    print(f"\n[Turn 1 — no cache] Same messages, full reprocess (baseline)")
+    print("\n[Turn 1 — no cache] Same messages, full reprocess (baseline)")
     r_cold = make_request(base_url, msgs_cached)
     print(f"  TTFT: {r_cold['ttft_ms']}ms")
 
@@ -408,7 +407,7 @@ def run_prepare_benchmark(base_url: str):
     tw = r_warm["ttft_ms"]
     tc = r_cold["ttft_ms"]
     print(f"\n{'─'*70}")
-    print(f"  RESULTS — Pre-Warmed System Prompt (TTFT, streaming)")
+    print("  RESULTS — Pre-Warmed System Prompt (TTFT, streaming)")
     print(f"{'─'*70}")
     print(f"  {'Step':<40} {'TTFT':>8}  {'vs baseline':>12}")
     print(f"  {'─'*40} {'─'*8}  {'─'*12}")
@@ -461,7 +460,7 @@ def main():
         except Exception as e:
             print(f"  Unload failed (may not be supported): {e}")
 
-    print(f"Warming up model...")
+    print("Warming up model...")
     warmup = make_request(args.base_url, [
         {"role": "user", "content": "Say hello"},
     ], max_tokens=5)

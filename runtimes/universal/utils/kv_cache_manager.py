@@ -11,6 +11,7 @@ Tiers: vram (in llama.cpp context) → ram (serialized bytes) → disk → evict
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -109,7 +110,7 @@ def compare_segments(
     match_count: how many leading segments match
     invalidated_at: type of first mismatched segment (None if all match)
     """
-    for i, (cached, incoming) in enumerate(zip(cached_segments, incoming_segments)):
+    for i, (cached, incoming) in enumerate(zip(cached_segments, incoming_segments, strict=False)):
         if cached["hash"] != incoming["hash"]:
             return i, cached.get("type", "unknown")
 
@@ -434,8 +435,12 @@ class KVCacheManager:
 
             if entry.tier == "disk":
                 if entry.disk_path and Path(entry.disk_path).exists():
-                    entry.kv_data = Path(entry.disk_path).read_bytes()
+                    # Use thread pool to avoid blocking event loop on large files
+                    entry.kv_data = await asyncio.to_thread(
+                        Path(entry.disk_path).read_bytes
+                    )
                     entry.tier = "ram"
+                    self._enforce_budget()
                 else:
                     logger.warning(f"Cache {entry.cache_key[:8]}… disk path missing")
                     return False
@@ -569,15 +574,12 @@ class KVCacheManager:
         if entry is None:
             return False
         # Clean up content index
-        if entry.content_hash in self._content_index:
-            if self._content_index[entry.content_hash] == cache_key:
-                del self._content_index[entry.content_hash]
+        if entry.content_hash in self._content_index and self._content_index[entry.content_hash] == cache_key:
+            del self._content_index[entry.content_hash]
         # Clean up disk file
         if entry.disk_path:
-            try:
+            with contextlib.suppress(Exception):
                 Path(entry.disk_path).unlink(missing_ok=True)
-            except Exception:
-                pass
         logger.info(f"Evicted cache {cache_key[:8]}…")
         return True
 
@@ -664,9 +666,7 @@ async def stop_kv_cache_gc() -> None:
     global _gc_task
     if _gc_task is not None and not _gc_task.done():
         _gc_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _gc_task
-        except asyncio.CancelledError:
-            pass
         logger.info("KV cache GC task stopped")
     _gc_task = None

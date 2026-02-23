@@ -45,7 +45,13 @@ r1 = httpx.post(f"{base}/v1/chat/completions", json={
     "return_cache_key": True,  # ask for a cache key in the response
     "stream": True,
 })
-cache_key_1 = r1.json()["x_cache"]["new_cache_key"]
+# Parse SSE stream to extract x_cache event
+cache_key_1 = None
+for line in r1.iter_lines():
+    if line.startswith("data: ") and line != "data: [DONE]":
+        chunk = json.loads(line[6:])
+        if "x_cache" in chunk:
+            cache_key_1 = chunk["x_cache"]["new_cache_key"]
 
 # Turn 2: send the cache key — only the new message gets processed
 r2 = httpx.post(f"{base}/v1/chat/completions", json={

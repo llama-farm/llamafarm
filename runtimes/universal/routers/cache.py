@@ -120,8 +120,20 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
             f"Too many tools ({len(request.tools)}), "
             f"max {MAX_PREPARE_TOOLS}",
         )
+    def _content_chars(content: Any) -> int:
+        """Count characters in message content, handling multimodal lists."""
+        if isinstance(content, str):
+            return len(content)
+        if isinstance(content, list):
+            return sum(
+                len(part.get("text", ""))
+                for part in content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        return 0
+
     total_chars = sum(
-        len(m.get("content", "") or "") for m in request.messages
+        _content_chars(m.get("content")) for m in request.messages
     )
     if total_chars > MAX_MESSAGE_CONTENT_CHARS:
         raise HTTPException(

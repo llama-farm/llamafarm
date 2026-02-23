@@ -8,7 +8,8 @@
 #   ./run_kv_benchmark.sh THUDM/glm-4-9b-GGUF
 #   ./run_kv_benchmark.sh Qwen/Qwen3-8B-GGUF
 
-set -euo pipefail
+set -uo pipefail
+# Note: NOT using set -e — we capture exit codes manually to ensure cleanup runs
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$(dirname "$SCRIPT_DIR")"
