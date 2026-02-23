@@ -39,6 +39,7 @@ export function TrainingPanel() {
   const [batchSize, setBatchSize] = useState(16)
   const [learningRate, setLearningRate] = useState(0.001)
   const [jobId, setJobId] = useState<string | null>(null)
+  const [showDatasetInfo, setShowDatasetInfo] = useState(true)
 
   const startTraining = useStartTraining()
   const { data: jobStatus } = useTrainingJobStatus(jobId)
@@ -88,6 +89,7 @@ export function TrainingPanel() {
     setJobId(null)
     setModelName('')
     setDataset('')
+    setShowDatasetInfo(false)
   }
 
   // When a job is active/complete/failed, show progress view
@@ -172,7 +174,7 @@ export function TrainingPanel() {
       </PanelIntro>
 
       {/* Dataset guidance — collapsible, open by default */}
-      <Collapsible defaultOpen>
+      <Collapsible open={showDatasetInfo} onOpenChange={setShowDatasetInfo}>
         <div className="rounded-lg border border-border bg-muted/20">
           <CollapsibleTrigger className="flex items-center justify-between w-full p-3 text-left">
             <p className="text-sm font-medium">Dataset requirements</p>
