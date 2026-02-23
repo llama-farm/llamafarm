@@ -64,7 +64,9 @@ class IncrementalTrainer:
     def __init__(self, model_loader: Callable | None = None):
         self._model_loader = model_loader
         self._jobs: dict[str, TrainingJob] = {}
-        self._queue: asyncio.Queue[tuple[TrainingJob, str | None, Callable | None]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[TrainingJob, str | None, Callable | None]] = (
+            asyncio.Queue()
+        )
         self._worker_task: asyncio.Task | None = None
 
     def set_model_loader(self, loader: Callable) -> None:
@@ -80,32 +82,49 @@ class IncrementalTrainer:
         while True:
             job, base_model, on_complete = await self._queue.get()
             try:
-                logger.info(f"Job worker: starting {job.job_id} ({job.model_id}), "
-                            f"{self._queue.qsize()} remaining in queue")
+                logger.info(
+                    f"Job worker: starting {job.job_id} ({job.model_id}), "
+                    f"{self._queue.qsize()} remaining in queue"
+                )
                 await self._run(job, base_model, on_complete)
             except Exception as e:
                 logger.error(f"Job worker: unhandled error for {job.job_id}: {e}")
             finally:
                 self._queue.task_done()
 
-    async def start_training(self, model_id: str, dataset_path: str,
-                             task: Literal["detection", "classification"],
-                             config: TrainingConfig | None = None,
-                             base_model: str | None = None,
-                             on_complete: Callable | None = None) -> TrainingJob:
+    async def start_training(
+        self,
+        model_id: str,
+        dataset_path: str,
+        task: Literal["detection", "classification"],
+        config: TrainingConfig | None = None,
+        base_model: str | None = None,
+        on_complete: Callable | None = None,
+    ) -> TrainingJob:
         config = config or TrainingConfig()
         job_id = str(uuid.uuid4())[:8]
-        job = TrainingJob(job_id=job_id, model_id=model_id,
-                          dataset_path=dataset_path, task=task, config=config)
+        job = TrainingJob(
+            job_id=job_id,
+            model_id=model_id,
+            dataset_path=dataset_path,
+            task=task,
+            config=config,
+        )
         self._jobs[job_id] = job
         await self._queue.put((job, base_model, on_complete))
         self._ensure_worker()
         queue_pos = self._queue.qsize()
-        logger.info(f"Queued training job {job_id} for {model_id} (position {queue_pos})")
+        logger.info(
+            f"Queued training job {job_id} for {model_id} (position {queue_pos})"
+        )
         return job
 
-    async def _run(self, job: TrainingJob, base_model: str | None,
-                   on_complete: Callable | None = None) -> None:
+    async def _run(
+        self,
+        job: TrainingJob,
+        base_model: str | None,
+        on_complete: Callable | None = None,
+    ) -> None:
         # Skip if cancelled while queued
         if job.status == TrainingStatus.CANCELLED:
             logger.info(f"Skipping cancelled job {job.job_id}")
@@ -119,24 +138,26 @@ class IncrementalTrainer:
 
             # Load a FRESH model for training — don't corrupt inference cache
             from ultralytics import YOLO
+
             model_id = base_model or job.model_id
             model_path = model_id  # Could be a path or a variant name
             # Auto-detect best device: MPS (Apple GPU) > CUDA > CPU
             import torch
+
             if torch.cuda.is_available():
-                device = 'cuda'
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                device = 'mps'
+                device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
             else:
-                device = 'cpu'
-            
+                device = "cpu"
+
             # Try to get model path from cached model's info
             try:
                 cached = await self._model_loader(model_id)
-                if hasattr(cached, '_model_path') and cached._model_path:
+                if hasattr(cached, "_model_path") and cached._model_path:
                     model_path = cached._model_path
                 # Use cached model's device if available
-                if hasattr(cached, 'device') and cached.device:
+                if hasattr(cached, "device") and cached.device:
                     device = cached.device
             except Exception:
                 pass
@@ -146,20 +167,30 @@ class IncrementalTrainer:
             # Auto-convert COCO JSON to YOLO format if needed
             dataset_path = job.dataset_path
             from vision_training.coco_converter import is_coco_format
+
             if is_coco_format(dataset_path):
                 from pathlib import Path as _Path
 
                 from vision_training.coco_converter import convert_coco_to_yolo
-                coco_out = _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
-                logger.info(f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}")
+
+                coco_out = (
+                    _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
+                )
+                logger.info(
+                    f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}"
+                )
                 data_yaml = await asyncio.to_thread(
-                    convert_coco_to_yolo, dataset_path, coco_out,
+                    convert_coco_to_yolo,
+                    dataset_path,
+                    coco_out,
                 )
                 dataset_path = str(data_yaml)
                 logger.info(f"COCO conversion complete: {dataset_path}")
 
             # Train using the fresh YOLO instance
-            logger.info(f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}")
+            logger.info(
+                f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}"
+            )
             train_args = {
                 "data": dataset_path,
                 "epochs": job.config.epochs,
@@ -170,6 +201,7 @@ class IncrementalTrainer:
                 "save": True,
                 "verbose": True,
             }
+
             # Register cancellation callback — checked between epochs
             def _check_cancelled(trainer_obj):
                 if job.status == TrainingStatus.CANCELLED:
@@ -183,7 +215,9 @@ class IncrementalTrainer:
             metrics = {}
             if hasattr(results, "results_dict"):
                 metrics = results.results_dict
-            metrics["model_path"] = str(results.save_dir) if hasattr(results, "save_dir") else None
+            metrics["model_path"] = (
+                str(results.save_dir) if hasattr(results, "save_dir") else None
+            )
             metrics["epochs"] = job.config.epochs
 
             job.metrics = metrics
@@ -200,7 +234,11 @@ class IncrementalTrainer:
             if on_complete:
                 # Validate model_id: basename only, no traversal
                 safe_id = Path(job.model_id).name
-                if safe_id != job.model_id or ".." in job.model_id or ":" in job.model_id:
+                if (
+                    safe_id != job.model_id
+                    or ".." in job.model_id
+                    or ":" in job.model_id
+                ):
                     logger.error(f"Invalid model_id for on_complete: {job.model_id}")
                 else:
                     model_dir = VISION_MODELS_DIR / safe_id
@@ -209,7 +247,9 @@ class IncrementalTrainer:
                         try:
                             await on_complete(job.model_id, str(current_pt))
                         except Exception as cb_err:
-                            logger.error(f"on_complete callback failed for {job.job_id}: {cb_err}")
+                            logger.error(
+                                f"on_complete callback failed for {job.job_id}: {cb_err}"
+                            )
 
         except KeyboardInterrupt:
             # Raised by cancellation callback
@@ -235,7 +275,7 @@ class IncrementalTrainer:
         existing = list(model_dir.glob("v*.pt"))
         versions = []
         for p in existing:
-            m = re.match(r'v(\d+)\.pt$', p.name)
+            m = re.match(r"v(\d+)\.pt$", p.name)
             if m:
                 versions.append(int(m.group(1)))
         version = max(versions, default=0) + 1
@@ -266,6 +306,7 @@ class IncrementalTrainer:
         """Export trained weights to ONNX."""
         try:
             from ultralytics import YOLO
+
             trained = YOLO(model_path)
             trained.export(format="onnx", simplify=True)
             logger.info(f"ONNX exported for {model_path}")
@@ -297,9 +338,10 @@ class IncrementalTrainer:
             logger.info(f"Cancelled queued job {job_id}")
             return True
         if job.status == TrainingStatus.RUNNING:
-            # Mark for cancellation — _run() checks this between epochs
+            # Mark for cancellation — the on_train_epoch_end callback in _run()
+            # checks this flag and raises KeyboardInterrupt to stop training.
+            # completed_at is set when the job actually stops (in _run's except block).
             job.status = TrainingStatus.CANCELLED
-            job.completed_at = datetime.utcnow()
             logger.info(
                 f"Marked running job {job_id} for cancellation "
                 f"(will stop at next epoch boundary)"
@@ -307,13 +349,20 @@ class IncrementalTrainer:
             return True
         return False
 
-    async def wait_for_job(self, job_id: str, timeout: float | None = None) -> TrainingJob | None:
+    async def wait_for_job(
+        self, job_id: str, timeout: float | None = None
+    ) -> TrainingJob | None:
         """Poll job status until complete or timeout."""
         import time
+
         deadline = time.time() + timeout if timeout else None
         while True:
             job = self._jobs.get(job_id)
-            if not job or job.status in (TrainingStatus.COMPLETED, TrainingStatus.FAILED, TrainingStatus.CANCELLED):
+            if not job or job.status in (
+                TrainingStatus.COMPLETED,
+                TrainingStatus.FAILED,
+                TrainingStatus.CANCELLED,
+            ):
                 return job
             if deadline and time.time() > deadline:
                 return job

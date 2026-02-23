@@ -1,14 +1,16 @@
 """Auto-generated LlamaFarm SDK method stubs from OpenAPI spec.
 
-Generated: 2026-02-23 05:03:31 UTC
-Endpoints: 143
+Generated: 2026-02-23 17:42:06 UTC
+Endpoints: 134
 
 This file is a REFERENCE — not imported directly.
 Use it to verify client.py coverage and update signatures.
 """
 
 from __future__ import annotations
+
 from typing import Any
+
 from ._generated_types import *  # noqa: F403
 
 # ======================================================================
@@ -21,7 +23,7 @@ class AddonsAPI:
         # GET /v1/addons
         ...
 
-    def addons_install(self, request: AddonInstallRequest) -> AddonInstallResponse:
+    def post_addons_install(self, request: AddonInstallRequest) -> AddonInstallResponse:
         """Install Addon"""
         # POST /v1/addons/install
         ...
@@ -31,7 +33,7 @@ class AddonsAPI:
         # GET /v1/addons/tasks/{task_id}
         ...
 
-    def addons_uninstall(self, request: AddonInstallRequest) -> dict[str, Any]:
+    def post_addons_uninstall(self, request: AddonInstallRequest) -> dict[str, Any]:
         """Uninstall Addon"""
         # POST /v1/addons/uninstall
         ...
@@ -42,7 +44,7 @@ class AddonsAPI:
 # ======================================================================
 
 class AdtkAPI:
-    def adtk_detect(self, request: ADTKDetectRequest) -> dict[str, Any]:
+    def post_adtk_detect(self, request: ADTKDetectRequest) -> dict[str, Any]:
         """Detect Anomalies"""
         # POST /v1/adtk/detect
         ...
@@ -52,12 +54,12 @@ class AdtkAPI:
         # GET /v1/adtk/detectors
         ...
 
-    def adtk_fit(self, request: ADTKFitRequest) -> dict[str, Any]:
+    def post_adtk_fit(self, request: ADTKFitRequest) -> dict[str, Any]:
         """Fit Detector"""
         # POST /v1/adtk/fit
         ...
 
-    def adtk_load(self, request: ADTKLoadRequest) -> dict[str, Any]:
+    def post_adtk_load(self, request: ADTKLoadRequest) -> dict[str, Any]:
         """Load Model"""
         # POST /v1/adtk/load
         ...
@@ -83,17 +85,17 @@ class AnomalyAPI:
         # GET /v1/ml/anomaly/backends
         ...
 
-    def ml_anomaly_detect(self, request: AnomalyScoreRequest) -> dict[str, Any]:
+    def post_ml_anomaly_detect(self, request: AnomalyScoreRequest) -> dict[str, Any]:
         """Detect Anomalies"""
         # POST /v1/ml/anomaly/detect
         ...
 
-    def ml_anomaly_fit(self, request: AnomalyFitRequest) -> dict[str, Any]:
+    def post_ml_anomaly_fit(self, request: AnomalyFitRequest) -> dict[str, Any]:
         """Fit Anomaly Detector"""
         # POST /v1/ml/anomaly/fit
         ...
 
-    def ml_anomaly_load(self, request: AnomalyLoadRequest) -> dict[str, Any]:
+    def post_ml_anomaly_load(self, request: AnomalyLoadRequest) -> dict[str, Any]:
         """Load Anomaly Model"""
         # POST /v1/ml/anomaly/load
         ...
@@ -108,17 +110,17 @@ class AnomalyAPI:
         # DELETE /v1/ml/anomaly/models/{filename}
         ...
 
-    def ml_anomaly_save(self, request: AnomalySaveRequest) -> dict[str, Any]:
+    def post_ml_anomaly_save(self, request: AnomalySaveRequest) -> dict[str, Any]:
         """Save Anomaly Model"""
         # POST /v1/ml/anomaly/save
         ...
 
-    def ml_anomaly_score(self, request: AnomalyScoreRequest) -> dict[str, Any]:
+    def post_ml_anomaly_score(self, request: AnomalyScoreRequest) -> dict[str, Any]:
         """Score Anomalies"""
         # POST /v1/ml/anomaly/score
         ...
 
-    def ml_anomaly_stream(self) -> dict[str, Any]:
+    def post_ml_anomaly_stream(self) -> dict[str, Any]:
         """Anomaly Stream"""
         # POST /v1/ml/anomaly/stream
         ...
@@ -138,7 +140,7 @@ class AnomalyAPI:
         # DELETE /v1/ml/anomaly/stream/{model_id}
         ...
 
-    def ml_anomaly_stream_by_model_id_reset(self, model_id: str) -> dict[str, Any]:
+    def post_ml_anomaly_stream_by_model_id_reset(self, model_id: str) -> dict[str, Any]:
         """Reset Streaming Detector"""
         # POST /v1/ml/anomaly/stream/{model_id}/reset
         ...
@@ -149,7 +151,7 @@ class AnomalyAPI:
 # ======================================================================
 
 class CatboostAPI:
-    def catboost_fit(self, request: CatBoostFitRequest) -> dict[str, Any]:
+    def post_catboost_fit(self, request: CatBoostFitRequest) -> dict[str, Any]:
         """Fit Model"""
         # POST /v1/catboost/fit
         ...
@@ -159,7 +161,7 @@ class CatboostAPI:
         # GET /v1/catboost/info
         ...
 
-    def catboost_load(self, request: CatBoostLoadRequest) -> dict[str, Any]:
+    def post_catboost_load(self, request: CatBoostLoadRequest) -> dict[str, Any]:
         """Load Model"""
         # POST /v1/catboost/load
         ...
@@ -169,12 +171,12 @@ class CatboostAPI:
         # GET /v1/catboost/models
         ...
 
-    def catboost_predict(self, request: CatBoostPredictRequest) -> dict[str, Any]:
+    def post_catboost_predict(self, request: CatBoostPredictRequest) -> dict[str, Any]:
         """Predict"""
         # POST /v1/catboost/predict
         ...
 
-    def catboost_update(self, request: CatBoostUpdateRequest) -> dict[str, Any]:
+    def post_catboost_update(self, request: CatBoostUpdateRequest) -> dict[str, Any]:
         """Update Model"""
         # POST /v1/catboost/update
         ...
@@ -195,12 +197,12 @@ class CatboostAPI:
 # ======================================================================
 
 class ClassifierAPI:
-    def ml_classifier_fit(self, request: ClassifierFitRequest) -> dict[str, Any]:
+    def post_ml_classifier_fit(self, request: ClassifierFitRequest) -> dict[str, Any]:
         """Fit Classifier"""
         # POST /v1/ml/classifier/fit
         ...
 
-    def ml_classifier_load(self, request: ClassifierLoadRequest) -> dict[str, Any]:
+    def post_ml_classifier_load(self, request: ClassifierLoadRequest) -> dict[str, Any]:
         """Load Classifier"""
         # POST /v1/ml/classifier/load
         ...
@@ -215,12 +217,12 @@ class ClassifierAPI:
         # DELETE /v1/ml/classifier/models/{model_name}
         ...
 
-    def ml_classifier_predict(self, request: ClassifierPredictRequest) -> dict[str, Any]:
+    def post_ml_classifier_predict(self, request: ClassifierPredictRequest) -> dict[str, Any]:
         """Predict Classifier"""
         # POST /v1/ml/classifier/predict
         ...
 
-    def ml_classifier_save(self, request: ClassifierSaveRequest) -> dict[str, Any]:
+    def post_ml_classifier_save(self, request: ClassifierSaveRequest) -> dict[str, Any]:
         """Save Classifier"""
         # POST /v1/ml/classifier/save
         ...
@@ -247,7 +249,7 @@ class CoreAPI:
 # ======================================================================
 
 class DriftAPI:
-    def drift_detect(self, request: DriftDetectRequest) -> dict[str, Any]:
+    def post_drift_detect(self, request: DriftDetectRequest) -> dict[str, Any]:
         """Detect Drift"""
         # POST /v1/drift/detect
         ...
@@ -257,12 +259,12 @@ class DriftAPI:
         # GET /v1/drift/detectors
         ...
 
-    def drift_fit(self, request: DriftFitRequest) -> dict[str, Any]:
+    def post_drift_fit(self, request: DriftFitRequest) -> dict[str, Any]:
         """Fit Detector"""
         # POST /v1/drift/fit
         ...
 
-    def drift_load(self, request: DriftLoadRequest) -> dict[str, Any]:
+    def post_drift_load(self, request: DriftLoadRequest) -> dict[str, Any]:
         """Load Model"""
         # POST /v1/drift/load
         ...
@@ -277,7 +279,7 @@ class DriftAPI:
         # DELETE /v1/drift/models/{model_name}
         ...
 
-    def drift_reset_by_model_name(self, model_name: str) -> dict[str, Any]:
+    def post_drift_reset_by_model_name(self, model_name: str) -> dict[str, Any]:
         """Reset Detector"""
         # POST /v1/drift/reset/{model_name}
         ...
@@ -313,17 +315,17 @@ class ExamplesAPI:
         # GET /v1/examples/{example_id}/datasets
         ...
 
-    def examples_by_example_id_import_data(self, example_id: str, request: ImportDataRequest) -> ImportDataResponse:
+    def post_examples_by_example_id_import_data(self, example_id: str, request: ImportDataRequest) -> ImportDataResponse:
         """Import Data"""
         # POST /v1/examples/{example_id}/import-data
         ...
 
-    def examples_by_example_id_import_dataset(self, example_id: str, request: ImportDatasetRequest) -> ImportDatasetResponse:
+    def post_examples_by_example_id_import_dataset(self, example_id: str, request: ImportDatasetRequest) -> ImportDatasetResponse:
         """Import Dataset"""
         # POST /v1/examples/{example_id}/import-dataset
         ...
 
-    def examples_by_example_id_import_project(self, example_id: str, request: ImportProjectRequest) -> ImportProjectResponse:
+    def post_examples_by_example_id_import_project(self, example_id: str, request: ImportProjectRequest) -> ImportProjectResponse:
         """Import Project"""
         # POST /v1/examples/{example_id}/import-project
         ...
@@ -339,12 +341,12 @@ class ExplainAPI:
         # GET /v1/explain/explainers
         ...
 
-    def explain_importance(self, request: FeatureImportanceRequest) -> dict[str, Any]:
+    def post_explain_importance(self, request: FeatureImportanceRequest) -> dict[str, Any]:
         """Feature Importance"""
         # POST /v1/explain/importance
         ...
 
-    def explain_shap(self, request: SHAPExplainRequest) -> dict[str, Any]:
+    def post_explain_shap(self, request: SHAPExplainRequest) -> dict[str, Any]:
         """Explain Shap"""
         # POST /v1/explain/shap
         ...
@@ -371,12 +373,12 @@ class ModelsAPI:
         # GET /v1/models
         ...
 
-    def models_download(self, request: DownloadModelRequest) -> dict[str, Any]:
+    def post_models_download(self, request: DownloadModelRequest) -> dict[str, Any]:
         """Download Model"""
         # POST /v1/models/download
         ...
 
-    def models_validate_download(self, request: ValidateDownloadRequest) -> dict[str, Any]:
+    def post_models_validate_download(self, request: ValidateDownloadRequest) -> dict[str, Any]:
         """Validate Download"""
         # POST /v1/models/validate-download
         ...
@@ -397,22 +399,22 @@ class ModelsAPI:
 # ======================================================================
 
 class NlpAPI:
-    def nlp_classify(self, request: ClassifyRequest) -> dict[str, Any]:
+    def post_nlp_classify(self, request: ClassifyRequest) -> dict[str, Any]:
         """Classify Text"""
         # POST /v1/nlp/classify
         ...
 
-    def nlp_embeddings(self, request: EmbeddingRequest) -> dict[str, Any]:
+    def post_nlp_embeddings(self, request: EmbeddingRequest) -> dict[str, Any]:
         """Create Embeddings"""
         # POST /v1/nlp/embeddings
         ...
 
-    def nlp_ner(self, request: NERRequest) -> dict[str, Any]:
+    def post_nlp_ner(self, request: NERRequest) -> dict[str, Any]:
         """Extract Entities"""
         # POST /v1/nlp/ner
         ...
 
-    def nlp_rerank(self, request: RerankRequest) -> dict[str, Any]:
+    def post_nlp_rerank(self, request: RerankRequest) -> dict[str, Any]:
         """Rerank Documents"""
         # POST /v1/nlp/rerank
         ...
@@ -423,7 +425,7 @@ class NlpAPI:
 # ======================================================================
 
 class PolarsAPI:
-    def ml_polars_append(self, request: PolarsBufferAppendRequest) -> dict[str, Any]:
+    def post_ml_polars_append(self, request: PolarsBufferAppendRequest) -> dict[str, Any]:
         """Append To Polars Buffer"""
         # POST /v1/ml/polars/append
         ...
@@ -433,7 +435,7 @@ class PolarsAPI:
         # GET /v1/ml/polars/buffers
         ...
 
-    def ml_polars_buffers(self, request: PolarsBufferCreateRequest) -> dict[str, Any]:
+    def post_ml_polars_buffers(self, request: PolarsBufferCreateRequest) -> dict[str, Any]:
         """Create Polars Buffer"""
         # POST /v1/ml/polars/buffers
         ...
@@ -448,7 +450,7 @@ class PolarsAPI:
         # DELETE /v1/ml/polars/buffers/{buffer_id}
         ...
 
-    def ml_polars_buffers_by_buffer_id_clear(self, buffer_id: str) -> dict[str, Any]:
+    def post_ml_polars_buffers_by_buffer_id_clear(self, buffer_id: str) -> dict[str, Any]:
         """Clear Polars Buffer"""
         # POST /v1/ml/polars/buffers/{buffer_id}/clear
         ...
@@ -458,7 +460,7 @@ class PolarsAPI:
         # GET /v1/ml/polars/buffers/{buffer_id}/data
         ...
 
-    def ml_polars_features(self, request: PolarsBufferFeaturesRequest) -> PolarsBufferDataResponse:
+    def post_ml_polars_features(self, request: PolarsBufferFeaturesRequest) -> PolarsBufferDataResponse:
         """Compute Polars Features"""
         # POST /v1/ml/polars/features
         ...
@@ -474,7 +476,7 @@ class ProjectsAPI:
         # GET /v1/projects/{namespace}
         ...
 
-    def projects_by_namespace(self, namespace: str, request: CreateProjectRequest) -> CreateProjectResponse:
+    def post_projects_by_namespace(self, namespace: str, request: CreateProjectRequest) -> CreateProjectResponse:
         """Create a project"""
         # POST /v1/projects/{namespace}
         ...
@@ -494,7 +496,7 @@ class ProjectsAPI:
         # DELETE /v1/projects/{namespace}/{project_id}
         ...
 
-    def projects_by_namespace_by_project_id_chat_completions(self, namespace: str, project_id: str, request: ChatRequest) -> ChatCompletion:
+    def post_projects_by_namespace_by_project_id_chat_completions(self, namespace: str, project_id: str, request: ChatRequest) -> ChatCompletion:
         """Chat"""
         # POST /v1/projects/{namespace}/{project_id}/chat/completions
         ...
@@ -544,7 +546,7 @@ class ProjectsAPI:
         # GET /v1/projects/{namespace}/{project}/datasets/
         ...
 
-    def projects_by_namespace_by_project_datasets_(self, namespace: str, project: str, request: CreateDatasetRequest) -> CreateDatasetResponse:
+    def post_projects_by_namespace_by_project_datasets_(self, namespace: str, project: str, request: CreateDatasetRequest) -> CreateDatasetResponse:
         """Create Dataset"""
         # POST /v1/projects/{namespace}/{project}/datasets/
         ...
@@ -559,17 +561,17 @@ class ProjectsAPI:
         # DELETE /v1/projects/{namespace}/{project}/datasets/{dataset}
         ...
 
-    def projects_by_namespace_by_project_datasets_by_dataset_actions(self, namespace: str, project: str, dataset: str, request: DatasetActionRequest) -> DatasetActionResponse:
+    def post_projects_by_namespace_by_project_datasets_by_dataset_actions(self, namespace: str, project: str, dataset: str, request: DatasetActionRequest) -> DatasetActionResponse:
         """Execute an action on a dataset"""
         # POST /v1/projects/{namespace}/{project}/datasets/{dataset}/actions
         ...
 
-    def projects_by_namespace_by_project_datasets_by_dataset_data(self, namespace: str, project: str, dataset: str, auto_process: bool | None | None = None) -> DatasetDataUploadResponse:
+    def post_projects_by_namespace_by_project_datasets_by_dataset_data(self, namespace: str, project: str, dataset: str, auto_process: bool | None | None = None) -> DatasetDataUploadResponse:
         """Upload a file to the dataset"""
         # POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data
         ...
 
-    def projects_by_namespace_by_project_datasets_by_dataset_data_bulk(self, namespace: str, project: str, dataset: str, auto_process: bool | None | None = None) -> BulkDatasetDataUploadResponse:
+    def post_projects_by_namespace_by_project_datasets_by_dataset_data_bulk(self, namespace: str, project: str, dataset: str, auto_process: bool | None | None = None) -> BulkDatasetDataUploadResponse:
         """Upload multiple files to the dataset"""
         # POST /v1/projects/{namespace}/{project}/datasets/{dataset}/data/bulk
         ...
@@ -584,7 +586,7 @@ class ProjectsAPI:
         # GET /v1/projects/{namespace}/{project}/rag/databases
         ...
 
-    def projects_by_namespace_by_project_rag_databases(self, namespace: str, project: str, request: CreateDatabaseRequest) -> DatabaseResponse:
+    def post_projects_by_namespace_by_project_rag_databases(self, namespace: str, project: str, request: CreateDatabaseRequest) -> DatabaseResponse:
         """Create a new RAG database"""
         # POST /v1/projects/{namespace}/{project}/rag/databases
         ...
@@ -609,7 +611,7 @@ class ProjectsAPI:
         # GET /v1/projects/{namespace}/{project}/rag/databases/{database_name}/documents
         ...
 
-    def projects_by_namespace_by_project_rag_databases_by_database_name_preview(self, namespace: str, project: str, database_name: str, request: DocumentPreviewRequest) -> DocumentPreviewResponse:
+    def post_projects_by_namespace_by_project_rag_databases_by_database_name_preview(self, namespace: str, project: str, database_name: str, request: DocumentPreviewRequest) -> DocumentPreviewResponse:
         """Preview document chunking"""
         # POST /v1/projects/{namespace}/{project}/rag/databases/{database_name}/preview
         ...
@@ -619,7 +621,7 @@ class ProjectsAPI:
         # GET /v1/projects/{namespace}/{project}/rag/health
         ...
 
-    def projects_by_namespace_by_project_rag_query(self, namespace: str, project: str, request: RAGQueryRequest) -> QueryResponse:
+    def post_projects_by_namespace_by_project_rag_query(self, namespace: str, project: str, request: RAGQueryRequest) -> QueryResponse:
         """Query the RAG system for semantic search"""
         # POST /v1/projects/{namespace}/{project}/rag/query
         ...
@@ -656,12 +658,12 @@ class TimeseriesAPI:
         # GET /v1/timeseries/backends
         ...
 
-    def timeseries_fit(self, request: TimeseriesFitRequest) -> TimeseriesFitResponse:
+    def post_timeseries_fit(self, request: TimeseriesFitRequest) -> TimeseriesFitResponse:
         """Fit Timeseries"""
         # POST /v1/timeseries/fit
         ...
 
-    def timeseries_load(self, request: TimeseriesLoadRequest) -> TimeseriesFitResponse:
+    def post_timeseries_load(self, request: TimeseriesLoadRequest) -> TimeseriesFitResponse:
         """Load Timeseries"""
         # POST /v1/timeseries/load
         ...
@@ -681,60 +683,35 @@ class TimeseriesAPI:
         # DELETE /v1/timeseries/models/{model_name}
         ...
 
-    def timeseries_predict(self, request: TimeseriesPredictRequest) -> TimeseriesPredictResponse:
+    def post_timeseries_predict(self, request: TimeseriesPredictRequest) -> TimeseriesPredictResponse:
         """Predict Timeseries"""
         # POST /v1/timeseries/predict
         ...
 
 
 # ======================================================================
-# VISION (25 endpoints)
+# VISION (16 endpoints)
 # ======================================================================
 
 class VisionAPI:
-    def vision_classify(self) -> dict[str, Any]:
+    def post_vision_classify(self) -> dict[str, Any]:
         """Classify Image"""
         # POST /v1/vision/classify
         ...
 
-    def vision_detect(self) -> dict[str, Any]:
+    def post_vision_detect(self) -> dict[str, Any]:
         """Detect Objects"""
         # POST /v1/vision/detect
         ...
 
-    def vision_detect_classify(self) -> dict[str, Any]:
+    def post_vision_detect_classify(self) -> dict[str, Any]:
         """Detect Classify"""
         # POST /v1/vision/detect_classify
         ...
 
-    def vision_documents_extract(self) -> dict[str, Any]:
+    def post_vision_documents_extract(self) -> dict[str, Any]:
         """Extract From Documents"""
         # POST /v1/vision/documents/extract
-        ...
-
-    def vision_eval(self) -> dict[str, Any]:
-        """Start Eval"""
-        # POST /v1/vision/eval
-        ...
-
-    def vision_eval_compare(self) -> dict[str, Any]:
-        """Compare Models"""
-        # POST /v1/vision/eval/compare
-        ...
-
-    def vision_eval_leaderboard(self, dataset: str | None | None = None, limit: int | None = None) -> dict[str, Any]:
-        """Leaderboard"""
-        # GET /v1/vision/eval/leaderboard
-        ...
-
-    def vision_eval_leaderboard_by_model_name(self, model_name: str, limit: int | None = None) -> dict[str, Any]:
-        """Model History"""
-        # GET /v1/vision/eval/leaderboard/{model_name}
-        ...
-
-    def vision_eval_by_job_id(self, job_id: str) -> dict[str, Any]:
-        """Eval Status"""
-        # GET /v1/vision/eval/{job_id}
         ...
 
     def vision_models(self) -> dict[str, Any]:
@@ -742,17 +719,17 @@ class VisionAPI:
         # GET /v1/vision/models
         ...
 
-    def vision_models_export(self) -> dict[str, Any]:
+    def post_vision_models_export(self) -> dict[str, Any]:
         """Export Model"""
         # POST /v1/vision/models/export
         ...
 
-    def vision_ocr(self) -> dict[str, Any]:
+    def post_vision_ocr(self) -> dict[str, Any]:
         """Extract Text"""
         # POST /v1/vision/ocr
         ...
 
-    def vision_review_decide(self) -> dict[str, Any]:
+    def post_vision_review_decide(self) -> dict[str, Any]:
         """Submit Decision"""
         # POST /v1/vision/review/decide
         ...
@@ -762,7 +739,7 @@ class VisionAPI:
         # GET /v1/vision/review/pending
         ...
 
-    def vision_stream_frame(self) -> dict[str, Any]:
+    def post_vision_stream_frame(self) -> dict[str, Any]:
         """Stream Frame"""
         # POST /v1/vision/stream/frame
         ...
@@ -772,37 +749,17 @@ class VisionAPI:
         # GET /v1/vision/stream/sessions
         ...
 
-    def vision_stream_start(self) -> dict[str, Any]:
+    def post_vision_stream_start(self) -> dict[str, Any]:
         """Stream Start"""
         # POST /v1/vision/stream/start
         ...
 
-    def vision_stream_stop(self) -> dict[str, Any]:
+    def post_vision_stream_stop(self) -> dict[str, Any]:
         """Stream Stop"""
         # POST /v1/vision/stream/stop
         ...
 
-    def vision_track_frame(self) -> dict[str, Any]:
-        """Track Frame"""
-        # POST /v1/vision/track/frame
-        ...
-
-    def vision_track_start(self) -> dict[str, Any]:
-        """Start Tracking"""
-        # POST /v1/vision/track/start
-        ...
-
-    def vision_track_stop(self) -> dict[str, Any]:
-        """Stop Tracking"""
-        # POST /v1/vision/track/stop
-        ...
-
-    def vision_track_by_session_id(self, session_id: str) -> dict[str, Any]:
-        """Track Status"""
-        # GET /v1/vision/track/{session_id}
-        ...
-
-    def vision_train(self) -> dict[str, Any]:
+    def post_vision_train(self) -> dict[str, Any]:
         """Start Training"""
         # POST /v1/vision/train
         ...
@@ -823,7 +780,7 @@ class VisionAPI:
 # ======================================================================
 
 class _Namespace_API:
-    def by_namespace_by_project_audio_speech(self, namespace: str, project: str, request: SpeechRequest) -> dict[str, Any]:
+    def post_by_namespace_by_project_audio_speech(self, namespace: str, project: str, request: SpeechRequest) -> dict[str, Any]:
         """Create Speech"""
         # POST /v1/{namespace}/{project}/audio/speech
         ...

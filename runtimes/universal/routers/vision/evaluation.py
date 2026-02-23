@@ -51,17 +51,20 @@ def _get_evaluator() -> ModelEvaluator:
 
 class EvalRequest(BaseModel):
     """Evaluate a model against a dataset."""
+
     model: str = Field(..., description="Model name or path to .pt file")
     dataset: str = Field(..., description="Path to dataset YAML")
     imgsz: int = Field(640, ge=320, le=2560, description="Image size for evaluation")
     batch_size: int = Field(16, ge=1, le=256, description="Batch size")
     weights: dict[str, float] | None = Field(
-        None, description="Scoring weights override (keys: mAP50_95, mAP50, small_object_recall, f1, speed)"
+        None,
+        description="Scoring weights override (keys: mAP50_95, mAP50, small_object_recall, f1, speed)",
     )
 
 
 class EvalCompareRequest(BaseModel):
     """Head-to-head model comparison."""
+
     model_a: str = Field(..., description="First model name or path")
     model_b: str = Field(..., description="Second model name or path")
     dataset: str = Field(..., description="Dataset YAML for evaluation")
@@ -118,7 +121,9 @@ def _resolve_model_path(model: str) -> str:  # lgtm[py/path-injection]
         resolved = p.resolve()
         home_llamafarm = Path.home() / ".llamafarm"
         cwd = Path.cwd().resolve()
-        if not (resolved.is_relative_to(home_llamafarm) or resolved.is_relative_to(cwd)):
+        if not (
+            resolved.is_relative_to(home_llamafarm) or resolved.is_relative_to(cwd)
+        ):
             raise HTTPException(403, "Model path outside allowed directories")
         if resolved.exists():
             return str(resolved)
@@ -131,7 +136,9 @@ def _resolve_model_path(model: str) -> str:  # lgtm[py/path-injection]
         if safe_name != model or ":" in model:
             raise HTTPException(400, "Invalid model name")
 
-        current = _VISION_MODELS_DIR / safe_name / "current.pt"  # safe_name is basename-only
+        current = (
+            _VISION_MODELS_DIR / safe_name / "current.pt"
+        )  # safe_name is basename-only
         if current.exists():
             return str(current)
 
@@ -179,13 +186,20 @@ def _build_eval_cmd(
 ) -> list[str]:
     """Build the subprocess command for eval worker."""
     cmd = [
-        _PYTHON, _WORKER_SCRIPT,
-        "--model", model_path,
-        "--dataset", dataset,
-        "--output", output_path,
-        "--imgsz", str(imgsz),
-        "--batch", str(batch),
-        "--db-path", str(EVAL_DB_PATH),
+        _PYTHON,
+        _WORKER_SCRIPT,
+        "--model",
+        model_path,
+        "--dataset",
+        dataset,
+        "--output",
+        output_path,
+        "--imgsz",
+        str(imgsz),
+        "--batch",
+        str(batch),
+        "--db-path",
+        str(EVAL_DB_PATH),
     ]
     if model_name:
         cmd.extend(["--model-name", model_name])
@@ -207,9 +221,16 @@ async def _run_subprocess_eval(cmd: list[str], output_path: str) -> dict[str, An
 
     if proc.returncode != 0:
         # Subprocess crashed (OOM, segfault, etc.) — runtime stays alive
-        err_msg = stderr.decode(errors="replace").strip()[-500:] if stderr else "Unknown error"
+        err_msg = (
+            stderr.decode(errors="replace").strip()[-500:]
+            if stderr
+            else "Unknown error"
+        )
         logger.error(f"Eval subprocess exited {proc.returncode}: {err_msg}")
-        return {"status": "failed", "error": f"Eval process crashed (exit {proc.returncode}): {err_msg}"}
+        return {
+            "status": "failed",
+            "error": f"Eval process crashed (exit {proc.returncode}): {err_msg}",
+        }
 
     # Read result from temp file
     try:
@@ -223,13 +244,18 @@ async def _run_eval(job_id: str, model_path: str, request: EvalRequest) -> None:
     output_path: str | None = None
     try:
         _eval_jobs[job_id]["status"] = "running"
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="eval_"
+        ) as f:
             output_path = f.name
 
         cmd = _build_eval_cmd(
-            model_path=model_path, dataset=request.dataset,
-            output_path=output_path, model_name=request.model,
-            imgsz=request.imgsz, batch=request.batch_size,
+            model_path=model_path,
+            dataset=request.dataset,
+            output_path=output_path,
+            model_name=request.model,
+            imgsz=request.imgsz,
+            batch=request.batch_size,
             weights=request.weights,
         )
         result = await _run_subprocess_eval(cmd, output_path)
@@ -261,33 +287,54 @@ async def _run_compare(
         _eval_jobs[job_id]["status"] = "running"
 
         # Run both evals in subprocesses (sequentially to limit memory)
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_a_") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="eval_a_"
+        ) as f:
             out_a = f.name
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="eval_b_") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="eval_b_"
+        ) as f:
             out_b = f.name
 
         cmd_a = _build_eval_cmd(
-            model_path=path_a, dataset=request.dataset, output_path=out_a,
-            model_name=request.model_a, imgsz=request.imgsz, batch=request.batch_size,
+            model_path=path_a,
+            dataset=request.dataset,
+            output_path=out_a,
+            model_name=request.model_a,
+            imgsz=request.imgsz,
+            batch=request.batch_size,
         )
         cmd_b = _build_eval_cmd(
-            model_path=path_b, dataset=request.dataset, output_path=out_b,
-            model_name=request.model_b, imgsz=request.imgsz, batch=request.batch_size,
+            model_path=path_b,
+            dataset=request.dataset,
+            output_path=out_b,
+            model_name=request.model_b,
+            imgsz=request.imgsz,
+            batch=request.batch_size,
         )
 
         res_a = await _run_subprocess_eval(cmd_a, out_a)
         if res_a.get("status") != "completed":
-            raise RuntimeError(f"Eval of {request.model_a} failed: {res_a.get('error')}")
+            raise RuntimeError(
+                f"Eval of {request.model_a} failed: {res_a.get('error')}"
+            )
 
         res_b = await _run_subprocess_eval(cmd_b, out_b)
         if res_b.get("status") != "completed":
-            raise RuntimeError(f"Eval of {request.model_b} failed: {res_b.get('error')}")
+            raise RuntimeError(
+                f"Eval of {request.model_b} failed: {res_b.get('error')}"
+            )
 
         # Compare using in-process evaluator (lightweight, no model loading)
         evaluator = _get_evaluator()
         from models.eval_model import EvalResult
-        result_a = EvalResult(**{k: v for k, v in res_a["result"].items() if k != "eval_id"})
-        result_b = EvalResult(**{k: v for k, v in res_b["result"].items() if k != "eval_id"})
+
+        result_a = EvalResult(
+            **{k: v for k, v in res_a["result"].items() if k != "eval_id"}
+        )
+        result_b = EvalResult(
+            **{k: v for k, v in res_b["result"].items() if k != "eval_id"}
+        )
         comparison = evaluator.compare(result_a, result_b)
 
         _eval_jobs[job_id]["status"] = "completed"
@@ -321,22 +368,33 @@ async def auto_eval_after_training(
     Returns the EvalResult or None on failure.
     """
     try:
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False, prefix="autoeval_") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, prefix="autoeval_"
+        ) as f:
             output_path = f.name
 
         cmd = _build_eval_cmd(
-            model_path=model_path, dataset=dataset, output_path=output_path,
-            model_name=model_id, weights=weights,
+            model_path=model_path,
+            dataset=dataset,
+            output_path=output_path,
+            model_name=model_id,
+            weights=weights,
         )
         res = await _run_subprocess_eval(cmd, output_path)
         Path(output_path).unlink(missing_ok=True)
 
         if res.get("status") != "completed":
-            logger.error(f"Auto-eval subprocess failed for {model_id}: {res.get('error')}")
+            logger.error(
+                f"Auto-eval subprocess failed for {model_id}: {res.get('error')}"
+            )
             return None
 
-        result = EvalResult(**{k: v for k, v in res["result"].items() if k != "eval_id"})
-        logger.info(f"Auto-eval for {model_id}: score={result.score:.4f} mAP50={result.mAP50:.4f}")
+        result = EvalResult(
+            **{k: v for k, v in res["result"].items() if k != "eval_id"}
+        )
+        logger.info(
+            f"Auto-eval for {model_id}: score={result.score:.4f} mAP50={result.mAP50:.4f}"
+        )
 
         if auto_promote:
             db = EvalDB()  # Fresh connection — eval was in subprocess
@@ -345,13 +403,16 @@ async def auto_eval_after_training(
             if not best or best["model_name"] == model_id:
                 # First model or this IS the best → promote
                 _promote_model(model_id, model_path)
-                db.record_promotion(model_id, result.eval_id or 0, "auto-promoted as best model")
+                db.record_promotion(
+                    model_id, result.eval_id or 0, "auto-promoted as best model"
+                )
                 logger.info(f"Auto-promoted {model_id} (first or best)")
             elif result.score > best["score"]:
                 # New model beats current best → promote
                 _promote_model(model_id, model_path)
                 db.record_promotion(
-                    model_id, result.eval_id or 0,
+                    model_id,
+                    result.eval_id or 0,
                     f"auto-promoted: score {result.score:.4f} > {best['score']:.4f} ({best['model_name']})",
                 )
                 logger.info(
@@ -410,7 +471,9 @@ async def start_compare(request: EvalCompareRequest) -> EvalJobResponse:
 
 @router.get("/v1/vision/eval/leaderboard", response_model=list[LeaderboardEntry])
 @handle_endpoint_errors("vision_eval_leaderboard")
-async def leaderboard(dataset: str | None = None, limit: int = 20) -> list[LeaderboardEntry]:
+async def leaderboard(
+    dataset: str | None = None, limit: int = 20
+) -> list[LeaderboardEntry]:
     """Ranked model leaderboard by composite score."""
     db = _get_evaluator().db
     results = db.leaderboard(dataset, limit)

@@ -29,10 +29,8 @@ import argparse
 import json
 import re
 import sys
-import textwrap
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 # Where to write generated files
 SDK_SRC = Path(__file__).resolve().parent.parent / "src" / "llamafarm"
@@ -57,6 +55,7 @@ RUNTIME_PREFIXES = ("/v1/finetune", "/v1/cache")
 def fetch_spec(url: str = "http://localhost:14345") -> dict:
     """Fetch OpenAPI spec from a running server."""
     import httpx
+
     r = httpx.get(f"{url}/openapi.json", timeout=10)
     r.raise_for_status()
     return r.json()
@@ -69,6 +68,7 @@ def load_spec(path: str) -> dict:
 # =============================================================================
 # Type Generation
 # =============================================================================
+
 
 def _python_type(schema: dict, schemas: dict, depth: int = 0) -> str:
     """Convert an OpenAPI schema to a Python type annotation."""
@@ -139,9 +139,23 @@ def _sanitize_class_name(name: str) -> str:
 
 
 _RESERVED = {
-    "type", "class", "from", "import", "return", "global", "in", "is", "not",
-    "and", "or", "schema", "model_fields", "model_config", "model_computed_fields",
-    "model_extra", "model_fields_set",
+    "type",
+    "class",
+    "from",
+    "import",
+    "return",
+    "global",
+    "in",
+    "is",
+    "not",
+    "and",
+    "or",
+    "schema",
+    "model_fields",
+    "model_config",
+    "model_computed_fields",
+    "model_extra",
+    "model_fields_set",
 }
 
 
@@ -159,7 +173,7 @@ def generate_types(spec: dict) -> str:
     lines: list[str] = [
         '"""Auto-generated LlamaFarm SDK types from OpenAPI spec.',
         "",
-        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         f"Server: {spec.get('info', {}).get('title', 'unknown')}",
         f"Schemas: {len(schemas)}",
         "",
@@ -184,7 +198,7 @@ def generate_types(spec: dict) -> str:
         schema = schemas[name]
         cls_name = _sanitize_class_name(name)
         desc = schema.get("description", "")
-        title = schema.get("title", name)
+        _title = schema.get("title", name)  # noqa: F841 — reserved for future docstring use
 
         # Only generate for object schemas with properties
         props = schema.get("properties", {})
@@ -193,7 +207,9 @@ def generate_types(spec: dict) -> str:
             if "enum" in schema:
                 vals = schema["enum"]
                 lines.append(f"# Enum: {name}")
-                lines.append(f"{cls_name} = Literal[{', '.join(repr(v) for v in vals)}]")
+                lines.append(
+                    f"{cls_name} = Literal[{', '.join(repr(v) for v in vals)}]"
+                )
                 lines.append("")
                 generated_count += 1
                 continue
@@ -238,7 +254,12 @@ def generate_types(spec: dict) -> str:
 
             if prop_desc:
                 # Sanitize: single line, escape quotes
-                safe_desc = prop_desc.replace("\n", " ").replace("\r", "").replace('"', '\\"').strip()
+                safe_desc = (
+                    prop_desc.replace("\n", " ")
+                    .replace("\r", "")
+                    .replace('"', '\\"')
+                    .strip()
+                )
                 safe_desc = " ".join(safe_desc.split())  # collapse whitespace
                 field_args.append(f'description="{safe_desc}"')
 
@@ -264,6 +285,7 @@ def generate_types(spec: dict) -> str:
 # Method Generation
 # =============================================================================
 
+
 def _path_to_method_name(path: str, method: str) -> str:
     """Convert an API path to a Python method name."""
     # Strip /v1/ prefix
@@ -272,8 +294,8 @@ def _path_to_method_name(path: str, method: str) -> str:
     p = re.sub(r"\{([^}]+)\}", r"by_\1", p)
     # Replace slashes with underscores
     p = p.replace("/", "_").replace("-", "_")
-    # Prefix with method if ambiguous
-    if method != "get" and method != "post":
+    # Prefix non-GET methods to disambiguate (e.g. GET /buffers vs POST /buffers)
+    if method != "get":
         p = f"{method}_{p}"
     return p.lower()
 
@@ -297,14 +319,16 @@ def _extract_params(op: dict, schemas: dict) -> list[dict]:
     """Extract path and query params from an operation."""
     params = []
     for p in op.get("parameters", []):
-        params.append({
-            "name": _sanitize_field_name(p["name"]),
-            "original_name": p["name"],
-            "type": _python_type(p.get("schema", {}), schemas),
-            "required": p.get("required", False),
-            "in": p.get("in", "query"),
-            "description": p.get("description", ""),
-        })
+        params.append(
+            {
+                "name": _sanitize_field_name(p["name"]),
+                "original_name": p["name"],
+                "type": _python_type(p.get("schema", {}), schemas),
+                "required": p.get("required", False),
+                "in": p.get("in", "query"),
+                "description": p.get("description", ""),
+            }
+        )
     return params
 
 
@@ -353,7 +377,7 @@ def generate_methods(spec: dict) -> str:
             method_name = _path_to_method_name(path, method)
             summary = op.get("summary", "")
             desc = op.get("description", "")
-            tags = op.get("tags", [])
+            _tags = op.get("tags", [])  # noqa: F841 — reserved for future routing
 
             params = _extract_params(op, schemas)
             body_type = _extract_request_body_type(op, schemas)
@@ -364,16 +388,16 @@ def generate_methods(spec: dict) -> str:
             sig_parts = ["self"]
             for p in params:
                 if p["in"] == "path" and p["required"]:
-                    sig_parts.append(f'{p["name"]}: {p["type"]}')
+                    sig_parts.append(f"{p['name']}: {p['type']}")
             if body_type:
                 safe_body = _sanitize_class_name(body_type)
                 sig_parts.append(f"request: {safe_body}")
             for p in params:
                 if p["in"] == "query":
                     if p["required"]:
-                        sig_parts.append(f'{p["name"]}: {p["type"]}')
+                        sig_parts.append(f"{p['name']}: {p['type']}")
                     else:
-                        sig_parts.append(f'{p["name"]}: {p["type"]} | None = None')
+                        sig_parts.append(f"{p['name']}: {p['type']} | None = None")
 
             sig = ", ".join(sig_parts)
 
@@ -384,8 +408,10 @@ def generate_methods(spec: dict) -> str:
             lines.append(f'        """{doc}"""')
             lines.append(f"        # {method.upper()} {path}")
             if is_runtime:
-                lines.append(f"        # NOTE: runtime-direct (not proxied through main)")
-            lines.append(f"        ...")
+                lines.append(
+                    "        # NOTE: runtime-direct (not proxied through main)"
+                )
+            lines.append("        ...")
             lines.append("")
 
             if group not in groups:
@@ -396,7 +422,7 @@ def generate_methods(spec: dict) -> str:
     out_lines = [
         '"""Auto-generated LlamaFarm SDK method stubs from OpenAPI spec.',
         "",
-        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         f"Endpoints: {sum(len(v) for v in groups.values())}",
         "",
         "This file is a REFERENCE — not imported directly.",
@@ -427,6 +453,7 @@ def generate_methods(spec: dict) -> str:
 # Coverage Check
 # =============================================================================
 
+
 def check_coverage(spec: dict, client_path: Path) -> list[str]:
     """Check which server endpoints are missing from the SDK client."""
     if not client_path.exists():
@@ -453,14 +480,27 @@ def check_coverage(spec: dict, client_path: Path) -> list[str]:
 # Main
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Generate LlamaFarm SDK from OpenAPI spec")
-    parser.add_argument("--spec", help="Path to OpenAPI JSON file (instead of fetching)")
+    parser = argparse.ArgumentParser(
+        description="Generate LlamaFarm SDK from OpenAPI spec"
+    )
+    parser.add_argument(
+        "--spec", help="Path to OpenAPI JSON file (instead of fetching)"
+    )
     parser.add_argument("--url", default="http://localhost:14345", help="Server URL")
     parser.add_argument("--save-spec", help="Save fetched spec to file")
-    parser.add_argument("--check", action="store_true", help="Check if generated code is up to date")
-    parser.add_argument("--coverage", action="store_true", help="Check SDK endpoint coverage")
-    parser.add_argument("--dry-run", action="store_true", help="Print to stdout instead of writing files")
+    parser.add_argument(
+        "--check", action="store_true", help="Check if generated code is up to date"
+    )
+    parser.add_argument(
+        "--coverage", action="store_true", help="Check SDK endpoint coverage"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print to stdout instead of writing files",
+    )
     args = parser.parse_args()
 
     # Load spec
@@ -470,8 +510,10 @@ def main():
     else:
         try:
             spec = fetch_spec(args.url)
-            print(f"Fetched spec from {args.url}: {len(spec.get('paths', {}))} paths, "
-                  f"{len(spec.get('components', {}).get('schemas', {}))} schemas")
+            print(
+                f"Fetched spec from {args.url}: {len(spec.get('paths', {}))} paths, "
+                f"{len(spec.get('components', {}).get('schemas', {}))} schemas"
+            )
         except Exception as e:
             print(f"Error: Cannot fetch spec from {args.url}: {e}", file=sys.stderr)
             print("Start the server or use --spec <file>", file=sys.stderr)
@@ -513,16 +555,24 @@ def main():
     if args.check:
         stale = False
         if not types_path.exists():
-            print("❌ _generated_types.py missing — run: python scripts/generate_sdk.py")
+            print(
+                "❌ _generated_types.py missing — run: python scripts/generate_sdk.py"
+            )
             stale = True
         elif types_path.read_text() != types_code:
-            print("❌ _generated_types.py is stale — run: python scripts/generate_sdk.py")
+            print(
+                "❌ _generated_types.py is stale — run: python scripts/generate_sdk.py"
+            )
             stale = True
         if not methods_path.exists():
-            print("❌ _generated_methods.py missing — run: python scripts/generate_sdk.py")
+            print(
+                "❌ _generated_methods.py missing — run: python scripts/generate_sdk.py"
+            )
             stale = True
         elif methods_path.read_text() != methods_code:
-            print("❌ _generated_methods.py is stale — run: python scripts/generate_sdk.py")
+            print(
+                "❌ _generated_methods.py is stale — run: python scripts/generate_sdk.py"
+            )
             stale = True
         if stale:
             sys.exit(1)

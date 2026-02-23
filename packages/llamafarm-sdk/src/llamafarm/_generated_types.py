@@ -1,8 +1,8 @@
 """Auto-generated LlamaFarm SDK types from OpenAPI spec.
 
-Generated: 2026-02-23 05:03:31 UTC
+Generated: 2026-02-23 17:42:06 UTC
 Server: FastAPI
-Schemas: 221
+Schemas: 216
 
 DO NOT EDIT — regenerate with: python scripts/generate_sdk.py
 """

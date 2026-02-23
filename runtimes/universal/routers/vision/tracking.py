@@ -26,18 +26,10 @@ router = APIRouter(tags=["vision-tracking"])
 
 _VISION_MODELS_DIR: Path | None = None
 
-# Detection loader: async def(model_id) -> model with .detect()
-_load_detection_fn: Any = None
-
 
 def set_tracking_models_dir(d: Path) -> None:
     global _VISION_MODELS_DIR
     _VISION_MODELS_DIR = d
-
-
-def set_tracking_detection_loader(fn: Any) -> None:
-    global _load_detection_fn
-    _load_detection_fn = fn
 
 
 # ── Session state ───────────────────────────────────────────────────────────
@@ -59,11 +51,13 @@ class TrackSession:
     total_tracks_created: int = 0
     created_at: float = field(default_factory=time.time)
     last_frame_at: float = field(default_factory=time.time)
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)  # Prevent concurrent frame races
+    lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock
+    )  # Prevent concurrent frame races
 
 
 _sessions: dict[str, TrackSession] = {}
-_cleanup_task: asyncio.Task | None = None
+_cleanup_task: asyncio.Task | None = None  # Held to prevent GC of the background task
 
 
 async def _session_cleanup_loop() -> None:
@@ -72,7 +66,8 @@ async def _session_cleanup_loop() -> None:
         await asyncio.sleep(15)
         now = time.time()
         expired = [
-            sid for sid, s in _sessions.items()
+            sid
+            for sid, s in _sessions.items()
             if (now - s.last_frame_at) > SESSION_TTL_SECONDS
         ]
         for sid in expired:
@@ -130,8 +125,11 @@ def _resolve_model_path(model: str) -> str:
 
 class TrackStartRequest(BaseModel):
     """Start a tracking session. First frame can be included."""
+
     model: str = Field(..., description="Model name or path to .pt file")
-    tracker: str = Field("bytetrack", description="Tracker algorithm: bytetrack, botsort, ocsort")
+    tracker: str = Field(
+        "bytetrack", description="Tracker algorithm: bytetrack, botsort, ocsort"
+    )
     confidence_threshold: float = Field(0.25, ge=0.0, le=1.0)
     target_fps: float = Field(10.0, ge=0.1, le=60.0)
     image: str | None = Field(None, description="Optional base64 image for first frame")
@@ -198,7 +196,9 @@ class TrackStopResponse(BaseModel):
 # ── Core tracking logic ─────────────────────────────────────────────────────
 
 
-def _run_track(session: TrackSession, image_bytes: bytes) -> tuple[list[TrackedDetection], TracksSummary, float, float]:
+def _run_track(
+    session: TrackSession, image_bytes: bytes
+) -> tuple[list[TrackedDetection], TracksSummary, float, float]:
     """Run model.track() synchronously. Called via asyncio.to_thread()."""
     import io
 
@@ -235,13 +235,18 @@ def _run_track(session: TrackSession, image_bytes: bytes) -> tuple[list[TrackedD
             if boxes.id is not None:
                 track_id = int(boxes.id[i])
 
-            detections.append(TrackedDetection(
-                x1=x1, y1=y1, x2=x2, y2=y2,
-                class_name=cls_name,
-                class_id=cls_id,
-                confidence=conf,
-                track_id=track_id,
-            ))
+            detections.append(
+                TrackedDetection(
+                    x1=x1,
+                    y1=y1,
+                    x2=x2,
+                    y2=y2,
+                    class_name=cls_name,
+                    class_id=cls_id,
+                    confidence=conf,
+                    track_id=track_id,
+                )
+            )
 
     active_tracks = len({d.track_id for d in detections if d.track_id >= 0})
     # Track total unique IDs seen
@@ -270,7 +275,10 @@ def _run_track(session: TrackSession, image_bytes: bytes) -> tuple[list[TrackedD
 async def start_tracking(request: TrackStartRequest) -> TrackStartResponse:
     """Start a tracking session. Optionally include first frame."""
     if request.tracker not in VALID_TRACKERS:
-        raise HTTPException(400, f"Invalid tracker: {request.tracker}. Valid: {', '.join(sorted(VALID_TRACKERS))}")
+        raise HTTPException(
+            400,
+            f"Invalid tracker: {request.tracker}. Valid: {', '.join(sorted(VALID_TRACKERS))}",
+        )
     if len(_sessions) >= MAX_SESSIONS:
         raise HTTPException(429, f"Max {MAX_SESSIONS} concurrent tracking sessions")
 
@@ -278,6 +286,7 @@ async def start_tracking(request: TrackStartRequest) -> TrackStartResponse:
 
     # Load a fresh YOLO model in thread pool to avoid blocking the event loop
     from ultralytics import YOLO
+
     yolo_model = await asyncio.to_thread(YOLO, model_path)
 
     sid = str(uuid.uuid4())[:8]
@@ -310,7 +319,9 @@ async def start_tracking(request: TrackStartRequest) -> TrackStartResponse:
         response.inference_time_ms = round(inf_ms, 2)
         response.tracking_time_ms = round(trk_ms, 2)
 
-    logger.info(f"Started tracking session {sid}: model={request.model} tracker={request.tracker}")
+    logger.info(
+        f"Started tracking session {sid}: model={request.model} tracker={request.tracker}"
+    )
     return response
 
 
