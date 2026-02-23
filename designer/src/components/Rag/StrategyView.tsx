@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
-import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { defaultStrategies } from './strategies'
 import ParserSettingsForm from './ParserSettingsForm'
 import PatternEditor from './PatternEditor'
@@ -18,7 +18,7 @@ import {
   EXTRACTOR_SCHEMAS,
   getDefaultExtractorConfig,
 } from '@/types/ragTypes'
-import { useToast } from '../ui/toast'
+import { useToast } from '@/components/ui/toast'
 import PageActions from '../common/PageActions'
 import Tabs from '../Tabs'
 import ExtractorSettingsForm from './ExtractorSettingsForm'
@@ -29,14 +29,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { Checkbox } from '../ui/checkbox'
+} from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Textarea } from '@/components/ui/textarea'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import {
   useListDatasets,
@@ -2476,7 +2477,7 @@ function StrategyView() {
                   <label className="text-xs text-muted-foreground">
                     Description
                   </label>
-                  <textarea
+                  <Textarea
                     rows={4}
                     className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground"
                     placeholder="Add a brief description"

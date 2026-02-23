@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import PageActions from '../common/PageActions'
-import { Badge } from '../ui/badge'
-import { useToast } from '../ui/toast'
+import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/components/ui/toast'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   Dialog,
@@ -15,7 +15,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useListDatasets } from '../../hooks/useDatasets'
@@ -24,7 +24,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
+} from '@/components/ui/tooltip'
 import { apiClient } from '../../api/client'
 import DatabaseModal from './DatabaseModal'
 import {
@@ -39,7 +39,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 
 type Database = {
   name: string

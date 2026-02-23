@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Loader2, Volume2, Download } from 'lucide-react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
-import { Badge } from '../ui/badge'
+import { Badge } from '@/components/ui/badge'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectChatParams } from '../../hooks/useProjectChat'
 import { useStreamingChatCompletionMessage } from '../../hooks/useChatCompletions'
@@ -22,7 +22,7 @@ import remarkGfm from 'remark-gfm'
 import { useProjectModels } from '../../hooks/useProjectModels'
 import { useProject } from '../../hooks/useProjects'
 import { useListAnomalyModels, useScoreAnomaly, useLoadAnomaly, useListClassifierModels, usePredictClassifier, useLoadClassifier, useScanDocument, useCreateEmbeddings, useRerankDocuments } from '../../hooks/useMLModels'
-import { Selector } from '../ui/selector'
+import { Selector } from '@/components/ui/selector'
 import { SpeechTestPanel, Waveform } from '../speech'
 import { checkRuntimeHealth } from '../../api/voiceService'
 import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
@@ -31,7 +31,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { AddonInfo } from '../../types/addons'
 import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
 import { AddonInstallProgress } from '../Addons/AddonInstallProgress'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
   DOCUMENT_SCANNING_LANGUAGES,
@@ -3754,11 +3755,9 @@ export default function TestChat({
               <div>
                 <div className="text-xs text-muted-foreground mb-1 invisible">Spacer</div>
                 <label className="h-9 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={parseByPage}
-                    onChange={(e) => setParseByPage(e.target.checked)}
-                    className="rounded border-border"
+                    onCheckedChange={(checked) => setParseByPage(checked === true)}
                   />
                   Parse by page
                 </label>

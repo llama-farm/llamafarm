@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Mic, Square, Trash2, Save, Play, Pause } from 'lucide-react'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { RecordingState } from '../../types/ml'
 
 interface VoiceRecorderProps {

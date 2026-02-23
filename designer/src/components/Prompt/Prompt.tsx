@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import ModeToggle from '../ModeToggle'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { usePackageModal } from '../../contexts/PackageModalContext'
 import Prompts from './GeneratedOutput/Prompts'

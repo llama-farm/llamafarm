@@ -12,8 +12,9 @@ import SamplePreviewModal from './SamplePreviewModal'
 import ImportSampleProjectModal from './ImportSampleProjectModal'
 import ImportSampleDataModal from './ImportSampleDataModal'
 import { useProjectModalContext } from '../../contexts/ProjectModalContext'
-import { useToast } from '../ui/toast'
-import { Button } from '../ui/button'
+import { useToast } from '@/components/ui/toast'
+import { Selector } from '@/components/ui/selector'
+import { Button } from '@/components/ui/button'
 // import { useCreateProject } from '../../hooks/useProjects'
 import { getCurrentNamespace } from '../../utils/namespaceUtils'
 import { setActiveProject } from '../../utils/projectUtils'
@@ -249,21 +250,17 @@ function SampleProjects() {
               />
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Model</label>
-            <select
-              className="px-2 py-1.5 rounded-md border border-input bg-background text-xs"
-              value={modelFilter}
-              onChange={e => setModelFilter(e.target.value as any)}
-            >
-              <option value="all">All</option>
-              {uniqueModels.map(m => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Selector
+            label="Model"
+            value={modelFilter}
+            onChange={v => setModelFilter(v as any)}
+            options={[
+              { value: 'all', label: 'All' },
+              ...uniqueModels.map(m => ({ value: m, label: m })),
+            ]}
+            size="sm"
+            className="flex flex-row items-center gap-2"
+          />
         </div>
       </div>
 

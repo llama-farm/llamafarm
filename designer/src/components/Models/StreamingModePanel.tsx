@@ -4,10 +4,10 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { useToast } from '../ui/toast'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/toast'
 import FontIcon from '../../common/FontIcon'
 import StreamingConfig, { type StreamingConfigState } from './StreamingConfig'
 import StreamingStatusPanel from './StreamingStatusPanel'

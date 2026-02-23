@@ -3,27 +3,27 @@ import { SAMPLE_DATASETS } from './sampleData'
 import StreamingModeToggle from './StreamingModeToggle'
 import StreamingModePanel from './StreamingModePanel'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { Selector } from '../ui/selector'
-import { Textarea } from '../ui/textarea'
-import { Badge } from '../ui/badge'
-import { Checkbox } from '../ui/checkbox'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Selector } from '@/components/ui/selector'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dropdown-menu'
+import { useToast } from '@/components/ui/toast'
 import FontIcon from '../../common/FontIcon'
 import TrainingLoadingOverlay from './TrainingLoadingOverlay'
 import type { AnomalyTestResult } from './types'
@@ -1719,23 +1719,18 @@ MX`}
                                         }}
                                         className="flex-1 px-2 py-1.5 bg-transparent border-0 outline-none text-xs font-medium focus:bg-background"
                                       />
-                                      <select
+                                      <Selector
                                         value={col.type}
-                                        onChange={e =>
+                                        onChange={v =>
                                           handleColumnTypeChange(
                                             col.name,
-                                            e.target.value as FeatureEncodingType
+                                            v as FeatureEncodingType
                                           )
                                         }
-                                        className="pl-1 pr-1 py-1 bg-transparent border-0 outline-none text-[10px] text-muted-foreground cursor-pointer hover:text-foreground"
-                                        title="Column type"
-                                      >
-                                        {ENCODING_TYPE_OPTIONS.map(opt => (
-                                          <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                        options={ENCODING_TYPE_OPTIONS}
+                                        variant="minimal"
+                                        size="sm"
+                                      />
                                       <button
                                         onClick={() => handleRemoveColumn(idx)}
                                         className="ml-1 p-0.5 text-muted-foreground/50 hover:text-destructive"
