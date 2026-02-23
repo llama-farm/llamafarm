@@ -15,7 +15,6 @@ export function StreamingPanel() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [detections, setDetections] = useState<Detection[]>([])
-  const [, setFrameDataUrl] = useState<string | null>(null)
   const [framesProcessed, setFramesProcessed] = useState(0)
   const [startError, setStartError] = useState<string | null>(null)
 
@@ -43,7 +42,6 @@ export function StreamingPanel() {
 
     ctx.drawImage(video, 0, 0)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-    setFrameDataUrl(dataUrl)
     return dataUrl.split(',')[1]
   }, [])
 

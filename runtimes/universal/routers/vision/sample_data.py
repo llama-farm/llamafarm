@@ -100,11 +100,13 @@ async def clone_sample_data() -> CloneResponse:
         _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         if proc.returncode != 0:
             err = stderr.decode().strip() if stderr else "Unknown error"
-            return CloneResponse(success=False, path=str(sd), message=f"Clone failed: {err}")
+            logger.error("git clone failed: %s", err)
+            return CloneResponse(success=False, path=str(sd), message="Failed to clone sample data repository")
         # Create train/val split for YOLO classification compatibility
         _create_train_val_split(sd)
         return CloneResponse(success=True, path=str(sd), message="Cloned successfully")
     except asyncio.TimeoutError:
         return CloneResponse(success=False, path=str(sd), message="Clone timed out (120s)")
-    except Exception as e:
-        return CloneResponse(success=False, path=str(sd), message=str(e))
+    except Exception:
+        logger.exception("Unexpected error cloning sample data")
+        return CloneResponse(success=False, path=str(sd), message="Failed to clone sample data repository")

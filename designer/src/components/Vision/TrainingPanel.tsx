@@ -299,7 +299,7 @@ export function TrainingPanel() {
           </div>
           {cloneMutation.isError && (
             <p className="text-xs text-destructive mt-1">
-              Failed to download sample data: {(cloneMutation.error as Error).message}
+              Failed to download sample data. Check your network connection and try again.
             </p>
           )}
         </div>
@@ -351,7 +351,7 @@ export function TrainingPanel() {
       </Button>
 
       {startTraining.isError && (
-        <p className="text-sm text-destructive">{(startTraining.error as Error).message}</p>
+        <p className="text-sm text-destructive">Failed to start training. Check that the dataset path is valid and the runtime is running.</p>
       )}
     </div>
   )
