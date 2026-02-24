@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dropdown-menu'
+import { useToast } from '@/components/ui/toast'
 import FontIcon from '../../common/FontIcon'
 import type { TrainedModel, TrainedModelType } from './types'
 import {

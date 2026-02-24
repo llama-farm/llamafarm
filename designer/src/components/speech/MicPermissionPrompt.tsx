@@ -1,5 +1,5 @@
 import { Mic, AlertTriangle, RefreshCw } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import type { MicPermissionState } from '../../types/ml'
 
 interface MicPermissionPromptProps {

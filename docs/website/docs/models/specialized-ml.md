@@ -18,6 +18,12 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
 | [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Vision Pipeline](./vision.md) | `POST /v1/vision/*` | YOLO detection, CLIP classification, cascade streaming |
+| [Time-Series Forecasting](./ml-addons.md#time-series-forecasting) | `POST /v1/timeseries/*` | ARIMA, Chronos, Exponential Smoothing |
+| [ADTK Anomaly Detection](./ml-addons.md#time-series-anomaly-detection-adtk) | `POST /v1/adtk/*` | Level shifts, spikes, seasonal anomalies |
+| [Data Drift Detection](./ml-addons.md#data-drift-detection) | `POST /v1/drift/*` | KS, Chi-squared, MMD drift monitoring |
+| [CatBoost](./ml-addons.md#catboost-gradient-boosting) | `POST /v1/catboost/*` | Gradient boosting with categorical features |
+| [SHAP Explainability](./ml-addons.md#shap-explainability) | `POST /v1/explain/*` | Feature contributions for any ML model |
 
 ## Starting the Universal Runtime
 

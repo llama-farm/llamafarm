@@ -1158,8 +1158,34 @@ LF_DATA_DIR=/path/to/llamafarm/data
 
 ---
 
+## SHAP Explainability
+
+Add `explain: true` to any anomaly detection call to get SHAP explanations showing which features drove each anomaly.
+
+```bash
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sensor-monitor",
+    "data": [[22.0, 100], [5.0, 500], [50.0, 10]],
+    "explain": true,
+    "feature_names": ["temperature", "pressure"]
+  }'
+```
+
+Each anomaly in the response includes SHAP contributions showing the direction and magnitude of each feature's influence. This uses TreeExplainer for Isolation Forest models and KernelExplainer for other backends.
+
+For standalone SHAP explanations or global feature importance, see the [SHAP Explainability section](./ml-addons.md#shap-explainability) in the ML Addons guide.
+
+:::tip Time-Series Anomaly Detection
+For detecting temporal patterns like level shifts, seasonal violations, and volatility changes, see the [ADTK addon](./ml-addons.md#time-series-anomaly-detection-adtk). ADTK complements point anomaly detection by understanding time-series context.
+:::
+
+---
+
 ## Next Steps
 
+- [ML Addons Guide](./ml-addons.md) - ADTK time-series anomalies, SHAP explainability, drift detection
 - [Specialized ML Models](./specialized-ml.md) - Overview of all ML endpoints
 - [Universal Runtime](./index.md#universal-runtime) - General runtime configuration
 - [API Reference](../api/index.md) - Full API documentation

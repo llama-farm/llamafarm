@@ -1,6 +1,6 @@
 import React from 'react'
 import ModeToggle, { Mode } from '../ModeToggle'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { usePackageModal } from '../../contexts/PackageModalContext'
 
 interface PageActionsProps {
