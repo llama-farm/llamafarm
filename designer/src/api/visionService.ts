@@ -139,6 +139,11 @@ export async function exportModel(request: ExportModelRequest): Promise<Blob> {
   return response.data
 }
 
+export async function deleteModel(name: string): Promise<{ deleted: boolean }> {
+  const response = await visionClient.delete(`/v1/vision/models/${encodeURIComponent(name)}`)
+  return response.data
+}
+
 // =============================================================================
 // Review
 // =============================================================================

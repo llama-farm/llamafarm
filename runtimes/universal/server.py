@@ -109,7 +109,7 @@ from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
-from vision_training.trainer import set_trainer_model_loader
+from vision_training.trainer import set_trainer_model_loader, set_trainer_output_dir
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -1208,6 +1208,7 @@ set_model_export_loader(load_detection_model)
 
 # Vision training
 set_trainer_model_loader(load_detection_model)
+set_trainer_output_dir(VISION_MODELS_DIR)
 
 # Anomaly router
 set_anomaly_loader(load_anomaly)

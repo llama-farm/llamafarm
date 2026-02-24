@@ -11,7 +11,7 @@ import {
 } from '../ui/dropdown-menu'
 import { useToast } from '../ui/toast'
 import FontIcon from '../../common/FontIcon'
-import { useVisionModels, useLoadVisionModel, useExportVisionModel } from '../../hooks/useVision'
+import { useVisionModels, useLoadVisionModel, useExportVisionModel, useDeleteVisionModel } from '../../hooks/useVision'
 
 const BUILTIN_MODELS = [
   {
@@ -53,6 +53,7 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
   const { data, isLoading, error } = useVisionModels()
   const loadModel = useLoadVisionModel()
   const exportModel = useExportVisionModel()
+  const deleteModel = useDeleteVisionModel()
   const { toast } = useToast()
 
   const customModels = data?.models ?? []
@@ -65,6 +66,13 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
         onError: (err: Error) => toast({ message: err.message }),
       }
     )
+  }
+
+  const handleDelete = (name: string) => {
+    deleteModel.mutate(name, {
+      onSuccess: () => toast({ message: `Model "${name}" deleted` }),
+      onError: (err: Error) => toast({ message: err.message }),
+    })
   }
 
   const handleExport = (name: string) => {
@@ -185,6 +193,7 @@ export function ModelsPanel({ onNavigateToTrain }: { onNavigateToTrain?: () => v
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleLoad(model.name)}>Load</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleExport(model.name)}>Export</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDelete(model.name)} className="text-destructive">Remove</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

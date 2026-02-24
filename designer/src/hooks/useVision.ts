@@ -204,6 +204,16 @@ export function useExportVisionModel() {
   })
 }
 
+export function useDeleteVisionModel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => visionService.deleteModel(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: visionKeys.modelList() })
+    },
+  })
+}
+
 // =============================================================================
 // Review Mutations
 // =============================================================================

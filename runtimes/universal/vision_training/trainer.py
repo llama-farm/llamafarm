@@ -238,19 +238,23 @@ class IncrementalTrainer:
         return metrics
 
     def _save_versioned_model(self, model_id: str, dataset_path: str) -> str | None:
-        """Save the trained model with version number.
+        """Save the trained model into the vision models directory.
+
+        Creates a subdirectory per model with metadata.json and current.pt,
+        matching the structure expected by the /v1/vision/models list endpoint.
 
         Returns path to saved model, or None if source not found.
         """
-        # Increment version counter
-        version = self._version_counter.get(model_id, 0) + 1
-        self._version_counter[model_id] = version
+        import json
+        import shutil
+        from datetime import UTC, datetime
 
-        # Look for the trained model in the dataset directory
-        # YOLO typically saves to runs/detect/train/weights/best.pt
+        # Look for the trained model output
+        # YOLO saves to runs/detect/train/weights/best.pt (or classify/train/...)
         dataset_dir = Path(dataset_path)
         candidates = [
             dataset_dir / "runs" / "detect" / "train" / "weights" / "best.pt",
+            dataset_dir / "runs" / "classify" / "train" / "weights" / "best.pt",
             dataset_dir / "best.pt",
             dataset_dir / "weights" / "best.pt",
         ]
@@ -265,14 +269,25 @@ class IncrementalTrainer:
             logger.warning(f"No trained model found for {model_id}")
             return None
 
-        # Save to versioned path
-        self._output_dir.mkdir(parents=True, exist_ok=True)
-        dst_path = self._output_dir / f"{model_id}_v{version}.pt"
+        # Save into models dir as {model_id}/current.pt + metadata.json
+        model_dir = self._output_dir / model_id
+        model_dir.mkdir(parents=True, exist_ok=True)
 
-        import shutil
+        dst_path = model_dir / "current.pt"
         shutil.copy2(str(src_path), str(dst_path))
-        logger.info(f"Saved model {model_id} v{version} to {dst_path}")
 
+        # Write metadata
+        job = self._jobs.get(model_id)
+        meta = {
+            "name": model_id,
+            "task": job.task if job else "detection",
+            "base_model": job.base_model if job else None,
+            "dataset": dataset_path,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        (model_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
+
+        logger.info(f"Saved model {model_id} to {dst_path}")
         return str(dst_path)
     
     async def _train_classification(
@@ -347,6 +362,11 @@ def get_trainer() -> IncrementalTrainer:
     if _trainer is None:
         _trainer = IncrementalTrainer()
     return _trainer
+
+
+def set_trainer_output_dir(d: Path | str) -> None:
+    """Set the output directory for trained models."""
+    get_trainer()._output_dir = Path(d)
 
 
 def set_trainer_model_loader(loader: Callable[[str], Any]) -> None:
