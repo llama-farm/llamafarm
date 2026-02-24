@@ -213,6 +213,7 @@ export default {
   saveModel,
   loadModel,
   exportModel,
+  deleteModel,
   getPendingReviews,
   submitReviewDecision,
   getSampleDataStatus,
