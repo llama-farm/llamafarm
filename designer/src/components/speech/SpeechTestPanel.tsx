@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Mic, Send, MicOff, StopCircle, Volume2, AlertCircle, ChevronDown, ChevronRight, Settings2, MessageSquare, HelpCircle } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { SpeechToTextConfig } from './SpeechToTextConfig'
 import { TextToSpeechConfig } from './TextToSpeechConfig'
 import { TurnDetectionSettings } from './TurnDetectionSettings'
@@ -9,9 +9,10 @@ import { ConversationView } from './ConversationView'
 import { TranscriptionOutput } from './TranscriptionOutput'
 import { MicPermissionPrompt } from './MicPermissionPrompt'
 import { Waveform } from './Waveform'
-import { Selector } from '../ui/selector'
-import { Switch } from '../ui/switch'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
+import { Selector } from '@/components/ui/selector'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Textarea } from '@/components/ui/textarea'
 import {
   STT_MODELS,
   TTS_MODELS,
@@ -1596,7 +1597,7 @@ export function SpeechTestPanel({
               {/* Input area at bottom */}
               <div className="flex-shrink-0 p-3 border-t border-border bg-background/60">
                 <div className="flex items-center gap-2">
-                  <textarea
+                  <Textarea
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -1672,7 +1673,7 @@ export function SpeechTestPanel({
                 <>
                   {/* Text input (only for conversation mode, hidden when recording) */}
                   {mode === 'conversation' && (
-                    <textarea
+                    <Textarea
                       ref={inputRef}
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}

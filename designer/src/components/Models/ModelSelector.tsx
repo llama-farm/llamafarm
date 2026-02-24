@@ -3,7 +3,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import FontIcon from '../../common/FontIcon'
 
 interface ModelOption {

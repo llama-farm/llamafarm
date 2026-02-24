@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Copy, Check, Download, Globe, Clock, FileText } from 'lucide-react'
-import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import type { TranscriptionResult } from '../../types/ml'
 
 interface TranscriptionOutputProps {

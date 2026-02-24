@@ -9,15 +9,15 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/toast'
 
 function Versions() {
   const navigate = useNavigate()

@@ -1,7 +1,7 @@
 import { Mic, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { Switch } from '../ui/switch'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface TurnDetectionSettingsProps {
   enabled: boolean

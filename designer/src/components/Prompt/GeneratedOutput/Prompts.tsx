@@ -1,20 +1,20 @@
 import { useMemo, useState } from 'react'
 import FontIcon from '../../../common/FontIcon'
-import { Button } from '../../ui/button'
+import { Button } from '@/components/ui/button'
 import { useActiveProject } from '../../../hooks/useActiveProject'
 import { useProject } from '../../../hooks/useProjects'
 import projectService from '../../../api/projectService'
 import PromptModal, { PromptModalMode } from './PromptModal'
-import { Input } from '../../ui/input'
-import { Label } from '../../ui/label'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../../ui/dialog'
-import { useToast } from '../../ui/toast'
+} from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/toast'
 import {
   parsePromptSets,
   serializePromptSets,
