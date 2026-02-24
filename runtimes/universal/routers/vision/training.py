@@ -17,6 +17,8 @@ class TrainConfigRequest(BaseModel):
     epochs: int = Field(default=10, ge=1, le=1000)
     batch_size: int = Field(default=16, ge=1, le=256)
     learning_rate: float = Field(default=0.001, gt=0.0)
+    imgsz: int = Field(default=640, ge=320, le=2560, description="Training image size (px)")
+    patience: int = Field(default=50, ge=0, le=500, description="Early stopping patience (0=disabled)")
 
 class TrainRequest(BaseModel):
     model: str
@@ -24,6 +26,11 @@ class TrainRequest(BaseModel):
     task: Literal["detection", "classification"]
     config: TrainConfigRequest = Field(default_factory=TrainConfigRequest)
     base_model: str | None = None
+    auto_eval: bool = Field(default=False, description="Run evaluation after training completes")
+    auto_promote: bool = Field(default=False, description="Auto-promote if eval score beats leaderboard best")
+    eval_weights: dict[str, float] | None = Field(
+        None, description="Custom scoring weights for auto-eval (keys: mAP50_95, mAP50, small_object_recall, f1, speed)"
+    )
 
 class TrainResponse(BaseModel):
     job_id: str
@@ -44,16 +51,38 @@ class TrainStatusResponse(BaseModel):
 @router.post("/v1/vision/train", response_model=TrainResponse)
 @handle_endpoint_errors("vision_train")
 async def start_training(request: TrainRequest) -> TrainResponse:
-    """Start a training job."""
+    """Start a training job. Set auto_eval=true to evaluate on completion,
+    auto_promote=true to auto-promote if score beats leaderboard best."""
     trainer = get_trainer()
     config = TrainingConfig(
         epochs=request.config.epochs,
         batch_size=request.config.batch_size,
         learning_rate=request.config.learning_rate,
+        imgsz=request.config.imgsz,
+        patience=request.config.patience,
     )
+
+    # auto_promote implies auto_eval
+    auto_eval = request.auto_eval or request.auto_promote
+
+    # Build completion callback for auto-eval
+    on_complete = None
+    if auto_eval:
+        from .evaluation import auto_eval_after_training
+
+        async def on_complete(model_id: str, model_path: str) -> None:
+            await auto_eval_after_training(
+                model_id=model_id,
+                model_path=model_path,
+                dataset=request.dataset,
+                auto_promote=request.auto_promote,
+                weights=request.eval_weights,
+            )
+
     job = await trainer.start_training(
         model_id=request.model, dataset_path=request.dataset,
         task=request.task, config=config, base_model=request.base_model,
+        on_complete=on_complete,
     )
     return TrainResponse(job_id=job.job_id, status=job.status.value,
                          progress=job.progress, metrics=job.metrics or None)
