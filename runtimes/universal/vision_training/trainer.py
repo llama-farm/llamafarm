@@ -231,13 +231,13 @@ class IncrementalTrainer:
         job.current_epoch = config.epochs
 
         # Save versioned model checkpoint
-        model_path = self._save_versioned_model(job.model_id, job.dataset_path)
+        model_path = self._save_versioned_model(job)
         if model_path:
             metrics["model_path"] = model_path
 
         return metrics
 
-    def _save_versioned_model(self, model_id: str, dataset_path: str) -> str | None:
+    def _save_versioned_model(self, job: TrainingJob) -> str | None:
         """Save the trained model into the vision models directory.
 
         Creates a subdirectory per model with metadata.json and current.pt,
@@ -251,6 +251,8 @@ class IncrementalTrainer:
 
         # Look for the trained model output
         # YOLO saves to runs/detect/train/weights/best.pt (or classify/train/...)
+        model_id = job.model_id
+        dataset_path = job.dataset_path
         dataset_dir = Path(dataset_path)
         candidates = [
             dataset_dir / "runs" / "detect" / "train" / "weights" / "best.pt",
@@ -277,11 +279,10 @@ class IncrementalTrainer:
         shutil.copy2(str(src_path), str(dst_path))
 
         # Write metadata
-        job = self._jobs.get(model_id)
         meta = {
             "name": model_id,
-            "task": job.task if job else "detection",
-            "base_model": job.base_model if job else None,
+            "task": job.task,
+            "base_model": getattr(job, "base_model", None),
             "dataset": dataset_path,
             "created_at": datetime.now(UTC).isoformat(),
         }
