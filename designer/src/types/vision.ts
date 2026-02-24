@@ -42,11 +42,6 @@ export interface ClassifyRequest {
   top_k?: number
 }
 
-export interface ClassScore {
-  class_name: string
-  confidence: number
-}
-
 export interface ClassifyResponse {
   class_name: string
   confidence: number
