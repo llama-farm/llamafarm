@@ -71,12 +71,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Package } from 'lucide-react'
 import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
 import { VisionPanel } from '../Vision/VisionPanel'
 import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
-import { AddonsLink } from '../speech/AddonsLink'
 import { AddonInstallProgress } from '../Addons'
 import { AddonInstallSidePane } from '../Addons'
 
@@ -3252,7 +3251,7 @@ const Models = () => {
             tabs={[
               { id: 'project', label: 'Inference models' },
               { id: 'training', label: 'Trained models' },
-              { id: 'vision', label: <span className="flex items-center gap-1.5">Vision <AddonsLink /></span> },
+              { id: 'vision', label: <span className="flex items-center gap-1.5">Vision <Package className="w-3.5 h-3.5 text-muted-foreground" /></span> },
             ]}
           />
 

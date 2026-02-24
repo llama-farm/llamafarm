@@ -487,7 +487,12 @@ class ReplayBufferPersistence:
                     for od in json.loads(row["opinions_json"] or "[]"):
                         opinions.append(ModelOpinion.from_dict(od))
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    logger.warning(
+                        "Failed to deserialize opinions_json for replay sample id=%r, "
+                        "defaulting to empty opinions list.",
+                        row.get("id") if isinstance(row, dict) else row["id"],
+                        exc_info=True,
+                    )
 
                 try:
                     metadata = json.loads(row["metadata_json"] or "{}")
