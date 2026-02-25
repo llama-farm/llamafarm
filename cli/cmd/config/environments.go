@@ -11,12 +11,19 @@ type DeployConfig struct {
 	// ServerURL is the LlamaFarm server URL for this environment.
 	ServerURL string
 	// DeployModels controls whether model downloads are triggered on deploy.
-	// The generated config type uses a plain bool whose schema default is true,
-	// so we propagate it directly — no pointer indirection needed.
-	DeployModels bool
+	// Pointer: nil means "not set" (defaults to true), non-nil uses the value.
+	DeployModels *bool
 	// DeployData controls whether dataset documents are uploaded and ingested.
 	// Defaults to false if not explicitly set.
 	DeployData bool
+}
+
+// DeployModelsOrDefault returns the DeployModels value, defaulting to true if nil.
+func (dc *DeployConfig) DeployModelsOrDefault() bool {
+	if dc.DeployModels == nil {
+		return true
+	}
+	return *dc.DeployModels
 }
 
 // ResolveEnvironment looks up a named environment from the config and returns
@@ -40,7 +47,7 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 	dc := &DeployConfig{
 		ServerURL:    env.ServerUrl,
 		DeployData:   env.DeployData,
-		DeployModels: env.DeployModels,
+		DeployModels: env.DeployModels, // nil when omitted → defaults to true
 	}
 
 	return dc, nil

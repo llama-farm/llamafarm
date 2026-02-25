@@ -25,6 +25,7 @@ from .types import (
     PLATFORM_TO_GOOS,
     SIZE_ESTIMATES,
     VALID_ACCELERATORS,
+    VALID_ADDONS,
     VALID_ARCHITECTURES,
     VALID_PLATFORMS,
     BundleManifest,
@@ -107,11 +108,9 @@ def validate_request(req: BundleRequest) -> str | None:
         return (
             f"Accelerator '{req.accelerator}' not available on {req.platform}"
         )
-    # Validate addon names — reject path traversal characters
     for addon in req.addons:
-        if not _SAFE_NAME_RE.match(addon):
-            return f"Invalid addon name '{addon}': only alphanumeric, dots, hyphens, and underscores allowed"
-    # Validate version if provided
+        if addon not in VALID_ADDONS:
+            return f"Invalid addon '{addon}'"
     if req.version and not _SAFE_NAME_RE.match(req.version):
         return f"Invalid version string"
     return None
@@ -386,27 +385,29 @@ def list_bundles() -> list[BundleSummary]:
     return sorted(results, key=lambda b: b.created_at, reverse=True)
 
 
-def _safe_bundle_id(bundle_id: str) -> str | None:
-    """Validate bundle_id is a safe filename (alphanumeric + hyphens only)."""
-    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9\-]{0,63}', bundle_id):
-        logger.warning(f"Invalid bundle_id rejected: {bundle_id!r}")
-        return None
-    return bundle_id
+_SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9\-]{0,63}$')
+_SAFE_FILENAME_RE = re.compile(r'^[a-zA-Z0-9._\-]+$')
 
 
 def _safe_bundle_dir(bundle_id: str) -> Path | None:
-    """Resolve a bundle directory, returning None if the ID attempts path traversal."""
-    safe_id = _safe_bundle_id(bundle_id)
-    if safe_id is None:
+    """Resolve a bundle directory, returning None if the ID is invalid.
+
+    Uses regex allowlist + startswith containment check so static analysers
+    (CodeQL) can verify the path is constrained.
+    """
+    if not _SAFE_ID_RE.fullmatch(bundle_id):
+        logger.warning(f"Invalid bundle_id rejected: {bundle_id!r}")
         return None
+
     bundles_dir = _bundles_dir()
-    bundle_dir = bundles_dir / safe_id
-    # Verify resolved path is inside bundles_dir
-    try:
-        bundle_dir.resolve().relative_to(bundles_dir.resolve())
-    except ValueError:
-        logger.warning(f"Path traversal attempt blocked for bundle_id: {bundle_id!r}")
+    bundle_dir = bundles_dir / bundle_id
+    resolved = str(bundle_dir.resolve())
+    safe_prefix = str(bundles_dir.resolve()) + os.sep
+
+    if not resolved.startswith(safe_prefix):
+        logger.warning(f"Path traversal blocked for bundle_id: {bundle_id!r}")
         return None
+
     return bundle_dir
 
 
@@ -415,24 +416,29 @@ def get_bundle_path(bundle_id: str) -> Path | None:
     bundle_dir = _safe_bundle_dir(bundle_id)
     if bundle_dir is None or not bundle_dir.exists():
         return None
+
     manifest_file = bundle_dir / "manifest.json"
     if not manifest_file.exists():
         return None
+
     try:
         data = json.loads(manifest_file.read_text())
-        filename = data.get("filename", "")
-        # Only allow safe filenames (no path separators, no traversal)
-        if not filename or not re.fullmatch(r'[a-zA-Z0-9._\-]+', filename):
-            return None
-        archive = bundle_dir / filename
-        try:
-            archive.resolve().relative_to(bundle_dir.resolve())
-        except ValueError:
-            return None
-        if archive.exists():
-            return archive
     except Exception:
         logger.exception(f"Failed to read manifest for bundle {bundle_id!r}")
+        return None
+
+    filename = data.get("filename", "")
+    if not filename or not _SAFE_FILENAME_RE.fullmatch(filename):
+        return None
+
+    archive = bundle_dir / filename
+    resolved = str(archive.resolve())
+    safe_prefix = str(bundle_dir.resolve()) + os.sep
+    if not resolved.startswith(safe_prefix):
+        return None
+
+    if archive.exists():
+        return archive
     return None
 
 

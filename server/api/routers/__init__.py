@@ -1,7 +1,7 @@
 from .addons import router as addons_router
-from .bundle import router as bundle_router
 from .adtk import adtk_router
 from .audio import audio_router
+from .bundle import router as bundle_router
 from .catboost import catboost_router
 from .datasets import router as datasets_router
 from .drift import drift_router

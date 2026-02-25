@@ -10,17 +10,17 @@ from .types import BundleEstimate, BundleRequest, BundleSummary
 
 logger = FastAPIStructLogger()
 
-router = APIRouter(prefix="/bundle", tags=["bundle"])
+router = APIRouter(tags=["bundle"])
 
 
-@router.get("/version")
+@router.get("/bundle/version")
 async def get_bundle_version():
     """Get the version that will be used for bundling."""
     ver = await service.get_latest_version()
     return {"version": ver}
 
 
-@router.post("", response_class=StreamingResponse)
+@router.post("/bundle", response_class=StreamingResponse)
 async def create_bundle(request: BundleRequest):
     """Create a new bundle. Returns SSE stream of progress events."""
     error = service.validate_request(request)
@@ -38,7 +38,7 @@ async def create_bundle(request: BundleRequest):
     )
 
 
-@router.post("/estimate", response_model=BundleEstimate)
+@router.post("/bundle/estimate", response_model=BundleEstimate)
 def estimate_bundle_size(request: BundleRequest):
     """Estimate bundle size based on configuration."""
     error = service.validate_request(request)
@@ -52,13 +52,13 @@ def estimate_bundle_size(request: BundleRequest):
     )
 
 
-@router.get("s", response_model=list[BundleSummary])
+@router.get("/bundles", response_model=list[BundleSummary])
 def list_bundles():
     """List all completed bundles."""
     return service.list_bundles()
 
 
-@router.get("s/{bundle_id}/download")
+@router.get("/bundles/{bundle_id}/download")
 def download_bundle(bundle_id: str):
     """Download a bundle archive."""
     try:
@@ -76,7 +76,7 @@ def download_bundle(bundle_id: str):
     )
 
 
-@router.delete("s/{bundle_id}")
+@router.delete("/bundles/{bundle_id}")
 def delete_bundle(bundle_id: str):
     """Delete a bundle."""
     try:

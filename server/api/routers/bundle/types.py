@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 VALID_PLATFORMS = ["linux", "darwin", "windows"]
 VALID_ARCHITECTURES = ["x86_64", "arm64"]
 VALID_ACCELERATORS = ["cuda", "rocm", "vulkan", "cpu", "metal"]
+VALID_ADDONS = {"stt", "tts"}
 
 INVALID_COMBOS = {
     ("darwin", "x86_64"),  # macOS Intel not supported
