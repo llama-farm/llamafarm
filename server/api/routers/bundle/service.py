@@ -389,40 +389,31 @@ _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9\-]{0,63}$')
 _SAFE_FILENAME_RE = re.compile(r'^[a-zA-Z0-9._\-]+$')
 
 
-def _safe_bundle_dir(bundle_id: str) -> Path | None:
-    """Resolve a bundle directory, returning None if the ID is invalid.
+def get_bundle_path(bundle_id: str) -> Path | None:
+    """Get the archive path for a bundle.
 
-    Uses regex allowlist + startswith containment check so static analysers
-    (CodeQL) can verify the path is constrained.
+    Sanitisation is inlined so that static analysers (CodeQL) can verify
+    each filesystem access is guarded by a ``startswith`` containment check.
     """
     if not _SAFE_ID_RE.fullmatch(bundle_id):
         logger.warning(f"Invalid bundle_id rejected: {bundle_id!r}")
         return None
 
-    bundles_dir = _bundles_dir()
-    bundle_dir = bundles_dir / bundle_id
-    resolved = str(bundle_dir.resolve())
-    safe_prefix = str(bundles_dir.resolve()) + os.sep
-
-    if not resolved.startswith(safe_prefix):
+    safe_root = os.path.realpath(_bundles_dir())
+    real_dir = os.path.realpath(os.path.join(safe_root, bundle_id))
+    if not real_dir.startswith(safe_root + os.sep):
         logger.warning(f"Path traversal blocked for bundle_id: {bundle_id!r}")
         return None
 
-    return bundle_dir
-
-
-def get_bundle_path(bundle_id: str) -> Path | None:
-    """Get the archive path for a bundle."""
-    bundle_dir = _safe_bundle_dir(bundle_id)
-    if bundle_dir is None or not bundle_dir.exists():
+    if not os.path.isdir(real_dir):
         return None
 
-    manifest_file = bundle_dir / "manifest.json"
-    if not manifest_file.exists():
+    manifest_path = os.path.join(real_dir, "manifest.json")
+    if not os.path.isfile(manifest_path):
         return None
 
     try:
-        data = json.loads(manifest_file.read_text())
+        data = json.loads(Path(manifest_path).read_text())
     except Exception:
         logger.exception(f"Failed to read manifest for bundle {bundle_id!r}")
         return None
@@ -431,23 +422,28 @@ def get_bundle_path(bundle_id: str) -> Path | None:
     if not filename or not _SAFE_FILENAME_RE.fullmatch(filename):
         return None
 
-    archive = bundle_dir / filename
-    resolved = str(archive.resolve())
-    safe_prefix = str(bundle_dir.resolve()) + os.sep
-    if not resolved.startswith(safe_prefix):
+    real_archive = os.path.realpath(os.path.join(real_dir, filename))
+    if not real_archive.startswith(real_dir + os.sep):
         return None
 
-    if archive.exists():
-        return archive
+    if os.path.isfile(real_archive):
+        return Path(real_archive)
     return None
 
 
 def delete_bundle(bundle_id: str) -> bool:
     """Delete a bundle directory. Returns True if deleted."""
-    bundle_dir = _safe_bundle_dir(bundle_id)
-    if bundle_dir is None or not bundle_dir.exists():
+    if not _SAFE_ID_RE.fullmatch(bundle_id):
         return False
-    shutil.rmtree(bundle_dir, ignore_errors=True)
+
+    safe_root = os.path.realpath(_bundles_dir())
+    real_dir = os.path.realpath(os.path.join(safe_root, bundle_id))
+    if not real_dir.startswith(safe_root + os.sep):
+        return False
+
+    if not os.path.isdir(real_dir):
+        return False
+    shutil.rmtree(real_dir, ignore_errors=True)
     return True
 
 

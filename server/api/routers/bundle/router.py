@@ -1,5 +1,7 @@
 """Bundle management API endpoints."""
 
+import os
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -69,10 +71,16 @@ def download_bundle(bundle_id: str):
     if not path:
         raise HTTPException(404, "Bundle not found")
 
+    # Inline containment check so CodeQL can verify the path is safe.
+    safe_root = os.path.realpath(service._bundles_dir())
+    real_path = os.path.realpath(path)
+    if not real_path.startswith(safe_root + os.sep):
+        raise HTTPException(404, "Bundle not found")
+
     return FileResponse(
-        path=str(path),
+        path=real_path,
         media_type="application/gzip",
-        filename=path.name,
+        filename=os.path.basename(real_path),
     )
 
 
