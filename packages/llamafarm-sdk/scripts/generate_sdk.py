@@ -29,7 +29,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Where to write generated files
@@ -173,7 +173,7 @@ def generate_types(spec: dict) -> str:
     lines: list[str] = [
         '"""Auto-generated LlamaFarm SDK types from OpenAPI spec.',
         "",
-        f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         f"Server: {spec.get('info', {}).get('title', 'unknown')}",
         f"Schemas: {len(schemas)}",
         "",
@@ -422,7 +422,7 @@ def generate_methods(spec: dict) -> str:
     out_lines = [
         '"""Auto-generated LlamaFarm SDK method stubs from OpenAPI spec.',
         "",
-        f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         f"Endpoints: {sum(len(v) for v in groups.values())}",
         "",
         "This file is a REFERENCE — not imported directly.",

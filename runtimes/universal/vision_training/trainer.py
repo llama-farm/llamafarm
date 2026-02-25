@@ -238,6 +238,7 @@ class IncrementalTrainer:
                     safe_id != job.model_id
                     or ".." in job.model_id
                     or ":" in job.model_id
+                    or "\\" in job.model_id
                 ):
                     logger.error(f"Invalid model_id for on_complete: {job.model_id}")
                 else:
