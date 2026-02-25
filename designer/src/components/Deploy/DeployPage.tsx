@@ -16,27 +16,23 @@ import type { BundleSummary } from '../../api/bundleService'
 import { formatBytes } from '../../utils/formatBytes'
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  } catch {
-    return iso
-  }
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 function targetLabel(b: BundleSummary): string {
-  const parts = []
-  if (b.platform === 'linux') parts.push('Linux')
-  else if (b.platform === 'darwin') parts.push('Mac')
-  else if (b.platform === 'windows') parts.push('Windows')
-  parts.push('·')
-  parts.push(b.arch)
-  parts.push('·')
-  parts.push(b.accelerator.toUpperCase())
-  return parts.join(' ')
+  const platformNames: Record<string, string> = {
+    linux: 'Linux',
+    darwin: 'Mac',
+    windows: 'Windows',
+  }
+  const platform = platformNames[b.platform] ?? b.platform
+  return `${platform} · ${b.arch} · ${b.accelerator.toUpperCase()}`
 }
 
 const DeployPage = () => {

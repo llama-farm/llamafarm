@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/llamafarm/cli/cmd/orchestrator"
@@ -59,6 +60,9 @@ var archToGoArch = map[string]string{
 	"x86_64": "amd64",
 	"arm64":  "arm64",
 }
+
+// safeNameRe validates addon names and other user-provided path components.
+var safeNameRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 // knownInvalidCombos lists platform/arch combos that don't have release artifacts.
 var knownInvalidCombos = map[string]bool{
@@ -197,6 +201,9 @@ func runBundle(cmd *cobra.Command, args []string) error {
 			addon = strings.TrimSpace(addon)
 			if addon == "" {
 				continue
+			}
+			if !safeNameRe.MatchString(addon) {
+				return fmt.Errorf("invalid addon name %q: only alphanumeric, dots, hyphens, and underscores allowed", addon)
 			}
 			fmt.Printf("  Downloading addon wheels: %s...\n", addon)
 			wheelArchiveName := fmt.Sprintf("%s-wheels-%s.tar.gz", addon, addonPlatform)
@@ -350,7 +357,7 @@ func downloadTorchWheels(accelerator, platform, arch, destDir string) error {
 	// Use pip download to fetch platform-specific wheels
 	pythonPlatform := getPipPlatformTag(platform, arch)
 	args := []string{
-		"pip", "download",
+		"-m", "pip", "download",
 		"torch>=2.0.0",
 		"--only-binary=:all:",
 		"--dest", destDir,
@@ -361,7 +368,7 @@ func downloadTorchWheels(accelerator, platform, arch, destDir string) error {
 		args = append(args, "--index-url", indexURL)
 	}
 
-	cmd := exec.Command("uv", args...)
+	cmd := exec.Command("python3", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

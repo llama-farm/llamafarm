@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -10,22 +11,12 @@ type DeployConfig struct {
 	// ServerURL is the LlamaFarm server URL for this environment.
 	ServerURL string
 	// DeployModels controls whether model downloads are triggered on deploy.
-	// Pointer type so callers can distinguish "not set" (nil → default true)
-	// from "explicitly false". The generated config types use plain bool,
-	// so we treat Go's zero value (false) as "explicitly set to false" here
-	// and rely on the YAML having the field present when the user wants false.
-	DeployModels *bool
+	// The generated config type uses a plain bool whose schema default is true,
+	// so we propagate it directly — no pointer indirection needed.
+	DeployModels bool
 	// DeployData controls whether dataset documents are uploaded and ingested.
 	// Defaults to false if not explicitly set.
 	DeployData bool
-}
-
-// DeployModelsOrDefault returns the DeployModels value, defaulting to true if nil.
-func (dc *DeployConfig) DeployModelsOrDefault() bool {
-	if dc.DeployModels == nil {
-		return true
-	}
-	return *dc.DeployModels
 }
 
 // ResolveEnvironment looks up a named environment from the config and returns
@@ -46,11 +37,10 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 		return nil, fmt.Errorf("environment %q has no server_url configured", name)
 	}
 
-	deployModels := env.DeployModels
 	dc := &DeployConfig{
 		ServerURL:    env.ServerUrl,
 		DeployData:   env.DeployData,
-		DeployModels: &deployModels,
+		DeployModels: env.DeployModels,
 	}
 
 	return dc, nil
@@ -65,6 +55,7 @@ func (c *LlamaFarmConfig) ListEnvironmentNames() []string {
 	for name := range c.Environments {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 

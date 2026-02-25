@@ -152,7 +152,7 @@ func resolveDeployTarget(cfg *config.LlamaFarmConfig, args []string) (targetURL 
 			return "", false, false, "", resolveErr
 		}
 		targetURL = dc.ServerURL
-		deployModels = dc.DeployModelsOrDefault()
+		deployModels = dc.DeployModels
 		deployData = dc.DeployData
 	} else {
 		// Use --server-url flag (which defaults to localhost:14345)
@@ -321,8 +321,9 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 		}
 	}
 
-	// Download models in parallel
+	// Download models in parallel with synchronized stdout writes
 	var wg sync.WaitGroup
+	var printMu sync.Mutex
 	results := make([]modelDeployResult, len(universalModels))
 
 	for i, m := range universalModels {
@@ -333,12 +334,12 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 				Name:  model.Name,
 				Model: model.Model,
 			}
-			err := pullModelFromRemote(baseURL, model.Model, model.Name)
+			status, err := pullModelFromRemote(baseURL, model.Model, model.Name, &printMu)
 			if err != nil {
 				result.Status = "failed"
 				result.Error = err
 			} else {
-				result.Status = "downloaded"
+				result.Status = status
 			}
 			results[idx] = result
 		}(i, m)
@@ -350,7 +351,8 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 }
 
 // pullModelFromRemote triggers a model download on the remote server and streams progress.
-func pullModelFromRemote(baseURL, modelID, displayName string) error {
+// Returns a status string ("downloaded" or "cached") and any error.
+func pullModelFromRemote(baseURL, modelID, displayName string, printMu *sync.Mutex) (string, error) {
 	url := fmt.Sprintf("%s/v1/models/download", baseURL)
 
 	requestBody, err := json.Marshal(map[string]string{
@@ -358,7 +360,7 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 		"model_name": modelID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
@@ -366,23 +368,24 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return "", fmt.Errorf("failed to connect to server: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
 	reader := bufio.NewReader(resp.Body)
 	prefix := fmt.Sprintf("  [%s]", displayName)
+	status := "downloaded"
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -390,7 +393,7 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("error reading response: %w", err)
+			return "", fmt.Errorf("error reading response: %w", err)
 		}
 
 		line = strings.TrimSpace(line)
@@ -411,7 +414,9 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 		switch event.Event {
 		case "init":
 			if event.TotalSize > 0 {
+				printMu.Lock()
 				fmt.Printf("%s %s (%s)\n", prefix, event.ModelID, utils.FormatBytes(event.TotalSize))
+				printMu.Unlock()
 			}
 		case "progress":
 			if event.Total > 1024*1024 {
@@ -419,21 +424,28 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 				if event.BytesPerSec > 0 {
 					rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
 				}
+				printMu.Lock()
 				fmt.Printf("\r%s %.1f%%%s", prefix, event.Percent, rateStr)
 				os.Stdout.Sync()
+				printMu.Unlock()
 			}
 		case "cached":
+			status = "cached"
+			printMu.Lock()
 			fmt.Printf("%s cached\n", prefix)
+			printMu.Unlock()
 		case "end":
+			printMu.Lock()
 			fmt.Printf("\r%s 100%%\n", prefix)
+			printMu.Unlock()
 		case "done":
-			return nil
+			return status, nil
 		case "error":
-			return fmt.Errorf("%s", event.Message)
+			return "", fmt.Errorf("%s", event.Message)
 		}
 	}
 
-	return fmt.Errorf("download incomplete: connection closed before completion")
+	return "", fmt.Errorf("download incomplete: connection closed before completion")
 }
 
 // validateModelDiskSpace checks if the server has enough disk space for a model.

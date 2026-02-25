@@ -42,6 +42,10 @@ _latest_release_cache: dict[str, str | None] = {}
 
 _VERSION_RE = re.compile(r'^v?\d+\.\d+\.\d+')
 
+# Safe name pattern: alphanumeric, dots, hyphens, underscores only.
+# Used to validate any user-provided value that touches filesystem paths.
+_SAFE_NAME_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
+
 
 def _is_valid_version(ver: str) -> bool:
     """Check if a version string looks like a semver release."""
@@ -81,20 +85,6 @@ def _bundles_dir() -> Path:
     return Path(settings.lf_data_dir).resolve() / "bundles"
 
 
-def _safe_bundle_dir(bundle_id: str) -> Path | None:
-    """Return the bundle directory, or None if the id is invalid/traversal."""
-    # Only allow alphanumeric + hyphens (uuid fragments)
-    if not re.match(r'^[a-zA-Z0-9\-]+$', bundle_id):
-        return None
-    bundle_dir = _bundles_dir() / bundle_id
-    # Ensure resolved path is still under bundles dir
-    try:
-        bundle_dir.resolve().relative_to(_bundles_dir().resolve())
-    except ValueError:
-        return None
-    return bundle_dir
-
-
 def _addon_platform_string(platform: str, arch: str) -> str:
     """Get the addon wheel archive platform string."""
     if platform == "darwin":
@@ -117,6 +107,13 @@ def validate_request(req: BundleRequest) -> str | None:
         return (
             f"Accelerator '{req.accelerator}' not available on {req.platform}"
         )
+    # Validate addon names — reject path traversal characters
+    for addon in req.addons:
+        if not _SAFE_NAME_RE.match(addon):
+            return f"Invalid addon name '{addon}': only alphanumeric, dots, hyphens, and underscores allowed"
+    # Validate version if provided
+    if req.version and not _SAFE_NAME_RE.match(req.version):
+        return f"Invalid version string"
     return None
 
 
@@ -203,7 +200,7 @@ def _run_bundle_sync(
                     manifest_data[step_name] = step.get("asset", step_name)
                 except Exception as exc:
                     logger.error(f"Bundle step {step_name} failed: {exc}", exc_info=True)
-                    emit("error", {"message": f"Failed at step '{step_name}'. Check server logs for details."})
+                    emit("error", {"message": "A bundle step failed. Check server logs for details."})
                     return
 
                 emit("progress", {

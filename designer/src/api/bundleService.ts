@@ -84,6 +84,7 @@ export async function createBundleStream(
       }
       const decoder = new TextDecoder()
       let buffer = ''
+      let currentEvent = ''
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -96,7 +97,6 @@ export async function createBundleStream(
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
-        let currentEvent = ''
         for (const line of lines) {
           if (line.startsWith('event: ')) {
             currentEvent = line.slice(7).trim()

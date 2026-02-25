@@ -294,7 +294,11 @@ install_bundle_addons() {
 
         local addon_dir="$addon_install_dir/$addon_name"
         mkdir -p "$addon_dir"
-        tar xzf "$wheel_archive" -C "$addon_dir"
+        # Validate archive contents — reject entries with path traversal
+        if tar tzf "$wheel_archive" | grep -qE '(^|/)\.\.(/|$)'; then
+            error "Archive $wheel_archive contains path traversal entries — aborting"
+        fi
+        tar xzf "$wheel_archive" --strip-components=0 -C "$addon_dir"
 
         success "  Addon $addon_name installed"
     done
@@ -322,8 +326,11 @@ install_from_bundle() {
     temp_dir=$(mktemp -d)
     trap 'rm -rf $temp_dir' EXIT
 
-    # Extract archive
+    # Extract archive (validate no path traversal)
     info "Extracting bundle..."
+    if tar tzf "$archive" | grep -qE '(^|/)\.\.(/|$)'; then
+        error "Archive contains path traversal entries — aborting"
+    fi
     tar xzf "$archive" -C "$temp_dir"
 
     # Read manifest
