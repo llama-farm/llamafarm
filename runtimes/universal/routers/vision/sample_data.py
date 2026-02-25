@@ -34,11 +34,11 @@ def _create_train_val_split(sd: Path, train_ratio: float = 0.8) -> None:
     if train_dir.exists():
         return  # already created
 
-    categories = [d for d in sd.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    categories = [d for d in sd.iterdir() if d.is_dir() and not d.name.startswith(".") and not d.is_symlink()]
     rng = random.Random(42)
 
     for cat in categories:
-        images = sorted(f for f in cat.iterdir() if f.suffix.lower() in IMAGE_EXTS)
+        images = sorted(f for f in cat.iterdir() if f.suffix.lower() in IMAGE_EXTS and not f.is_symlink())
         if not images:
             continue
         rng.shuffle(images)

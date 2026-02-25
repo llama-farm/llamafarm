@@ -252,6 +252,9 @@ class IncrementalTrainer:
         # Look for the trained model output
         # YOLO saves to runs/detect/train/weights/best.pt (or classify/train/...)
         model_id = job.model_id
+        # Validate model_id to prevent path traversal
+        if not model_id or '/' in model_id or '\\' in model_id or model_id in ('.', '..') or '..' in model_id:
+            raise ValueError(f"Invalid model_id: {model_id!r}")
         dataset_path = job.dataset_path
         dataset_dir = Path(dataset_path)
         candidates = [
