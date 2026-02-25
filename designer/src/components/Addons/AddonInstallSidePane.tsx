@@ -1,7 +1,7 @@
 import { X, Package, Zap, HardDrive, Cpu } from 'lucide-react'
 import type { AddonInfo } from '../../types/addons'
 import { useEffect, useState } from 'react'
-import { Checkbox } from '../ui/checkbox'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface AddonInstallSidePaneProps {
   open: boolean

@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import { getFileBasedDemos, type FileBasedDemo } from '../../config/demos'
 import { useDemoWorkflow, DemoStep, ApiCall, ProcessingResult } from '../../hooks/useDemoWorkflow'
 import { CheckCircle2, Loader2, XCircle, ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'

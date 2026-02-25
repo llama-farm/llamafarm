@@ -6,7 +6,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Selector } from '@/components/ui/selector'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Textarea } from '@/components/ui/textarea'
 
 type SubmitPayload = {
   target: 'new' | 'existing'
@@ -87,12 +90,10 @@ function ImportSampleDataModal({
           ) : null}
 
           <div className="flex items-center gap-3">
-            <input
+            <Checkbox
               id="includeStrategies"
-              type="checkbox"
-              className="h-4 w-4"
               checked={includeStrategies}
-              onChange={e => setIncludeStrategies(e.target.checked)}
+              onCheckedChange={(checked) => setIncludeStrategies(checked === true)}
             />
             <label htmlFor="includeStrategies" className="text-sm">
               Include processing strategies with data
@@ -142,7 +143,7 @@ function ImportSampleDataModal({
                 <label className="text-xs text-muted-foreground">
                   Project description
                 </label>
-                <textarea
+                <Textarea
                   className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={description}
                   onChange={e => setDescription(e.target.value)}
@@ -160,18 +161,13 @@ function ImportSampleDataModal({
                   No existing projects available.
                 </div>
               ) : (
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Selector
                   value={existingName}
-                  onChange={e => setExistingName(e.target.value)}
+                  onChange={v => setExistingName(v)}
+                  options={projects.map(name => ({ value: name, label: name }))}
                   disabled={projects.length === 0}
-                >
-                  {projects.map(name => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select a project"
+                />
               )}
             </div>
           )}

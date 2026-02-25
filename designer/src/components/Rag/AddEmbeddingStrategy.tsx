@@ -1,25 +1,26 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import FontIcon from '../../common/FontIcon'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dropdown-menu'
+import { useToast } from '@/components/ui/toast'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
 import { getClientSideSecret } from '../../utils/crypto'
 import { validateStrategyName } from '../../utils/security'
@@ -1805,11 +1806,10 @@ function AddEmbeddingStrategy() {
                     ) : null}
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-xs">
-                    <input
+                    <Checkbox
                       id="make-default"
-                      type="checkbox"
                       checked={makeDefault}
-                      onChange={e => setMakeDefault(e.target.checked)}
+                      onCheckedChange={(checked) => setMakeDefault(checked === true)}
                     />
                     <label htmlFor="make-default">Make default strategy</label>
                   </div>

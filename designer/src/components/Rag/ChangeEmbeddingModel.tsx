@@ -7,27 +7,28 @@ import {
 } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import FontIcon from '../../common/FontIcon'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Badge } from '../ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
-import { useToast } from '../ui/toast'
-import { Label } from '../ui/label'
+import { useToast } from '@/components/ui/toast'
+import { Label } from '@/components/ui/label'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import { getClientSideSecret } from '../../utils/crypto'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
@@ -1301,10 +1302,9 @@ function ChangeEmbeddingModel() {
               </div>
               {!isDefaultStrategy && (
                 <label className="text-xs flex items-center gap-2 select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={makeDefault}
-                    onChange={e => setMakeDefault(e.target.checked)}
+                    onCheckedChange={(checked) => setMakeDefault(checked === true)}
                   />
                   Make default
                 </label>
@@ -1451,10 +1451,9 @@ function ChangeEmbeddingModel() {
             {!isDefaultStrategy && (
               <div className="flex items-center gap-2">
                 <label className="text-xs flex items-center gap-2 select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={makeDefault}
-                    onChange={e => setMakeDefault(e.target.checked)}
+                    onCheckedChange={(checked) => setMakeDefault(checked === true)}
                   />
                   Make default strategy
                 </label>

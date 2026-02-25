@@ -19,7 +19,7 @@ import {
   RestartOnboardingBanner,
   CollapsedChecklist,
 } from '../Onboarding'
-import { useToast } from '../ui/toast'
+import { useToast } from '@/components/ui/toast'
 import { getDemoById, isModelBasedDemo, isFileBasedDemo, type FileBasedDemo } from '../../config/demos'
 import { CLASSIFIER_SAMPLE_DATASETS, ANOMALY_SAMPLE_DATASETS } from '../Models/sampleDatasets'
 import { parseNumericTrainingData } from '../../types/ml'

@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, HTTPException
 from server.services.vision import VisionPipelineService
 
 logger = logging.getLogger(__name__)
@@ -11,8 +11,48 @@ router = APIRouter(prefix="/vision", tags=["vision-pipeline"])
 
 
 # =============================================================================
+# Detect + Classify (combo endpoint)
+# =============================================================================
+
+@router.post("/detect_classify")
+async def detect_classify(
+    image: str = Form(..., description="Base64-encoded image"),
+    detection_model: str = Form(default="yolov8n"),
+    classification_model: str = Form(default="clip-vit-base"),
+    classes: str = Form(..., description="Comma-separated classification classes"),
+    confidence_threshold: float = Form(default=0.5),
+    detection_classes: str | None = Form(default=None),
+    top_k: int = Form(default=3),
+) -> dict[str, Any]:
+    """Detect objects then classify each crop — single round-trip."""
+    if not detection_model or not detection_model.strip():
+        raise HTTPException(status_code=422, detail="detection_model must not be empty")
+    if not classification_model or not classification_model.strip():
+        raise HTTPException(status_code=422, detail="classification_model must not be empty")
+    cls_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not cls_list:
+        raise HTTPException(status_code=422, detail="classes must contain at least one non-empty value")
+    det_cls = [c.strip() for c in detection_classes.split(",") if c.strip()] if detection_classes else None
+    return await VisionPipelineService.detect_classify({
+        "image": image,
+        "detection_model": detection_model,
+        "classification_model": classification_model,
+        "classes": cls_list,
+        "confidence_threshold": confidence_threshold,
+        "detection_classes": det_cls,
+        "top_k": top_k,
+    })
+
+
+# =============================================================================
 # Streaming
 # =============================================================================
+
+@router.get("/stream/sessions")
+async def stream_sessions() -> dict[str, Any]:
+    """List active streaming sessions."""
+    return await VisionPipelineService.stream_sessions()
+
 
 @router.post("/stream/start")
 async def stream_start(

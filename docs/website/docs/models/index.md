@@ -586,15 +586,19 @@ Beyond text generation, the Universal Runtime provides specialized ML capabiliti
 
 See the detailed guides:
 - [Specialized ML Models](./specialized-ml.md) - OCR, document extraction, classification, NER, reranking
+- [Vision Pipeline](./vision.md) - YOLO object detection, CLIP classification, cascade streaming, training, ONNX export
 - [Anomaly Detection Guide](./anomaly-detection.md) - Batch anomaly detection for training and scoring
 - [Streaming Anomaly Detection](./streaming-anomaly-detection.md) - Real-time streaming with auto-retraining
+- [ML Addons](./ml-addons.md) - Time-series forecasting (Chronos, ARIMA), ADTK anomaly detection, data drift monitoring, CatBoost, SHAP explainability
 - [Polars Buffer API](./polars-buffers.md) - High-performance data buffers for feature engineering
 
 ## Next Steps
 
 - [Specialized ML Models](./specialized-ml.md) – OCR, document extraction, and more.
+- [Vision Pipeline](./vision.md) – object detection, classification, and streaming.
 - [Anomaly Detection](./anomaly-detection.md) – detect outliers in your data.
 - [Streaming Anomaly Detection](./streaming-anomaly-detection.md) – real-time streaming detection.
+- [ML Addons](./ml-addons.md) – time-series forecasting, drift detection, CatBoost, SHAP.
 - [Polars Buffer API](./polars-buffers.md) – direct access to Polars data buffers.
 - [Configuration Guide](../configuration/index.md) – runtime schema details.
 - [Extending runtimes](../extending/index.md#extend-runtimes) – step-by-step provider integration.
