@@ -274,8 +274,13 @@ class IncrementalTrainer:
             logger.warning(f"No trained model found for {model_id}")
             return None
 
-        # Save into models dir as {model_id}/current.pt + metadata.json
-        model_dir = self._output_dir / model_id
+        # Validate model_id is a safe basename (no path separators, no .., no drive letters)
+        safe_id = Path(model_id).name
+        if not safe_id or safe_id != model_id or ":" in model_id:
+            raise ValueError(f"Invalid model_id: {model_id!r}")
+        model_dir = self._output_dir / safe_id
+        if not model_dir.resolve().is_relative_to(self._output_dir.resolve()):
+            raise ValueError(f"Invalid model_id: {model_id!r}")
         model_dir.mkdir(parents=True, exist_ok=True)
 
         dst_path = model_dir / "current.pt"
