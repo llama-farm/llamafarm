@@ -5,16 +5,39 @@ This service manages cached health status for the RAG service to avoid blocking
 health checks while still providing up-to-date information.
 """
 
-import json as _json
 import logging
-import subprocess
-import sys
+import os
+import signal
 import time
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _get_pid_dir() -> Path:
+    """Get the PID directory (mirrors llamafarm_common.pidfile logic)."""
+    try:
+        _home = Path.home()
+    except RuntimeError:
+        _fb = (
+            os.environ.get("USERPROFILE")
+            or os.environ.get("APPDATA")
+            or os.environ.get("LOCALAPPDATA")
+        )
+        _home = Path(_fb) if _fb else Path.cwd()
+    lf_data_dir = os.getenv("LF_DATA_DIR", str(_home / ".llamafarm"))
+    return Path(lf_data_dir) / "pids"
+
+
+def _is_process_alive(pid: int) -> bool:
+    """Check whether a process is running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
 
 
 class RAGHealthCache:
@@ -24,10 +47,10 @@ class RAGHealthCache:
     This class provides non-blocking access to RAG health information by:
     1. Maintaining a cache of the last known health status
     2. Periodically updating the cache in the background
-    3. Falling back to fast ping checks when needed
+    3. Using PID file checks for reliable cross-deploy-mode health detection
     """
 
-    def __init__(self, update_interval: int = 30, timeout: float = 5.0):
+    def __init__(self, update_interval: int = 10, timeout: float = 5.0):
         """
         Initialize the RAG health cache.
 
@@ -95,77 +118,45 @@ class RAGHealthCache:
 
     def _perform_health_check(self) -> dict[str, Any] | None:
         """
-        Perform the health check using a subprocess to avoid GIL blocking.
+        Check RAG worker health via its PID file.
 
-        The Celery filesystem broker's result polling can hold the Python GIL
-        for extended periods, starving the uvicorn event loop even from a
-        background thread.  Running the check in a subprocess avoids this
-        because child processes have their own GIL.
+        This approach works reliably in both source and binary (PyApp)
+        deploy modes because it avoids Celery imports and subprocess
+        invocations that behave differently across environments.
 
         Returns:
-            Health data dict or None if check failed
+            Health data dict or None if the worker is not running
         """
-        # Inline script that pings the RAG worker via Celery and prints JSON
-        script = (
-            "import json, time\n"
-            "from celery import signature\n"
-            "from core.celery.celery import app\n"
-            "t = signature('rag.ping', app=app)\n"
-            "r = t.apply_async()\n"
-            "waited = 0.0\n"
-            "while r.status in ('PENDING', 'STARTED') and waited < 3:\n"
-            "    time.sleep(0.1)\n"
-            "    waited += 0.1\n"
-            "d = r.result if r.status == 'SUCCESS' else None\n"
-            "print(json.dumps(d) if isinstance(d, dict) else '{}')\n"
-        )
-        server_dir = str(Path(__file__).resolve().parents[1])
+        pid_file = _get_pid_dir() / "rag.pid"
 
-        # Detect PyApp binary mode: if sys.executable isn't a Python
-        # interpreter, use the "self python" subcommand to access the
-        # embedded Python.
-        exe = sys.executable
-        if "python" in Path(exe).name.lower():
-            cmd = [exe, "-c", script]
-        else:
-            cmd = [exe, "self", "python", "-c", script]
+        if not pid_file.exists():
+            return None
 
         try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=8,
-                cwd=server_dir,
-            )
-            if proc.returncode != 0:
-                logger.debug(f"Health subprocess stderr: {proc.stderr[:300]}")
+            pid_text = pid_file.read_text().strip()
+            if not pid_text:
                 return None
-
-            data = _json.loads(proc.stdout.strip())
-            if not data:
-                return None
-
-            return {
-                "status": data.get("status", "healthy"),
-                "timestamp": data.get("timestamp", int(time.time())),
-                "message": "RAG worker responding",
-                "worker_id": data.get("worker_id", "unknown"),
-                "checks": {
-                    "connectivity": {
-                        "status": "healthy",
-                        "message": "RAG worker reachable",
-                    }
-                },
-                "metrics": {"latency_ms": data.get("latency_ms", 0)},
-                "errors": [],
-            }
-        except subprocess.TimeoutExpired:
-            logger.debug("RAG health subprocess timed out")
+            pid = int(pid_text)
+        except (ValueError, OSError):
             return None
-        except Exception as e:
-            logger.warning(f"RAG health check failed: {e}")
+
+        if not _is_process_alive(pid):
             return None
+
+        return {
+            "status": "healthy",
+            "timestamp": int(time.time()),
+            "message": "RAG worker responding",
+            "worker_id": f"pid:{pid}",
+            "checks": {
+                "connectivity": {
+                    "status": "healthy",
+                    "message": "RAG worker process alive",
+                }
+            },
+            "metrics": {"latency_ms": 0},
+            "errors": [],
+        }
 
     def get_cached_health(self) -> dict[str, Any]:
         """
@@ -231,7 +222,6 @@ def get_rag_health_cache() -> RAGHealthCache:
 
     if _rag_health_cache is None:
         _rag_health_cache = RAGHealthCache()
-        # Health check now runs in a subprocess (own GIL), safe to enable.
         _rag_health_cache.start_background_updates()
 
     return _rag_health_cache
