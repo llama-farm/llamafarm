@@ -54,25 +54,25 @@ func loadConfigFile(filePath string) (*LlamaFarmConfig, error) {
 
 	fileExt := strings.ToLower(filepath.Ext(filePath))
 
-	// Store raw data for secondary parsing (e.g., detecting explicit bool values)
-	SetRawConfigData(data)
-
 	var config LlamaFarmConfig
 	switch strings.ToLower(fileExt) {
 	case ".yaml", ".yml":
 		if err := yaml.Unmarshal(data, &config); err != nil {
 			return nil, fmt.Errorf("failed to parse YAML config file %s: %w", filePath, err)
 		}
+		SetRawConfigData(data, "yaml")
 	case ".toml":
 		// TOML support temporarily disabled due to dependency issues
 		// For now, skip TOML files and let YAML/JSON take precedence
 		if err := toml.Unmarshal(data, &config); err != nil {
 			return nil, fmt.Errorf("failed to parse TOML config file %s: %w", filePath, err)
 		}
+		SetRawConfigData(data, "toml")
 	case ".json":
 		if err := json.Unmarshal(data, &config); err != nil {
 			return nil, fmt.Errorf("failed to parse JSON config file %s: %w", filePath, err)
 		}
+		SetRawConfigData(data, "json")
 	default:
 		return nil, fmt.Errorf("unsupported config file extension: %s", fileExt)
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -63,20 +64,33 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 // This allows us to detect explicitly-set fields that the generated types can't distinguish.
 var rawConfigData []byte
 
-// SetRawConfigData stores the raw config bytes for use in environment resolution.
-func SetRawConfigData(data []byte) {
+// rawConfigFormat holds the format of the raw config data ("yaml", "json", or "toml").
+var rawConfigFormat string
+
+// SetRawConfigData stores the raw config bytes and format for use in environment resolution.
+func SetRawConfigData(data []byte, format string) {
 	rawConfigData = data
+	rawConfigFormat = format
 }
 
-// envFieldExplicitlySet checks if a boolean field was explicitly set in the raw YAML
+// envFieldExplicitlySet checks if a boolean field was explicitly set in the raw config
 // for a given environment. Returns (true, value) if the field exists, (false, false) otherwise.
 func envFieldExplicitlySet(data []byte, envName, field string) (bool, bool) {
 	var raw struct {
-		Environments map[string]map[string]interface{} `yaml:"environments"`
+		Environments map[string]map[string]interface{} `yaml:"environments" json:"environments"`
 	}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
+
+	var err error
+	switch rawConfigFormat {
+	case "json":
+		err = json.Unmarshal(data, &raw)
+	default: // yaml, toml (toml uses same key names)
+		err = yaml.Unmarshal(data, &raw)
+	}
+	if err != nil {
 		return false, false
 	}
+
 	env, ok := raw.Environments[envName]
 	if !ok {
 		return false, false

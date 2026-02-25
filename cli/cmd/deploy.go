@@ -360,8 +360,22 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 
 	wg.Wait()
 
+	// Check if any models failed
+	var failedNames []string
+	for _, r := range results {
+		if r.Status == "failed" {
+			failedNames = append(failedNames, r.Name)
+		}
+	}
+	if len(failedNames) == len(results) {
+		return results, fmt.Errorf("all model downloads failed")
+	}
+
 	return results, nil
 }
+
+// progressMu serializes terminal progress output across concurrent model downloads.
+var progressMu sync.Mutex
 
 // pullModelFromRemote triggers a model download on the remote server and streams progress.
 // Returns the status ("downloaded" or "cached") and any error.
@@ -427,7 +441,9 @@ func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
 		switch event.Event {
 		case "init":
 			if event.TotalSize > 0 {
+				progressMu.Lock()
 				fmt.Printf("%s %s (%s)\n", prefix, event.ModelID, utils.FormatBytes(event.TotalSize))
+				progressMu.Unlock()
 			}
 		case "progress":
 			if event.Total > 1024*1024 {
@@ -435,14 +451,20 @@ func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
 				if event.BytesPerSec > 0 {
 					rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
 				}
+				progressMu.Lock()
 				fmt.Printf("\r%s %.1f%%%s", prefix, event.Percent, rateStr)
 				os.Stdout.Sync()
+				progressMu.Unlock()
 			}
 		case "cached":
+			progressMu.Lock()
 			fmt.Printf("%s cached\n", prefix)
+			progressMu.Unlock()
 			status = "cached"
 		case "end":
+			progressMu.Lock()
 			fmt.Printf("\r%s 100%%\n", prefix)
+			progressMu.Unlock()
 		case "done":
 			return status, nil
 		case "error":
