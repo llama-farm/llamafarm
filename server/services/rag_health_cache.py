@@ -121,9 +121,18 @@ class RAGHealthCache:
         )
         server_dir = str(Path(__file__).resolve().parents[1])
 
+        # Detect PyApp binary mode: if sys.executable isn't a Python
+        # interpreter, use the "self python" subcommand to access the
+        # embedded Python.
+        exe = sys.executable
+        if "python" in Path(exe).name.lower():
+            cmd = [exe, "-c", script]
+        else:
+            cmd = [exe, "self", "python", "-c", script]
+
         try:
             proc = subprocess.run(
-                [sys.executable, "-c", script],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=8,
