@@ -63,7 +63,8 @@ var archToGoArch = map[string]string{
 
 // knownInvalidCombos lists platform/arch combos that don't have release artifacts.
 var knownInvalidCombos = map[string]bool{
-	"darwin-x86_64": true, // macOS Intel not supported
+	"darwin-x86_64":  true, // macOS Intel not supported
+	"windows-arm64":  true, // No Windows ARM64 builds
 }
 
 var bundleCmd = &cobra.Command{
@@ -274,7 +275,9 @@ func runBundle(cmd *cobra.Command, args []string) error {
 				if err != nil {
 					utils.LogDebug(fmt.Sprintf("warning: could not read addon registry file %s: %v", registryFile, err))
 				} else {
-					os.WriteFile(filepath.Join(registryDir, addon+".yaml"), data, 0644)
+					if err := os.WriteFile(filepath.Join(registryDir, addon+".yaml"), data, 0644); err != nil {
+						return fmt.Errorf("failed to write addon registry file for %s: %w", addon, err)
+					}
 				}
 			}
 		}
@@ -456,6 +459,9 @@ func getPipPlatformTag(platform, arch string) string {
 	case "darwin":
 		return "macosx_14_0_arm64"
 	case "windows":
+		if arch == "arm64" {
+			return "win_arm64"
+		}
 		return "win_amd64"
 	default:
 		return "manylinux2014_x86_64"

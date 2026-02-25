@@ -164,7 +164,7 @@ func resolveDeployTarget(cfg *config.LlamaFarmConfig, args []string) (targetURL 
 
 // healthCheck verifies the target server is reachable.
 func healthCheck(targetURL string) error {
-	url := fmt.Sprintf("%s/health/liveness", strings.TrimSuffix(targetURL, "/"))
+	url := fmt.Sprintf("%s/health", strings.TrimSuffix(targetURL, "/"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -281,7 +281,8 @@ func createProject(baseURL, namespace, project string) error {
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create project (status %d): %s", resp.StatusCode, string(bodyBytes))
+		utils.LogDebug(fmt.Sprintf("create project response body: %s", string(bodyBytes)))
+		return fmt.Errorf("failed to create project (server returned status %d)", resp.StatusCode)
 	}
 
 	return nil
@@ -315,9 +316,22 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 	fmt.Printf("\nDownloading %d model(s)...\n", len(universalModels))
 
 	// Pre-check disk space for each model
+	var diskWarnings []string
 	for _, m := range universalModels {
 		if err := validateModelDiskSpace(baseURL, m.Model); err != nil {
-			fmt.Printf("  Warning: %s - %v\n", m.Model, err)
+			diskWarnings = append(diskWarnings, fmt.Sprintf("  %s: %v", m.Model, err))
+		}
+	}
+	if len(diskWarnings) > 0 {
+		fmt.Println("  Disk space warnings:")
+		for _, w := range diskWarnings {
+			fmt.Println(w)
+		}
+		fmt.Print("  Continue anyway? [y/N] ")
+		var answer string
+		fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" {
+			return nil, fmt.Errorf("aborted by user due to disk space warnings")
 		}
 	}
 
@@ -333,12 +347,12 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 				Name:  model.Name,
 				Model: model.Model,
 			}
-			err := pullModelFromRemote(baseURL, model.Model, model.Name)
+			status, err := pullModelFromRemote(baseURL, model.Model, model.Name)
 			if err != nil {
 				result.Status = "failed"
 				result.Error = err
 			} else {
-				result.Status = "downloaded"
+				result.Status = status
 			}
 			results[idx] = result
 		}(i, m)
@@ -350,7 +364,8 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 }
 
 // pullModelFromRemote triggers a model download on the remote server and streams progress.
-func pullModelFromRemote(baseURL, modelID, displayName string) error {
+// Returns the status ("downloaded" or "cached") and any error.
+func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
 	url := fmt.Sprintf("%s/v1/models/download", baseURL)
 
 	requestBody, err := json.Marshal(map[string]string{
@@ -358,7 +373,7 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 		"model_name": modelID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
@@ -366,23 +381,24 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return "", fmt.Errorf("failed to connect to server: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
 	reader := bufio.NewReader(resp.Body)
 	prefix := fmt.Sprintf("  [%s]", displayName)
+	status := "downloaded"
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -390,7 +406,7 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("error reading response: %w", err)
+			return "", fmt.Errorf("error reading response: %w", err)
 		}
 
 		line = strings.TrimSpace(line)
@@ -424,16 +440,17 @@ func pullModelFromRemote(baseURL, modelID, displayName string) error {
 			}
 		case "cached":
 			fmt.Printf("%s cached\n", prefix)
+			status = "cached"
 		case "end":
 			fmt.Printf("\r%s 100%%\n", prefix)
 		case "done":
-			return nil
+			return status, nil
 		case "error":
-			return fmt.Errorf("%s", event.Message)
+			return "", fmt.Errorf("%s", event.Message)
 		}
 	}
 
-	return fmt.Errorf("download incomplete: connection closed before completion")
+	return "", fmt.Errorf("download incomplete: connection closed before completion")
 }
 
 // validateModelDiskSpace checks if the server has enough disk space for a model.
@@ -480,7 +497,7 @@ func validateModelDiskSpace(baseURL, modelID string) error {
 // printDryRun displays what would happen during deploy without executing.
 func printDryRun(cfg *config.LlamaFarmConfig, targetURL string, projectInfo *config.ProjectInfo, deployModels, deployData bool) error {
 	fmt.Println("\n[DRY RUN] Actions that would be taken:")
-	fmt.Printf("  1. Health check: GET %s/health/liveness\n", targetURL)
+	fmt.Printf("  1. Health check: GET %s/health\n", targetURL)
 	fmt.Printf("  2. Push config: PUT /v1/projects/%s/%s (or create if not found)\n", projectInfo.Namespace, projectInfo.Project)
 
 	if deployModels && cfg.Runtime.Models != nil {

@@ -77,7 +77,7 @@ check_dependencies() {
     fi
 }
 
-# Download file
+# Download file (fatal on failure)
 download_file() {
     local url="$1"
     local output="$2"
@@ -89,6 +89,19 @@ download_file() {
     elif command_exists wget; then
         wget -O "$output" "$url" || error "Failed to download with wget"
     fi
+}
+
+# Download file (non-fatal, returns 1 on failure)
+try_download_file() {
+    local url="$1"
+    local output="$2"
+
+    if command_exists curl; then
+        curl -f -sL -o "$output" "$url" 2>/dev/null && return 0
+    elif command_exists wget; then
+        wget -q -O "$output" "$url" 2>/dev/null && return 0
+    fi
+    return 1
 }
 
 # Get latest release version
@@ -194,7 +207,7 @@ install_cli() {
         local pyapp_dest="$bin_dir/llamafarm-${component}"
 
         info "  Downloading $component..."
-        if download_file "$pyapp_url" "$temp_dir/$pyapp_name" 2>/dev/null; then
+        if try_download_file "$pyapp_url" "$temp_dir/$pyapp_name"; then
             cp "$temp_dir/$pyapp_name" "$pyapp_dest"
             chmod +x "$pyapp_dest"
         else
