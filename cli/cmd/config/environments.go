@@ -2,7 +2,10 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DeployConfig holds the resolved deploy settings for a target environment.
@@ -43,23 +46,49 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 		DeployModels: true, // schema default
 	}
 
-	// The generated type uses bool with omitempty. When YAML has deploy_models: false,
-	// it deserializes as false. When deploy_models is absent, it's also false (Go zero value).
-	// We can't distinguish these cases with the generated type, so we always default to true
-	// and let the explicit false override via the YAML field.
-	//
-	// In practice this means: if a user wants deploy_models: false, they must set it
-	// explicitly in the YAML. Omitting it means true. This matches the schema default.
-	if env.DeployModels {
+	// The generated type uses bool (not *bool), so we can't distinguish "absent" from
+	// "explicitly false". Use the raw config data to check if deploy_models was set.
+	if rawConfigData != nil {
+		if explicitly, val := envFieldExplicitlySet(rawConfigData, name, "deploy_models"); explicitly {
+			dc.DeployModels = val
+		}
+	} else if env.DeployModels {
 		dc.DeployModels = true
 	}
-	// Note: if the user explicitly sets deploy_models: false in YAML, env.DeployModels
-	// will be false, and dc.DeployModels stays true (the default). This is a known
-	// limitation. To properly support deploy_models: false, we'd need *bool in the
-	// generated types or a custom unmarshaler.
-	// TODO: Consider using raw YAML parsing to detect explicit false values.
 
 	return dc, nil
+}
+
+// rawConfigData holds the raw bytes of the loaded config file for secondary parsing.
+// This allows us to detect explicitly-set fields that the generated types can't distinguish.
+var rawConfigData []byte
+
+// SetRawConfigData stores the raw config bytes for use in environment resolution.
+func SetRawConfigData(data []byte) {
+	rawConfigData = data
+}
+
+// envFieldExplicitlySet checks if a boolean field was explicitly set in the raw YAML
+// for a given environment. Returns (true, value) if the field exists, (false, false) otherwise.
+func envFieldExplicitlySet(data []byte, envName, field string) (bool, bool) {
+	var raw struct {
+		Environments map[string]map[string]interface{} `yaml:"environments"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return false, false
+	}
+	env, ok := raw.Environments[envName]
+	if !ok {
+		return false, false
+	}
+	val, ok := env[field]
+	if !ok {
+		return false, false
+	}
+	if b, ok := val.(bool); ok {
+		return true, b
+	}
+	return false, false
 }
 
 // ListEnvironmentNames returns a sorted list of configured environment names.
@@ -71,6 +100,7 @@ func (c *LlamaFarmConfig) ListEnvironmentNames() []string {
 	for name := range c.Environments {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 

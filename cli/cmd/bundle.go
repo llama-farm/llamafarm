@@ -313,7 +313,10 @@ func runBundle(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print summary
-	fi, _ := os.Stat(bundleFlags.output)
+	fi, err := os.Stat(bundleFlags.output)
+	if err != nil {
+		return fmt.Errorf("failed to stat output archive: %w", err)
+	}
 	sizeMB := float64(fi.Size()) / (1024 * 1024)
 	fmt.Printf("\nBundle created: %s (%.1f MB)\n", bundleFlags.output, sizeMB)
 	fmt.Printf("  Version:     %s\n", ver)
@@ -565,7 +568,7 @@ func createTarGz(outputPath, sourceDir string) error {
 		if err != nil {
 			return err
 		}
-		header.Name = relPath
+		header.Name = filepath.ToSlash(relPath)
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err

@@ -54,6 +54,9 @@ func loadConfigFile(filePath string) (*LlamaFarmConfig, error) {
 
 	fileExt := strings.ToLower(filepath.Ext(filePath))
 
+	// Store raw data for secondary parsing (e.g., detecting explicit bool values)
+	SetRawConfigData(data)
+
 	var config LlamaFarmConfig
 	switch strings.ToLower(fileExt) {
 	case ".yaml", ".yml":
