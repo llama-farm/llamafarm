@@ -64,10 +64,16 @@ class CreateProjectRequest(BaseModel):
     config_template: str | None = Field(
         None, description="The config template to use for the project"
     )
+    auto_preload: bool = Field(
+        False, description="If True, automatically preload models after creation"
+    )
 
 
 class CreateProjectResponse(BaseModel):
     project: Project = Field(..., description="The created project")
+    preload_result: dict | None = Field(
+        None, description="Preload results if auto_preload was True"
+    )
 
 
 class GetProjectResponse(BaseModel):
@@ -102,6 +108,25 @@ class ListModelsResponse(BaseModel):
 
     total: int = Field(..., description="Total number of models")
     models: list[ModelResponse] = Field(..., description="List of models")
+
+
+class ProjectPreloadResponse(BaseModel):
+    """Response from project preload operation."""
+
+    status: str = Field(
+        ..., description="Overall status: success, partial, failed, or skipped"
+    )
+    results: dict[str, dict] = Field(..., description="Per-model results")
+    summary: dict = Field(..., description="Aggregate statistics")
+    resources: dict | None = Field(None, description="Resource information")
+
+
+class ProjectHealthResponse(BaseModel):
+    """Response from project health check."""
+
+    project: dict = Field(..., description="Project information")
+    models: dict = Field(..., description="Model preload status")
+    resources: dict = Field(..., description="System resources")
 
 
 router = APIRouter(
@@ -161,16 +186,217 @@ async def list_projects(
     },
 )
 async def create_project(namespace: str, request: CreateProjectRequest):
-    cfg = ProjectService.create_project(
-        namespace, request.name, request.config_template
-    )
-    return CreateProjectResponse(
-        project=Project(
+    try:
+        # Updated to handle tuple return and auto_preload parameter
+        cfg, preload_result = await ProjectService.create_project(
+            namespace,
+            request.name,
+            request.config_template,
+            auto_preload=request.auto_preload,
+        )
+
+        return CreateProjectResponse(
+            project=Project(
+                namespace=namespace,
+                name=request.name,
+                config=cfg,
+            ),
+            preload_result=preload_result,
+        )
+    except Exception as e:
+        from core.logging import FastAPIStructLogger
+
+        logger = FastAPIStructLogger()
+        logger.error(
+            "Failed to create project",
             namespace=namespace,
-            name=request.name,
-            config=cfg,
-        ),
+            project_name=request.name,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create project: {str(e)}",
+        ) from e
+
+
+# endpoint for manual preload
+@router.post(
+    "/{namespace}/{project_id}/preload",
+    operation_id="project_preload",
+    summary="Preload models for a project",
+    tags=["projects", "models"],
+    response_model=ProjectPreloadResponse,
+    responses={
+        200: {"model": ProjectPreloadResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def preload_project_models(
+    namespace: str,
+    project_id: str,
+) -> ProjectPreloadResponse:
+    """Trigger model preloading for a project.
+
+    This endpoint triggers model preloading for all models in the project's
+    config that have `preload: true`. This is useful for:
+    - Warming up models after project creation
+    - Reloading models after config changes
+    - Ensuring models are ready before heavy workloads
+
+    **Example**: `POST /v1/projects/default/my-chatbot/preload`
+
+    **Response**:
+    ```json
+    {
+        "status": "success",
+        "results": {
+            "fast": {
+                "status": "loaded",
+                "pinned": true,
+                "load_time_seconds": 8.45
+            }
+        },
+        "summary": {
+            "loaded": 1,
+            "failed": 0,
+            "total_time_seconds": 8.52,
+            "concurrency_used": 3
+        },
+        "resources": {
+            "device": "cuda",
+            "cpu_count": 16,
+            "available_ram_gb": 28.4
+        }
+    }
+    ```
+    """
+    from core.logging import FastAPIStructLogger
+
+    logger = FastAPIStructLogger()
+    logger.info(
+        "Preloading models for project",
+        namespace=namespace,
+        project=project_id,
     )
+
+    try:
+        result = await ProjectService.preload_project_models(
+            namespace=namespace,
+            project_id=project_id,
+            force=False,
+        )
+
+        return ProjectPreloadResponse(
+            status=result.get("status", "unknown"),
+            results=result.get("results", {}),
+            summary=result.get("summary", {}),
+            resources=result.get("resources"),
+        )
+
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error(
+            "Failed to preload project models",
+            namespace=namespace,
+            project=project_id,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to preload models: {str(e)}",
+        ) from e
+
+
+@router.get(
+    "/{namespace}/{project_id}/health",
+    operation_id="project_health",
+    summary="Get project health including model status",
+    tags=["projects", "models"],
+    response_model=ProjectHealthResponse,
+    responses={
+        200: {"model": ProjectHealthResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def get_project_health(
+    namespace: str,
+    project_id: str,
+) -> ProjectHealthResponse:
+    """Get project health including model preload status.
+
+    Returns comprehensive health information including:
+    - Project metadata (last modified)
+    - Loaded models and cache statistics
+    - System resource availability
+
+    **Example**: `GET /v1/projects/default/my-chatbot/health`
+
+    **Response**:
+    ```json
+    {
+        "project": {
+            "namespace": "default",
+            "name": "my-chatbot",
+            "last_modified": "2026-02-24T10:30:00"
+        },
+        "models": {
+            "loaded_models": [
+                {
+                    "cache_key": "language:microsoft/phi-2:...",
+                    "model_id": "microsoft/phi-2",
+                    "pinned": true,
+                    "idle_time_seconds": 120.5
+                }
+            ],
+            "cache_stats": {
+                "total_items": 2,
+                "pinned_items": 1,
+                "cache_full": false
+            }
+        },
+        "resources": {
+            "device": "cuda",
+            "cpu_count": 16,
+            "available_ram_gb": 28.4
+        }
+    }
+    ```
+    """
+    from core.logging import FastAPIStructLogger
+
+    logger = FastAPIStructLogger()
+
+    try:
+        health = await ProjectService.get_project_health(
+            namespace=namespace,
+            project_id=project_id,
+        )
+
+        return ProjectHealthResponse(
+            project=health["project"],
+            models=health["models"],
+            resources=health["resources"],
+        )
+
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error(
+            "Failed to get project health",
+            namespace=namespace,
+            project=project_id,
+            error=str(e),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get project health: {str(e)}",
+        ) from e
 
 
 @router.get(
@@ -639,7 +865,9 @@ async def chat(
         # Detect HuggingFace gated model authentication errors
         if "gated repo" in error_msg.lower() or "401 client error" in error_msg.lower():
             # Extract model name if present
-            model_name = agent.model if agent and hasattr(agent, 'model') else "this model"
+            model_name = (
+                agent.model if agent and hasattr(agent, "model") else "this model"
+            )
             raise HTTPException(
                 status_code=401,
                 detail=f"Model '{model_name}' requires authentication. Please authenticate with HuggingFace using 'huggingface-cli login' or select a different model in Models & Settings.",

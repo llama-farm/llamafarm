@@ -2,6 +2,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from config import (  # noqa: E402
     ConfigError,
@@ -112,15 +113,26 @@ class ProjectService:
             return None
 
     @classmethod
-    def create_project(
+    async def create_project(
         cls,
         namespace: str,
         project_id: str,
         config_template: str | None = None,
-    ) -> LlamaFarmConfig:
+        auto_preload: bool = False,
+    ) -> tuple[LlamaFarmConfig, dict | None]:
         """
         Create a new project.
-        @param project_id: The ID of the project to create. (e.g. MyNamespace/MyProject)
+
+        Args:
+            namespace: Project namespace
+            project_id: The ID of the project to create (e.g. MyNamespace/MyProject)
+            config_template: Config template to use
+            auto_preload: If True, automatically preload models after creation
+
+        Returns:
+            Tuple of (config, preload_result)
+            - config: The created project config
+            - preload_result: Preload results if auto_preload=True, None otherwise
         """
         if namespace in RESERVED_NAMESPACES:
             raise ReservedNamespaceError(namespace)
@@ -139,12 +151,28 @@ class ProjectService:
             config_template_path=str(config_template_path),
         )
 
-        return cls.save_config(
+        config = cls.save_config(
             namespace,
             project_id,
             LlamaFarmConfig(**cfg_dict),
             template_path=template_path,
         )
+
+        # Auto-preload if requested
+        preload_result = None
+        if auto_preload:
+            logger.info(
+                "Auto-preloading models for new project",
+                namespace=namespace,
+                project_id=project_id,
+            )
+            preload_result = await cls.preload_project_models(
+                namespace,
+                project_id,
+                force=False,
+            )
+
+        return config, preload_result
 
     @classmethod
     def _resolve_template_path(cls, config_template: str | None) -> Path:
@@ -488,6 +516,176 @@ class ProjectService:
     @classmethod
     def load_config(cls, namespace: str, project_id: str) -> LlamaFarmConfig:
         return load_config(cls.get_project_dir(namespace, project_id))
+
+    @classmethod
+    async def preload_project_models(
+        cls,
+        namespace: str,
+        project_id: str,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Preload models for a project if configured with preload: true.
+
+        This method:
+        1. Checks if the project exists
+        2. Reads the project's llamafarm.yaml
+        3. Calls the Universal Runtime's preload endpoint
+        4. Returns detailed status
+
+        Args:
+            namespace: Project namespace
+            project_id: Project name
+            force: If True, reload even if already loaded
+
+        Returns:
+            Dictionary with preload results:
+            {
+                "status": "success|partial|failed|skipped",
+                "results": {...},
+                "summary": {...},
+                "resources": {...}
+            }
+        """
+        from services.universal_runtime_service import UniversalRuntimeService
+
+        # Validate project exists (raises ProjectNotFoundError if not)
+        project = cls.get_project(namespace, project_id)
+
+        # Check if project has any models configured for preload
+        has_preload_models = False
+        if hasattr(project.config, "runtime") and hasattr(
+            project.config.runtime, "models"
+        ):
+            for model_cfg in project.config.runtime.models:
+                if getattr(model_cfg, "provider", None) == "universal" and getattr(
+                    model_cfg, "preload", False
+                ):
+                    has_preload_models = True
+                    break
+
+        if not has_preload_models and not force:
+            logger.info(
+                "No models configured for preload",
+                namespace=namespace,
+                project_id=project_id,
+            )
+            return {
+                "status": "skipped",
+                "results": {},
+                "summary": {
+                    "loaded": 0,
+                    "failed": 0,
+                    "already_loaded": 0,
+                    "skipped": 0,
+                    "total_time_seconds": 0.0,
+                    "message": "No models configured for preload",
+                },
+            }
+
+        # Get project config path
+        project_dir = cls.get_project_dir(namespace, project_id)
+        config_path = os.path.join(project_dir, "llamafarm.yaml")
+
+        logger.info(
+            "Preloading models for project",
+            namespace=namespace,
+            project_id=project_id,
+            config_path=config_path,
+        )
+
+        try:
+            # Call Universal Runtime's preload endpoint
+            result = await UniversalRuntimeService.trigger_preload(
+                config_path=config_path
+            )
+
+            logger.info(
+                "Preload completed",
+                namespace=namespace,
+                project_id=project_id,
+                status=result.get("status"),
+                loaded=result.get("summary", {}).get("loaded", 0),
+                failed=result.get("summary", {}).get("failed", 0),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to preload project models",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+                exc_info=True,
+            )
+            return {
+                "status": "failed",
+                "results": {},
+                "summary": {
+                    "loaded": 0,
+                    "failed": 1,
+                    "already_loaded": 0,
+                    "skipped": 0,
+                    "total_time_seconds": 0.0,
+                    "message": f"Preload failed: {str(e)}",
+                },
+            }
+
+    @classmethod
+    async def get_project_health(
+        cls,
+        namespace: str,
+        project_id: str,
+    ) -> dict[str, Any]:
+        """Get project health status including model preload status.
+
+        Returns:
+            Dictionary with:
+            - project: Basic project info
+            - models: Model preload status
+            - resources: System resources
+        """
+        from services.universal_runtime_service import UniversalRuntimeService
+
+        project = cls.get_project(namespace, project_id)
+
+        try:
+            preload_status = await UniversalRuntimeService.get_preload_status()
+        except Exception as e:
+            logger.warning(
+                "Failed to get preload status",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+            )
+            preload_status = {
+                "loaded_models": [],
+                "cache_stats": {},
+                "error": str(e),
+            }
+
+        try:
+            resources = await UniversalRuntimeService.get_preload_resources()
+        except Exception as e:
+            logger.warning(
+                "Failed to get resource info",
+                namespace=namespace,
+                project_id=project_id,
+                error=str(e),
+            )
+            resources = {"error": str(e)}
+
+        return {
+            "project": {
+                "namespace": namespace,
+                "name": project_id,
+                "last_modified": project.last_modified.isoformat()
+                if project.last_modified
+                else None,
+            },
+            "models": preload_status,
+            "resources": resources,
+        }
 
     @classmethod
     def save_config(
