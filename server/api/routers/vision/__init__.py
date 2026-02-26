@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from .drone import router as drone_router
 from .eval import router as eval_router
 from .pipeline import router as pipeline_router
 from .review import router as review_router
@@ -14,5 +15,6 @@ vision_router.include_router(pipeline_router)
 vision_router.include_router(eval_router)
 vision_router.include_router(review_router)
 vision_router.include_router(tracking_router)
+vision_router.include_router(drone_router)
 
 __all__ = ["vision_router"]

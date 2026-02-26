@@ -93,6 +93,7 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'models/ml-addons', label: 'ML Addons' },
         { type: 'doc', id: 'models/vision-eval', label: 'Vision Evaluation' },
         { type: 'doc', id: 'models/vision-tracking', label: 'Vision Object Tracking' },
+        { type: 'doc', id: 'models/drone-vision', label: 'Drone Vision API' },
       ],
     },
     {

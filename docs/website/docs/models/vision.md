@@ -16,6 +16,7 @@ The vision pipeline supports:
 - **Cascade Streaming**: Multi-model chains that escalate when confidence is low
 - **Training**: Fine-tune detection and classification models on custom datasets
 - **Model Management**: Save, load, list, and export models (ONNX, CoreML, TensorRT)
+- **Drone Vision**: WebSocket aerial streaming, telemetry-based georeferencing, and edge export profiles (see [Drone Vision API](./drone-vision))
 
 ## Quick Start
 
