@@ -86,6 +86,8 @@ class TestChatCompletion:
         assert "top_p" in params
         assert "stream" in params
         assert "stop" in params
+        assert "logprobs" in params
+        assert "top_logprobs" in params
 
     def test_stream_parameter_default_false(self):
         """Stream parameter should default to False."""
