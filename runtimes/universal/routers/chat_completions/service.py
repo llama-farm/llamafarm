@@ -61,6 +61,54 @@ logger = logging.getLogger(__name__)
 
 
 class ChatCompletionsService:
+    @staticmethod
+    def _normalize_logprobs_payload(logprobs_payload, top_logprobs: int | None = None):
+        """Normalize backend logprobs into OpenAI chat choice.logprobs shape."""
+        if not isinstance(logprobs_payload, dict):
+            return None
+
+        # Already OpenAI-style from backend
+        content = logprobs_payload.get("content")
+        if isinstance(content, list):
+            return {"content": content}
+
+        tokens = logprobs_payload.get("tokens")
+        token_logprobs = logprobs_payload.get("token_logprobs")
+        top_items = logprobs_payload.get("top_logprobs")
+
+        if not isinstance(tokens, list) or not isinstance(token_logprobs, list):
+            return None
+
+        normalized = []
+        for idx, token in enumerate(tokens):
+            if not isinstance(token, str):
+                continue
+            lp = token_logprobs[idx] if idx < len(token_logprobs) else None
+            entry = {
+                "token": token,
+                "logprob": lp,
+                "bytes": list(token.encode("utf-8", errors="ignore")) or None,
+            }
+
+            if isinstance(top_items, list) and idx < len(top_items):
+                token_top = top_items[idx]
+                if isinstance(token_top, dict):
+                    pairs = list(token_top.items())
+                    if top_logprobs is not None:
+                        pairs = pairs[:top_logprobs]
+                    entry["top_logprobs"] = [
+                        {
+                            "token": str(t),
+                            "logprob": float(v),
+                            "bytes": list(str(t).encode("utf-8", errors="ignore"))
+                            or None,
+                        }
+                        for t, v in pairs
+                    ]
+            normalized.append(entry)
+
+        return {"content": normalized} if normalized else None
+
     def __init__(self):
         # import here to avoid circular import
         from server import load_language
@@ -931,6 +979,7 @@ class ChatCompletionsService:
                 context_usage_info,
             ) = await prepare_generation()
 
+            response_logprobs = None
             if use_native_audio and audio_bytes:
                 # Use native audio processing (no STT transcription)
                 response_text = await model.generate_with_audio(
@@ -946,18 +995,35 @@ class ChatCompletionsService:
                 )
             else:
                 # Standard text generation (audio already transcribed if present)
-                response_text = await model.generate(
-                    messages=prepared_messages,
-                    max_tokens=effective_max_tokens,
-                    temperature=chat_request.temperature
-                    if chat_request.temperature is not None
-                    else 0.7,
-                    top_p=chat_request.top_p,
-                    stop=chat_request.stop,
-                    thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                    tools=tools_for_generation,
-                    tool_choice=chat_request.tool_choice,
-                )
+                if is_gguf and chat_request.logprobs:
+                    detailed = await model.generate_with_logprobs(
+                        messages=prepared_messages,
+                        max_tokens=effective_max_tokens,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
+                        top_p=chat_request.top_p,
+                        stop=chat_request.stop,
+                        thinking_budget=(thinking_tokens or None),
+                        tools=tools_for_generation,
+                        tool_choice=chat_request.tool_choice,
+                        top_logprobs=chat_request.top_logprobs,
+                    )
+                    response_text = detailed.get("content", "")
+                    response_logprobs = detailed.get("logprobs")
+                else:
+                    response_text = await model.generate(
+                        messages=prepared_messages,
+                        max_tokens=effective_max_tokens,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
+                        top_p=chat_request.top_p,
+                        stop=chat_request.stop,
+                        thinking_budget=(thinking_tokens or None) if is_gguf else None,
+                        tools=tools_for_generation,
+                        tool_choice=chat_request.tool_choice,
+                    )
 
             # Debug log the raw response from the model
             if logger.isEnabledFor(logging.DEBUG):
@@ -975,6 +1041,10 @@ class ChatCompletionsService:
             tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
             if tools_dict and tool_choice_mode != "none":
                 tool_calls = detect_tool_call_in_content(parsed.content)
+
+            normalized_logprobs = self._normalize_logprobs_payload(
+                response_logprobs, chat_request.top_logprobs
+            )
 
             if tool_calls:
                 # Log detected tool calls
@@ -1012,6 +1082,7 @@ class ChatCompletionsService:
                                 ],
                             },
                             "finish_reason": "tool_calls",
+                            "logprobs": normalized_logprobs,
                         }
                     ],
                     "usage": {
@@ -1047,6 +1118,7 @@ class ChatCompletionsService:
                         "index": 0,
                         "message": {"role": "assistant", "content": parsed.content},
                         "finish_reason": "stop",
+                        "logprobs": normalized_logprobs,
                     }
                 ],
                 "usage": {
