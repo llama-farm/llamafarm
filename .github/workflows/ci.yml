@@ -189,10 +189,12 @@ jobs:
           # For universal runtime, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
           UV_EXTRA_INDEX_URL: ${{ matrix.component == 'runtimes/universal' && 'https://download.pytorch.org/whl/cpu' || '' }}
         run: |
-          # For universal runtime, allow uv to search all indexes (PyTorch index has old versions of common packages)
+          # For universal runtime, prefer the first index with a compatible version.
+          # This keeps CPU torch from the PyTorch index while still falling back to PyPI when
+          # the PyTorch index has incompatible or missing versions of common dependencies.
           INDEX_STRATEGY_FLAG=""
           if [ "${{ matrix.component }}" = "runtimes/universal" ]; then
-            INDEX_STRATEGY_FLAG="--index-strategy unsafe-best-match"
+            INDEX_STRATEGY_FLAG="--index-strategy unsafe-first-match"
           fi
           
           if [ -f "uv.lock" ]; then

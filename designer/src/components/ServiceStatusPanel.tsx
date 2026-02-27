@@ -12,7 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import { useServiceHealth, AggregateStatus, ServiceDisplay } from '../hooks/useServiceHealth'
 import { cn } from '../lib/utils'
 

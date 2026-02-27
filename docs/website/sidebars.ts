@@ -88,7 +88,11 @@ const sidebars: SidebarsConfig = {
       link: { type: 'doc', id: 'models/index' },
       items: [
         { type: 'doc', id: 'models/specialized-ml', label: 'Specialized ML Models' },
+        { type: 'doc', id: 'models/vision', label: 'Vision Pipeline' },
         { type: 'doc', id: 'models/anomaly-detection', label: 'Anomaly Detection' },
+        { type: 'doc', id: 'models/ml-addons', label: 'ML Addons' },
+        { type: 'doc', id: 'models/vision-eval', label: 'Vision Evaluation' },
+        { type: 'doc', id: 'models/vision-tracking', label: 'Vision Object Tracking' },
       ],
     },
     {

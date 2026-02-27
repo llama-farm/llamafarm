@@ -1,11 +1,12 @@
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 import FontIcon from '../../common/FontIcon'
 import Loader from '../../common/Loader'
 import { PromptSetSelector } from './PromptSetSelector'
@@ -155,7 +156,7 @@ export function CustomDownloadDialog({
               >
                 Description (optional)
               </label>
-              <textarea
+              <Textarea
                 id="custom-model-description"
                 rows={2}
                 placeholder="Enter model description"

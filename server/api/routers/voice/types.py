@@ -5,13 +5,13 @@ Protocol messages for the real-time voice assistant pipeline:
 - Speech In → STT → LLM → TTS → Speech Out
 """
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class VoiceState(str, Enum):
+class VoiceState(StrEnum):
     """Voice session state machine states."""
 
     IDLE = "idle"  # Waiting for input

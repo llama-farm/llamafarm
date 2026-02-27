@@ -462,9 +462,10 @@ jobs:
       LF_VERSION_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.ref_name }}
       # Use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages in CI
       UV_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
-      # Allow uv to search all indexes for best version match (needed because PyTorch index
-      # has old versions of common packages like 'requests' that would block resolution)
-      UV_INDEX_STRATEGY: unsafe-best-match
+      # For PyTorch index installs, prefer the first index with a compatible version.
+      # This keeps CPU torch from the PyTorch index while still falling back to PyPI when
+      # the PyTorch index has incompatible or missing versions of common dependencies.
+      UV_INDEX_STRATEGY: unsafe-first-match
       # Force CPU for GGUF inference to avoid Metal SIGSEGV on macOS CI
       # (Apple Paravirtual GPU in GitHub Actions VMs is unreliable)
       LLAMAFARM_GGUF_FORCE_CPU: 1

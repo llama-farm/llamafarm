@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import { useProjects } from '../hooks/useProjects'
 import { useProjectModalContext } from '../contexts/ProjectModalContext'
 import {
@@ -22,7 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { VersionDetailsDialog } from './common/VersionDetailsDialog'
 import UpgradeModal from './common/UpgradeModal'
 import { projectKeys } from '../hooks/useProjects'
-import { Button } from './ui/button'
+import { Button } from '@/components/ui/button'
 import { useMobileView } from '../contexts/MobileViewContext'
 import { ServiceStatusPanel } from './ServiceStatusPanel'
 
