@@ -7,7 +7,6 @@ health checks while still providing up-to-date information.
 
 import logging
 import os
-import signal
 import time
 from pathlib import Path
 from threading import Lock, Thread
