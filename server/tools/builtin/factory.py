@@ -50,6 +50,9 @@ class BuiltinToolFactory:
             _project_dir = project_dir
             _session_id = session_id
 
+        InjectedTool.__name__ = base_class.__name__
+        InjectedTool.__qualname__ = base_class.__qualname__
+
         return InjectedTool
 
     def create_task_create_tool(self) -> type[BaseTool] | None:
