@@ -70,6 +70,7 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
+
 try:
     from routers.explain import router as explain_router
     from routers.explain import set_explain_state, set_model_getter
@@ -95,13 +96,16 @@ from routers.vision import (
     set_detect_classify_loaders,
     set_detection_loader,
     set_document_loader,
+    set_eval_models_dir,
     set_file_image_getter,
     set_model_export_loader,
     set_ocr_loader,
     set_streaming_detection_loader,
+    set_tracking_models_dir,
     set_vision_models_dir,
     set_sample_data_dir,
     start_session_cleanup,
+    start_tracking_cleanup,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -109,7 +113,7 @@ from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
-from vision_training.trainer import set_trainer_model_loader, set_trainer_output_dir
+from vision_training.trainer import set_trainer_model_loader
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -313,6 +317,7 @@ async def lifespan(app: FastAPI):
 
     # Start vision streaming session cleanup (needs running event loop)
     start_session_cleanup()
+    start_tracking_cleanup()
     logger.info("Vision session cleanup task started")
 
     yield
@@ -1201,14 +1206,15 @@ set_detection_loader(load_detection_model)
 set_classification_loader(load_classification_model)
 set_detect_classify_loaders(load_detection_model, load_classification_model)
 set_streaming_detection_loader(load_detection_model)
+set_tracking_models_dir(VISION_MODELS_DIR)
 set_vision_models_dir(VISION_MODELS_DIR)
 set_sample_data_dir(_LF_DATA_DIR)
+set_eval_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
 # NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 
 # Vision training
 set_trainer_model_loader(load_detection_model)
-set_trainer_output_dir(VISION_MODELS_DIR)
 
 # Anomaly router
 set_anomaly_loader(load_anomaly)
