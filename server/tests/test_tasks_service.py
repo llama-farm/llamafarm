@@ -27,7 +27,6 @@ try:
     from services.tasks_service import (
         CycleDetectedError,
         InvalidStatusTransitionError,
-        Task,
         TaskNotFoundError,
         TasksService,
     )
@@ -2084,7 +2083,7 @@ class TestDataIntegrity:
         # so we just verify we can read the task using a new call
         import importlib
 
-        import services.tasks_service as ts_module
+        import services.tasks_service as ts_module  # noqa: E811
 
         importlib.reload(ts_module)
 
