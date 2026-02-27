@@ -2082,13 +2082,14 @@ class TestDataIntegrity:
         # In practice, TasksService is stateless and reads from disk,
         # so we just verify we can read the task using a new call
         import importlib
+        import sys
 
-        import services.tasks_service as ts_module  # noqa: E811
-
-        importlib.reload(ts_module)
+        ts_module = sys.modules.get("services.tasks_service")
+        if ts_module is not None:
+            importlib.reload(ts_module)
 
         # Get task using the "restarted" service
-        retrieved_task = ts_module.TasksService.get_task(
+        retrieved_task = TasksService.get_task(
             temp_project_dir, session_id, task_id
         )
 
