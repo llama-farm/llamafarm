@@ -642,11 +642,10 @@ class TestChatOrchestratorAgent:
                 # The tool should have been called with the complete arguments
                 mock_tool_instance.arun.assert_awaited()
 
-                # Verify the tool was called with the correct accumulated arguments
-                call_args = mock_tool_instance.arun.call_args
-                assert call_args is not None
-                # The tool receives the parsed arguments
-                assert "operation" in str(call_args)
+                # Verify the input_schema was called with the accumulated arguments
+                mock_tool_class.input_schema.assert_called_once()
+                schema_call_kwargs = mock_tool_class.input_schema.call_args
+                assert "operation" in str(schema_call_kwargs)
 
     def test_enable_persistence(self, base_config):
         """Test enabling persistence."""
