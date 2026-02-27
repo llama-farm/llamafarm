@@ -137,9 +137,10 @@ def test_create_database_with_both_reference_and_inline_error(mocker):
         },
     )
     assert resp.status_code == 400
-    assert "either embedding_strategy reference or embedding_strategies inline" in resp.json()[
-        "detail"
-    ]
+    assert (
+        "either embedding_strategy reference or embedding_strategies inline"
+        in resp.json()["detail"]
+    )
 
 
 def test_create_database_with_missing_reference_error(mocker):

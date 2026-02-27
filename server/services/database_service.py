@@ -90,7 +90,11 @@ class DatabaseService:
 
         # Extract the resolved database we just added
         resolved_db = next(
-            (db for db in resolved_temp.rag.databases or [] if db.name == database.name),
+            (
+                db
+                for db in resolved_temp.rag.databases or []
+                if db.name == database.name
+            ),
             None,
         )
         if resolved_db is None:

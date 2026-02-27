@@ -13,6 +13,7 @@ Every LlamaFarm project is defined by a single file: `llamafarm.yaml`. The serve
 version: v1
 name: my-project
 namespace: default
+schema: schemas/example.py::Person
 runtime: { ... }
 prompts: [...]
 rag: { ... }
@@ -22,11 +23,12 @@ voice: { ... }
 
 ### Metadata
 
-| Field       | Type   | Required  | Notes                                              |
-| ----------- | ------ | --------- | -------------------------------------------------- |
-| `version`   | string | ✅ (`v1`) | Schema version.                                    |
-| `name`      | string | ✅        | Project identifier.                                |
-| `namespace` | string | ✅        | Grouping for isolation (matches server namespace). |
+| Field       | Type   | Required  | Notes                                                       |
+| ----------- | ------ | --------- | ----------------------------------------------------------- |
+| `version`   | string | ✅ (`v1`) | Schema version.                                             |
+| `name`      | string | ✅        | Project identifier.                                         |
+| `namespace` | string | ✅        | Grouping for isolation (matches server namespace).          |
+| `schema`    | string | Optional  | Pydantic schema for structured outputs (`schemas/...::Class`) |
 
 ### Runtime
 
@@ -66,7 +68,7 @@ The original flat runtime configuration is automatically converted internally:
 runtime:
   provider: openai
   model: qwen2.5:7b
-  base_url: http://localhost:8000/v1
+  base_url: http://localhost:14345/v1
   api_key: sk-local-placeholder
   instructor_mode: tools
   model_api_parameters:
@@ -101,6 +103,61 @@ runtime:
 | `encoder_config`       | object                                | Optional                                                                   | Configuration for BERT-style encoder models (Universal runtime only)                                                   |
 | `tool_call_strategy`   | enum                                  | `native_api`                                                               | `native_api` or `prompt_based` for tool calling strategy                                                               |
 | `mcp_servers`          | array                                 | Optional                                                                   | List of MCP server names to use (omit for all, empty for none)                                                         |
+| `rag_enabled`          | boolean                               | Optional                                                                   | Default RAG behavior for this model. Overridden by request-level `rag_enabled`                                         |
+| `target_database`      | string                                | Optional                                                                   | Default RAG database for this model. Overridden by request-level `database`                                            |
+
+**Per-model RAG defaults:**
+
+You can set per-model RAG defaults so that specific models always (or never) use RAG, and optionally target a specific database. These are defaults that can be overridden per-request.
+
+```yaml
+runtime:
+  models:
+    - name: rag-assistant
+      provider: ollama
+      model: llama3.1:8b
+      rag_enabled: true
+      target_database: knowledge_base
+
+    - name: code-helper
+      provider: ollama
+      model: codellama:7b
+      rag_enabled: false  # Never use RAG for code tasks
+```
+
+The resolution priority for RAG parameters is:
+
+1. **Request parameters** (highest priority) — `rag_enabled`, `database` in the API call
+2. **Model defaults** — `rag_enabled`, `target_database` on the model config
+3. **Project defaults** — `rag.default_database`, or first database when databases exist
+
+### Structured Outputs
+
+Structured outputs require two settings:
+
+1. **Top-level schema**: Point to a Pydantic model inside your project’s `schemas/` directory.
+2. **Instructor mode**: Set `instructor_mode` on the target model (for example, `tools` or `json`).
+
+Example:
+
+```yaml
+schema: schemas/example.py::Person
+
+runtime:
+  models:
+    - name: vllm-model
+      provider: openai
+      model: qwen2.5:7b
+      base_url: http://localhost:8000/v1
+      api_key: ${VLLM_API_KEY}
+      instructor_mode: tools
+      default: true
+```
+
+Notes:
+
+- Schema paths must be relative, use a `.py` file, and live under `schemas/`.
+- Streaming is not supported when `schema` is configured. Use non-streaming requests (for example, `lf chat --structured`).
 
 **extra_body fields (Universal runtime):**
 
@@ -128,7 +185,7 @@ runtime:
 
 ### Prompts
 
-Prompts are named sets of messages that seed instructions for each session.
+Prompts are named sets of messages that seed instructions for each session. Prompts support **dynamic variable substitution** using Jinja2-style `{{variable}}` syntax.
 
 ```yaml
 prompts:
@@ -143,6 +200,51 @@ prompts:
 - Roles can be `system`, `user`, or `assistant` (anything supported by the runtime).
 - Models can select which prompt sets to use via `prompts: [list of names]`; if omitted, all prompts stack in definition order.
 - Prompts are appended before user input; combine with RAG context via the RAG guide.
+
+#### Dynamic Variable Substitution
+
+Use Jinja2-style `{{variable}}` syntax to inject values at request time:
+
+```yaml
+prompts:
+  - name: personalized
+    messages:
+      - role: system
+        content: |
+          You are a customer service assistant for {{company_name | Acme Corp}}.
+          The customer's name is {{user_name | Valued Customer}}.
+          Account tier: {{account_tier | standard}}
+```
+
+**Syntax:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `{{variable}}` | Required variable | `Hello {{name}}` → Error if `name` not provided |
+| `{{variable \| default}}` | Variable with default | `Hello {{name \| Guest}}` → `Hello Guest` if missing |
+| `{{ variable }}` | Whitespace allowed | Same as above |
+
+**Passing variables via API:**
+
+```bash
+curl -X POST http://localhost:14345/v1/projects/ns/project/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Hi"}],
+    "variables": {
+      "company_name": "TechCorp",
+      "user_name": "Alice",
+      "account_tier": "premium"
+    }
+  }'
+```
+
+Variables can be used in:
+- **Prompt message content** - Personalize system instructions
+- **Tool descriptions** - Customize tool behavior per request
+- **Tool parameter descriptions** - Dynamic parameter help text
+
+See the [Prompts Guide](../prompts/index.md) for detailed examples.
 
 ### RAG Configuration
 

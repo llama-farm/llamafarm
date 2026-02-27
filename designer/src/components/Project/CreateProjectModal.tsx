@@ -5,15 +5,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
-import { Label } from '../ui/label'
-import { Input } from '../ui/input'
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import FontIcon from '../../common/FontIcon'
 
 interface CreateProjectModalProps {

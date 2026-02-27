@@ -22,11 +22,14 @@ from dataclasses import dataclass
 
 import httpx
 import websockets
-from config.datamodel import Model
+from config.datamodel import LlamaFarmConfig, Model, ToolCallStrategy
 from fastapi import WebSocket
 
+from core.mcp_registry import register_mcp_service
 from core.settings import settings
+from services.mcp_service import MCPService
 from services.universal_runtime_service import UniversalRuntimeService
+from tools.mcp_tool.tool.mcp_tool_factory import MCPToolFactory
 
 from .phrase_detector import PhraseBoundaryDetector
 from .session import VoiceSession
@@ -35,11 +38,16 @@ from .types import (
     LLMTextMessage,
     StatusMessage,
     ToolCallMessage,
+    ToolExecutingMessage,
     TranscriptionMessage,
     TTSDoneMessage,
     TTSStartMessage,
     VoiceState,
 )
+
+# Tool execution limits for voice pipeline
+MAX_TOOL_ITERATIONS = 3   # Lower than chat's 10 for voice latency
+TOOL_RESULT_TIMEOUT = 30.0  # Seconds to wait for client tool result
 
 
 @dataclass
@@ -453,16 +461,23 @@ class VoiceChatService:
             )
         return cls._http_client
 
-    def __init__(self, session: VoiceSession, llm_model_config: Model):
+    def __init__(
+        self,
+        session: VoiceSession,
+        llm_model_config: Model,
+        project_config: LlamaFarmConfig | None = None,
+    ):
         """Initialize voice chat service.
 
         Args:
             session: Voice session with conversation state.
             llm_model_config: Resolved LLM model configuration from project.
                               Contains the actual model ID, base_url, etc.
+            project_config: Project configuration (needed for MCP tool support).
         """
         self.session = session
         self._llm_model_config = llm_model_config
+        self._project_config = project_config
 
         # LLM endpoint - use model's base_url if specified, otherwise runtime default
         if llm_model_config.base_url:
@@ -479,7 +494,16 @@ class VoiceChatService:
         )
 
         # Reusable TTS WebSocket connection
-        self._tts_ws: websockets.WebSocketClientProtocol | None = None
+        self._tts_ws: websockets.ClientConnection | None = None
+
+        # MCP tool support (lazy initialization)
+        self._mcp_service: MCPService | None = None
+        self._mcp_tool_factory: MCPToolFactory | None = None
+        self._mcp_tools: list = []
+        self._mcp_initialized: bool = False
+
+        # Accumulated response from last stream_llm_response call (for tool loop)
+        self._last_accumulated_response: str = ""
 
     async def warm_up(self) -> None:
         """Pre-warm connections to minimize first-request latency.
@@ -507,16 +531,26 @@ class VoiceChatService:
                          Raw PCM is preferred for optimal performance.
 
         Returns:
-            Transcribed text.
+            Transcribed text, or empty string if audio couldn't be decoded.
         """
-        # Use .pcm extension to hint at raw PCM format (though detection is content-based)
-        result = await UniversalRuntimeService.transcribe_audio(
-            audio_bytes=audio_bytes,
-            filename="audio.pcm",
-            model=self.session.config.stt_model,
-            language=self.session.config.language,
-        )
-        return result.get("text", "")
+        try:
+            # Use .pcm extension to hint at raw PCM format (though detection is content-based)
+            result = await UniversalRuntimeService.transcribe_audio(
+                audio_bytes=audio_bytes,
+                filename="audio.pcm",
+                model=self.session.config.stt_model,
+                language=self.session.config.language,
+            )
+            return result.get("text", "")
+        except Exception as e:
+            error_str = str(e)
+            # FFmpeg errors (e.g., truncated audio when user stops recording) should
+            # be treated as "no speech" rather than surfaced as errors to the user
+            if "Invalid data" in error_str or "processing input" in error_str:
+                logger.warning(f"Audio decode error (treating as no speech): {e}")
+                return ""
+            # Re-raise other errors
+            raise
 
     async def transcribe_audio_stream(
         self, audio_bytes: bytes
@@ -592,6 +626,165 @@ class VoiceChatService:
                 break
 
         return messages
+
+    async def _ensure_mcp_tools(self) -> None:
+        """Lazily initialize MCP tools on first tool call.
+
+        Only attempts initialization once. If MCP is not configured or
+        fails to load, _mcp_tools stays empty and all tools fall through
+        to the client round-trip path.
+        """
+        if self._mcp_initialized:
+            return
+        self._mcp_initialized = True
+
+        if not self._project_config:
+            return
+
+        # Check if project has MCP servers configured
+        if not self._project_config.mcp or not self._project_config.mcp.servers:
+            return
+
+        try:
+            model_name = self._llm_model_config.name
+            self._mcp_service = MCPService(self._project_config, model_name)
+            self._mcp_tool_factory = MCPToolFactory(self._mcp_service)
+            register_mcp_service(self._mcp_service)
+            self._mcp_tools = await self._mcp_tool_factory.create_all_tools()
+            logger.info(
+                f"MCP tools loaded for voice: {len(self._mcp_tools)} tools, "
+                f"names={[getattr(t, 'mcp_tool_name', t.__name__) for t in self._mcp_tools]}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize MCP tools for voice: {e}")
+            self._mcp_tools = []
+
+    def _can_execute_tool_call(self, tool_name: str) -> bool:
+        """Check if a tool can be executed server-side via MCP."""
+        return bool(
+            next(
+                (t for t in self._mcp_tools
+                 if getattr(t, "mcp_tool_name", None) == tool_name),
+                None,
+            )
+        )
+
+    async def _execute_mcp_tool(self, tool_name: str, arguments: str) -> str:
+        """Execute an MCP tool and return the result string."""
+        tool_class = next(
+            (t for t in self._mcp_tools
+             if getattr(t, "mcp_tool_name", None) == tool_name),
+            None,
+        )
+        if not tool_class:
+            return f"Error: Tool '{tool_name}' not found"
+
+        try:
+            tool_instance = tool_class()
+            input_schema_class = tool_class.input_schema
+            tool_input = input_schema_class(
+                tool_name=tool_name, **json.loads(arguments or "{}")
+            )
+            result = await tool_instance.arun(tool_input)
+            result_content = getattr(result, "result", str(result))
+            logger.info(f"MCP tool '{tool_name}' executed, result length={len(str(result_content))}")
+            return str(result_content)
+        except Exception as e:
+            error_msg = f"Error executing tool '{tool_name}': {e}"
+            logger.error(error_msg, exc_info=True)
+            return error_msg
+
+    def _get_tools_for_payload(self) -> list[dict] | None:
+        """Convert model config tools to OpenAI API format.
+
+        Returns tools list for the request payload when using native_api
+        strategy, or None if no tools or using prompt_based strategy.
+        """
+        tools = self._llm_model_config.tools
+        if not tools:
+            return None
+
+        strategy = self._llm_model_config.tool_call_strategy
+        use_native = strategy in (ToolCallStrategy.native_api, "native_api", None)
+        if not use_native:
+            return None
+
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                },
+            }
+            for tool in tools
+        ]
+
+    def _inject_prompt_based_tools(self, messages: list[dict]) -> list[dict]:
+        """Inject tool definitions into the system message for prompt-based tool calling.
+
+        For models that don't support native tool calling, this injects tool
+        definitions and instructions into the system prompt so the model can
+        still use tools via structured text output.
+
+        Args:
+            messages: List of chat messages.
+
+        Returns:
+            Modified messages list (copies if modified).
+        """
+        tools = self._llm_model_config.tools
+        if not tools:
+            return messages
+
+        strategy = self._llm_model_config.tool_call_strategy
+        if strategy not in (ToolCallStrategy.prompt_based, "prompt_based"):
+            return messages
+
+        # Build tool definitions block
+        tools_block = "\n\nYou may call one or more tools to assist with the user query.\n"
+        tools_block += "You are provided with function signatures within <tools></tools> XML tags:\n<tools>\n"
+        for tool in tools:
+            tool_json = json.dumps({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                },
+            })
+            tools_block += f"<tool>{tool_json}</tool>\n"
+        tools_block += "\n</tools>\n"
+        tools_block += 'For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n'
+        tools_block += '<tool_call>\n{"name": <function-name>, "arguments": <args-json-object>}\n</tool_call>.\n'
+        tools_block += "If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request."
+
+        # Make a copy and inject into first system message
+        messages = [dict(m) for m in messages]
+        for msg in messages:
+            if msg.get("role") == "system" and isinstance(msg.get("content"), str):
+                msg["content"] = msg["content"] + tools_block
+                break
+        else:
+            # No system message found - prepend one with tools
+            messages.insert(0, {"role": "system", "content": tools_block.strip()})
+
+        return messages
+
+    async def _send_error_and_reset(self, websocket: WebSocket, error_msg: str) -> None:
+        """Send error message to client and reset session state.
+
+        Args:
+            websocket: Client WebSocket connection.
+            error_msg: User-friendly error message to send.
+        """
+        try:
+            await websocket.send_json(ErrorMessage(message=error_msg).model_dump())
+            await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
+        except Exception:
+            pass  # WebSocket might be closed
+        self.session.set_state(VoiceState.IDLE)
 
     def _filter_thinking_tags(self, text: str) -> str:
         """Filter out <think>...</think> tags from text.
@@ -701,12 +894,14 @@ class VoiceChatService:
         return text.strip()
 
     async def stream_llm_response(
-        self, user_text: str
+        self, user_text: str = "", *, continuation: bool = False
     ) -> AsyncGenerator[LLMStreamOutput, None]:
         """Stream LLM response tokens and tool calls.
 
         Args:
-            user_text: User's transcribed text.
+            user_text: User's transcribed text (ignored when continuation=True).
+            continuation: If True, stream from existing session history without
+                adding a new user message. Used for tool loop re-invocations.
 
         Yields:
             LLMContent for regular text tokens, LLMToolCall for tool calls.
@@ -718,13 +913,26 @@ class VoiceChatService:
         t_first_token = None
         first_token_logged = False
 
-        # Add user message to history
-        self.session.add_user_message(user_text)
+        # Add user message to history (skip on continuation — history already has it)
+        if not continuation:
+            self.session.add_user_message(user_text)
 
         # Prepare messages with thinking control
         messages = self._inject_thinking_control(self.session.messages)
         if not self.session.config.enable_thinking:
             logger.debug("Thinking disabled for voice - injected /no_think")
+
+        # Inject tools into the LLM request
+        config_tools = self._llm_model_config.tools
+        strategy = self._llm_model_config.tool_call_strategy
+        logger.info(
+            f"🔧 Tools config: {len(config_tools or [])} tools, "
+            f"strategy={strategy}, "
+            f"tool_names={[t.name for t in (config_tools or [])]}"
+        )
+
+        # Prompt-based strategy injects tools into messages
+        messages = self._inject_prompt_based_tools(messages)
 
         # Prepare request using resolved model config
         # Use the actual model ID (e.g., "unsloth/Qwen3-4B-GGUF:Q4_K_M"), not the project name
@@ -737,6 +945,14 @@ class VoiceChatService:
             "temperature": 0.7,  # Slightly lower for faster sampling
             "max_tokens": 500,   # Limit response length for voice
         }
+
+        # Inject tools for native API strategy
+        openai_tools = self._get_tools_for_payload()
+        if openai_tools:
+            payload["tools"] = openai_tools
+            logger.info(f"🔧 Injected {len(openai_tools)} tools into payload (native_api)")
+        elif config_tools:
+            logger.info("🔧 Tools present but not injected into payload (prompt_based or strategy mismatch)")
 
         # Add any model-specific parameters (may override above)
         if self._llm_model_config.model_api_parameters:
@@ -841,8 +1057,12 @@ class VoiceChatService:
             t_done = time.perf_counter()
             logger.info(f"⏱️ LLM: Complete in {(t_done - t_start)*1000:.1f}ms, {token_count} tokens, {len(accumulated_response)} chars")
 
+            # Store accumulated response for caller (tool loop needs it for history)
+            self._last_accumulated_response = accumulated_response
+
             # Add complete response to history (with thinking tags filtered)
-            if accumulated_response:
+            # In continuation mode, the tool loop caller manages history
+            if not continuation and accumulated_response:
                 clean_response = self._filter_thinking_tags(accumulated_response).strip()
                 if clean_response:
                     self.session.add_assistant_message(clean_response)
@@ -854,7 +1074,7 @@ class VoiceChatService:
             logger.error(f"LLM streaming error: {e}")
             raise
 
-    async def _get_tts_websocket(self) -> websockets.WebSocketClientProtocol:
+    async def _get_tts_websocket(self) -> websockets.ClientConnection:
         """Get or create TTS WebSocket connection.
 
         Reuses existing connection to avoid handshake overhead (~50-100ms per connection).
@@ -949,15 +1169,13 @@ class VoiceChatService:
     async def process_turn(
         self, websocket: WebSocket, audio_bytes: bytes
     ) -> None:
-        """Process a single conversational turn with parallel STT+LLM.
+        """Process a single conversational turn.
 
-        Optimized pipeline:
-        1. Start streaming STT
-        2. As soon as first segment arrives, start LLM (parallel with remaining STT)
+        Pipeline:
+        1. Stream STT to get full transcription
+        2. Start LLM with complete text
         3. Stream TTS for each LLM phrase
         4. Handle interrupts
-
-        This reduces time-to-first-audio by starting LLM before STT completes.
 
         Args:
             websocket: Client WebSocket connection.
@@ -980,18 +1198,15 @@ class VoiceChatService:
         await websocket.send_json(StatusMessage(state=VoiceState.PROCESSING).model_dump())
 
         try:
-            # STT PATH: Transcribe audio first, then send text to LLM
-            # PARALLEL STT+LLM: Collect first segment(s) quickly, then start LLM
-            # while STT continues in background
+            # STT PATH: Collect the full transcription before starting LLM.
+            # Audio is already fully buffered (VAD collected the complete
+            # utterance), so STT completes quickly and breaking early would
+            # only lose segments.
             transcription_parts: list[str] = []
-            llm_started = False
-            # Start LLM very early - even 5 chars is enough (e.g., "Hello" or "Hi!")
-            min_chars_for_llm = 5
 
-            # Try streaming transcription with timeout, fall back to HTTP if needed
-            # Streaming allows parallel LLM start but HTTP is more reliable
+            # Try streaming transcription, fall back to HTTP if needed
             try:
-                async with asyncio.timeout(2.0):  # 2 second timeout for streaming
+                async with asyncio.timeout(10.0):
                     async for segment_text in self.transcribe_audio_stream(audio_bytes):
                         if t_first_stt_segment is None:
                             t_first_stt_segment = time.perf_counter()
@@ -1007,17 +1222,10 @@ class VoiceChatService:
                                 is_final=False
                             ).model_dump()
                         )
-
-                        # Start LLM as soon as we have enough text
-                        if not llm_started and len(current_text) >= min_chars_for_llm:
-                            llm_started = True
-                            # Break to start LLM - remaining STT will be appended to display
-                            break
             except TimeoutError:
                 logger.debug("STT streaming timeout, using collected segments")
             except websockets.exceptions.ConnectionClosed:
-                # Expected when breaking early from STT loop - generator cleanup closes WebSocket
-                logger.debug("STT WebSocket closed during early exit (expected when starting LLM early)")
+                logger.debug("STT WebSocket closed during streaming")
 
             # If no segments received, fall back to non-streaming HTTP endpoint
             # This is faster for short utterances where streaming overhead dominates
@@ -1038,7 +1246,7 @@ class VoiceChatService:
                 t_stt_complete = time.perf_counter()
                 logger.info(f"⏱️ TIMING: STT streaming complete: {(t_stt_complete - t_start)*1000:.1f}ms")
 
-            # Use what we have so far for LLM (first segment(s))
+            # Assemble complete transcription for LLM
             transcription_for_llm = " ".join(transcription_parts).strip()
 
             if not transcription_for_llm:
@@ -1052,178 +1260,258 @@ class VoiceChatService:
                 TranscriptionMessage(text=transcription_for_llm, is_final=True).model_dump()
             )
 
-            # Step 2 & 3: Stream LLM and TTS in parallel
+            # Step 2 & 3: Stream LLM and TTS with tool execution loop
             self.session.set_state(VoiceState.SPEAKING)
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
-
-            # Use the text-based LLM path
-            llm_stream = self.stream_llm_response(transcription_for_llm)
-
-            # Use phrase detector to accumulate LLM tokens
-            # Pass sentence_boundary_only config for natural speech (avoids mid-sentence breaks)
-            phrase_detector = PhraseBoundaryDetector(
-                sentence_boundary_only=self.session.config.sentence_boundary_only,
-            )
-            # Filter out <think>...</think> blocks at the token level
-            thinking_filter = StreamingThinkingFilter()
-            # Filter out JSON-like tool call content from text stream
-            tool_call_filter = StreamingToolCallFilter()
-            full_response = ""
-            first_token_logged = False
-            first_phrase_logged = False
-
-            t_llm_start = time.perf_counter()
-            logger.info(f"⏱️ TIMING: Starting LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
 
             # Track if we've already spoken a tool call placeholder this turn
             tool_call_placeholder_spoken = False
 
-            async for output in llm_stream:
-                if not first_token_logged:
-                    t_llm_first_token = time.perf_counter()
-                    first_token_logged = True
-                    logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total, {(t_llm_first_token - t_llm_start)*1000:.1f}ms from request")
+            for tool_iteration in range(MAX_TOOL_ITERATIONS):
+                is_continuation = tool_iteration > 0
 
-                # Check for interrupt
-                if self.session.is_interrupted():
-                    logger.info("Turn interrupted by user")
+                if is_continuation:
+                    logger.info(f"Tool loop iteration {tool_iteration + 1}/{MAX_TOOL_ITERATIONS} (continuation)")
+
+                # Use the text-based LLM path
+                llm_stream = self.stream_llm_response(
+                    transcription_for_llm, continuation=is_continuation
+                )
+
+                # Fresh filters per iteration
+                phrase_detector = PhraseBoundaryDetector(
+                    sentence_boundary_only=self.session.config.sentence_boundary_only,
+                )
+                thinking_filter = StreamingThinkingFilter()
+                tool_call_filter = StreamingToolCallFilter()
+                full_response = ""
+                collected_tool_calls: list[LLMToolCall] = []
+                first_token_logged = False
+                first_phrase_logged = False
+
+                t_llm_start = time.perf_counter()
+                logger.info(f"⏱️ TIMING: Starting LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
+
+                async for output in llm_stream:
+                    if not first_token_logged:
+                        t_llm_first_token = time.perf_counter()
+                        first_token_logged = True
+                        logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total, {(t_llm_first_token - t_llm_start)*1000:.1f}ms from request")
+
+                    # Check for interrupt
+                    if self.session.is_interrupted():
+                        logger.info("Turn interrupted by user")
+                        break
+
+                    # Handle tool calls - collect them for execution after stream
+                    if isinstance(output, LLMToolCall):
+                        logger.info(f"Tool call received: {output.name} - collecting for execution")
+                        collected_tool_calls.append(output)
+
+                        # Speak a brief placeholder if we haven't already this turn
+                        if not tool_call_placeholder_spoken:
+                            placeholder = "One moment."
+                            await websocket.send_json(
+                                LLMTextMessage(text=placeholder, is_final=False).model_dump()
+                            )
+                            await self._synthesize_and_stream_phrase(
+                                websocket, placeholder,
+                                track_first_audio=(t_first_tts_audio is None),
+                                turn_start_time=t_start
+                            )
+                            tool_call_placeholder_spoken = True
+
+                        continue
+
+                    # Handle regular content tokens
+                    if isinstance(output, LLMContent):
+                        token = output.text
+
+                        # DEBUG: Log raw token content
+                        if token.strip():
+                            logger.debug(f"🔤 RAW TOKEN: {repr(token)}")
+
+                        # Filter thinking content at token level (before phrase detection)
+                        filtered_token = thinking_filter.filter_token(token)
+                        full_response += token  # Keep full response for history
+
+                        # Skip empty tokens (thinking content filtered out)
+                        if not filtered_token:
+                            continue
+
+                        # DEBUG: Log after thinking filter
+                        if filtered_token != token:
+                            logger.debug(f"🧠 AFTER THINKING FILTER: {repr(filtered_token)}")
+
+                        # Filter out JSON-like tool call content from text
+                        # (some models output tool calls as text, not structured)
+                        before_tool_filter = filtered_token
+                        filtered_token = tool_call_filter.filter_token(filtered_token)
+
+                        # DEBUG: Log if tool call filter changed anything
+                        if filtered_token != before_tool_filter:
+                            logger.debug(f"🔧 TOOL FILTER removed: {repr(before_tool_filter)} -> {repr(filtered_token)}")
+
+                        # Check if tool call filter detected any tool calls - speak placeholder
+                        if tool_call_filter.get_detected_tool_calls() and not tool_call_placeholder_spoken:
+                            placeholder = "One moment."
+                            await websocket.send_json(
+                                LLMTextMessage(text=placeholder, is_final=False).model_dump()
+                            )
+                            await self._synthesize_and_stream_phrase(
+                                websocket, placeholder,
+                                track_first_audio=(t_first_tts_audio is None),
+                                turn_start_time=t_start
+                            )
+                            tool_call_placeholder_spoken = True
+
+                        # Skip empty tokens (tool call content filtered out)
+                        if not filtered_token:
+                            continue
+
+                        # Detect phrase boundaries on filtered content
+                        phrase = phrase_detector.add_token(filtered_token)
+                        if phrase:
+                            if not first_phrase_logged:
+                                t_first_phrase = time.perf_counter()
+                                first_phrase_logged = True
+                                logger.info(f"⏱️ TIMING: First phrase detected: {(t_first_phrase - t_start)*1000:.1f}ms total, phrase='{phrase[:50]}...'")
+
+                            # Send LLM text to client for display
+                            await websocket.send_json(
+                                LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            )
+
+                            # Synthesize and stream audio for this phrase
+                            tts_timing = await self._synthesize_and_stream_phrase(
+                                websocket, phrase,
+                                track_first_audio=(t_first_tts_audio is None),
+                                turn_start_time=t_start
+                            )
+                            if t_first_tts_audio is None and tts_timing:
+                                t_first_tts_audio = tts_timing
+
+                            # Check interrupt again after TTS
+                            if self.session.is_interrupted():
+                                break
+
+                # Flush remaining text from this iteration
+                if not self.session.is_interrupted():
+                    remaining_filtered = thinking_filter.flush()
+                    if remaining_filtered:
+                        remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
+                    tool_call_remaining = tool_call_filter.flush()
+                    if tool_call_remaining:
+                        remaining_filtered = (remaining_filtered or "") + tool_call_remaining
+                    if remaining_filtered:
+                        phrase = phrase_detector.add_token(remaining_filtered)
+                        if phrase:
+                            await websocket.send_json(
+                                LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            )
+                            await self._synthesize_and_stream_phrase(websocket, phrase)
+                    remaining = phrase_detector.flush()
+                    if remaining:
+                        # Only send is_final if no tool calls to process
+                        is_final = len(collected_tool_calls) == 0
+                        await websocket.send_json(
+                            LLMTextMessage(text=remaining, is_final=is_final).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(websocket, remaining)
+
+                # --- Tool execution ---
+                if not collected_tool_calls or self.session.is_interrupted():
+                    # No tool calls or interrupted — send final marker and exit loop
+                    if not self.session.is_interrupted():
+                        await websocket.send_json(
+                            LLMTextMessage(text="", is_final=True).model_dump()
+                        )
                     break
 
-                # Handle tool calls - send via JSON only, never TTS
-                if isinstance(output, LLMToolCall):
-                    logger.info(f"Tool call received: {output.name} - sending via JSON only")
+                # Add the assistant message (with content + tool_calls) to history
+                assistant_msg: dict = {"role": "assistant"}
+                clean_content = self._filter_thinking_tags(
+                    self._last_accumulated_response
+                ).strip()
+                if clean_content:
+                    assistant_msg["content"] = clean_content
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for tc in collected_tool_calls
+                ]
+                self.session.messages.append(assistant_msg)
 
-                    # Send tool call as JSON for the client
-                    await websocket.send_json(
-                        ToolCallMessage(
-                            tool_call_id=output.id,
-                            function_name=output.name,
-                            arguments=output.arguments,
-                        ).model_dump()
+                # Execute all tool calls and add results to history.
+                # The OpenAI API requires a tool result for every tool_call
+                # in the assistant message.
+                await self._ensure_mcp_tools()
+
+                for tc in collected_tool_calls:
+                    logger.info(f"Executing tool call: {tc.name} (id={tc.id})")
+
+                    if self._can_execute_tool_call(tc.name):
+                        # Server-side MCP execution
+                        await websocket.send_json(
+                            ToolExecutingMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                            ).model_dump()
+                        )
+                        result_text = await self._execute_mcp_tool(tc.name, tc.arguments)
+                        is_error = result_text.startswith("Error")
+                    else:
+                        # Client round-trip: send tool call, wait for result
+                        await websocket.send_json(
+                            ToolCallMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                                arguments=tc.arguments,
+                            ).model_dump()
+                        )
+                        tool_result = await self.session.wait_for_tool_result(
+                            tc.id, timeout=TOOL_RESULT_TIMEOUT
+                        )
+                        if tool_result is None:
+                            result_text = (
+                                "Tool execution timed out or was interrupted."
+                            )
+                            is_error = True
+                        else:
+                            result_text = tool_result.get("result", "")
+                            is_error = tool_result.get("is_error", False)
+
+                    # Add tool result to history
+                    self.session.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_text,
+                    })
+                    logger.info(
+                        f"Tool result added to history: {tc.name}, "
+                        f"error={is_error}, len={len(result_text)}"
                     )
 
-                    # Speak a brief placeholder if we haven't already this turn
-                    if not tool_call_placeholder_spoken:
-                        placeholder = "One moment."
-                        await websocket.send_json(
-                            LLMTextMessage(text=placeholder, is_final=False).model_dump()
-                        )
-                        await self._synthesize_and_stream_phrase(
-                            websocket, placeholder,
-                            track_first_audio=(t_first_tts_audio is None),
-                            turn_start_time=t_start
-                        )
-                        tool_call_placeholder_spoken = True
+                    if self.session.is_interrupted():
+                        # Emit error results for remaining tool calls so every
+                        # tool_call in the assistant message has a matching result.
+                        remaining = collected_tool_calls[
+                            collected_tool_calls.index(tc) + 1 :
+                        ]
+                        for remaining_tc in remaining:
+                            self.session.messages.append({
+                                "role": "tool",
+                                "tool_call_id": remaining_tc.id,
+                                "content": "Interrupted by user.",
+                            })
+                        break
 
-                    continue
-
-                # Handle regular content tokens
-                if isinstance(output, LLMContent):
-                    token = output.text
-
-                    # DEBUG: Log raw token content
-                    if token.strip():
-                        logger.debug(f"🔤 RAW TOKEN: {repr(token)}")
-
-                    # Filter thinking content at token level (before phrase detection)
-                    filtered_token = thinking_filter.filter_token(token)
-                    full_response += token  # Keep full response for history
-
-                    # Skip empty tokens (thinking content filtered out)
-                    if not filtered_token:
-                        continue
-
-                    # DEBUG: Log after thinking filter
-                    if filtered_token != token:
-                        logger.debug(f"🧠 AFTER THINKING FILTER: {repr(filtered_token)}")
-
-                    # Filter out JSON-like tool call content from text
-                    # (some models output tool calls as text, not structured)
-                    before_tool_filter = filtered_token
-                    filtered_token = tool_call_filter.filter_token(filtered_token)
-
-                    # DEBUG: Log if tool call filter changed anything
-                    if filtered_token != before_tool_filter:
-                        logger.debug(f"🔧 TOOL FILTER removed: {repr(before_tool_filter)} -> {repr(filtered_token)}")
-
-                    # Check if tool call filter detected any tool calls - speak placeholder
-                    if tool_call_filter.get_detected_tool_calls() and not tool_call_placeholder_spoken:
-                        placeholder = "One moment."
-                        await websocket.send_json(
-                            LLMTextMessage(text=placeholder, is_final=False).model_dump()
-                        )
-                        await self._synthesize_and_stream_phrase(
-                            websocket, placeholder,
-                            track_first_audio=(t_first_tts_audio is None),
-                            turn_start_time=t_start
-                        )
-                        tool_call_placeholder_spoken = True
-
-                    # Skip empty tokens (tool call content filtered out)
-                    if not filtered_token:
-                        continue
-
-                    # Detect phrase boundaries on filtered content
-                    phrase = phrase_detector.add_token(filtered_token)
-                    if phrase:
-                        if not first_phrase_logged:
-                            t_first_phrase = time.perf_counter()
-                            first_phrase_logged = True
-                            logger.info(f"⏱️ TIMING: First phrase detected: {(t_first_phrase - t_start)*1000:.1f}ms total, phrase='{phrase[:50]}...'")
-
-                        # Send LLM text to client for display
-                        await websocket.send_json(
-                            LLMTextMessage(text=phrase, is_final=False).model_dump()
-                        )
-
-                        # Synthesize and stream audio for this phrase
-                        # Pass timing context for first TTS audio tracking
-                        tts_timing = await self._synthesize_and_stream_phrase(
-                            websocket, phrase,
-                            track_first_audio=(t_first_tts_audio is None),
-                            turn_start_time=t_start
-                        )
-                        if t_first_tts_audio is None and tts_timing:
-                            t_first_tts_audio = tts_timing
-
-                        # Check interrupt again after TTS
-                        if self.session.is_interrupted():
-                            break
-
-            # Flush remaining text
-            if not self.session.is_interrupted():
-                # First flush any remaining content from thinking filter
-                remaining_filtered = thinking_filter.flush()
-                if remaining_filtered:
-                    # Also filter through tool call filter
-                    remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
-
-                # Flush tool call filter as well
-                tool_call_remaining = tool_call_filter.flush()
-                if tool_call_remaining:
-                    remaining_filtered = (remaining_filtered or "") + tool_call_remaining
-
-                if remaining_filtered:
-                    # Add filtered content to phrase detector
-                    phrase = phrase_detector.add_token(remaining_filtered)
-                    if phrase:
-                        await websocket.send_json(
-                            LLMTextMessage(text=phrase, is_final=False).model_dump()
-                        )
-                        await self._synthesize_and_stream_phrase(websocket, phrase)
-
-                # Then flush the phrase detector
-                remaining = phrase_detector.flush()
-                if remaining:
-                    await websocket.send_json(
-                        LLMTextMessage(text=remaining, is_final=True).model_dump()
-                    )
-                    await self._synthesize_and_stream_phrase(websocket, remaining)
-                else:
-                    # Always send is_final=True to signal LLM response complete
-                    await websocket.send_json(
-                        LLMTextMessage(text="", is_final=True).model_dump()
-                    )
+                if self.session.is_interrupted():
+                    break
+                # Loop continues — next iteration will call LLM with continuation=True
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -1244,15 +1532,42 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during turn: {e}", exc_info=True)
+            # Check for specific model-not-loaded errors
+            if "not loaded" in error_str.lower():
+                error_msg = "Model not ready. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = "Processing error. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your request. Please try again."
-                ).model_dump()
-            )
-            self.session.set_state(VoiceState.IDLE)
+            # Provide contextual error message based on exception content
+            # Use generic messages to avoid leaking internal details
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = "Model not available. Please try a different model."
+            else:
+                # Generic fallback - don't expose internal error details
+                error_msg = "Failed to process request. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def process_turn_native_audio(
         self, websocket: WebSocket, audio_bytes: bytes
@@ -1305,136 +1620,234 @@ class VoiceChatService:
             self.session.set_state(VoiceState.SPEAKING)
             await websocket.send_json(StatusMessage(state=VoiceState.SPEAKING).model_dump())
 
-            # Stream LLM response with native audio
-            llm_stream = self.stream_llm_response_with_audio(audio_bytes)
+            # Track if we've already spoken a tool call placeholder this turn
+            tool_call_placeholder_spoken = False
+            # Track the input filter across iterations for "model heard" logging
+            last_input_filter: StreamingTagFilter | None = None
 
-            # Use phrase detector to accumulate LLM tokens
-            phrase_detector = PhraseBoundaryDetector(
-                sentence_boundary_only=self.session.config.sentence_boundary_only,
-            )
-            thinking_filter = StreamingThinkingFilter()
-            tool_call_filter = StreamingToolCallFilter()
-            # Filter for <input>...</input> tags - captures content for logging
-            input_filter = StreamingTagFilter("input", capture=True)
-            full_response = ""
-            first_token_logged = False
-            first_phrase_logged = False
+            for tool_iteration in range(MAX_TOOL_ITERATIONS):
+                is_continuation = tool_iteration > 0
 
-            t_llm_start = time.perf_counter()
-            logger.info(f"⏱️ TIMING: Starting native audio LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
+                if is_continuation:
+                    logger.info(f"Native audio tool loop iteration {tool_iteration + 1}/{MAX_TOOL_ITERATIONS}")
 
-            async for output in llm_stream:
-                if not first_token_logged:
-                    t_llm_first_token = time.perf_counter()
-                    first_token_logged = True
-                    logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total")
+                # Stream LLM response with native audio
+                llm_stream = self.stream_llm_response_with_audio(
+                    audio_bytes, continuation=is_continuation
+                )
 
-                # Check for interrupt
-                if self.session.is_interrupted():
-                    logger.info("Turn interrupted by user")
+                # Fresh filters per iteration
+                phrase_detector = PhraseBoundaryDetector(
+                    sentence_boundary_only=self.session.config.sentence_boundary_only,
+                )
+                thinking_filter = StreamingThinkingFilter()
+                tool_call_filter = StreamingToolCallFilter()
+                input_filter = StreamingTagFilter("input", capture=True)
+                last_input_filter = input_filter
+                full_response = ""
+                collected_tool_calls: list[LLMToolCall] = []
+                first_token_logged = False
+                first_phrase_logged = False
+
+                t_llm_start = time.perf_counter()
+                logger.info(f"⏱️ TIMING: Starting native audio LLM request: {(t_llm_start - t_start)*1000:.1f}ms from turn start")
+
+                async for output in llm_stream:
+                    if not first_token_logged:
+                        t_llm_first_token = time.perf_counter()
+                        first_token_logged = True
+                        logger.info(f"⏱️ TIMING: LLM first token: {(t_llm_first_token - t_start)*1000:.1f}ms total")
+
+                    # Check for interrupt
+                    if self.session.is_interrupted():
+                        logger.info("Turn interrupted by user")
+                        break
+
+                    # Handle tool calls - collect for execution
+                    if isinstance(output, LLMToolCall):
+                        logger.info(f"Tool call received: {output.name} - collecting for execution")
+                        collected_tool_calls.append(output)
+
+                        if not tool_call_placeholder_spoken:
+                            placeholder = "One moment."
+                            await websocket.send_json(
+                                LLMTextMessage(text=placeholder, is_final=False).model_dump()
+                            )
+                            await self._synthesize_and_stream_phrase(
+                                websocket, placeholder,
+                                track_first_audio=(t_first_tts_audio is None),
+                                turn_start_time=t_start
+                            )
+                            tool_call_placeholder_spoken = True
+                        continue
+
+                    # Handle regular content tokens
+                    if isinstance(output, LLMContent):
+                        token = output.text
+                        filtered_token = thinking_filter.filter_token(token)
+                        full_response += token
+
+                        if not filtered_token:
+                            continue
+
+                        # Filter <input>...</input> tags (model's echo of what it heard)
+                        filtered_token = input_filter.filter_token(filtered_token)
+                        if not filtered_token:
+                            continue
+
+                        filtered_token = tool_call_filter.filter_token(filtered_token)
+                        if not filtered_token:
+                            continue
+
+                        # Detect phrase boundaries
+                        phrase = phrase_detector.add_token(filtered_token)
+                        if phrase:
+                            if not first_phrase_logged:
+                                t_first_phrase = time.perf_counter()
+                                first_phrase_logged = True
+                                logger.info(f"⏱️ TIMING: First phrase: {(t_first_phrase - t_start)*1000:.1f}ms")
+
+                            await websocket.send_json(
+                                LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            )
+
+                            tts_timing = await self._synthesize_and_stream_phrase(
+                                websocket, phrase,
+                                track_first_audio=(t_first_tts_audio is None),
+                                turn_start_time=t_start
+                            )
+                            if t_first_tts_audio is None and tts_timing:
+                                t_first_tts_audio = tts_timing
+
+                            if self.session.is_interrupted():
+                                break
+
+                # Flush remaining text from this iteration
+                if not self.session.is_interrupted():
+                    remaining_filtered = thinking_filter.flush()
+                    if remaining_filtered:
+                        remaining_filtered = input_filter.filter_token(remaining_filtered)
+                    if remaining_filtered:
+                        remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
+                    input_filter.flush()
+                    tool_call_remaining = tool_call_filter.flush()
+                    if tool_call_remaining:
+                        remaining_filtered = (remaining_filtered or "") + tool_call_remaining
+                    if remaining_filtered:
+                        phrase = phrase_detector.add_token(remaining_filtered)
+                        if phrase:
+                            await websocket.send_json(
+                                LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            )
+                            await self._synthesize_and_stream_phrase(websocket, phrase)
+                    remaining = phrase_detector.flush()
+                    if remaining:
+                        is_final = len(collected_tool_calls) == 0
+                        await websocket.send_json(
+                            LLMTextMessage(text=remaining, is_final=is_final).model_dump()
+                        )
+                        await self._synthesize_and_stream_phrase(websocket, remaining)
+
+                # --- Tool execution ---
+                if not collected_tool_calls or self.session.is_interrupted():
+                    if not self.session.is_interrupted():
+                        await websocket.send_json(
+                            LLMTextMessage(text="", is_final=True).model_dump()
+                        )
                     break
 
-                # Handle tool calls
-                if isinstance(output, LLMToolCall):
-                    logger.info(f"Tool call received: {output.name}")
-                    await websocket.send_json(
-                        ToolCallMessage(
-                            tool_call_id=output.id,
-                            function_name=output.name,
-                            arguments=output.arguments,
-                        ).model_dump()
-                    )
-                    continue
+                # Add assistant message with tool_calls to history
+                assistant_msg: dict = {"role": "assistant"}
+                clean_content = self._filter_thinking_tags(
+                    self._last_accumulated_response
+                ).strip()
+                if clean_content:
+                    assistant_msg["content"] = clean_content
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for tc in collected_tool_calls
+                ]
+                self.session.messages.append(assistant_msg)
 
-                # Handle regular content tokens
-                if isinstance(output, LLMContent):
-                    token = output.text
-                    filtered_token = thinking_filter.filter_token(token)
-                    full_response += token
+                # Execute all tool calls and add results to history.
+                # The OpenAI API requires a tool result for every tool_call
+                # in the assistant message.
+                await self._ensure_mcp_tools()
 
-                    if not filtered_token:
-                        continue
+                for tc in collected_tool_calls:
+                    logger.info(f"Executing tool call: {tc.name} (id={tc.id})")
 
-                    # Filter <input>...</input> tags (model's echo of what it heard)
-                    filtered_token = input_filter.filter_token(filtered_token)
-                    if not filtered_token:
-                        continue
-
-                    filtered_token = tool_call_filter.filter_token(filtered_token)
-                    if not filtered_token:
-                        continue
-
-                    # Detect phrase boundaries
-                    phrase = phrase_detector.add_token(filtered_token)
-                    if phrase:
-                        if not first_phrase_logged:
-                            t_first_phrase = time.perf_counter()
-                            first_phrase_logged = True
-                            logger.info(f"⏱️ TIMING: First phrase: {(t_first_phrase - t_start)*1000:.1f}ms")
-
+                    if self._can_execute_tool_call(tc.name):
                         await websocket.send_json(
-                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            ToolExecutingMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                            ).model_dump()
                         )
-
-                        tts_timing = await self._synthesize_and_stream_phrase(
-                            websocket, phrase,
-                            track_first_audio=(t_first_tts_audio is None),
-                            turn_start_time=t_start
-                        )
-                        if t_first_tts_audio is None and tts_timing:
-                            t_first_tts_audio = tts_timing
-
-                        if self.session.is_interrupted():
-                            break
-
-            # Flush remaining text
-            if not self.session.is_interrupted():
-                remaining_filtered = thinking_filter.flush()
-                if remaining_filtered:
-                    # Filter through input and tool call filters
-                    remaining_filtered = input_filter.filter_token(remaining_filtered)
-                if remaining_filtered:
-                    remaining_filtered = tool_call_filter.filter_token(remaining_filtered)
-
-                # Flush all filters
-                input_filter.flush()  # Just flush, captured content retrieved later
-                tool_call_remaining = tool_call_filter.flush()
-                if tool_call_remaining:
-                    remaining_filtered = (remaining_filtered or "") + tool_call_remaining
-
-                if remaining_filtered:
-                    phrase = phrase_detector.add_token(remaining_filtered)
-                    if phrase:
+                        result_text = await self._execute_mcp_tool(tc.name, tc.arguments)
+                        is_error = result_text.startswith("Error")
+                    else:
                         await websocket.send_json(
-                            LLMTextMessage(text=phrase, is_final=False).model_dump()
+                            ToolCallMessage(
+                                tool_call_id=tc.id,
+                                function_name=tc.name,
+                                arguments=tc.arguments,
+                            ).model_dump()
                         )
-                        await self._synthesize_and_stream_phrase(websocket, phrase)
+                        tool_result = await self.session.wait_for_tool_result(
+                            tc.id, timeout=TOOL_RESULT_TIMEOUT
+                        )
+                        if tool_result is None:
+                            result_text = "Tool execution timed out or was interrupted."
+                            is_error = True
+                        else:
+                            result_text = tool_result.get("result", "")
+                            is_error = tool_result.get("is_error", False)
 
-                remaining = phrase_detector.flush()
-                if remaining:
-                    await websocket.send_json(
-                        LLMTextMessage(text=remaining, is_final=True).model_dump()
+                    self.session.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_text,
+                    })
+                    logger.info(
+                        f"Tool result added to history: {tc.name}, "
+                        f"error={is_error}, len={len(result_text)}"
                     )
-                    await self._synthesize_and_stream_phrase(websocket, remaining)
-                else:
-                    # Always send is_final=True to signal LLM response complete
-                    await websocket.send_json(
-                        LLMTextMessage(text="", is_final=True).model_dump()
-                    )
+
+                    if self.session.is_interrupted():
+                        # Emit error results for remaining tool calls so every
+                        # tool_call in the assistant message has a matching result.
+                        remaining = collected_tool_calls[
+                            collected_tool_calls.index(tc) + 1 :
+                        ]
+                        for remaining_tc in remaining:
+                            self.session.messages.append({
+                                "role": "tool",
+                                "tool_call_id": remaining_tc.id,
+                                "content": "Interrupted by user.",
+                            })
+                        break
+
+                if self.session.is_interrupted():
+                    break
 
             # Log what the model heard from the audio (captured from <input> tags)
-            heard_text = input_filter.get_captured()
-            if heard_text:
-                logger.info(f"🎤 MODEL HEARD: \"{heard_text}\"")
-                # Also send to client for debugging
-                await websocket.send_json(
-                    TranscriptionMessage(
-                        text=f"[Model heard: {heard_text}]",
-                        is_final=True
-                    ).model_dump()
-                )
-            else:
-                logger.warning("🎤 MODEL HEARD: (no <input> tag found in response)")
+            if last_input_filter:
+                heard_text = last_input_filter.get_captured()
+                if heard_text:
+                    logger.info(f"🎤 MODEL HEARD: \"{heard_text}\"")
+                    await websocket.send_json(
+                        TranscriptionMessage(
+                            text=f"[Model heard: {heard_text}]",
+                            is_final=True
+                        ).model_dump()
+                    )
+                else:
+                    logger.warning("🎤 MODEL HEARD: (no <input> tag found in response)")
 
             # === TIMING SUMMARY ===
             t_end = time.perf_counter()
@@ -1452,18 +1865,42 @@ class VoiceChatService:
             self.session.set_state(VoiceState.IDLE)
             await websocket.send_json(StatusMessage(state=VoiceState.IDLE).model_dump())
 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error during native audio turn: {e}", exc_info=True)
+            error_msg = "Cannot connect to the AI service. Please check that the Universal Runtime is running."
+            await self._send_error_and_reset(websocket, error_msg)
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout during native audio turn: {e}", exc_info=True)
+            error_msg = "Request timed out. The service may be overloaded or the model may be loading."
+            await self._send_error_and_reset(websocket, error_msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"WebSocket connection closed during native audio turn: {e}", exc_info=True)
+            error_msg = "Connection to speech service was lost. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
+        except RuntimeError as e:
+            error_str = str(e)
+            logger.error(f"Runtime error during native audio turn: {e}", exc_info=True)
+            if "not loaded" in error_str.lower():
+                error_msg = "Model not ready. Try selecting a different model or wait for it to load."
+            else:
+                error_msg = "Processing error. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Error processing native audio turn: {e}", exc_info=True)
-            # Send sanitized error to client - don't expose internal details
-            await websocket.send_json(
-                ErrorMessage(
-                    message="An error occurred while processing your audio. Please try again."
-                ).model_dump()
-            )
-            self.session.set_state(VoiceState.IDLE)
+            # Use generic messages to avoid leaking internal details
+            if "timeout" in error_str.lower():
+                error_msg = "Request timed out. Please try again."
+            elif "connection" in error_str.lower():
+                error_msg = "Connection error. Please check your network and try again."
+            elif "model" in error_str.lower() and "not" in error_str.lower():
+                error_msg = "Model not available. Please try a different model."
+            else:
+                error_msg = "Failed to process audio. Please try again."
+            await self._send_error_and_reset(websocket, error_msg)
 
     async def stream_llm_response_with_audio(
-        self, audio_bytes: bytes
+        self, audio_bytes: bytes, *, continuation: bool = False
     ) -> AsyncGenerator[LLMStreamOutput, None]:
         """Stream LLM response with native audio input.
 
@@ -1471,7 +1908,9 @@ class VoiceChatService:
         multimodal message format (input_audio content part).
 
         Args:
-            audio_bytes: Raw PCM audio (16kHz 16-bit mono).
+            audio_bytes: Raw PCM audio (16kHz 16-bit mono). Ignored when continuation=True.
+            continuation: If True, stream from existing session history without
+                adding a new audio message. Used for tool loop re-invocations.
 
         Yields:
             LLMContent for regular text tokens, LLMToolCall for tool calls.
@@ -1479,51 +1918,58 @@ class VoiceChatService:
         Raises:
             ValueError: If audio_bytes exceeds MAX_NATIVE_AUDIO_SIZE.
         """
-        # Validate audio size to prevent DoS via memory exhaustion
-        if len(audio_bytes) > MAX_NATIVE_AUDIO_SIZE:
-            raise ValueError(
-                f"Audio size ({len(audio_bytes)} bytes) exceeds maximum allowed "
-                f"({MAX_NATIVE_AUDIO_SIZE} bytes). Please use shorter audio clips."
-            )
-
         t_start = time.perf_counter()
         first_token_logged = False
 
-        # Convert PCM to WAV format (adds 44-byte header)
-        # OpenAI-compatible APIs only accept 'wav' or 'mp3', not raw 'pcm'
-        wav_bytes = pcm_to_wav(audio_bytes, sample_rate=16000, channels=1, bits_per_sample=16)
-        audio_base64 = base64.b64encode(wav_bytes).decode("utf-8")
+        if not continuation:
+            # Validate audio size to prevent DoS via memory exhaustion
+            if len(audio_bytes) > MAX_NATIVE_AUDIO_SIZE:
+                raise ValueError(
+                    f"Audio size ({len(audio_bytes)} bytes) exceeds maximum allowed "
+                    f"({MAX_NATIVE_AUDIO_SIZE} bytes). Please use shorter audio clips."
+                )
 
-        # Build multimodal message with audio content
-        # Uses OpenAI-compatible format: input_audio with data and format
-        # Include instruction for model to echo what it heard at the end (for debugging)
-        audio_message = {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": audio_base64,
-                        "format": "wav",  # WAV format (PCM with header)
+            # Convert PCM to WAV format (adds 44-byte header)
+            # OpenAI-compatible APIs only accept 'wav' or 'mp3', not raw 'pcm'
+            wav_bytes = pcm_to_wav(audio_bytes, sample_rate=16000, channels=1, bits_per_sample=16)
+            audio_base64 = base64.b64encode(wav_bytes).decode("utf-8")
+
+            # Build multimodal message with audio content
+            # Uses OpenAI-compatible format: input_audio with data and format
+            # Include instruction for model to echo what it heard at the end (for debugging)
+            audio_message = {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": audio_base64,
+                            "format": "wav",  # WAV format (PCM with header)
+                        },
                     },
-                },
-                {
-                    "type": "text",
-                    "text": "Respond to my audio message. At the very end of your response, add <input>what you heard me say</input> (this will be stripped for logging).",
-                },
-            ],
-        }
+                    {
+                        "type": "text",
+                        "text": "Respond to my audio message. At the very end of your response, add <input>what you heard me say</input> (this will be stripped for logging).",
+                    },
+                ],
+            }
 
-        # Add audio message to session history
-        # Note: We store a placeholder in history, not the full audio
-        self.session.messages.append({
-            "role": "user",
-            "content": "[Audio message]",
-        })
+            # Add audio message to session history
+            # Note: We store a placeholder in history, not the full audio
+            self.session.messages.append({
+                "role": "user",
+                "content": "[Audio message]",
+            })
 
-        # Prepare messages - use existing history + new audio message
-        # Replace the placeholder with actual audio for this request
-        messages = self.session.messages[:-1] + [audio_message]
+            # Prepare messages - use existing history + new audio message
+            # Replace the placeholder with actual audio for this request
+            messages = self.session.messages[:-1] + [audio_message]
+        else:
+            # Continuation: use existing history (after tool results were added)
+            messages = list(self.session.messages)
+
+        # Inject tools (prompt-based strategy modifies messages)
+        messages = self._inject_prompt_based_tools(messages)
 
         # Prepare request
         url = f"{self._llm_url}/chat/completions"
@@ -1534,6 +1980,11 @@ class VoiceChatService:
             "temperature": 0.7,
             "max_tokens": 500,
         }
+
+        # Inject tools for native API strategy
+        openai_tools = self._get_tools_for_payload()
+        if openai_tools:
+            payload["tools"] = openai_tools
 
         if self._llm_model_config.model_api_parameters:
             payload.update(self._llm_model_config.model_api_parameters)
@@ -1614,8 +2065,11 @@ class VoiceChatService:
             t_done = time.perf_counter()
             logger.info(f"⏱️ LLM (native audio): Complete in {(t_done - t_start)*1000:.1f}ms, {token_count} tokens")
 
-            # Add response to history
-            if accumulated_response:
+            # Store accumulated response for caller (tool loop needs it)
+            self._last_accumulated_response = accumulated_response
+
+            # Add response to history (in continuation mode, caller manages history)
+            if not continuation and accumulated_response:
                 clean_response = self._filter_thinking_tags(accumulated_response).strip()
                 if clean_response:
                     self.session.add_assistant_message(clean_response)
@@ -1743,6 +2197,14 @@ class VoiceChatService:
         """Clean up service resources.
 
         Call this when the voice session ends to properly close
-        the TTS WebSocket connection.
+        the TTS WebSocket connection and MCP sessions.
         """
         await self._close_tts_websocket()
+
+        # Close MCP sessions if they were initialized
+        if self._mcp_service:
+            try:
+                await self._mcp_service.close_all_persistent_sessions()
+                logger.debug("MCP sessions closed")
+            except Exception as e:
+                logger.warning(f"Error closing MCP sessions: {e}")

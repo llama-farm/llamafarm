@@ -5,6 +5,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from celery import group  # type: ignore[import-not-found,import-untyped]
 from config.datamodel import Dataset
@@ -598,9 +599,7 @@ class DatasetService:
             metadata = DataService.get_data_file_metadata_by_hash(
                 namespace, project, dataset, file_hash
             )
-            original_filename = (
-                metadata.original_file_name if metadata else file_hash
-            )
+            original_filename = metadata.original_file_name if metadata else file_hash
 
             ingest_tasks.append(
                 build_ingest_signature(
@@ -618,7 +617,11 @@ class DatasetService:
 
     @classmethod
     def start_dataset_ingestion(
-        cls, namespace: str, project: str, dataset: str
+        cls,
+        namespace: str,
+        project: str,
+        dataset: str,
+        parser_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> DatasetIngestLaunchResult:
         """
         Kick off ingestion tasks for all files in a dataset and return the tracking task id.

@@ -5,7 +5,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 
 export type ProjectModalMode = 'create' | 'edit'
 
@@ -125,7 +126,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({
               <label className="text-xs text-muted-foreground">
                 What are you building? (optional)
               </label>
-              <textarea
+              <Textarea
                 rows={4}
                 className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground min-h-[44px]"
                 placeholder="What are you building?"

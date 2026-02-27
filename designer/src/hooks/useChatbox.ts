@@ -14,7 +14,14 @@ import { parsePromptSets } from '../utils/promptSets'
 import { useProjectSession } from './useProjectSession'
 import { useChatSession } from './useChatSession'
 import { ChatboxMessage } from '../types/chatbox'
-import { ChatStreamChunk, NetworkError, ChatMessage, ClassifiedError } from '../types/chat'
+import {
+  ChatStreamChunk,
+  NetworkError,
+  ChatMessage,
+  ClassifiedError,
+  isChatChunk,
+  isSourcesEvent,
+} from '../types/chat'
 import { generateMessageId } from '../utils/idGenerator'
 import { classifyError, getContextualErrorMessage } from '../utils/errorClassifier'
 import { getHealth } from '../api/healthService'
@@ -611,6 +618,14 @@ export function useChatbox(options: UseChatboxOptions = {}) {
               signal: abortController.signal,
               onChunk: (chunk: ChatStreamChunk) => {
                 if (!isMountedRef.current) return
+
+                // Handle sources event (ignore for now in useChatbox, handled in TestChat)
+                if (isSourcesEvent(chunk)) {
+                  return
+                }
+
+                // Only process chat completion chunks
+                if (!isChatChunk(chunk)) return
 
                 // Clear error on first successful chunk - server is responding!
                 if (error) {

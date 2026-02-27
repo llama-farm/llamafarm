@@ -119,6 +119,11 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if err := createSchemaScaffold(absProjectDir); err != nil {
+			utils.OutputError("Failed to scaffold schemas directory: %v", err)
+			os.Exit(1)
+		}
+
 		fmt.Printf("Created project %s/%s in %s\n", ns, projectName, absProjectDir)
 	},
 }
@@ -130,3 +135,33 @@ func init() {
 }
 
 var initConfigTemplate string
+
+func createSchemaScaffold(projectDir string) error {
+	schemasDir := filepath.Join(projectDir, "schemas")
+	if err := os.MkdirAll(schemasDir, 0755); err != nil {
+		return fmt.Errorf("create schemas directory: %w", err)
+	}
+
+	examplePath := filepath.Join(schemasDir, "example.py")
+	if _, err := os.Stat(examplePath); err == nil {
+		return nil
+	}
+
+	exampleContent := []byte(`# Example Pydantic schema for structured outputs.
+# Configure in llamafarm.yaml:
+# schema: schemas/example.py::Person
+
+from pydantic import BaseModel
+
+
+class Person(BaseModel):
+    name: str
+    age: int
+`)
+
+	if err := os.WriteFile(examplePath, exampleContent, 0644); err != nil {
+		return fmt.Errorf("write example schema: %w", err)
+	}
+
+	return nil
+}

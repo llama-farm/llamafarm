@@ -17,7 +17,13 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Vision Pipeline](./vision.md) | `POST /v1/vision/*` | YOLO detection, CLIP classification, cascade streaming |
+| [Time-Series Forecasting](./ml-addons.md#time-series-forecasting) | `POST /v1/timeseries/*` | ARIMA, Chronos, Exponential Smoothing |
+| [ADTK Anomaly Detection](./ml-addons.md#time-series-anomaly-detection-adtk) | `POST /v1/adtk/*` | Level shifts, spikes, seasonal anomalies |
+| [Data Drift Detection](./ml-addons.md#data-drift-detection) | `POST /v1/drift/*` | KS, Chi-squared, MMD drift monitoring |
+| [CatBoost](./ml-addons.md#catboost-gradient-boosting) | `POST /v1/catboost/*` | Gradient boosting with categorical features |
+| [SHAP Explainability](./ml-addons.md#shap-explainability) | `POST /v1/explain/*` | Feature contributions for any ML model |
 
 ## Starting the Universal Runtime
 
@@ -65,7 +71,7 @@ The easiest way to use OCR is through the LlamaFarm API, which handles file uplo
 
 ```bash
 # Upload a PDF or image directly
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F "file=@document.pdf" \
   -F "model=easyocr" \
   -F "languages=en"
@@ -74,7 +80,7 @@ curl -X POST http://localhost:8000/v1/vision/ocr \
 Or with base64-encoded images:
 
 ```bash
-curl -X POST http://localhost:8000/v1/vision/ocr \
+curl -X POST http://localhost:14345/v1/vision/ocr \
   -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \
   -F "model=surya" \
   -F "languages=en"
@@ -161,7 +167,7 @@ The easiest way to extract data from documents is through the LlamaFarm API:
 
 ```bash
 # Extract from a receipt (file upload)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@receipt.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \
   -F "task=extraction"
@@ -208,7 +214,7 @@ Ask questions about document content using the LlamaFarm API:
 
 ```bash
 # Document VQA with file upload (LlamaFarm API)
-curl -X POST http://localhost:8000/v1/vision/documents/extract \
+curl -X POST http://localhost:14345/v1/vision/documents/extract \
   -F "file=@invoice.pdf" \
   -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \
   -F "prompts=What is the total amount?,What is the invoice date?" \
@@ -322,8 +328,8 @@ The LlamaFarm API (`/v1/ml/classifier/*`) provides the same functionality as the
 - **Latest Resolution**: Use `model-name-latest` to auto-resolve to the newest version
 
 ```bash
-# Via LlamaFarm API (port 8000)
-curl -X POST http://localhost:8000/v1/ml/classifier/fit ...
+# Via LlamaFarm API (port 14345)
+curl -X POST http://localhost:14345/v1/ml/classifier/fit ...
 
 # Via Universal Runtime (port 11540)
 curl -X POST http://localhost:11540/v1/classifier/fit ...
@@ -332,7 +338,7 @@ curl -X POST http://localhost:11540/v1/classifier/fit ...
 
 :::warning Server vs Universal Runtime
 - **`/v1/classify`** (pre-trained models) is **only available on Universal Runtime** (port 11540). It is NOT proxied through the LlamaFarm server.
-- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 8000) and proxies to Universal Runtime.
+- **`/v1/ml/classifier/*`** (custom SetFit classifiers) is available on the LlamaFarm server (port 14345) and proxies to Universal Runtime.
 :::
 
 ### Step 1: Train Your Classifier
@@ -613,11 +619,11 @@ Detect outliers and anomalies in numeric and mixed data using multiple algorithm
 
 See the dedicated [Anomaly Detection Guide](./anomaly-detection.md) for complete documentation.
 
-### Quick Example
+### Quick Example (LlamaFarm API - Recommended)
 
 ```bash
 # 1. Train on normal data
-curl -X POST http://localhost:11540/v1/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
@@ -627,7 +633,7 @@ curl -X POST http://localhost:11540/v1/anomaly/fit \
   }'
 
 # 2. Detect anomalies in new data
-curl -X POST http://localhost:11540/v1/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",

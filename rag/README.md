@@ -46,7 +46,7 @@ data_processing_strategies:
           chunk_overlap: 100      # Overlap between chunks
           chunk_strategy: semantic # semantic, sections, paragraphs, sentences, characters
           use_ocr: true           # Enable OCR fallback
-          ocr_endpoint: "http://127.0.0.1:8000/v1/vision/ocr"
+          ocr_endpoint: "http://127.0.0.1:14345/v1/vision/ocr"
     extractors:
       - type: UniversalExtractor
         config:

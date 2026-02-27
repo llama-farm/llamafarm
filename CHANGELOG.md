@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.0.27](https://github.com/llama-farm/llamafarm/compare/v0.0.26...v0.0.27) (2026-02-16)
+
+
+### Features
+
+* addons ([#748](https://github.com/llama-farm/llamafarm/issues/748)) ([c026511](https://github.com/llama-farm/llamafarm/commit/c026511bbb2d5a58ba7d514cdc32ad04e3af0411))
+* **anomaly:** add comprehensive docs, use-cases, and full demo ([#715](https://github.com/llama-farm/llamafarm/issues/715)) ([fe988ad](https://github.com/llama-farm/llamafarm/commit/fe988ad572e0e6542c2b2aba4392d686e433f2cc))
+* binary component builds ([#681](https://github.com/llama-farm/llamafarm/issues/681)) ([a9858e4](https://github.com/llama-farm/llamafarm/commit/a9858e48546d668386826dced2a0cf897d0aa7c4))
+* **config:** add per-model RAG defaults ([#759](https://github.com/llama-farm/llamafarm/issues/759)) ([4ad4a6c](https://github.com/llama-farm/llamafarm/commit/4ad4a6cd40916b383e5123c7d91798757b6e07db))
+* **designer:** show RAG source chunks in test outputs ([#740](https://github.com/llama-farm/llamafarm/issues/740)) ([be5ea97](https://github.com/llama-farm/llamafarm/commit/be5ea9719fb277d6bde364ee44fed4703a1cca07))
+* **server:** cascading default data processing strategies ([#697](https://github.com/llama-farm/llamafarm/issues/697)) ([882a643](https://github.com/llama-farm/llamafarm/commit/882a643f00a5842a58579a9cda3921f4472763ac))
+* **server:** change default port from 8000 to 14345 ([#731](https://github.com/llama-farm/llamafarm/issues/731)) ([7150e75](https://github.com/llama-farm/llamafarm/commit/7150e755c6e538e75a17b28f4dfd050eaffd4069))
+
+
+### Bug Fixes
+
+* **audio:** designer error handling  ([#722](https://github.com/llama-farm/llamafarm/issues/722)) ([dc41a42](https://github.com/llama-farm/llamafarm/commit/dc41a424ce054662adc235fee0801810289b6d57))
+* **designer:** improve delete UX and handle ghost projects ([#739](https://github.com/llama-farm/llamafarm/issues/739)) ([cb002d4](https://github.com/llama-farm/llamafarm/commit/cb002d43d44ece7df5e6559a8c29e71f7eca5661))
+* **designer:** preserve project name when opening delete modal ([10ba578](https://github.com/llama-farm/llamafarm/commit/10ba578deb043de33c23356f3aff820c5b8e76ae))
+* **designer:** remove redundant save calls causing 404 on train button ([#741](https://github.com/llama-farm/llamafarm/issues/741)) ([05d0779](https://github.com/llama-farm/llamafarm/commit/05d0779ba9310fb8e92f65f9595d1f0198ea7caf))
+* **designer:** sequential addon install and auto-enable after install ([#767](https://github.com/llama-farm/llamafarm/issues/767)) ([c4e78f9](https://github.com/llama-farm/llamafarm/commit/c4e78f9701f39543bb1f38423a05126ea4c10ee1))
+* **designer:** update onboarding checklist after demo project conversion ([#745](https://github.com/llama-farm/llamafarm/issues/745)) ([1e8ee89](https://github.com/llama-farm/llamafarm/commit/1e8ee899ba9dff7f39c53b87ec9d594f73cc694b))
+* **runtime:** add smart GPU allocation to prevent multi-model OOM crashes ([#761](https://github.com/llama-farm/llamafarm/issues/761)) ([848d103](https://github.com/llama-farm/llamafarm/commit/848d10346d6a6bbb80aa249702b5d475cc310f81))
+* **server:** API system prompts override config system prompts ([#763](https://github.com/llama-farm/llamafarm/issues/763)) ([97f1e3c](https://github.com/llama-farm/llamafarm/commit/97f1e3c35603087bd5d14e885f05fbc657fed570))
+* **universal-runtime:** prevent event loop blocking during model loading ([#743](https://github.com/llama-farm/llamafarm/issues/743)) ([b3d7f31](https://github.com/llama-farm/llamafarm/commit/b3d7f31f1fe7263aacc6dc2283413fa9fc62824c))
+
+
+### Miscellaneous Chores
+
+* release 0.0.27 ([9aff4e9](https://github.com/llama-farm/llamafarm/commit/9aff4e9e8d96cd8cee3b565e75fcfb323d2e56c8))
+
+## [0.0.26](https://github.com/llama-farm/llamafarm/compare/v0.0.25...v0.0.26) (2026-01-27)
+
+
+### Features
+
+* **config:** add reusable components ([#682](https://github.com/llama-farm/llamafarm/issues/682)) ([e59ec87](https://github.com/llama-farm/llamafarm/commit/e59ec871a935285ff2bff27000beda90c1e6f3d1))
+* **designer:** add gardening and home repair sample datasets ([#688](https://github.com/llama-farm/llamafarm/issues/688)) ([b2c71f3](https://github.com/llama-farm/llamafarm/commit/b2c71f34b5cb2fd735dfb97ab9abb2472d0c9889))
+* **designer:** add port and clean up link ([2d03d2c](https://github.com/llama-farm/llamafarm/commit/2d03d2cce0c2878e1ac6baf44b89490a0f852355))
+* **designer:** add Service Status panel to header ([3d9aca7](https://github.com/llama-farm/llamafarm/commit/3d9aca77694c4d7cbc9deacf4d1076e01227d950))
+* **designer:** auto process datasets ([#679](https://github.com/llama-farm/llamafarm/issues/679)) ([b15db41](https://github.com/llama-farm/llamafarm/commit/b15db413c61ea9e2a2c48c21b55bf96e277af14a))
+* **designer:** small color/sizing/layout update ([#711](https://github.com/llama-farm/llamafarm/issues/711)) ([8bd9542](https://github.com/llama-farm/llamafarm/commit/8bd95426478d8f3866a90849a75c574a238ce981))
+* **electron-app:** improve splash screen UX and cross-platform support ([#712](https://github.com/llama-farm/llamafarm/issues/712)) ([35f56f7](https://github.com/llama-farm/llamafarm/commit/35f56f70ca986ffaaf7d8c02e0b8460c6c65729b))
+* full-duplex speech reasoning pipeline ([#690](https://github.com/llama-farm/llamafarm/issues/690)) ([0d6090b](https://github.com/llama-farm/llamafarm/commit/0d6090baa2ed3342a981cc5713943970944cc9e6))
+* **rag:** add document preview with strategy selection ([#704](https://github.com/llama-farm/llamafarm/issues/704)) ([87fe04f](https://github.com/llama-farm/llamafarm/commit/87fe04fab19920fdc45cd29744bb58fec201f5ca))
+* **rag:** Universal RAG - Zero-config default strategy ([#696](https://github.com/llama-farm/llamafarm/issues/696)) ([909f549](https://github.com/llama-farm/llamafarm/commit/909f549d3713035342715a7fc375d09dd8e59b3b))
+* **runtime:** audio processing ([#685](https://github.com/llama-farm/llamafarm/issues/685)) ([3d7536c](https://github.com/llama-farm/llamafarm/commit/3d7536cda9e4872aefdd9b867aa342af14dd61ea))
+* **server:** add dynamic value substitution for prompts and tools ([#672](https://github.com/llama-farm/llamafarm/issues/672)) ([127fccb](https://github.com/llama-farm/llamafarm/commit/127fccb51b05471705248c3cacd8801a6f0705f7))
+
+
+### Bug Fixes
+
+* **cli:** prevent dev builds from stopping running services ([#699](https://github.com/llama-farm/llamafarm/issues/699)) ([2173f77](https://github.com/llama-farm/llamafarm/commit/2173f773ff36ebe0a6dcea08e0229da11d5f6758)), closes [#698](https://github.com/llama-farm/llamafarm/issues/698)
+* **cli:** remove PYTORCH_MPS_HIGH_WATERMARK_RATIO to fix sample project creation ([#725](https://github.com/llama-farm/llamafarm/issues/725)) ([1fdfec7](https://github.com/llama-farm/llamafarm/commit/1fdfec7084d2146c2dc2d2453c32246050e3c028))
+* **cli:** update prompt type to match generated schema ([cb4f76d](https://github.com/llama-farm/llamafarm/commit/cb4f76d58efeab49f849922326ba64a1f1dc8b8a))
+* **designer:** Clear Chat Button Input Field Issue During Streaming ([#446](https://github.com/llama-farm/llamafarm/issues/446)) ([8df09e8](https://github.com/llama-farm/llamafarm/commit/8df09e82fdb3e858382ed33b13a783321e78713c))
+* **designer:** fix error overflows ([581b846](https://github.com/llama-farm/llamafarm/commit/581b8464e702d917818aa91eab71ad431661669f))
+* **designer:** improve Service Status panel reliability and accessibility ([29fe28d](https://github.com/llama-farm/llamafarm/commit/29fe28d191fa725276a718ecbb1acdce11fc63dc))
+* Jetson/Tegra CUDA optimization and unified memory GPU support ([#702](https://github.com/llama-farm/llamafarm/issues/702)) ([33f65ad](https://github.com/llama-farm/llamafarm/commit/33f65ad67a1a8b9c1172b33764afabc0edb094bd))
+* **runtime:** add Intel Mac (x86_64) support with PyTorch 2.2.2 ([#726](https://github.com/llama-farm/llamafarm/issues/726)) ([9ef08e6](https://github.com/llama-farm/llamafarm/commit/9ef08e6e88b7fb732c65148d54e585b5736ff201))
+* **runtime:** restrict sync inference to Jetson/Tegra platforms ([#718](https://github.com/llama-farm/llamafarm/issues/718)) ([a5429bd](https://github.com/llama-farm/llamafarm/commit/a5429bd9c12365ad125ec01729fbb8d9cbc66b37))
+
+
+### Miscellaneous Chores
+
+* release 0.0.26 ([9ccae0f](https://github.com/llama-farm/llamafarm/commit/9ccae0f4a4f41bd1b13942904be7eab7cfb13ceb))
+
 ## [0.0.25](https://github.com/llama-farm/llamafarm/compare/v0.0.24...v0.0.25) (2026-01-14)
 
 

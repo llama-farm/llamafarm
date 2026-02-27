@@ -29,12 +29,14 @@ If you omit `namespace/project`, the CLI resolves them from `llamafarm.yaml`.
 | `--rag-top-k` | Adjust the number of results (default 5). |
 | `--rag-score-threshold` | Minimum similarity score for results. |
 | `--curl` | Print the sanitized `curl` request instead of executing. |
+| `--structured` | Use the configured `schema` for structured output (non-streaming). |
 
 ## Behaviour
 
 - Automatically starts the server if needed.
 - Filters client/error messages from the transcript before sending.
-- Streams responses; exit code is non-zero if the API returns an error.
+- Streams responses by default; exit code is non-zero if the API returns an error.
+- When using `--structured`, streaming is disabled to match server requirements.
 - Redacts authorization headers when using `--curl`.
 
 ## Examples
@@ -60,6 +62,9 @@ lf chat --database main_db --retrieval-strategy hybrid_search "Find biologics re
 
 # Combine model selection with RAG
 lf chat --model lemon --database main_db "Query with specific model and database"
+
+# Structured output (requires `schema` in llamafarm.yaml)
+lf chat --structured "Summarize this into the configured schema"
 ```
 
 ## Sessions

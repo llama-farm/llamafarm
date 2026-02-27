@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import PageActions from '../common/PageActions'
 import FontIcon from '../../common/FontIcon'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
-import { Badge } from '../ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
 import {
   getDefaultConfigForRetrieval,
   parseWeightsList,
@@ -23,7 +23,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
@@ -503,12 +504,11 @@ function RetrievalMethod() {
                       const onlyOne = list.length <= 1
                       return (
                         <label className="inline-flex items-center gap-2 text-xs">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={isDefault}
                             disabled={isDefault || onlyOne}
-                            onChange={e => {
-                              if (e.target.checked && strategyId) {
+                            onCheckedChange={(checked) => {
+                              if (checked === true && strategyId) {
                                 setDefaultRetrieval(strategyId)
                               }
                             }}

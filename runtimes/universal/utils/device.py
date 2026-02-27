@@ -1,13 +1,50 @@
 """
 Device detection and optimization utilities.
+
+PyTorch is optional - this module provides fallback behavior for GGUF-only
+deployments where torch is not installed. llama.cpp has its own GPU detection
+independent of PyTorch.
 """
+
+from __future__ import annotations
 
 import logging
 import platform
+from typing import TYPE_CHECKING
 
-import torch
+if TYPE_CHECKING:
+    import torch as torch_type
 
 logger = logging.getLogger(__name__)
+
+# Cached torch module reference (lazy loaded)
+_torch: torch_type | None = None
+_torch_available: bool | None = None
+
+
+def _get_torch() -> torch_type | None:
+    """Lazy-load torch module. Returns None if not installed."""
+    global _torch, _torch_available
+
+    if _torch_available is None:
+        try:
+            import torch
+
+            _torch = torch
+            _torch_available = True
+            logger.debug(f"PyTorch {torch.__version__} loaded successfully")
+        except ImportError:
+            _torch = None
+            _torch_available = False
+            logger.info("PyTorch not installed - encoder models will not be available")
+
+    return _torch
+
+
+def is_torch_available() -> bool:
+    """Check if PyTorch is available without importing it."""
+    _get_torch()
+    return _torch_available or False
 
 
 def get_optimal_device() -> str:
@@ -16,6 +53,10 @@ def get_optimal_device() -> str:
 
     Returns:
         str: Device name ("cuda", "mps", or "cpu")
+
+    Note:
+        If PyTorch is not installed, always returns "cpu".
+        This allows GGUF models to still use GPU via llama.cpp's own detection.
     """
     import os
 
@@ -27,6 +68,12 @@ def get_optimal_device() -> str:
     )
     if force_cpu:
         logger.info("Forcing CPU device (TRANSFORMERS_FORCE_CPU=1)")
+        return "cpu"
+
+    # Try to use PyTorch for device detection
+    torch = _get_torch()
+    if torch is None:
+        logger.info("PyTorch not available - using CPU for encoder models")
         return "cpu"
 
     # Check for CUDA
@@ -65,29 +112,52 @@ def get_device_info() -> dict:
         dict: Device information including platform, acceleration, memory
     """
     device = get_optimal_device()
+    torch = _get_torch()
 
     info = {
         "device": device,
         "platform": platform.system(),
         "python_version": platform.python_version(),
-        "torch_version": torch.__version__,
+        "torch_version": torch.__version__ if torch else "not installed",
+        "torch_available": torch is not None,
     }
 
-    if device == "cuda":
-        info.update(
-            {
-                "gpu_name": torch.cuda.get_device_name(0),
-                "gpu_memory_total": torch.cuda.get_device_properties(0).total_memory,
-                "gpu_memory_allocated": torch.cuda.memory_allocated(0),
-            }
-        )
-    elif device == "mps":
-        info.update(
-            {
-                "gpu_name": "Apple Silicon (MPS)",
-                "architecture": platform.machine(),
-            }
-        )
+    if torch is not None:
+        if device == "cuda":
+            gpu_count = torch.cuda.device_count()
+            # Primary GPU info (backward compatible)
+            free_0, total_0 = torch.cuda.mem_get_info(0)
+            info.update(
+                {
+                    "gpu_name": torch.cuda.get_device_name(0),
+                    "gpu_memory_total": total_0,
+                    "gpu_memory_free": free_0,
+                    "gpu_memory_allocated": torch.cuda.memory_allocated(0),
+                    "gpu_count": gpu_count,
+                }
+            )
+            # Per-GPU details for multi-GPU systems
+            if gpu_count > 1:
+                gpus = []
+                for i in range(gpu_count):
+                    free, total = torch.cuda.mem_get_info(i)
+                    gpus.append(
+                        {
+                            "index": i,
+                            "name": torch.cuda.get_device_name(i),
+                            "memory_total": total,
+                            "memory_free": free,
+                            "memory_allocated": torch.cuda.memory_allocated(i),
+                        }
+                    )
+                info["gpus"] = gpus
+        elif device == "mps":
+            info.update(
+                {
+                    "gpu_name": "Apple Silicon (MPS)",
+                    "architecture": platform.machine(),
+                }
+            )
 
     return info
 

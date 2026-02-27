@@ -57,7 +57,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings, env_file=".env"):
     LOG_LEVEL: str = "INFO"
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 14345
 
 settings = Settings()  # Singleton at module level
 ```

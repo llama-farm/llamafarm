@@ -34,11 +34,13 @@ class LFAgent:
     history: LFAgentHistory
     _system_prompt_generator: LFAgentSystemPromptGenerator
     _client: LFAgentClient
+    _request_system_prompt: str | None
 
     def __init__(self, config: LFAgentConfig):
         self.history = config.history
         self._system_prompt_generator = config.system_prompt_generator
         self._client = config.client
+        self._request_system_prompt = None
 
     @property
     def config_tools(self) -> list[ToolDefinition]:
@@ -54,9 +56,16 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> LFChatCompletion:
-        if messages:
+        if messages is not None:
+            self._request_system_prompt = None
             for message in messages:
-                self.history.add_message(message)
+                if message.get("role") == "system":
+                    content = message.get("content")
+                    self._request_system_prompt = (
+                        content if isinstance(content, str) else ""
+                    )
+                else:
+                    self.history.add_message(message)
 
         messages = self._prepare_messages()
 
@@ -74,9 +83,16 @@ class LFAgent:
         tools: list[ToolDefinition] | None = None,
         extra_body: dict | None = None,
     ) -> AsyncGenerator[LFChatCompletionChunk]:
-        if messages:
+        if messages is not None:
+            self._request_system_prompt = None
             for message in messages:
-                self.history.add_message(message)
+                if message.get("role") == "system":
+                    content = message.get("content")
+                    self._request_system_prompt = (
+                        content if isinstance(content, str) else ""
+                    )
+                else:
+                    self.history.add_message(message)
         messages = self._prepare_messages()
 
         # Combine config tools with extra tools
@@ -104,13 +120,43 @@ class LFAgent:
         """Reset the agent's conversation history."""
         self.history.history.clear()
 
+    def _get_context_provider_text(self) -> str:
+        """Get context provider text (RAG, etc.) without config system prompts."""
+        parts: list[str] = []
+        providers = self._system_prompt_generator.context_providers
+        if providers:
+            parts.append("# EXTRA INFORMATION AND CONTEXT")
+            for provider in providers.values():
+                info = provider.get_info()
+                if info:
+                    parts.append(f"## {provider.title}")
+                    parts.append(info)
+                    parts.append("")
+        return "\n".join(parts)
+
     def _prepare_messages(self) -> list[LFChatCompletionMessageParam]:
         messages: list[LFChatCompletionMessageParam] = []
-        system_prompt = self._system_prompt_generator.generate_prompt()
-        if system_prompt:
+
+        if self._request_system_prompt is not None:
+            # API system prompt overrides config system prompts
+            system_content = self._request_system_prompt
+            context_suffix = self._get_context_provider_text()
+            if context_suffix:
+                system_content += "\n" + context_suffix
             messages.append(
-                LFChatCompletionSystemMessageParam(role="system", content=system_prompt)
+                LFChatCompletionSystemMessageParam(
+                    role="system", content=system_content
+                )
             )
+        else:
+            # No API override — use config system prompt
+            system_prompt = self._system_prompt_generator.generate_prompt()
+            if system_prompt:
+                messages.append(
+                    LFChatCompletionSystemMessageParam(
+                        role="system", content=system_prompt
+                    )
+                )
 
         for message in self.history.history:
             # Serialize messages to ensure proper JSON-compatible format

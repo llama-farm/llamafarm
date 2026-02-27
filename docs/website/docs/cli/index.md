@@ -16,7 +16,7 @@ lf [command] [flags]
 | Flag | Description |
 | ---- | ----------- |
 | `--debug`, `-d` | Enable verbose logging. |
-| `--server-url` | Override the server endpoint (default `http://localhost:8000`). |
+| `--server-url` | Override the server endpoint (default `http://localhost:14345`). |
 | `--server-start-timeout` | How long to wait for local server startup (default 45s). |
 | `--cwd` | Treat another directory as the working project root. |
 | `--auto-start` | Automatically start services when needed (default: true). Use `--auto-start=false` to disable. |
@@ -68,7 +68,7 @@ lf rag stats --auto-start=false
   run: lf start &
   
 - name: Wait for health
-  run: timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+  run: timeout 60 bash -c 'until curl -f http://localhost:14345/health; do sleep 2; done'
   
 - name: Run tests
   run: |
@@ -141,6 +141,6 @@ lf services stop server        # Stop specific service
 
 | Service | Description | Default Port |
 |---------|-------------|--------------|
-| `server` | Main FastAPI server | 8000 |
+| `server` | Main FastAPI server | 14345 |
 | `rag` | RAG/Celery worker | N/A |
 | `universal-runtime` | Universal Runtime server | 11540 |

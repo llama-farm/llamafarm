@@ -57,6 +57,9 @@ export interface ChatRequest {
   // Thinking/reasoning model parameters (universal runtime)
   think?: boolean | null
   thinking_budget?: number | null
+  // RAG sources visibility for debugging/testing
+  include_sources?: boolean | null
+  sources_limit?: number | null
 }
 
 /**
@@ -132,10 +135,27 @@ export class ValidationError extends Error {
 // Streaming-specific types
 
 /**
- * Streaming chunk structure from Server-Sent Events
- * Matches the format returned by the backend streaming endpoint
+ * Source item returned by RAG retrieval
  */
-export interface ChatStreamChunk {
+export interface RAGSource {
+  content: string
+  source: string
+  score: number
+  metadata?: Record<string, any>
+}
+
+/**
+ * Custom SSE event for RAG sources
+ */
+export interface SourcesEvent {
+  type: 'sources'
+  sources: RAGSource[]
+}
+
+/**
+ * OpenAI-compatible chat completion chunk
+ */
+export interface ChatCompletionChunkEvent {
   id: string
   object: string
   created: number
@@ -160,9 +180,33 @@ export interface ChatStreamChunk {
 }
 
 /**
+ * Discriminated union of all SSE event types
+ */
+export type ChatStreamEvent = SourcesEvent | ChatCompletionChunkEvent
+
+/**
+ * Type guard for sources event
+ */
+export function isSourcesEvent(event: ChatStreamEvent): event is SourcesEvent {
+  return 'type' in event && event.type === 'sources'
+}
+
+/**
+ * Type guard for chat completion chunk
+ */
+export function isChatChunk(
+  event: ChatStreamEvent
+): event is ChatCompletionChunkEvent {
+  return 'choices' in event
+}
+
+// Keep ChatStreamChunk as alias for backward compatibility
+export type ChatStreamChunk = ChatStreamEvent
+
+/**
  * Callback function type for handling streaming chunks
  */
-export type StreamChunkHandler = (chunk: ChatStreamChunk) => void
+export type StreamChunkHandler = (chunk: ChatStreamEvent) => void
 
 /**
  * Callback function type for handling streaming errors

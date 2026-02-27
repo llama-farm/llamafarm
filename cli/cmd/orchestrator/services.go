@@ -143,14 +143,15 @@ var ServiceGraph = map[string]*ServiceDefinition{
 			"TRANSFORMERS_CACHE_DIR":       filepath.Join("${HOME}", ".cache", "huggingface"),
 			"HF_HUB_DISABLE_PROGRESS_BARS": hfHubDisableProgressBars,
 			// Device control (empty = inherit from parent environment)
-			"TRANSFORMERS_SKIP_MPS":  "", // Set to "1" to skip MPS on macOS
-			"TRANSFORMERS_FORCE_CPU": "", // Set to "1" to force CPU (useful in CI)
+			"TRANSFORMERS_SKIP_MPS": "", // Set to "1" to skip MPS on macOS
 			// Note: PYTORCH_MPS_HIGH_WATERMARK_RATIO removed - setting it to non-default
 			// values causes "invalid low watermark ratio" errors on some PyTorch versions.
 			// Let PyTorch use its default memory management.
-			"HF_TOKEN": "",
+			"LLAMAFARM_GGUF_FORCE_CPU": "", // Set to "1" to force CPU for GGUF inference (avoids Metal SIGSEGV in CI)
+			"HF_TOKEN":                 "",
 			// In CI environments, use CPU-only PyTorch to avoid downloading 3GB+ of CUDA packages
-			"UV_EXTRA_INDEX_URL": "${UV_EXTRA_INDEX_URL}",
+			"UV_EXTRA_INDEX_URL":  "${UV_EXTRA_INDEX_URL}",
+			"UV_INDEX_STRATEGY":   "", // Inherit from parent env (e.g. unsafe-best-match in CI)
 		},
 		HealthComponent: "universal-runtime",
 		HardwarePackages: []HardwarePackageSpec{
@@ -166,7 +167,7 @@ var ServiceGraph = map[string]*ServiceDefinition{
 		DefaultTimeout:  90 * time.Second,
 		WorkDir:         "server",
 		Command:         "uv",
-		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0"},
+		Args:            []string{"run", "--managed-python", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "14345"},
 		Env: map[string]string{
 			"LOG_FILE":                     filepath.Join("${LF_DATA_DIR}", "logs", "server.log"),
 			"OLLAMA_HOST":                  "http://localhost:11434",
@@ -201,7 +202,15 @@ type ServiceManager struct {
 
 // NewServiceManager returns a new ServiceManager.
 func NewServiceManager(serverURL string) (*ServiceManager, error) {
-	orchestrator, err := NewOrchestrator(serverURL)
+	var orchestrator *NativeOrchestrator
+	var err error
+
+	if IsBinaryMode() {
+		utils.LogDebug("Binary deploy mode enabled\n")
+		orchestrator, err = NewBinaryOrchestrator(serverURL)
+	} else {
+		orchestrator, err = NewOrchestrator(serverURL)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orchestrator: %w", err)
@@ -382,8 +391,17 @@ func (sm *ServiceManager) ensureSingleService(serviceName string) error {
 	return nil
 }
 
-// startService starts a service using its declarative configuration
+// startService starts a service using its declarative configuration.
+// In binary mode, it launches pre-built PyApp binaries instead of uv + source.
 func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
+	if IsBinaryMode() {
+		return sm.startServiceBinary(serviceDef)
+	}
+	return sm.startServiceSource(serviceDef)
+}
+
+// startServiceSource starts a service from source code via uv (original path).
+func (sm *ServiceManager) startServiceSource(serviceDef *ServiceDefinition) error {
 	// Build environment variables
 	env := sm.orchestrator.getDefaultEnvWithKeys(serviceDef.Env)
 
@@ -396,11 +414,144 @@ func (sm *ServiceManager) startService(serviceDef *ServiceDefinition) error {
 	cmdArgs := append([]string{command}, serviceDef.Args...)
 
 	// Get source directory
-	lfDir, _ := utils.GetLFDataDir()
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("source mode: could not resolve data directory: %w", err)
+	}
 	sourceDir := filepath.Join(lfDir, "src")
 	workDir := filepath.Join(sourceDir, serviceDef.WorkDir)
 
+	// Inject addon paths into PYTHONPATH
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
+
 	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, workDir, env, cmdArgs...)
+}
+
+// getAddonPythonPaths returns PYTHONPATH entries for installed addons that apply to this service.
+func (sm *ServiceManager) getAddonPythonPaths(serviceName string) ([]string, error) {
+	// Load addon state from ~/.llamafarm/addons.json
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return nil, err
+	}
+
+	statePath := filepath.Join(lfDir, "addons.json")
+
+	// If state file doesn't exist, no addons are installed
+	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	// Read and parse state file
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		// Return error instead of silently failing
+		return nil, fmt.Errorf("failed to read addons state: %w", err)
+	}
+
+	var state struct {
+		Version         string `json:"version"`
+		InstalledAddons map[string]struct {
+			Name      string `json:"name"`
+			Component string `json:"component"`
+		} `json:"installed_addons"`
+	}
+
+	if err := json.Unmarshal(data, &state); err != nil {
+		// Return error instead of silently failing - corrupted state is a real problem
+		return nil, fmt.Errorf("failed to parse addons state (file may be corrupted): %w", err)
+	}
+
+	// Collect paths for addons that apply to this service
+	addonsDir := filepath.Join(lfDir, "addons")
+	var paths []string
+
+	for addonName, installed := range state.InstalledAddons {
+		// Check if this addon applies to this service
+		if installed.Component == serviceName {
+			addonPath := filepath.Join(addonsDir, addonName)
+			if _, err := os.Stat(addonPath); err == nil {
+				paths = append(paths, addonPath)
+			}
+		}
+	}
+
+	return paths, nil
+}
+
+// injectAddonPythonPath injects addon paths into PYTHONPATH for a service.
+// Returns the updated environment slice with PYTHONPATH set.
+func (sm *ServiceManager) injectAddonPythonPath(serviceName string, env []string) []string {
+	addonPaths, err := sm.getAddonPythonPaths(serviceName)
+	if err != nil {
+		utils.LogDebug(fmt.Sprintf("Warning: failed to get addon paths: %v", err))
+		return env
+	}
+
+	if len(addonPaths) == 0 {
+		return env
+	}
+
+	// Get existing PYTHONPATH from environment and remove it from env slice
+	var existingPath string
+	foundInEnv := false
+	filteredEnv := make([]string, 0, len(env))
+	for _, envVar := range env {
+		if strings.HasPrefix(envVar, "PYTHONPATH=") {
+			existingPath = strings.TrimPrefix(envVar, "PYTHONPATH=")
+			foundInEnv = true
+			// Skip this entry - we'll add the combined path below
+		} else {
+			filteredEnv = append(filteredEnv, envVar)
+		}
+	}
+	env = filteredEnv
+
+	// Only fall back to OS environment if PYTHONPATH was not explicitly set
+	if !foundInEnv {
+		existingPath = os.Getenv("PYTHONPATH")
+	}
+
+	// Build new PYTHONPATH (existing first, then addon paths)
+	// Put addons last so venv packages take precedence and avoid conflicts
+	var allPaths []string
+	if existingPath != "" {
+		allPaths = append(allPaths, existingPath)
+	}
+	allPaths = append(allPaths, addonPaths...)
+	newPath := strings.Join(allPaths, string(os.PathListSeparator))
+	env = append(env, fmt.Sprintf("PYTHONPATH=%s", newPath))
+	utils.LogDebug(fmt.Sprintf("Added addons to PYTHONPATH: %s", strings.Join(addonPaths, string(os.PathListSeparator))))
+
+	return env
+}
+
+// startServiceBinary starts a service from a pre-built PyApp binary.
+func (sm *ServiceManager) startServiceBinary(serviceDef *ServiceDefinition) error {
+	binaryPath, err := ResolveBinaryPath(serviceDef.Name)
+	if err != nil {
+		return fmt.Errorf("binary mode: %w", err)
+	}
+
+	utils.LogDebug(fmt.Sprintf("Starting %s from binary: %s\n", serviceDef.Name, binaryPath))
+
+	env := sm.orchestrator.getBinaryEnv(serviceDef.Env)
+
+	// PyApp binaries are self-contained; use the LF data dir as working directory
+	lfDir, err := utils.GetLFDataDir()
+	if err != nil {
+		return fmt.Errorf("binary mode: could not resolve data directory: %w", err)
+	}
+
+	// Always pass LF_DATA_DIR so the Python settings use the CLI-resolved value.
+	// This prevents path mismatches when Path.home() fails inside PyApp (e.g., on
+	// Windows where USERPROFILE may not be inherited).
+	env = append(env, fmt.Sprintf("LF_DATA_DIR=%s", lfDir))
+
+	// Inject addon paths into PYTHONPATH
+	env = sm.injectAddonPythonPath(serviceDef.Name, env)
+
+	return sm.orchestrator.processMgr.StartProcess(serviceDef.Name, lfDir, env, binaryPath)
 }
 
 // isServiceHealthy checks if a service is healthy by querying its health component

@@ -18,14 +18,14 @@ lf start
 
 This automatically launches:
 
-- The FastAPI server (port 8000)
+- The FastAPI server (port 14345)
 - The RAG worker
-- The Designer web UI (port **8000**)
+- The Designer web UI (port **14345**)
 
 Once started, open your browser to:
 
 ```
-http://localhost:8000
+http://localhost:14345
 ```
 
-The Designer is served by the same FastAPI server, so it shares port 8000 with the API.
+The Designer is served by the same FastAPI server, so it shares port 14345 with the API.

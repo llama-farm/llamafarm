@@ -1,4 +1,5 @@
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from config.datamodel import (
     Runtime,
     Version,
 )
+from pydantic import BaseModel
 
 from agents.base.history import LFChatCompletionUserMessageParam
 from agents.chat_orchestrator import (
@@ -163,3 +165,101 @@ async def test_simple_rag_agent_injects_context(monkeypatch):
     # Last message should be the user input
     assert messages[-1]["role"] == "user"
     assert messages[-1]["content"] == "Hello there"
+
+
+def test_schema_field_is_preserved_and_applied(monkeypatch):
+    cfg = make_config()
+    config_payload = cfg.model_dump(mode="python", by_alias=True)
+    config_payload["schema"] = "schemas/person.py::Person"
+    config_with_schema = LlamaFarmConfig.model_validate(config_payload)
+    assert config_with_schema.schema_ == "schemas/person.py::Person"
+
+    class Person(BaseModel):
+        name: str
+
+    class DummyClient:
+        def __init__(self):
+            self.response_model = None
+
+        def set_response_model(self, model):
+            self.response_model = model
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_config = config_with_schema
+    monkeypatch.setattr(agent, "_load_response_model", lambda _: Person)
+    client = DummyClient()
+    agent._apply_response_model(client)
+    assert client.response_model is Person
+
+
+def test_apply_response_model_falls_back_to_response_model_attr(monkeypatch):
+    cfg = make_config()
+    config_payload = cfg.model_dump(mode="python", by_alias=True)
+    config_payload["schema"] = "schemas/person.py::Person"
+    config_with_schema = LlamaFarmConfig.model_validate(config_payload)
+
+    class Person(BaseModel):
+        name: str
+
+    class LegacyClient:
+        def __init__(self):
+            self.response_model = None
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_config = config_with_schema
+    monkeypatch.setattr(agent, "_load_response_model", lambda _: Person)
+    client = LegacyClient()
+    agent._apply_response_model(client)
+    assert client.response_model is Person
+
+
+def test_apply_response_model_raises_for_unsupported_client(monkeypatch):
+    cfg = make_config()
+    config_payload = cfg.model_dump(mode="python", by_alias=True)
+    config_payload["schema"] = "schemas/person.py::Person"
+    config_with_schema = LlamaFarmConfig.model_validate(config_payload)
+
+    class Person(BaseModel):
+        name: str
+
+    class UnsupportedClient:
+        pass
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_config = config_with_schema
+    monkeypatch.setattr(agent, "_load_response_model", lambda _: Person)
+
+    with pytest.raises(TypeError, match="does not support structured output"):
+        agent._apply_response_model(UnsupportedClient())
+
+
+def test_load_response_model_missing_class_has_clear_error(tmp_path: Path):
+    schemas_dir = tmp_path / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    schema_file = schemas_dir / "person.py"
+    schema_file.write_text(
+        "from pydantic import BaseModel\n\nclass Person(BaseModel):\n    name: str\n",
+        encoding="utf-8",
+    )
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_dir = str(tmp_path)
+
+    with pytest.raises(ValueError, match="is not a valid class"):
+        agent._load_response_model("schemas/person.py::MissingClass")
+
+
+def test_load_response_model_wraps_exec_errors(tmp_path: Path):
+    schemas_dir = tmp_path / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    schema_file = schemas_dir / "broken.py"
+    schema_file.write_text(
+        "import definitely_missing_module\n\nclass Person:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    agent = ChatOrchestratorAgent.__new__(ChatOrchestratorAgent)
+    agent._project_dir = str(tmp_path)
+
+    with pytest.raises(ValueError, match="Failed to load schema module"):
+        agent._load_response_model("schemas/broken.py::Person")

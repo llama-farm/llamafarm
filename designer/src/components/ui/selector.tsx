@@ -22,6 +22,18 @@ export interface SelectorProps {
   emptyMessage?: string
   label?: string
   className?: string
+  size?: 'default' | 'sm'
+  variant?: 'default' | 'minimal'
+}
+
+const sizeClasses = {
+  default: 'h-9 px-3 text-sm',
+  sm: 'h-7 px-2 text-xs',
+}
+
+const textClasses = {
+  default: 'text-sm',
+  sm: 'text-xs',
 }
 
 export function Selector({
@@ -34,9 +46,16 @@ export function Selector({
   emptyMessage = 'No options available',
   label,
   className = '',
+  size = 'default',
+  variant = 'default',
 }: SelectorProps) {
   const selectedOption = options.find(opt => opt.value === value)
   const displayText = selectedOption?.label || placeholder
+
+  const triggerClasses =
+    variant === 'minimal'
+      ? `w-full ${sizeClasses[size]} bg-transparent border-0 outline-none text-left flex items-center justify-between gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
+      : `w-full ${sizeClasses[size]} rounded-lg border border-input bg-background text-left flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`
 
   return (
     <div className={className}>
@@ -50,9 +69,9 @@ export function Selector({
           <button
             type="button"
             disabled={disabled || loading}
-            className="w-full h-9 rounded-lg border border-input bg-background px-3 text-left flex items-center justify-between gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={triggerClasses}
           >
-            <span className={`truncate text-sm ${!selectedOption ? 'text-muted-foreground' : ''}`}>
+            <span className={`truncate ${textClasses[size]} ${!selectedOption ? 'text-muted-foreground' : ''}`}>
               {loading ? 'Loading...' : displayText}
             </span>
             {loading ? (
@@ -75,7 +94,7 @@ export function Selector({
                 onClick={() => onChange(option.value)}
               >
                 <div className="flex flex-col">
-                  <span className="text-sm">{option.label}</span>
+                  <span className={textClasses[size]}>{option.label}</span>
                   {option.description && (
                     <span className="text-xs text-muted-foreground">
                       {option.description}

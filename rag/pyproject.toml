@@ -88,9 +88,9 @@ dependencies = [
   "llama-index-readers-file>=0.1.0",
   # Windows-specific dependencies
   "pywin32>=306; sys_platform == 'win32'",
-  "urllib3>=2.3.0",
-  "aiohttp>=3.11.11",
-  "protobuf>=5.29.3",
+  "urllib3>=2.6.3",
+  "aiohttp>=3.13.3",
+  "protobuf>=6.33.5",
   "filelock>=3.16.1",
   "pypdf>=5.1.0",
   "authlib>=1.4.0",
@@ -170,7 +170,7 @@ llamaindex = [
   "tabula-py>=2.8.0",                     # Table extraction via Java
   "pytesseract>=0.3.10",                  # OCR support for scanned PDFs
   "pdf2image>=1.16.0",                    # PDF to image conversion
-  "pillow>=10.0.0",                       # Image processing
+  "pillow>=12.1.1",                       # Image processing
   "numpy>=1.24.0",                        # Numerical operations
   "scipy>=1.10.0",                        # Scientific computing
 ]

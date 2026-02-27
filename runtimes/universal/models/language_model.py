@@ -2,18 +2,13 @@
 Language model wrapper for text generation or embedding.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from threading import Thread
 from typing import cast
-
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedTokenizerBase,
-    TextIteratorStreamer,
-)
 
 from .base import BaseModel
 
@@ -29,20 +24,29 @@ class LanguageModel(BaseModel):
         self.supports_streaming = True
 
     async def load(self) -> None:
-        """Load the causal language model."""
+        """Load the causal language model.
+
+        All blocking transformers operations are wrapped in asyncio.to_thread()
+        to avoid blocking the FastAPI event loop during model loading.
+        """
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
         logger.info(f"Loading causal LM: {self.model_id}")
 
         dtype = self.get_dtype()
 
-        # Load tokenizer
-        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
+        # Load tokenizer - wrapped to avoid blocking event loop
+        self.tokenizer = await asyncio.to_thread(
+            AutoTokenizer.from_pretrained,
             self.model_id,
             trust_remote_code=True,
             token=self.token,
         )
 
-        # Load model
-        self.model = AutoModelForCausalLM.from_pretrained(
+        # Load model - wrapped to avoid blocking event loop
+        # This is the heaviest operation (downloads/loads model weights)
+        self.model = await asyncio.to_thread(
+            AutoModelForCausalLM.from_pretrained,
             self.model_id,
             dtype=dtype,
             trust_remote_code=True,
@@ -51,7 +55,8 @@ class LanguageModel(BaseModel):
         )
 
         if self.device != "cuda" and self.model is not None:
-            self.model = self.model.to(self.device)  # type: ignore[arg-type]
+            # Move to device - wrapped for consistency
+            self.model = await asyncio.to_thread(self.model.to, self.device)  # type: ignore[arg-type]
 
         logger.info(f"Causal LM loaded on {self.device}")
 
@@ -113,6 +118,8 @@ class LanguageModel(BaseModel):
         # Format messages using chat template
         prompt = self.format_messages(messages)
 
+        import torch
+
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
         max_new_tokens = max_tokens or 512
@@ -172,6 +179,8 @@ class LanguageModel(BaseModel):
         max_new_tokens = max_tokens or 512
 
         # Create a streamer that will yield tokens as they're generated
+        from transformers import AutoTokenizer, TextIteratorStreamer
+
         streamer = TextIteratorStreamer(
             cast(AutoTokenizer, self.tokenizer),
             skip_prompt=True,

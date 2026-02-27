@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from server.services.universal_runtime_service import UniversalRuntimeService
+from server.services.vision import VisionClassificationService, VisionDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ async def extract_text(
 
     Example with file upload (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/ocr \\
+    curl -X POST http://localhost:14345/v1/vision/ocr \\
       -F "file=@document.pdf" \\
       -F "model=easyocr" \\
       -F "languages=en"
@@ -171,7 +172,7 @@ async def extract_text(
 
     Example with base64 images (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/ocr \\
+    curl -X POST http://localhost:14345/v1/vision/ocr \\
       -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
       -F "model=surya" \\
       -F "languages=en"
@@ -267,7 +268,7 @@ async def extract_from_documents(
 
     Example with file upload (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+    curl -X POST http://localhost:14345/v1/vision/documents/extract \\
       -F "file=@receipt.pdf" \\
       -F "model=naver-clova-ix/donut-base-finetuned-docvqa" \\
       -F "prompts=What is the total amount?" \\
@@ -276,7 +277,7 @@ async def extract_from_documents(
 
     Example with base64 images (curl):
     ```bash
-    curl -X POST http://localhost:8000/v1/vision/documents/extract \\
+    curl -X POST http://localhost:14345/v1/vision/documents/extract \\
       -F 'images=["data:image/png;base64,iVBORw0KGgo..."]' \\
       -F "model=naver-clova-ix/donut-base-finetuned-cord-v2" \\
       -F "task=extraction"
@@ -319,4 +320,56 @@ async def extract_from_documents(
         images=image_list,
         prompts=prompt_list,
         task=task,  # type: ignore
+    )
+
+
+# =============================================================================
+# Detection Endpoint
+# =============================================================================
+
+
+@router.post("/detect")
+async def detect_objects(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(default=None),
+    model: str = Form(default="yolov8n"),
+    confidence_threshold: float = Form(default=0.5),
+    classes: str | None = Form(default=None),
+) -> dict[str, Any]:
+    """Detect objects in an image. Accepts file upload or base64."""
+    image_list = await _get_images_from_input(file, images)
+    class_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+
+    return await VisionDetectionService.detect(
+        image=image_list[0],
+        model=model,
+        confidence_threshold=confidence_threshold,
+        classes=class_list,
+    )
+
+
+# =============================================================================
+# Classification Endpoint
+# =============================================================================
+
+
+@router.post("/classify")
+async def classify_image(
+    file: OptionalFileUpload = None,
+    images: str | None = Form(default=None),
+    model: str = Form(default="clip-vit-base"),
+    classes: str = Form(..., description="Comma-separated class names"),
+    top_k: int = Form(default=5),
+) -> dict[str, Any]:
+    """Classify an image using CLIP. Accepts file upload or base64."""
+    image_list = await _get_images_from_input(file, images)
+    class_list = [c.strip() for c in classes.split(",") if c.strip()]
+    if not class_list:
+        raise HTTPException(status_code=400, detail="At least one class required")
+
+    return await VisionClassificationService.classify(
+        image=image_list[0],
+        classes=class_list,
+        model=model,
+        top_k=top_k,
     )

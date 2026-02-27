@@ -13,6 +13,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
+from utils.gguf_metadata_cache import get_gguf_metadata_cached
+from utils.gpu_allocator import InsufficientVRAMError, get_llama_gpu_params
 from utils.model_format import get_gguf_file_path
 
 from .base import BaseModel
@@ -98,6 +100,41 @@ class GGUFEncoderModel(BaseModel):
 
         n_gpu_layers = get_gguf_gpu_layers()
 
+        # Embedding models use a small, fixed context window.  This value
+        # is shared between the VRAM estimator and the Llama() constructor
+        # so that the allocation decision matches actual memory usage.
+        embedding_n_ctx = 512
+
+        # GPU allocation: select optimal GPU based on free VRAM
+        gpu_params = {}
+        try:
+            metadata = get_gguf_metadata_cached(gguf_path)
+            gpu_params = get_llama_gpu_params(
+                model_size_bytes=metadata.file_size_bytes,
+                n_ctx=embedding_n_ctx,
+                n_gpu_layers=n_gpu_layers,
+                total_layers=metadata.n_layer,
+                n_layer=metadata.n_layer,
+                n_head_kv=metadata.n_head_kv,
+                head_k_size=metadata.head_k_size,
+                head_v_size=metadata.head_v_size,
+            )
+            if gpu_params:
+                logger.info(
+                    f"GPU allocation: main_gpu={gpu_params.get('main_gpu')}, "
+                    f"split_mode={gpu_params.get('split_mode')}"
+                )
+            else:
+                logger.debug("No CUDA GPUs detected, using default GPU allocation")
+        except InsufficientVRAMError as e:
+            if e.gpu_details:
+                logger.error(f"GPU allocation failed:\n{e.gpu_details}")
+            else:
+                logger.error(f"GPU allocation failed: {e}")
+            raise RuntimeError(str(e)) from e
+        except Exception as e:
+            logger.warning(f"GPU allocation failed, using defaults: {e}")
+
         # Load model using llama-cpp in embedding mode
         # Run in thread pool since Llama() initialization is blocking
         loop = asyncio.get_running_loop()
@@ -111,12 +148,23 @@ class GGUFEncoderModel(BaseModel):
                     "Install it with: pip install llamafarm-llama"
                 ) from e
 
+            # Build GPU-specific kwargs from allocation
+            gpu_kwargs = {}
+            if gpu_params.get("main_gpu") is not None:
+                gpu_kwargs["main_gpu"] = gpu_params["main_gpu"]
+            if gpu_params.get("split_mode") is not None:
+                gpu_kwargs["split_mode"] = gpu_params["split_mode"]
+            if gpu_params.get("tensor_split") is not None:
+                gpu_kwargs["tensor_split"] = gpu_params["tensor_split"]
+
             return Llama(
                 model_path=gguf_path,
                 embedding=True,  # Enable embedding mode
+                n_ctx=embedding_n_ctx,
                 n_gpu_layers=n_gpu_layers,
                 n_threads=None,  # Auto-detect optimal threads
                 verbose=False,  # Disable verbose logging
+                **gpu_kwargs,
             )
 
         self.llama = await loop.run_in_executor(self._executor, _load_model)

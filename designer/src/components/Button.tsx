@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Button as ShadcnButton } from './ui/button'
+import { Button as ShadcnButton } from '@/components/ui/button'
 import { cn } from '../lib/utils'
 
 type LegacyVariant = 'primary' | 'secondary' | 'ghost' | 'danger'

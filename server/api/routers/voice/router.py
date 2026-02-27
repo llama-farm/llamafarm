@@ -84,11 +84,6 @@ def _sanitize_system_prompt(prompt: str | None) -> str | None:
 # Cache for model capabilities (avoid querying runtime repeatedly)
 _model_capabilities_cache: dict[str, dict] = {}
 
-# Cache for available TTS models (refreshed periodically)
-_available_tts_models: list[str] = []
-_tts_models_cache_time: float = 0
-TTS_CACHE_TTL = 60.0  # Refresh TTS model list every 60 seconds
-
 
 # Default values when no config is provided
 DEFAULT_STT_MODEL = "base"
@@ -96,52 +91,6 @@ DEFAULT_TTS_MODEL = "kokoro"
 DEFAULT_TTS_VOICE = "af_heart"
 DEFAULT_LANGUAGE = "en"
 DEFAULT_SPEED = 0.95  # Slightly slower for more natural speech
-
-
-async def _get_available_tts_models() -> list[str]:
-    """Get list of TTS models available on the runtime.
-
-    Queries the runtime's /v1/models endpoint and filters for TTS models.
-    Results are cached for TTS_CACHE_TTL seconds.
-
-    Returns:
-        List of available TTS model IDs (e.g., ["kokoro", "pocket-tts"]).
-    """
-    import time
-
-    global _available_tts_models, _tts_models_cache_time
-
-    # Return cached result if fresh
-    if _available_tts_models and (time.time() - _tts_models_cache_time) < TTS_CACHE_TTL:
-        return _available_tts_models
-
-    runtime_url = f"http://{settings.universal_host}:{settings.universal_port}"
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{runtime_url}/v1/models")
-            if response.status_code == 200:
-                data = response.json()
-                models = data.get("data", [])
-                # Filter for TTS models and extract the model name
-                # Model IDs are like "tts:kokoro:af_heart" or "tts:pocket-tts:alba"
-                tts_models = set()
-                for model in models:
-                    model_id = model.get("id", "")
-                    model_type = model.get("type", "")
-                    if model_type == "tts" and model_id.startswith("tts:"):
-                        # Extract model name from "tts:model_name:voice"
-                        parts = model_id.split(":")
-                        if len(parts) >= 2:
-                            tts_models.add(parts[1])
-                _available_tts_models = sorted(tts_models)
-                _tts_models_cache_time = time.time()
-                logger.debug(f"Available TTS models: {_available_tts_models}")
-                return _available_tts_models
-    except Exception as e:
-        logger.debug(f"Failed to query available TTS models: {e}")
-
-    return _available_tts_models  # Return stale cache on error
 
 
 async def _check_model_native_audio(model_id: str, base_url: str | None = None) -> bool:
@@ -215,7 +164,7 @@ def _get_voice_config_defaults(
         "sentence_boundary_only": True,  # Natural speech by default
         # Turn detection defaults (enabled by default)
         "turn_detection_enabled": True,
-        "base_silence_duration": 0.4,
+        "base_silence_duration": 0.6,
         "thinking_silence_duration": 1.2,
         "max_silence_duration": 2.5,
     }
@@ -400,21 +349,9 @@ async def voice_chat_websocket(
         await websocket.close(code=1008, reason="Invalid LLM model")
         return
 
-    # Validate TTS model is available on the runtime
-    # This prevents cryptic errors when the configured TTS model isn't loaded
-    available_tts = await _get_available_tts_models()
-    if available_tts and effective_tts_model not in available_tts:
-        # TTS model not available - provide helpful error with alternatives
-        available_list = ", ".join(available_tts) if available_tts else "none loaded"
-        error_msg = (
-            f"TTS model '{effective_tts_model}' is not loaded on the runtime. "
-            f"Available TTS models: {available_list}. "
-            f"Configure voice.tts.model in your project's llamafarm.yaml or pass tts_model query param."
-        )
-        logger.warning(error_msg)
-        await websocket.send_json(ErrorMessage(message=error_msg).model_dump())
-        await websocket.close(code=1008, reason="TTS model not available")
-        return
+    # Note: TTS model validation removed - models are loaded lazily, so checking
+    # /v1/models would reject valid models that simply haven't been used yet.
+    # If a TTS model is truly unavailable, synthesis will fail with a clear error.
 
     # Detect if model supports native audio input (e.g., Qwen2.5-Omni)
     # Query the runtime to check capabilities (falls back to name-based detection)
@@ -483,7 +420,7 @@ async def voice_chat_websocket(
             })
             logger.info("Appended sanitized system_prompt from query param")
 
-    service = VoiceChatService(session, llm_model_config)
+    service = VoiceChatService(session, llm_model_config, project_config=project_config)
 
     # Pre-warm connections in background (don't block session start)
     asyncio.create_task(service.warm_up())
@@ -505,6 +442,9 @@ async def voice_chat_websocket(
             "stt_model": effective_stt_model if not use_native_audio else "(native audio)",
             "native_audio": use_native_audio,
             "project": f"{namespace}/{project}" if namespace and project else None,
+            "tools_count": len(llm_model_config.tools or []),
+            "tool_call_strategy": str(llm_model_config.tool_call_strategy),
+            "tool_names": [t.name for t in (llm_model_config.tools or [])],
         },
     )
 
@@ -522,7 +462,31 @@ async def voice_chat_websocket(
         except asyncio.CancelledError:
             logger.info("process_turn cancelled by interrupt")
         except Exception as e:
+            error_str = str(e)
             logger.error(f"process_turn error: {e}", exc_info=True)
+            # Send descriptive error to client so UI doesn't stay stuck in loading state
+            try:
+                # Provide context-aware error message
+                # Use generic messages to avoid leaking internal details
+                if "connection" in error_str.lower() or "connect" in error_str.lower():
+                    error_msg = "Lost connection to a backend service. Please try again."
+                elif "timeout" in error_str.lower():
+                    error_msg = "Request timed out. The service may be busy."
+                elif "model" in error_str.lower() and "not" in error_str.lower():
+                    error_msg = "Model not available. Please try a different model."
+                else:
+                    error_msg = "Processing failed. Please try again."
+                await websocket.send_json(
+                    ErrorMessage(message=error_msg).model_dump()
+                )
+                # Also send status update to reset client state to idle
+                await websocket.send_json(
+                    StatusMessage(state=VoiceState.IDLE).model_dump()
+                )
+                # Reset session state
+                session.set_state(VoiceState.IDLE)
+            except Exception:
+                pass  # WebSocket might be closed
         finally:
             current_turn_task = None
 
@@ -649,12 +613,25 @@ async def voice_chat_websocket(
                         await service.handle_interrupt(websocket)
 
                     elif msg_type == "end":
-                        # Process accumulated audio as background task
+                        # Flush any remaining encoded audio from decoder
+                        # before retrieving the buffer.
+                        session.flush_and_check_vad()
                         if session.has_audio():
                             audio_bytes = session.get_audio_buffer()
                             current_turn_task = asyncio.create_task(
                                 run_process_turn(audio_bytes, session.config.use_native_audio)
                             )
+
+                    elif msg_type == "tool_result":
+                        # Client sending back a tool execution result
+                        tool_call_id = data.get("tool_call_id", "")
+                        result = data.get("result", "")
+                        is_error = data.get("is_error", False)
+                        if tool_call_id:
+                            session.submit_tool_result(tool_call_id, result, is_error)
+                            logger.debug(f"Tool result received: {tool_call_id}")
+                        else:
+                            logger.warning("tool_result message missing tool_call_id")
 
                     elif msg_type == "config":
                         # Update session configuration

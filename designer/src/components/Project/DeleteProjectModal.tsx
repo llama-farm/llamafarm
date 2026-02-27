@@ -5,7 +5,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 
 interface DeleteProjectModalProps {
   isOpen: boolean
@@ -46,6 +46,7 @@ const DeleteProjectModal: React.FC<DeleteProjectModalProps> = ({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         className="sm:max-w-md"
+        hideCloseButton
         onEscapeKeyDown={e => {
           e.preventDefault()
           if (!isLoading) onClose()

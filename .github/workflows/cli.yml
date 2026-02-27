@@ -15,6 +15,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-cli:
     name: Build CLI Binaries
@@ -28,9 +32,6 @@ jobs:
           - goos: linux
             goarch: arm64
             output: llamafarm-linux-arm64
-          - goos: darwin
-            goarch: amd64
-            output: llamafarm-darwin-amd64
           - goos: darwin
             goarch: arm64
             output: llamafarm-darwin-arm64
