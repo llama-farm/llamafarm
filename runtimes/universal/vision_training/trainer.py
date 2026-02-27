@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import re
 import shutil
@@ -34,6 +33,8 @@ class TrainingConfig:
     batch_size: int = 16
     learning_rate: float = 0.001
     validation_split: float = 0.2
+    imgsz: int = 640
+    patience: int = 50
 
 
 @dataclass
@@ -54,30 +55,80 @@ class TrainingJob:
 
 
 class IncrementalTrainer:
-    """Manages async training jobs for vision models."""
+    """Manages async training jobs for vision models.
+
+    Jobs run sequentially (one at a time) to prevent OOM from concurrent
+    model training. New jobs are queued and start when the current job finishes.
+    """
 
     def __init__(self, model_loader: Callable | None = None):
         self._model_loader = model_loader
         self._jobs: dict[str, TrainingJob] = {}
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._queue: asyncio.Queue[tuple[TrainingJob, str | None, Callable | None]] = (
+            asyncio.Queue()
+        )
+        self._worker_task: asyncio.Task | None = None
 
     def set_model_loader(self, loader: Callable) -> None:
         self._model_loader = loader
 
-    async def start_training(self, model_id: str, dataset_path: str,
-                             task: Literal["detection", "classification"],
-                             config: TrainingConfig | None = None,
-                             base_model: str | None = None) -> TrainingJob:
+    def _ensure_worker(self) -> None:
+        """Start the sequential job worker if not running."""
+        if self._worker_task is None or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self._job_worker())
+
+    async def _job_worker(self) -> None:
+        """Process training jobs one at a time from the queue."""
+        while True:
+            job, base_model, on_complete = await self._queue.get()
+            try:
+                logger.info(
+                    f"Job worker: starting {job.job_id} ({job.model_id}), "
+                    f"{self._queue.qsize()} remaining in queue"
+                )
+                await self._run(job, base_model, on_complete)
+            except Exception as e:
+                logger.error(f"Job worker: unhandled error for {job.job_id}: {e}")
+            finally:
+                self._queue.task_done()
+
+    async def start_training(
+        self,
+        model_id: str,
+        dataset_path: str,
+        task: Literal["detection", "classification"],
+        config: TrainingConfig | None = None,
+        base_model: str | None = None,
+        on_complete: Callable | None = None,
+    ) -> TrainingJob:
         config = config or TrainingConfig()
         job_id = str(uuid.uuid4())[:8]
-        job = TrainingJob(job_id=job_id, model_id=model_id,
-                          dataset_path=dataset_path, task=task, config=config)
+        job = TrainingJob(
+            job_id=job_id,
+            model_id=model_id,
+            dataset_path=dataset_path,
+            task=task,
+            config=config,
+        )
         self._jobs[job_id] = job
-        self._tasks[job_id] = asyncio.create_task(self._run(job, base_model))
-        logger.info(f"Started training job {job_id} for {model_id}")
+        await self._queue.put((job, base_model, on_complete))
+        self._ensure_worker()
+        queue_pos = self._queue.qsize()
+        logger.info(
+            f"Queued training job {job_id} for {model_id} (position {queue_pos})"
+        )
         return job
 
-    async def _run(self, job: TrainingJob, base_model: str | None) -> None:
+    async def _run(
+        self,
+        job: TrainingJob,
+        base_model: str | None,
+        on_complete: Callable | None = None,
+    ) -> None:
+        # Skip if cancelled while queued
+        if job.status == TrainingStatus.CANCELLED:
+            logger.info(f"Skipping cancelled job {job.job_id}")
+            return
         try:
             job.status = TrainingStatus.RUNNING
             job.started_at = datetime.utcnow()
@@ -87,16 +138,27 @@ class IncrementalTrainer:
 
             # Load a FRESH model for training — don't corrupt inference cache
             from ultralytics import YOLO
+
             model_id = base_model or job.model_id
             model_path = model_id  # Could be a path or a variant name
-            device = 'cpu'
-            
+            # Auto-detect best device: MPS (Apple GPU) > CUDA > CPU
+            import torch
+
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+
             # Try to get model path from cached model's info
             try:
                 cached = await self._model_loader(model_id)
-                if hasattr(cached, '_model_path') and cached._model_path:
+                if hasattr(cached, "_model_path") and cached._model_path:
                     model_path = cached._model_path
-                device = cached.device if hasattr(cached, 'device') else 'cpu'
+                # Use cached model's device if available
+                if hasattr(cached, "device") and cached.device:
+                    device = cached.device
             except Exception:
                 pass
 
@@ -105,35 +167,57 @@ class IncrementalTrainer:
             # Auto-convert COCO JSON to YOLO format if needed
             dataset_path = job.dataset_path
             from vision_training.coco_converter import is_coco_format
+
             if is_coco_format(dataset_path):
-                from vision_training.coco_converter import convert_coco_to_yolo
                 from pathlib import Path as _Path
-                coco_out = _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
-                logger.info(f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}")
+
+                from vision_training.coco_converter import convert_coco_to_yolo
+
+                coco_out = (
+                    _Path(dataset_path).parent / f".yolo_{_Path(dataset_path).stem}"
+                )
+                logger.info(
+                    f"Auto-converting COCO JSON → YOLO: {dataset_path} → {coco_out}"
+                )
                 data_yaml = await asyncio.to_thread(
-                    convert_coco_to_yolo, dataset_path, coco_out,
+                    convert_coco_to_yolo,
+                    dataset_path,
+                    coco_out,
                 )
                 dataset_path = str(data_yaml)
                 logger.info(f"COCO conversion complete: {dataset_path}")
 
             # Train using the fresh YOLO instance
-            logger.info(f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}")
+            logger.info(
+                f"Starting YOLO training: {job.config.epochs} epochs, batch {job.config.batch_size}"
+            )
             train_args = {
                 "data": dataset_path,
                 "epochs": job.config.epochs,
                 "batch": job.config.batch_size,
                 "device": device if device != "auto" else None,
-                "imgsz": 640,
-                "patience": 50,
+                "imgsz": job.config.imgsz,
+                "patience": job.config.patience,
                 "save": True,
                 "verbose": True,
             }
+
+            # Register cancellation callback — checked between epochs
+            def _check_cancelled(trainer_obj):
+                if job.status == TrainingStatus.CANCELLED:
+                    logger.info(f"Job {job.job_id} cancelled — stopping training")
+                    raise KeyboardInterrupt("Training cancelled")
+
+            training_yolo.add_callback("on_train_epoch_end", _check_cancelled)
+
             results = await asyncio.to_thread(training_yolo.train, **train_args)
-            
+
             metrics = {}
             if hasattr(results, "results_dict"):
                 metrics = results.results_dict
-            metrics["model_path"] = str(results.save_dir) if hasattr(results, "save_dir") else None
+            metrics["model_path"] = (
+                str(results.save_dir) if hasattr(results, "save_dir") else None
+            )
             metrics["epochs"] = job.config.epochs
 
             job.metrics = metrics
@@ -146,7 +230,38 @@ class IncrementalTrainer:
             await self._save_versioned(job, training_yolo)
             logger.info(f"Training job {job.job_id} completed")
 
+            # Run on_complete callback (e.g., auto-eval)
+            if on_complete:
+                # Validate model_id: basename only, no traversal
+                safe_id = Path(job.model_id).name
+                if (
+                    safe_id != job.model_id
+                    or ".." in job.model_id
+                    or ":" in job.model_id
+                    or "\\" in job.model_id
+                ):
+                    logger.error(f"Invalid model_id for on_complete: {job.model_id}")
+                else:
+                    model_dir = VISION_MODELS_DIR / safe_id
+                    current_pt = model_dir / "current.pt"
+                    if current_pt.exists():
+                        try:
+                            await on_complete(job.model_id, str(current_pt))
+                        except Exception as cb_err:
+                            logger.error(
+                                f"on_complete callback failed for {job.job_id}: {cb_err}"
+                            )
+
+        except KeyboardInterrupt:
+            # Raised by cancellation callback
+            if job.status != TrainingStatus.CANCELLED:
+                job.status = TrainingStatus.CANCELLED
+                job.completed_at = datetime.utcnow()
+            logger.info(f"Training job {job.job_id} stopped by cancellation")
         except Exception as e:
+            if job.status == TrainingStatus.CANCELLED:
+                logger.info(f"Training job {job.job_id} stopped by cancellation")
+                return
             logger.error(f"Training job {job.job_id} failed: {e}")
             job.status = TrainingStatus.FAILED
             job.error = str(e)
@@ -161,7 +276,7 @@ class IncrementalTrainer:
         existing = list(model_dir.glob("v*.pt"))
         versions = []
         for p in existing:
-            m = re.match(r'v(\d+)\.pt$', p.name)
+            m = re.match(r"v(\d+)\.pt$", p.name)
             if m:
                 versions.append(int(m.group(1)))
         version = max(versions, default=0) + 1
@@ -192,6 +307,7 @@ class IncrementalTrainer:
         """Export trained weights to ONNX."""
         try:
             from ultralytics import YOLO
+
             trained = YOLO(model_path)
             trained.export(format="onnx", simplify=True)
             logger.info(f"ONNX exported for {model_path}")
@@ -208,23 +324,50 @@ class IncrementalTrainer:
         return sorted(jobs, key=lambda j: j.created_at, reverse=True)
 
     async def cancel_job(self, job_id: str) -> bool:
+        """Cancel a training job.
+
+        QUEUED jobs are cancelled immediately. RUNNING jobs are marked
+        for cancellation — the training loop checks this flag between
+        epochs and will stop at the next checkpoint.
+        """
         job = self._jobs.get(job_id)
         if not job:
             return False
-        task = self._tasks.get(job_id)
-        if task and not task.done():
-            task.cancel()
+        if job.status == TrainingStatus.QUEUED:
             job.status = TrainingStatus.CANCELLED
             job.completed_at = datetime.utcnow()
+            logger.info(f"Cancelled queued job {job_id}")
+            return True
+        if job.status == TrainingStatus.RUNNING:
+            # Mark for cancellation — the on_train_epoch_end callback in _run()
+            # checks this flag and raises KeyboardInterrupt to stop training.
+            # completed_at is set when the job actually stops (in _run's except block).
+            job.status = TrainingStatus.CANCELLED
+            logger.info(
+                f"Marked running job {job_id} for cancellation "
+                f"(will stop at next epoch boundary)"
+            )
             return True
         return False
 
-    async def wait_for_job(self, job_id: str, timeout: float | None = None) -> TrainingJob | None:
-        task = self._tasks.get(job_id)
-        if task:
-            with contextlib.suppress(asyncio.TimeoutError):  # best-effort wait; training may outlast timeout
-                await asyncio.wait_for(task, timeout=timeout)
-        return self._jobs.get(job_id)
+    async def wait_for_job(
+        self, job_id: str, timeout: float | None = None
+    ) -> TrainingJob | None:
+        """Poll job status until complete or timeout."""
+        import time
+
+        deadline = time.time() + timeout if timeout else None
+        while True:
+            job = self._jobs.get(job_id)
+            if not job or job.status in (
+                TrainingStatus.COMPLETED,
+                TrainingStatus.FAILED,
+                TrainingStatus.CANCELLED,
+            ):
+                return job
+            if deadline and time.time() > deadline:
+                return job
+            await asyncio.sleep(1)
 
 
 _trainer: IncrementalTrainer | None = None

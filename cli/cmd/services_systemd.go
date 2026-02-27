@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -348,7 +349,7 @@ func buildUnitParams(serviceName string, cfg *systemdConfig) (*unitParams, error
 	for _, dep := range svcDef.Dependencies {
 		afterParts = append(afterParts, unitFileName(dep))
 	}
-	afterLine := "After=" + strings.Join(afterParts, " ")
+	afterLine := "Wants=network-online.target\nAfter=" + strings.Join(afterParts, " ")
 
 	requiresLine := ""
 	if len(svcDef.Dependencies) > 0 {
@@ -360,9 +361,17 @@ func buildUnitParams(serviceName string, cfg *systemdConfig) (*unitParams, error
 	}
 
 	// Build extra environment lines from ServiceGraph env, skipping
-	// LOG_FILE (journal handles it) and empty-value "inherit" vars
+	// LOG_FILE (journal handles it) and empty-value "inherit" vars.
+	// Sort keys for deterministic unit file output.
+	var envKeys []string
+	for key := range svcDef.Env {
+		envKeys = append(envKeys, key)
+	}
+	sort.Strings(envKeys)
+
 	var envLines []string
-	for key, val := range svcDef.Env {
+	for _, key := range envKeys {
+		val := svcDef.Env[key]
 		if key == "LOG_FILE" {
 			continue
 		}
@@ -424,7 +433,9 @@ func unitFileName(serviceName string) string {
 }
 
 func runSystemctl(cfg *systemdConfig, args ...string) error {
-	fullArgs := append(cfg.systemctlAs, args...)
+	fullArgs := make([]string, 0, len(cfg.systemctlAs)+len(args))
+	fullArgs = append(fullArgs, cfg.systemctlAs...)
+	fullArgs = append(fullArgs, args...)
 	cmd := exec.Command(cfg.systemctl, fullArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -72,11 +72,11 @@ class TestMCPToolFactory:
         # Create mock tool classes
         mock_tool1 = MagicMock()
         mock_tool1.__name__ = "Tool1"
-        mock_tool1.mcp_tool_name = "tool1"
+        mock_tool1.tool_name = "tool1"
 
         mock_tool2 = MagicMock()
         mock_tool2.__name__ = "Tool2"
-        mock_tool2.mcp_tool_name = "tool2"
+        mock_tool2.tool_name = "tool2"
 
         # Mock the persistent session to avoid actual network connection
         mock_session = AsyncMock()
@@ -94,7 +94,7 @@ class TestMCPToolFactory:
             tools = await factory.create_tools_for_server("test-server")
             assert len(tools) == 2
             # Tools are now dynamic AtomicAgent tool classes
-            assert all(hasattr(tool, "mcp_tool_name") for tool in tools)
+            assert all(hasattr(tool, "tool_name") for tool in tools)
 
     async def test_create_all_tools(self, mock_config):
         """Test creating tools for all servers."""
@@ -104,7 +104,7 @@ class TestMCPToolFactory:
         # Create mock tool class
         mock_tool = MagicMock()
         mock_tool.__name__ = "GlobalTool"
-        mock_tool.mcp_tool_name = "global_tool"
+        mock_tool.tool_name = "global_tool"
 
         # Mock the persistent session to avoid actual network connection
         mock_session = AsyncMock()
@@ -130,11 +130,11 @@ class TestMCPToolFactory:
         # Create mock tool classes
         mock_tool1 = MagicMock()
         mock_tool1.__name__ = "ValidTool"
-        mock_tool1.mcp_tool_name = "valid_tool"
+        mock_tool1.tool_name = "valid_tool"
 
         mock_tool2 = MagicMock()
         mock_tool2.__name__ = "ProblemTool"
-        mock_tool2.mcp_tool_name = "problem_tool"
+        mock_tool2.tool_name = "problem_tool"
 
         # Mock the persistent session to avoid actual network connection
         mock_session = AsyncMock()

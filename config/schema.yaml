@@ -270,6 +270,17 @@ properties:
                 even under memory pressure. Useful for models that need fast
                 response times (e.g., voice chat LLMs).
               default: false
+            builtin_tools:
+              type: object
+              description: |
+                Configuration for built-in tools. All builtin tools are disabled by default.
+                Use 'include' to enable specific tools by name.
+              properties:
+                include:
+                  type: array
+                  description: List of builtin tool names to enable (e.g., ["tasks"]). All builtin tools are disabled by default.
+                  items:
+                    type: string
             rag_enabled:
               type: boolean
               description: |

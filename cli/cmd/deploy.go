@@ -152,7 +152,7 @@ func resolveDeployTarget(cfg *config.LlamaFarmConfig, args []string) (targetURL 
 			return "", false, false, "", resolveErr
 		}
 		targetURL = dc.ServerURL
-		deployModels = dc.DeployModelsOrDefault()
+		deployModels = dc.DeployModels
 		deployData = dc.DeployData
 	} else {
 		// Use --server-url flag (which defaults to localhost:14345)
@@ -164,7 +164,7 @@ func resolveDeployTarget(cfg *config.LlamaFarmConfig, args []string) (targetURL 
 
 // healthCheck verifies the target server is reachable.
 func healthCheck(targetURL string) error {
-	url := fmt.Sprintf("%s/health/liveness", strings.TrimSuffix(targetURL, "/"))
+	url := fmt.Sprintf("%s/health", strings.TrimSuffix(targetURL, "/"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -281,7 +281,8 @@ func createProject(baseURL, namespace, project string) error {
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create project (status %d): %s", resp.StatusCode, string(bodyBytes))
+		utils.LogDebug(fmt.Sprintf("create project response body: %s", string(bodyBytes)))
+		return fmt.Errorf("failed to create project (server returned status %d)", resp.StatusCode)
 	}
 
 	return nil
@@ -315,15 +316,27 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 	fmt.Printf("\nDownloading %d model(s)...\n", len(universalModels))
 
 	// Pre-check disk space for each model
+	var diskWarnings []string
 	for _, m := range universalModels {
 		if err := validateModelDiskSpace(baseURL, m.Model); err != nil {
-			fmt.Printf("  Warning: %s - %v\n", m.Model, err)
+			diskWarnings = append(diskWarnings, fmt.Sprintf("  %s: %v", m.Model, err))
+		}
+	}
+	if len(diskWarnings) > 0 {
+		fmt.Println("  Disk space warnings:")
+		for _, w := range diskWarnings {
+			fmt.Println(w)
+		}
+		fmt.Print("  Continue anyway? [y/N] ")
+		var answer string
+		fmt.Scanln(&answer)
+		if answer != "y" && answer != "Y" {
+			return nil, fmt.Errorf("aborted by user due to disk space warnings")
 		}
 	}
 
-	// Download models in parallel with synchronized stdout writes
+	// Download models in parallel
 	var wg sync.WaitGroup
-	var printMu sync.Mutex
 	results := make([]modelDeployResult, len(universalModels))
 
 	for i, m := range universalModels {
@@ -334,7 +347,7 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 				Name:  model.Name,
 				Model: model.Model,
 			}
-			status, err := pullModelFromRemote(baseURL, model.Model, model.Name, &printMu)
+			status, err := pullModelFromRemote(baseURL, model.Model, model.Name)
 			if err != nil {
 				result.Status = "failed"
 				result.Error = err
@@ -347,12 +360,26 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 
 	wg.Wait()
 
+	// Check if any models failed
+	var failedNames []string
+	for _, r := range results {
+		if r.Status == "failed" {
+			failedNames = append(failedNames, r.Name)
+		}
+	}
+	if len(failedNames) == len(results) {
+		return results, fmt.Errorf("all model downloads failed")
+	}
+
 	return results, nil
 }
 
+// progressMu serializes terminal progress output across concurrent model downloads.
+var progressMu sync.Mutex
+
 // pullModelFromRemote triggers a model download on the remote server and streams progress.
-// Returns a status string ("downloaded" or "cached") and any error.
-func pullModelFromRemote(baseURL, modelID, displayName string, printMu *sync.Mutex) (string, error) {
+// Returns the status ("downloaded" or "cached") and any error.
+func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
 	url := fmt.Sprintf("%s/v1/models/download", baseURL)
 
 	requestBody, err := json.Marshal(map[string]string{
@@ -414,9 +441,9 @@ func pullModelFromRemote(baseURL, modelID, displayName string, printMu *sync.Mut
 		switch event.Event {
 		case "init":
 			if event.TotalSize > 0 {
-				printMu.Lock()
+				progressMu.Lock()
 				fmt.Printf("%s %s (%s)\n", prefix, event.ModelID, utils.FormatBytes(event.TotalSize))
-				printMu.Unlock()
+				progressMu.Unlock()
 			}
 		case "progress":
 			if event.Total > 1024*1024 {
@@ -424,20 +451,20 @@ func pullModelFromRemote(baseURL, modelID, displayName string, printMu *sync.Mut
 				if event.BytesPerSec > 0 {
 					rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
 				}
-				printMu.Lock()
+				progressMu.Lock()
 				fmt.Printf("\r%s %.1f%%%s", prefix, event.Percent, rateStr)
 				os.Stdout.Sync()
-				printMu.Unlock()
+				progressMu.Unlock()
 			}
 		case "cached":
-			status = "cached"
-			printMu.Lock()
+			progressMu.Lock()
 			fmt.Printf("%s cached\n", prefix)
-			printMu.Unlock()
+			progressMu.Unlock()
+			status = "cached"
 		case "end":
-			printMu.Lock()
+			progressMu.Lock()
 			fmt.Printf("\r%s 100%%\n", prefix)
-			printMu.Unlock()
+			progressMu.Unlock()
 		case "done":
 			return status, nil
 		case "error":
@@ -492,7 +519,7 @@ func validateModelDiskSpace(baseURL, modelID string) error {
 // printDryRun displays what would happen during deploy without executing.
 func printDryRun(cfg *config.LlamaFarmConfig, targetURL string, projectInfo *config.ProjectInfo, deployModels, deployData bool) error {
 	fmt.Println("\n[DRY RUN] Actions that would be taken:")
-	fmt.Printf("  1. Health check: GET %s/health/liveness\n", targetURL)
+	fmt.Printf("  1. Health check: GET %s/health\n", targetURL)
 	fmt.Printf("  2. Push config: PUT /v1/projects/%s/%s (or create if not found)\n", projectInfo.Namespace, projectInfo.Project)
 
 	if deployModels && cfg.Runtime.Models != nil {

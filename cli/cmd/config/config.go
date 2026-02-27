@@ -57,6 +57,17 @@ func loadConfigFile(filePath string) (*LlamaFarmConfig, error) {
 		return nil, err
 	}
 
+	// Store raw config data for environment resolution
+	fileExt := strings.ToLower(filepath.Ext(filePath))
+	switch fileExt {
+	case ".yaml", ".yml":
+		SetRawConfigData(data, "yaml")
+	case ".toml":
+		SetRawConfigData(data, "toml")
+	case ".json":
+		SetRawConfigData(data, "json")
+	}
+
 	return &config, nil
 }
 

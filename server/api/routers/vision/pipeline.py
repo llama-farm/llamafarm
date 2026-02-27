@@ -97,11 +97,13 @@ async def start_training(
     task: str = Form(default="detection"),
     epochs: int = Form(default=10),
     batch_size: int = Form(default=16),
+    imgsz: int = Form(default=640, description="Training image size (px)"),
+    patience: int = Form(default=50, description="Early stopping patience (0=disabled)"),
 ) -> dict[str, Any]:
     """Start a training job."""
     return await VisionPipelineService.train(
         model=model, dataset=dataset, task=task,
-        config={"epochs": epochs, "batch_size": batch_size},
+        config={"epochs": epochs, "batch_size": batch_size, "imgsz": imgsz, "patience": patience},
     )
 
 

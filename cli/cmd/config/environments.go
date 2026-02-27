@@ -1,29 +1,27 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	toml "github.com/pelletier/go-toml/v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DeployConfig holds the resolved deploy settings for a target environment.
+// Defaults are applied here since the generated types use plain bool (not *bool),
+// making it impossible to distinguish "not set" from "set to false" in YAML.
 type DeployConfig struct {
 	// ServerURL is the LlamaFarm server URL for this environment.
 	ServerURL string
 	// DeployModels controls whether model downloads are triggered on deploy.
-	// Pointer: nil means "not set" (defaults to true), non-nil uses the value.
-	DeployModels *bool
+	// Defaults to true if not explicitly set.
+	DeployModels bool
 	// DeployData controls whether dataset documents are uploaded and ingested.
 	// Defaults to false if not explicitly set.
 	DeployData bool
-}
-
-// DeployModelsOrDefault returns the DeployModels value, defaulting to true if nil.
-func (dc *DeployConfig) DeployModelsOrDefault() bool {
-	if dc.DeployModels == nil {
-		return true
-	}
-	return *dc.DeployModels
 }
 
 // ResolveEnvironment looks up a named environment from the config and returns
@@ -44,13 +42,66 @@ func (c *LlamaFarmConfig) ResolveEnvironment(name string) (*DeployConfig, error)
 		return nil, fmt.Errorf("environment %q has no server_url configured", name)
 	}
 
+	// Default deploy_models to true when not explicitly set (nil)
+	deployModels := true
+	if env.DeployModels != nil {
+		deployModels = *env.DeployModels
+	}
+
 	dc := &DeployConfig{
 		ServerURL:    env.ServerUrl,
 		DeployData:   env.DeployData,
-		DeployModels: env.DeployModels, // nil when omitted → defaults to true
+		DeployModels: deployModels,
 	}
 
 	return dc, nil
+}
+
+// rawConfigData holds the raw bytes of the loaded config file for secondary parsing.
+// This allows us to detect explicitly-set fields that the generated types can't distinguish.
+var rawConfigData []byte
+
+// rawConfigFormat holds the format of the raw config data ("yaml", "json", or "toml").
+var rawConfigFormat string
+
+// SetRawConfigData stores the raw config bytes and format for use in environment resolution.
+func SetRawConfigData(data []byte, format string) {
+	rawConfigData = data
+	rawConfigFormat = format
+}
+
+// envFieldExplicitlySet checks if a boolean field was explicitly set in the raw config
+// for a given environment. Returns (true, value) if the field exists, (false, false) otherwise.
+func envFieldExplicitlySet(data []byte, envName, field string) (bool, bool) {
+	var raw struct {
+		Environments map[string]map[string]interface{} `yaml:"environments" json:"environments" toml:"environments"`
+	}
+
+	var err error
+	switch rawConfigFormat {
+	case "json":
+		err = json.Unmarshal(data, &raw)
+	case "toml":
+		err = toml.Unmarshal(data, &raw)
+	default: // yaml
+		err = yaml.Unmarshal(data, &raw)
+	}
+	if err != nil {
+		return false, false
+	}
+
+	env, ok := raw.Environments[envName]
+	if !ok {
+		return false, false
+	}
+	val, ok := env[field]
+	if !ok {
+		return false, false
+	}
+	if b, ok := val.(bool); ok {
+		return true, b
+	}
+	return false, false
 }
 
 // ListEnvironmentNames returns a sorted list of configured environment names.
