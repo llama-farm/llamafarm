@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	toml "github.com/pelletier/go-toml/v2"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -77,14 +78,16 @@ func SetRawConfigData(data []byte, format string) {
 // for a given environment. Returns (true, value) if the field exists, (false, false) otherwise.
 func envFieldExplicitlySet(data []byte, envName, field string) (bool, bool) {
 	var raw struct {
-		Environments map[string]map[string]interface{} `yaml:"environments" json:"environments"`
+		Environments map[string]map[string]interface{} `yaml:"environments" json:"environments" toml:"environments"`
 	}
 
 	var err error
 	switch rawConfigFormat {
 	case "json":
 		err = json.Unmarshal(data, &raw)
-	default: // yaml, toml (toml uses same key names)
+	case "toml":
+		err = toml.Unmarshal(data, &raw)
+	default: // yaml
 		err = yaml.Unmarshal(data, &raw)
 	}
 	if err != nil {

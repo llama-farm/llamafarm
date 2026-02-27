@@ -61,6 +61,14 @@ var archToGoArch = map[string]string{
 	"arm64":  "arm64",
 }
 
+// platformToPyAppOS maps bundle platform names to PyApp binary platform strings.
+// PyApp uses "macos" instead of "darwin" for macOS builds.
+var platformToPyAppOS = map[string]string{
+	"linux":   "linux",
+	"darwin":  "macos",
+	"windows": "windows",
+}
+
 // knownInvalidCombos lists platform/arch combos that don't have release artifacts.
 var knownInvalidCombos = map[string]bool{
 	"darwin-x86_64":  true, // macOS Intel not supported
@@ -218,7 +226,7 @@ func runBundle(cmd *cobra.Command, args []string) error {
 	manifest.Components["cli"] = cliBinaryName
 
 	// Download PyApp service binaries
-	pyappPlatform := fmt.Sprintf("%s-%s", goOS, bundleFlags.arch)
+	pyappPlatform := fmt.Sprintf("%s-%s", platformToPyAppOS[bundleFlags.platform], bundleFlags.arch)
 	for _, component := range []string{"server", "rag", "runtime"} {
 		binaryName := fmt.Sprintf("llamafarm-%s-%s", component, pyappPlatform)
 		if bundleFlags.platform == "windows" {
