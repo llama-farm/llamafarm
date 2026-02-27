@@ -90,7 +90,7 @@ dependencies = [
   "pywin32>=306; sys_platform == 'win32'",
   "urllib3>=2.6.3",
   "aiohttp>=3.13.3",
-  "protobuf>=6.33.5",
+  "protobuf>=6.33.5,<7",
   "filelock>=3.16.1",
   "pypdf>=5.1.0",
   "authlib>=1.4.0",
