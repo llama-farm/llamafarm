@@ -60,6 +60,18 @@ class TasksService:
     """
 
     @classmethod
+    def _validate_task_id(cls, task_id: str) -> None:
+        """Validate that a task ID is a positive integer string.
+
+        Prevents path traversal attacks via crafted task IDs like '../../etc/foo'.
+
+        Raises:
+            TaskNotFoundError: If the task ID is not a valid positive integer.
+        """
+        if not task_id.isdigit():
+            raise TaskNotFoundError(f"Invalid task ID: '{task_id}'")
+
+    @classmethod
     def _get_tasks_dir(cls, project_dir: str, session_id: str) -> Path:
         """Get the tasks directory for a session, creating it if necessary."""
         tasks_dir = Path(project_dir) / "tasks" / session_id
@@ -113,6 +125,7 @@ class TasksService:
 
         Raises TaskNotFoundError if the task doesn't exist.
         """
+        cls._validate_task_id(task_id)
         task_path = tasks_dir / f"{task_id}.json"
         if not task_path.exists():
             raise TaskNotFoundError(f"Task '{task_id}' not found")
@@ -217,8 +230,9 @@ class TasksService:
         lock = cls._get_lock(tasks_dir)
 
         with lock:
-            # Validate all blockedBy tasks exist
+            # Validate all blockedBy task IDs
             for blocker_id in blockedBy:
+                cls._validate_task_id(blocker_id)
                 blocker_path = tasks_dir / f"{blocker_id}.json"
                 if not blocker_path.exists():
                     raise TaskNotFoundError(f"Task '{blocker_id}' not found")
@@ -395,8 +409,9 @@ class TasksService:
 
             # Handle addBlockedBy
             if addBlockedBy:
-                # Validate all referenced tasks exist
+                # Validate all referenced task IDs
                 for blocker_id in addBlockedBy:
+                    cls._validate_task_id(blocker_id)
                     blocker_path = tasks_dir / f"{blocker_id}.json"
                     if not blocker_path.exists():
                         raise TaskNotFoundError(f"Task '{blocker_id}' not found")
@@ -419,8 +434,9 @@ class TasksService:
 
             # Handle addBlocks
             if addBlocks:
-                # Validate all referenced tasks exist
+                # Validate all referenced task IDs
                 for blocked_id in addBlocks:
+                    cls._validate_task_id(blocked_id)
                     blocked_path = tasks_dir / f"{blocked_id}.json"
                     if not blocked_path.exists():
                         raise TaskNotFoundError(f"Task '{blocked_id}' not found")
