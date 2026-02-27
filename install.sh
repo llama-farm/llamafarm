@@ -193,6 +193,10 @@ install_cli() {
     case "$pyapp_goarch" in
         amd64) pyapp_arch="x86_64" ;;
     esac
+    # PyApp release binaries use "macos" instead of "darwin"
+    case "$pyapp_os" in
+        darwin) pyapp_os="macos" ;;
+    esac
     local pyapp_suffix="${pyapp_os}-${pyapp_arch}"
 
     local bin_dir="$LF_DATA_DIR/bin"

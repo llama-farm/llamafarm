@@ -545,18 +545,30 @@ func findInstallScript() string {
 }
 
 // createTarGz creates a tar.gz archive from a source directory.
-func createTarGz(outputPath, sourceDir string) error {
+func createTarGz(outputPath, sourceDir string) (retErr error) {
 	outFile, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() {
+		if cerr := outFile.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 
 	gzWriter := gzip.NewWriter(outFile)
-	defer gzWriter.Close()
+	defer func() {
+		if cerr := gzWriter.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 
 	tw := tar.NewWriter(gzWriter)
-	defer tw.Close()
+	defer func() {
+		if cerr := tw.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 
 	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
