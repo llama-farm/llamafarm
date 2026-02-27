@@ -19,6 +19,8 @@ from .streaming import set_streaming_detection_loader, start_session_cleanup
 from .tracking import router as tracking_router
 from .tracking import set_tracking_models_dir, start_tracking_cleanup
 from .training import router as training_router
+from .sample_data import router as sample_data_router
+from .sample_data import set_data_dir as set_sample_data_dir
 
 # Combined router
 router = APIRouter(tags=["vision"])
@@ -31,6 +33,7 @@ router.include_router(training_router)
 router.include_router(evaluation_router)
 router.include_router(tracking_router)
 router.include_router(models_router)
+router.include_router(sample_data_router)
 
 __all__ = [
     "router",
@@ -39,6 +42,7 @@ __all__ = [
     "set_detect_classify_loaders",
     "set_streaming_detection_loader", "start_session_cleanup",
     "set_vision_models_dir", "set_model_export_loader",
+    "set_sample_data_dir",
     "set_eval_models_dir",
     "set_tracking_models_dir", "start_tracking_cleanup",
 ]

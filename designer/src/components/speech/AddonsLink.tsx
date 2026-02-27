@@ -22,14 +22,16 @@ export function AddonsLink({ className = '' }: AddonsLinkProps) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={() => navigate('/addons')}
-            className={`text-muted-foreground hover:text-foreground transition-colors ${className}`}
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); navigate('/addons') }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); navigate('/addons') } }}
+            className={`text-muted-foreground hover:text-foreground transition-colors cursor-pointer inline-flex ${className}`}
             aria-label="Manage add-ons"
           >
             <Package className="w-4 h-4" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent>
           <p>This feature is an add-on. Click to manage add-ons</p>

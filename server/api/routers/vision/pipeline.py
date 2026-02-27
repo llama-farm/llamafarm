@@ -33,6 +33,7 @@ async def detect_classify(
     if not cls_list:
         raise HTTPException(status_code=422, detail="classes must contain at least one non-empty value")
     det_cls = [c.strip() for c in detection_classes.split(",") if c.strip()] if detection_classes else None
+    top_k = min(top_k, len(cls_list))
     return await VisionPipelineService.detect_classify({
         "image": image,
         "detection_model": detection_model,
@@ -97,13 +98,16 @@ async def start_training(
     task: str = Form(default="detection"),
     epochs: int = Form(default=10),
     batch_size: int = Form(default=16),
+    learning_rate: float = Form(default=0.001),
+    base_model: str | None = Form(default=None),
     imgsz: int = Form(default=640, description="Training image size (px)"),
     patience: int = Form(default=50, description="Early stopping patience (0=disabled)"),
 ) -> dict[str, Any]:
     """Start a training job."""
     return await VisionPipelineService.train(
         model=model, dataset=dataset, task=task,
-        config={"epochs": epochs, "batch_size": batch_size, "imgsz": imgsz, "patience": patience},
+        config={"epochs": epochs, "batch_size": batch_size, "learning_rate": learning_rate, "imgsz": imgsz, "patience": patience},
+        base_model=base_model,
     )
 
 
@@ -127,6 +131,25 @@ async def cancel_training(job_id: str) -> dict[str, Any]:
 async def list_models() -> dict[str, Any]:
     """List saved vision models."""
     return await VisionPipelineService.list_models()
+
+
+@router.post("/models/save")
+async def save_model(
+    model_id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(default=""),
+) -> dict[str, Any]:
+    """Save a vision model to persistent storage."""
+    return await VisionPipelineService.save_model(model_id, name, description)
+
+
+@router.post("/models/load")
+async def load_model(
+    model_id: str = Form(...),
+    device: str | None = Form(default=None),
+) -> dict[str, Any]:
+    """Load a saved vision model."""
+    return await VisionPipelineService.load_model(model_id, device)
 
 
 @router.post("/models/export")
