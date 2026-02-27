@@ -26,14 +26,17 @@ except ImportError:
     try:
         import tomli as tomllib
     except ImportError:
-        print("Error: TOML parsing requires Python 3.11+ or 'pip install tomli'")
-        sys.exit(1)
+        raise RuntimeError(
+            "TOML parsing requires Python 3.11+ or 'pip install tomli'"
+        ) from None
 
 import yaml
 
 
 def normalize_package_name(name: str) -> str:
-    """Normalize package name: lowercase, replace hyphens with underscores."""
+    """Normalize package name: lowercase, replace hyphens with underscores, strip extras."""
+    # Strip PEP 508 extras brackets (e.g., "uvicorn[standard]" -> "uvicorn")
+    name = re.sub(r"\[.*?\]", "", name)
     return re.sub(r"[-_.]+", "_", name.lower())
 
 
@@ -66,8 +69,12 @@ def parse_uv_lock_packages(uv_lock_path: Path, pyproject_path: Path) -> Set[str]
                 normalized_name = normalize_package_name(package_name)
                 deps = []
                 for dep in package.get("dependencies", []):
-                    # Dependency names in uv.lock can have version specs
-                    dep_name = re.split(r'[<>=!;]', dep.strip())[0].strip()
+                    # uv.lock deps can be dicts (e.g., {"name": "numpy", "marker": "..."})
+                    # or strings (e.g., "numpy>=1.24")
+                    if isinstance(dep, dict):
+                        dep_name = dep.get("name", "")
+                    else:
+                        dep_name = re.split(r'[<>=!;]', dep.strip())[0].strip()
                     if dep_name:
                         deps.append(normalize_package_name(dep_name))
                 dependency_graph[normalized_name] = deps
