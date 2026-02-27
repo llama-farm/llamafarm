@@ -433,7 +433,9 @@ func unitFileName(serviceName string) string {
 }
 
 func runSystemctl(cfg *systemdConfig, args ...string) error {
-	fullArgs := append(cfg.systemctlAs, args...)
+	fullArgs := make([]string, 0, len(cfg.systemctlAs)+len(args))
+	fullArgs = append(fullArgs, cfg.systemctlAs...)
+	fullArgs = append(fullArgs, args...)
 	cmd := exec.Command(cfg.systemctl, fullArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
