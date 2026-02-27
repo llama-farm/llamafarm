@@ -22,6 +22,13 @@ PLATFORM_TO_GOOS = {
     "windows": "windows",
 }
 
+# PyApp uses "macos" instead of "darwin" for macOS builds.
+PLATFORM_TO_PYAPP_OS = {
+    "linux": "linux",
+    "darwin": "macos",
+    "windows": "windows",
+}
+
 ARCH_TO_GOARCH = {
     "x86_64": "amd64",
     "arm64": "arm64",

@@ -17,6 +17,7 @@ const Data = lazy(() => import('../assets/icons/Data'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
 const Fade = lazy(() => import('../assets/icons/Fade'))
 const Integration = lazy(() => import('../assets/icons/Integration'))
+const Loader = lazy(() => import('../assets/icons/Loader'))
 const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
 const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
 const Prompt = lazy(() => import('../assets/icons/Prompt'))
@@ -153,7 +154,7 @@ const FontIcon: React.FC<FontIconProps> = ({
       case 'integration':
         return <Integration />
       case 'loading':
-        return <RecentlyViewed /> // Use RecentlyViewed icon for loading (with animate-spin in className)
+        return <Loader />
       case 'moon-filled':
         return <MoonFilled />
       case 'open-panel':

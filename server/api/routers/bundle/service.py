@@ -23,6 +23,7 @@ from .types import (
     ARCH_TO_GOARCH,
     INVALID_COMBOS,
     PLATFORM_TO_GOOS,
+    PLATFORM_TO_PYAPP_OS,
     SIZE_ESTIMATES,
     VALID_ACCELERATORS,
     VALID_ADDONS,
@@ -298,7 +299,8 @@ def _download_asset_sync(
         dest_dir.mkdir(exist_ok=True)
         return _download_release_sync(client, ver, name, dest_dir / name)
     elif step_name in ("server", "rag", "runtime"):
-        platform_str = f"{go_os}-{req.arch}"
+        pyapp_os = PLATFORM_TO_PYAPP_OS[req.platform]
+        platform_str = f"{pyapp_os}-{req.arch}"
         name = f"llamafarm-{step_name}-{platform_str}"
         if req.platform == "windows":
             name += ".exe"
@@ -477,7 +479,8 @@ def _make_pyapp_downloader(component: str):
         req: BundleRequest,
         tmp_dir: Path,
     ) -> int:
-        platform_str = f"{go_os}-{req.arch}"
+        pyapp_os = PLATFORM_TO_PYAPP_OS[req.platform]
+        platform_str = f"{pyapp_os}-{req.arch}"
         name = f"llamafarm-{component}-{platform_str}"
         if req.platform == "windows":
             name += ".exe"
