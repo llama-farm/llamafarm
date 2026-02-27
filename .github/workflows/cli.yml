@@ -114,6 +114,9 @@ jobs:
             VERSION=${GITHUB_SHA::8}
           fi
 
+          # Copy addon registry for embedding
+          cp -f ../addons/registry/*.yaml cmd/registry/
+
           # Build with version info (schema compilation and type generation already done by generate-types)
           go build -ldflags "-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .
 
