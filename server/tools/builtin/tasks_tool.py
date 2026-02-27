@@ -11,7 +11,9 @@ Each tool delegates to TasksService for persistence and validation.
 """
 
 import asyncio
+import concurrent.futures
 import json
+from collections.abc import Coroutine
 from typing import Any, Literal
 
 from atomic_agents import BaseTool
@@ -24,6 +26,18 @@ from services.tasks_service import (
     TaskNotFoundError,
     TasksService,
 )
+
+
+def _run_sync[T](coro: Coroutine[Any, Any, T]) -> T:
+    """Run a coroutine synchronously, safe to call from within a running event loop."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 class TaskToolOutput(BaseIOSchema):
@@ -95,7 +109,7 @@ class TaskCreateTool(BaseTool):
 
     def run(self, params: TaskCreateInput) -> TaskToolOutput:
         """Execute the task creation synchronously."""
-        return asyncio.get_event_loop().run_until_complete(self.arun(params))
+        return _run_sync(self.arun(params))
 
     async def arun(self, params: TaskCreateInput) -> TaskToolOutput:
         """Create a new task."""
@@ -218,7 +232,7 @@ class TaskUpdateTool(BaseTool):
 
     def run(self, params: TaskUpdateInput) -> TaskToolOutput:
         """Execute the task update synchronously."""
-        return asyncio.get_event_loop().run_until_complete(self.arun(params))
+        return _run_sync(self.arun(params))
 
     async def arun(self, params: TaskUpdateInput) -> TaskToolOutput:
         """Update an existing task."""
@@ -323,7 +337,7 @@ class TaskListTool(BaseTool):
 
     def run(self, params: TaskListInput) -> TaskToolOutput:
         """Execute the task list synchronously."""
-        return asyncio.get_event_loop().run_until_complete(self.arun(params))
+        return _run_sync(self.arun(params))
 
     async def arun(self, params: TaskListInput) -> TaskToolOutput:
         """List all tasks for the session."""
@@ -409,7 +423,7 @@ class TaskGetTool(BaseTool):
 
     def run(self, params: TaskGetInput) -> TaskToolOutput:
         """Execute the task get synchronously."""
-        return asyncio.get_event_loop().run_until_complete(self.arun(params))
+        return _run_sync(self.arun(params))
 
     async def arun(self, params: TaskGetInput) -> TaskToolOutput:
         """Get a task by ID."""
