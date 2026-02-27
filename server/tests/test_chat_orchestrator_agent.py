@@ -646,7 +646,7 @@ class TestChatOrchestratorAgent:
                 call_args = mock_tool_instance.arun.call_args
                 assert call_args is not None
                 # The tool receives the parsed arguments
-                assert "operation" in str(call_args) or mock_tool_instance.arun.called
+                assert "operation" in str(call_args)
 
     def test_enable_persistence(self, base_config):
         """Test enabling persistence."""
