@@ -145,7 +145,7 @@ properties:
             
             pin:
               type: boolean
-              description: Prevent this model from being evicted from the cache. This field only has effect if the model is loaded (either via preload: true or on-demand).
+              description: Prevent this model from being evicted from the cache. This field only has effect if the model is loaded (either via preload true or on-demand).
               default: false
             # ═══════════════════════════════════════════════════════════════
             

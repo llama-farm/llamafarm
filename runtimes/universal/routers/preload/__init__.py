@@ -180,8 +180,10 @@ async def get_preload_status():
     }
     ```
     """
-    # Import here to avoid circular dependencies
-    from server import _models
+    # Use state.get_models_cache() to access the correct cache instance
+    from state import get_models_cache
+
+    _models = get_models_cache()
 
     # Get loaded models info
     loaded_models = []

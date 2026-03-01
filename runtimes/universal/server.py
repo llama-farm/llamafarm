@@ -81,6 +81,9 @@ try:
     _HAS_EXPLAIN = True
 except ImportError:
     _HAS_EXPLAIN = False
+import sys
+from pathlib import Path
+
 from routers.files import router as files_router
 from routers.health import (
     router as health_router,
@@ -106,15 +109,16 @@ from routers.vision import (
     set_file_image_getter,
     set_model_export_loader,
     set_ocr_loader,
+    set_sample_data_dir,
     set_streaming_detection_loader,
     set_tracking_models_dir,
     set_vision_models_dir,
-    set_sample_data_dir,
     start_session_cleanup,
     start_tracking_cleanup,
     stop_session_cleanup,
     stop_tracking_cleanup,
 )
+from state import set_models_cache as state_set_models_cache
 from utils.concurrent_loader import (
     ConcurrentModelLoader,
 )
@@ -130,6 +134,10 @@ from utils.resource_detect import (
 )
 from utils.safe_home import get_data_dir
 from vision_training.trainer import set_trainer_model_loader
+
+repo_root = Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -517,6 +525,14 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Global model caches using TTL-based caching (via cachetools)
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+
+
+state_set_models_cache(_models)
+
+# Also set for health router (legacy)
+set_models_cache(_models)
+
+
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
@@ -962,7 +978,6 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
             }
         }
     """
-    from pathlib import Path
 
     try:
         from config.helpers.loader import load_config
