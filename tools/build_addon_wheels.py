@@ -112,7 +112,7 @@ def parse_uv_lock_packages(uv_lock_path: Path, pyproject_path: Path) -> Set[str]
         logging.debug(f"Base-reachable packages: {sorted(base_reachable)}")
         return base_reachable
         
-    except Exception as e:
+    except (KeyError, TypeError, tomllib.TOMLDecodeError) as e:
         logging.warning(f"Failed to parse uv.lock and dependency graph: {e}")
         return set()
 
@@ -141,7 +141,7 @@ def parse_pyproject_extras(pyproject_path: Path) -> Set[str]:
         
         logging.info(f"Parsed {len(packages)} packages from pyproject.toml gpu extra")
         return packages
-    except Exception as e:
+    except (KeyError, TypeError, tomllib.TOMLDecodeError) as e:
         logging.warning(f"Failed to parse pyproject.toml: {e}")
         return set()
 
@@ -305,8 +305,9 @@ def get_host_platform() -> str:
 
 def build_addon_wheels(
     addon_name: str,
-    target_platform: str, 
+    target_platform: str,
     output_dir: Path,
+    base_excluded: Set[str],
     no_exclude: bool = False
 ):
     """Build wheels for an addon."""
@@ -365,9 +366,6 @@ def build_addon_wheels(
         logging.info("  Exclusion disabled via --no-exclude flag")
         final_wheel_files = all_wheel_files
     else:
-        # Get base packages to exclude
-        base_excluded = get_base_exclusion_set(no_exclude=False)
-        
         # Get packages to keep for this addon
         addon_keep = get_addon_keep_packages(addon_name, spec)
         
@@ -471,12 +469,15 @@ def main():
             return 1
         platforms = [args.platform]
 
+    # Compute base exclusion set once (avoid re-parsing per addon/platform)
+    base_excluded = get_base_exclusion_set(no_exclude=args.no_exclude)
+
     # Build all combinations
     failures = 0
     for addon in addons:
         for plat in platforms:
             try:
-                build_addon_wheels(addon, plat, output_dir, no_exclude=args.no_exclude)
+                build_addon_wheels(addon, plat, output_dir, base_excluded, no_exclude=args.no_exclude)
             except Exception as e:
                 logging.error(f"✗ Failed to build {addon} for {plat}: {e}")
                 failures += 1
