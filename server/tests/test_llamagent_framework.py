@@ -251,12 +251,12 @@ class TestToolDefinition:
         assert tool.description == "A test tool"
         assert "arg1" in tool.parameters["properties"]
 
-    def test_from_mcp_tool_with_schema(self):
+    def test_from_tool_class_with_schema(self):
         """Test converting MCP tool to ToolDefinition."""
 
         # Create mock MCP tool class
         class MockMCPTool:
-            mcp_tool_name = "mock_tool"
+            tool_name = "mock_tool"
             __doc__ = "Mock tool description"
 
             class input_schema:
@@ -271,7 +271,7 @@ class TestToolDefinition:
                         "required": ["tool_name", "param1"],
                     }
 
-        tool_def = ToolDefinition.from_mcp_tool(MockMCPTool)
+        tool_def = ToolDefinition.from_tool_class(MockMCPTool)
         assert tool_def.name == "mock_tool"
         assert tool_def.description == "Mock tool description"
         # tool_name discriminator should be removed
@@ -279,14 +279,14 @@ class TestToolDefinition:
         assert "param1" in tool_def.parameters["properties"]
         assert tool_def.parameters["required"] == ["param1"]
 
-    def test_from_mcp_tool_no_schema(self):
+    def test_from_tool_class_no_schema(self):
         """Test converting MCP tool without input schema."""
 
         class MockMCPTool:
             __name__ = "MockMCPTool"
             __doc__ = "Tool without schema"
 
-        tool_def = ToolDefinition.from_mcp_tool(MockMCPTool)
+        tool_def = ToolDefinition.from_tool_class(MockMCPTool)
         assert tool_def.name == "MockMCPTool"
         assert tool_def.description == "Tool without schema"
         assert tool_def.parameters == {"type": "object", "properties": {}}

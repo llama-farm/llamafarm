@@ -172,13 +172,16 @@ function ImportSampleDatasetModal({ open, onOpenChange, onImport }: Props) {
         </div>
         <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm opacity-60 cursor-not-allowed">
+            <div className="flex items-center gap-2 text-sm opacity-60 cursor-not-allowed">
               <Checkbox
+                id="include-strategy"
                 checked={true}
                 disabled={true}
               />
-              Include processing strategy
-            </label>
+              <label htmlFor="include-strategy" className="cursor-not-allowed">
+                Include processing strategy
+              </label>
+            </div>
             {selectedObj ? (
               <div className="text-xs text-muted-foreground">
                 Selected: {selectedObj.name}

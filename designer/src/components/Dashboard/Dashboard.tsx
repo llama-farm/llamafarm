@@ -622,7 +622,7 @@ const Dashboard = () => {
                 </button>
               )}
             </div>
-            <PageActions mode={mode} onModeChange={handleModeChange} />
+            <PageActions mode={mode} onModeChange={handleModeChange} showPackage />
           </div>
         )}
 
@@ -724,6 +724,33 @@ const Dashboard = () => {
               databaseCount={databaseCount}
               modelsCount={modelsCount}
             />
+
+            {/* Bundle quick-action */}
+            <div
+              className="mt-4 rounded-lg border border-border bg-card p-4 flex items-center justify-between cursor-pointer hover:bg-accent/20 transition-colors"
+              onClick={() => navigate('/chat/deploy')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  navigate('/chat/deploy')
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Bundle for deployment"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-6 h-6 text-muted-foreground"><FontIcon type="rocket" /></span>
+                <div>
+                  <div className="text-sm font-medium text-foreground">Bundle for deployment</div>
+                  <div className="text-xs text-muted-foreground">
+                    Create a distributable archive to deploy on another machine
+                  </div>
+                </div>
+              </div>
+              <FontIcon type="arrow-right" className="w-5 h-5 text-muted-foreground" />
+            </div>
+
             <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               {/* Data (1/3) */}
               <div className="flex flex-col min-w-0 overflow-hidden">

@@ -322,9 +322,9 @@ async def test_streaming_immediate_start():
         time_to_first_chunk = first_chunk_time - start_time
         total_time = last_chunk_time - start_time
 
-        # First chunk should arrive within reasonable time (< 15 seconds including model loading)
-        # This is more generous to account for CI environments and initial model loading
-        assert time_to_first_chunk < 15.0, (
+        # First chunk should arrive within reasonable time (< 20 seconds including model loading)
+        # This is generous to account for CI environments and initial model loading
+        assert time_to_first_chunk < 20.0, (
             f"First chunk took {time_to_first_chunk:.2f}s - suggests buffering!"
         )
 

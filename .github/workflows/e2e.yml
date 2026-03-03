@@ -485,6 +485,7 @@ jobs:
       - name: Download CLI binary artifact
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: cli.yml
           run_id: ${{ needs.wait-for-cli.outputs.cli_run_id }}
           name: ${{ matrix.artifact }}
@@ -495,6 +496,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: cli.yml
           run_id: ${{ needs.wait-for-cli.outputs.cli_run_id }}
           name: pr-info
