@@ -87,6 +87,18 @@ def start_tracking_cleanup() -> None:
         _cleanup_task = asyncio.create_task(_session_cleanup_loop())
 
 
+async def stop_tracking_cleanup() -> None:
+    """Cancel the background tracking cleanup task (call during shutdown)."""
+    global _cleanup_task
+    if _cleanup_task is not None and not _cleanup_task.done():
+        _cleanup_task.cancel()
+        import contextlib
+        with contextlib.suppress(asyncio.CancelledError):
+            await _cleanup_task
+        logger.info("Vision tracking cleanup task stopped")
+    _cleanup_task = None
+
+
 # ── Model resolution ───────────────────────────────────────────────────────
 
 

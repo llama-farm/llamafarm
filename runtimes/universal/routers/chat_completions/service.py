@@ -619,9 +619,6 @@ class ChatCompletionsService:
                 _s_return_cache_key = None
                 _stream_cache_manager = self._get_cache_manager()
                 if _stream_cache_manager and is_gguf:
-                    import time as _time
-                    _s_cache_start = _time.time()  # noqa: F841 — reserved for future cache timing metrics
-
                     _s_cache_key = chat_request.cache_key
                     if _s_cache_key is None and chat_request.extra_body:
                         _s_cache_key = chat_request.extra_body.get("cache_key")
@@ -634,7 +631,7 @@ class ChatCompletionsService:
                         match = _stream_cache_manager.validate_and_match(
                             cache_key=_s_cache_key,
                             model_id=chat_request.model,
-                            messages=messages_dict,
+                            messages=prepared_messages,
                             tools=tools_dict,
                         )
                         if match["status"] == "hit" and match["entry"]:
@@ -972,7 +969,7 @@ class ChatCompletionsService:
                     # ── KV Cache: save post-generation state (streaming) ──
                     if _stream_cache_manager and is_gguf and (_s_return_cache_key or _stream_cache_info):
                         try:
-                            full_msgs = list(messages_dict) + [
+                            full_msgs = list(prepared_messages) + [
                                 {"role": "assistant", "content": accumulated_content}
                             ]
                             new_entry = await _stream_cache_manager.save_after_generation(
@@ -981,24 +978,17 @@ class ChatCompletionsService:
                                 parent_key=chat_request.cache_key,
                                 messages=full_msgs,
                                 tools=tools_dict,
+                                prompt_tokens=context_usage_info.prompt_tokens if context_usage_info else 0,
                             )
-                            # Emit cache info in a valid ChatCompletionChunk envelope
-                            # so OpenAI SDK clients can parse it without errors
-                            cache_event = _stream_cache_info or {}
+                            cache_event = dict(_stream_cache_info) if _stream_cache_info else {}
                             cache_event["new_cache_key"] = new_entry.cache_key
                             cache_event["cached_tokens"] = new_entry.token_count
-                            cache_chunk = {
-                                "id": f"chatcmpl-cache-{new_entry.cache_key[:8]}",
-                                "object": "chat.completion.chunk",
-                                "created": int(_time.time()),
-                                "model": chat_request.model,
-                                "choices": [],
-                                "x_cache": cache_event,
-                            }
-                            yield f"data: {json.dumps(cache_chunk)}\n\n".encode()
+                            # Use a named SSE event type so OpenAI SDK clients
+                            # ignore it (they only process default "message" events)
+                            yield f"event: x_cache\ndata: {json.dumps(cache_event)}\n\n".encode()
                             await asyncio.sleep(0)
                         except Exception as e:
-                                logger.warning(f"Failed to save streaming post-gen cache: {e}")
+                            logger.warning(f"Failed to save streaming post-gen cache: {e}")
 
                     yield b"data: [DONE]\n\n"
 
@@ -1048,7 +1038,7 @@ class ChatCompletionsService:
                     match = cache_manager.validate_and_match(
                         cache_key=cache_key,
                         model_id=chat_request.model,
-                        messages=messages_dict,
+                        messages=prepared_messages,
                         tools=tools_dict,
                     )
                     if match["status"] == "hit" and match["entry"]:
@@ -1197,6 +1187,35 @@ class ChatCompletionsService:
                         f"{json.dumps(response, indent=2, default=str)}"
                     )
 
+                # ── KV Cache: save after tool-call generation ────────────────
+                if cache_manager and is_gguf and (return_cache_key or cache_info):
+                    try:
+                        # Strip tool call markup from content for cache
+                        clean_content = strip_tool_call_from_content(response_text)
+                        full_messages = list(prepared_messages) + [
+                            {"role": "assistant", "content": clean_content}
+                        ]
+                        _prompt_tokens = (
+                            context_usage_info.prompt_tokens if context_usage_info else 0
+                        )
+                        new_entry = await cache_manager.save_after_generation(
+                            model=model.llama,
+                            model_id=chat_request.model,
+                            parent_key=chat_request.cache_key,
+                            messages=full_messages,
+                            tools=tools_dict,
+                            prompt_tokens=_prompt_tokens,
+                        )
+                        if cache_info is None:
+                            cache_info = {}
+                        cache_info["new_cache_key"] = new_entry.cache_key
+                        cache_info["cached_tokens"] = new_entry.token_count
+                    except Exception as e:
+                        logger.warning(f"Failed to save tool-call post-gen cache: {e}")
+
+                if cache_info:
+                    response["x_cache"] = cache_info
+
                 return response
 
             # Build response with optional thinking field (Ollama-compatible)
@@ -1237,7 +1256,7 @@ class ChatCompletionsService:
             if cache_manager and is_gguf and (return_cache_key or cache_info):
                 try:
                     # Build full conversation including the response
-                    full_messages = list(messages_dict) + [
+                    full_messages = list(prepared_messages) + [
                         {"role": "assistant", "content": parsed.content}
                     ]
                     # Get exact prompt token count for KV restore accuracy

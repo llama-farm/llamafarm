@@ -31,6 +31,7 @@ Turn 3: [full history + user3] + cache_key_2
 ### Multi-Turn Cache Chaining
 
 ```python
+import json
 import httpx
 
 base = "http://localhost:11540"
@@ -45,13 +46,22 @@ r1 = httpx.post(f"{base}/v1/chat/completions", json={
     "return_cache_key": True,  # ask for a cache key in the response
     "stream": True,
 })
-# Parse SSE stream to extract x_cache event
+# Parse SSE stream to extract cache key and response content
 cache_key_1 = None
+r1_content = ""
 for line in r1.iter_lines():
+    if line.startswith("event: x_cache"):
+        continue  # next line has the cache data
     if line.startswith("data: ") and line != "data: [DONE]":
-        chunk = json.loads(line[6:])
-        if "x_cache" in chunk:
-            cache_key_1 = chunk["x_cache"]["new_cache_key"]
+        payload = json.loads(line[6:])
+        # Check for cache event (named SSE event)
+        if "new_cache_key" in payload:
+            cache_key_1 = payload["new_cache_key"]
+        # Collect response content
+        choices = payload.get("choices", [])
+        if choices:
+            delta = choices[0].get("delta", {})
+            r1_content += delta.get("content", "")
 
 # Turn 2: send the cache key — only the new message gets processed
 r2 = httpx.post(f"{base}/v1/chat/completions", json={
@@ -59,13 +69,13 @@ r2 = httpx.post(f"{base}/v1/chat/completions", json={
     "messages": [
         {"role": "system", "content": "You are a financial analyst..."},
         {"role": "user", "content": "What are our top risks?"},
-        {"role": "assistant", "content": r1_response},  # full Turn 1 response
+        {"role": "assistant", "content": r1_content},  # full Turn 1 response
         {"role": "user", "content": "What about NVDA specifically?"}  # only this gets decoded
     ],
     "cache_key": cache_key_1,       # restore KV from Turn 1
     "return_cache_key": True,        # get cache_key_2 for next turn
-    "stream": True,
 })
+# Non-streaming response — cache info is in x_cache field
 cache_key_2 = r2.json()["x_cache"]["new_cache_key"]
 ```
 
@@ -80,7 +90,7 @@ prep = httpx.post(f"{base}/v1/cache/prepare", json={
     "messages": [
         {"role": "system", "content": "You are a financial analyst..."}
     ],
-    "tools": [{"type": "function", "function": {"name": "get_price", ...}}],
+    "tools": [{"type": "function", "function": {"name": "get_price", "parameters": {}}}],
     "warm": True,    # actually loads model and pre-computes KV
     "pinned": True,  # won't be evicted by GC
 })
@@ -133,9 +143,11 @@ Added to `POST /v1/chat/completions`:
 | `new_cache_key` | Cache key for this turn's state (use for next request) |
 | `cached_tokens` | Total tokens in the new cache entry |
 
-For streaming responses, `x_cache` is emitted as a separate SSE event before `[DONE]`:
+For streaming responses, cache info is emitted as a named SSE event (`event: x_cache`) before `[DONE]`. The OpenAI SDK ignores named events, so this is fully compatible:
 ```
-data: {"x_cache": {"hit": true, "new_cache_key": "def456", ...}}
+event: x_cache
+data: {"hit": true, "new_cache_key": "def456", "cached_tokens": 1958}
+
 data: [DONE]
 ```
 

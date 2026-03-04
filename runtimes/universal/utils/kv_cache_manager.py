@@ -210,17 +210,11 @@ class KVCacheManager:
         self._budget = budget or CacheBudget()
         self._cache_dir = cache_dir or Path.home() / ".llamafarm" / "cache" / "kv"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._next_seq_id = 100  # start high to avoid clashing with seq_id 0 used by inference
         self._lock = asyncio.Lock()
         # Stats
         self._total_hits = 0
         self._total_misses = 0
         self._total_partial_hits = 0
-
-    def _alloc_seq_id(self) -> int:
-        sid = self._next_seq_id
-        self._next_seq_id += 1
-        return sid
 
     # ── Core Operations ──────────────────────────────────────────────────
 
@@ -245,8 +239,8 @@ class KVCacheManager:
         segments = hash_messages_segments(messages, tools)
         content_hash = hash_segment(json.dumps([s["hash"] for s in segments]))
 
+        # Quick dedup check (under lock)
         async with self._lock:
-            # Dedup: if same content already cached, return existing
             if content_hash in self._content_index:
                 existing_key = self._content_index[content_hash]
                 if existing_key in self._entries:
@@ -261,22 +255,22 @@ class KVCacheManager:
 
         if model is not None:
             # Real KV serialization: tokenize → decode → serialize
+            # Run blocking model ops in a thread to avoid blocking the event loop
             try:
                 import time as _time
                 t0 = _time.perf_counter()
 
-                # Tokenize through the model's chat template
-                prompt = model._apply_chat_template(messages, add_generation_prompt=True)
-                tokens = model.tokenize(prompt, add_special=False, parse_special=True)
-                token_count = len(tokens)
+                def _prepare_kv():
+                    prompt = model._apply_chat_template(messages, add_generation_prompt=True)
+                    tokens = model.tokenize(prompt, add_special=False, parse_special=True)
+                    tc = len(tokens)
+                    model._lib.llama_memory_clear(model._memory, True)
+                    if not model._decode_batch(tokens):
+                        raise RuntimeError(f"Failed to decode {tc} prefix tokens")
+                    kv = model.state_seq_save(0)
+                    return kv, tc
 
-                # Clear KV and decode the prefix to build KV state
-                model._lib.llama_memory_clear(model._memory, True)
-                if not model._decode_batch(tokens):
-                    raise RuntimeError(f"Failed to decode {token_count} prefix tokens")
-
-                # Serialize the KV state
-                kv_data = model.state_seq_save(0)
+                kv_data, token_count = await asyncio.to_thread(_prepare_kv)
                 size_bytes = len(kv_data)
 
                 t1 = _time.perf_counter()
@@ -314,6 +308,14 @@ class KVCacheManager:
         )
 
         async with self._lock:
+            # Re-check dedup inside lock to prevent TOCTOU race
+            if content_hash in self._content_index:
+                existing_key = self._content_index[content_hash]
+                if existing_key in self._entries:
+                    existing = self._entries[existing_key]
+                    existing.touch()
+                    logger.info(f"Cache dedup hit (re-check): {existing.cache_key[:8]}…")
+                    return existing
             self._entries[cache_key] = entry
             self._content_index[content_hash] = cache_key
             self._enforce_budget()
@@ -440,7 +442,8 @@ class KVCacheManager:
                         Path(entry.disk_path).read_bytes
                     )
                     entry.tier = "ram"
-                    self._enforce_budget()
+                    async with self._lock:
+                        self._enforce_budget()
                 else:
                     logger.warning(f"Cache {entry.cache_key[:8]}… disk path missing")
                     return False
@@ -449,8 +452,14 @@ class KVCacheManager:
                 logger.warning(f"Cache {entry.cache_key[:8]}… has no KV data")
                 return False
 
-            model.memory_seq_rm(seq_id)
-            consumed = model.state_seq_load(entry.kv_data, seq_id)
+            # Run blocking model ops in a thread to avoid blocking the event loop
+            kv_data = entry.kv_data
+
+            def _restore_kv():
+                model.memory_seq_rm(seq_id)
+                return model.state_seq_load(kv_data, seq_id)
+
+            consumed = await asyncio.to_thread(_restore_kv)
             if consumed == 0:
                 logger.error(f"Failed to restore cache {entry.cache_key[:8]}…")
                 return False
@@ -488,7 +497,7 @@ class KVCacheManager:
         segments = hash_messages_segments(messages, tools)
         content_hash = hash_segment(json.dumps([s["hash"] for s in segments]))
 
-        # Check dedup
+        # Quick dedup check
         async with self._lock:
             if content_hash in self._content_index:
                 existing = self._entries.get(self._content_index[content_hash])
@@ -496,29 +505,26 @@ class KVCacheManager:
                     existing.touch()
                     return existing
 
-        # Serialize current KV state
-        kv_data = model.state_seq_save(seq_id)
+        # Serialize current KV state (blocking model op → run in thread)
+        def _serialize_kv():
+            kv = model.state_seq_save(seq_id)
+            tc = prompt_tokens
+            if tc <= 0:
+                try:
+                    prompt_text = model._apply_chat_template(
+                        [dict(m) if not isinstance(m, dict) else m for m in messages],
+                        add_generation_prompt=True,
+                    )
+                    toks = model.tokenize(prompt_text, add_special=False, parse_special=True)
+                    tc = len(toks)
+                except Exception as e:
+                    logger.warning(f"Failed to get exact token count: {e}, using estimate")
+                    tc = 0
+                    for seg in segments:
+                        tc += max(1, len(seg.get("content", "")) // 4)
+            return kv, tc
 
-        # Get exact token count by tokenizing the full conversation
-        # This is critical: kv_cache_tokens must be <= actual prompt tokens
-        # for the restore guard condition to pass
-        if prompt_tokens > 0:
-            token_count = prompt_tokens
-        else:
-            try:
-                # Tokenize through the model's chat template for exact count
-                prompt_text = model._apply_chat_template(
-                    [dict(m) if not isinstance(m, dict) else m for m in messages],
-                    add_generation_prompt=True,
-                )
-                tokens = model.tokenize(prompt_text, add_special=False, parse_special=True)
-                token_count = len(tokens)
-                logger.info(f"Exact token count from tokenization: {token_count}")
-            except Exception as e:
-                logger.warning(f"Failed to get exact token count: {e}, using estimate")
-                token_count = 0
-                for seg in segments:
-                    token_count += max(1, len(seg.get("content", "")) // 4)
+        kv_data, token_count = await asyncio.to_thread(_serialize_kv)
 
         cache_key = _generate_cache_key()
         entry = CacheEntry(
@@ -534,6 +540,12 @@ class KVCacheManager:
         )
 
         async with self._lock:
+            # Re-check dedup inside lock to prevent TOCTOU race
+            if content_hash in self._content_index:
+                existing = self._entries.get(self._content_index[content_hash])
+                if existing:
+                    existing.touch()
+                    return existing
             self._entries[cache_key] = entry
             self._content_index[content_hash] = cache_key
             self._enforce_budget()
@@ -569,7 +581,11 @@ class KVCacheManager:
         }
 
     def evict(self, cache_key: str) -> bool:
-        """Evict a specific cache entry."""
+        """Evict a specific cache entry.
+
+        Note: Callers should hold self._lock when calling from async context,
+        or use evict_async() instead.
+        """
         entry = self._entries.pop(cache_key, None)
         if entry is None:
             return False
@@ -580,14 +596,25 @@ class KVCacheManager:
         if entry.disk_path:
             with contextlib.suppress(Exception):
                 Path(entry.disk_path).unlink(missing_ok=True)
+        # Clear kv_data to free memory even if other references exist
+        entry.kv_data = b""
         logger.info(f"Evicted cache {cache_key[:8]}…")
         return True
 
+    async def evict_async(self, cache_key: str) -> bool:
+        """Thread-safe eviction of a cache entry."""
+        async with self._lock:
+            return self.evict(cache_key)
+
     def gc(self) -> int:
-        """Run garbage collection. Returns number of entries removed."""
+        """Run garbage collection. Returns number of entries removed.
+
+        Note: Called from the GC background task. Uses dict snapshot
+        to avoid mutation during iteration.
+        """
         removed = 0
         expired_keys = [
-            k for k, e in self._entries.items()
+            k for k, e in list(self._entries.items())
             if e.is_expired and not e.pinned
         ]
         for key in expired_keys:
@@ -625,7 +652,12 @@ class KVCacheManager:
                 disk_bytes -= entry.size_bytes
 
     def _demote_to_disk(self, entry: CacheEntry) -> None:
-        """Move a ram entry to disk."""
+        """Move a ram entry to disk.
+
+        Note: This performs synchronous disk I/O. When called from _enforce_budget()
+        under the async lock, it blocks the event loop briefly. For large KV states,
+        consider calling _demote_to_disk_async() instead.
+        """
         if not entry.kv_data:
             return
         disk_path = self._cache_dir / f"{entry.cache_key}.kvstate"

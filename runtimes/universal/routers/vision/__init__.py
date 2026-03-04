@@ -15,9 +15,9 @@ from .models import set_model_export_loader, set_vision_models_dir
 from .router import router as legacy_ocr_router
 from .router import set_document_loader, set_file_image_getter, set_ocr_loader
 from .streaming import router as streaming_router
-from .streaming import set_streaming_detection_loader, start_session_cleanup
+from .streaming import set_streaming_detection_loader, start_session_cleanup, stop_session_cleanup
 from .tracking import router as tracking_router
-from .tracking import set_tracking_models_dir, start_tracking_cleanup
+from .tracking import set_tracking_models_dir, start_tracking_cleanup, stop_tracking_cleanup
 from .training import router as training_router
 from .sample_data import router as sample_data_router
 from .sample_data import set_data_dir as set_sample_data_dir
@@ -40,9 +40,9 @@ __all__ = [
     "set_ocr_loader", "set_document_loader", "set_file_image_getter",
     "set_detection_loader", "set_classification_loader",
     "set_detect_classify_loaders",
-    "set_streaming_detection_loader", "start_session_cleanup",
+    "set_streaming_detection_loader", "start_session_cleanup", "stop_session_cleanup",
     "set_vision_models_dir", "set_model_export_loader",
     "set_sample_data_dir",
     "set_eval_models_dir",
-    "set_tracking_models_dir", "start_tracking_cleanup",
+    "set_tracking_models_dir", "start_tracking_cleanup", "stop_tracking_cleanup",
 ]

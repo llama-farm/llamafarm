@@ -125,11 +125,17 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
         if isinstance(content, str):
             return len(content)
         if isinstance(content, list):
-            return sum(
-                len(part.get("text", ""))
-                for part in content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
+            total = 0
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    total += len(part.get("text", ""))
+                elif part.get("type") == "image_url":
+                    # Count base64 data URI size to prevent bypass
+                    url = part.get("image_url", {}).get("url", "")
+                    total += len(url)
+            return total
         return 0
 
     total_chars = sum(
@@ -202,9 +208,10 @@ async def validate_cache(request: CacheValidateRequest) -> CacheValidateResponse
 async def list_caches() -> dict[str, Any]:
     """List all cache entries."""
     manager = _get_manager()
+    entries = manager.list_entries()
     return {
-        "entries": manager.list_entries(),
-        "count": len(manager.list_entries()),
+        "entries": entries,
+        "count": len(entries),
     }
 
 

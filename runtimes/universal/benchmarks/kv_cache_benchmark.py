@@ -339,17 +339,27 @@ def run_benchmark(base_url: str):
     t3 = r3["ttft_ms"]
     t3b = r3_base["ttft_ms"]
 
+    # Guard against None TTFT values (e.g. if streaming response had no tokens)
+    if any(t is None for t in (t1, t2, t3, t3b)):
+        print("\n  WARNING: Some TTFT values are None — cannot compute speedup ratios")
+        print(f"  t1={t1}, t2={t2}, t3={t3}, t3_baseline={t3b}")
+        return
+
     print(f"\n{'─'*70}")
     print("  RESULTS (TTFT, streaming)")
     print(f"{'─'*70}")
     print(f"  {'Step':<35} {'TTFT':>8}  {'vs baseline':>12}")
     print(f"  {'─'*35} {'─'*8}  {'─'*12}")
     print(f"  {'Turn 1 (cold start)':<35} {t1:>7.0f}ms  {'—':>12}")
-    print(f"  {'Turn 2 (cached, cache_key_1)':<35} {t2:>7.0f}ms  {t1/t2:>10.1f}x faster")
-    print(f"  {'Turn 3 (cached, cache_key_2)':<35} {t3:>7.0f}ms  {t3b/t3:>10.1f}x faster")
+    t2_speedup = f"{t1/t2:>10.1f}x faster" if t2 > 0 else "N/A"
+    t3_speedup = f"{t3b/t3:>10.1f}x faster" if t3 > 0 else "N/A"
+    print(f"  {'Turn 2 (cached, cache_key_1)':<35} {t2:>7.0f}ms  {t2_speedup}")
+    print(f"  {'Turn 3 (cached, cache_key_2)':<35} {t3:>7.0f}ms  {t3_speedup}")
     print(f"  {'Turn 3 (no cache, baseline)':<35} {t3b:>7.0f}ms  {'baseline':>12}")
-    print(f"\n  Cache saves ~{t3b - t3:.0f}ms per turn ({t3b/t3:.0f}x faster)")
-    print(f"  Cached TTFT is constant (~{(t2+t3)/2:.0f}ms) regardless of history length")
+    if t3 > 0:
+        print(f"\n  Cache saves ~{t3b - t3:.0f}ms per turn ({t3b/t3:.0f}x faster)")
+    avg = (t2 + t3) / 2
+    print(f"  Cached TTFT is constant (~{avg:.0f}ms) regardless of history length")
     print()
 
 

@@ -1304,7 +1304,7 @@ class Llama:
             try:
                 import psutil
                 available_mb = psutil.virtual_memory().available / (1024 * 1024)
-                # Require at least 2x the KV data size as headroom
+                # KV data must fit within 40% of available memory
                 if kv_data_mb > available_mb * 0.4:
                     logger.warning(
                         f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
@@ -1872,8 +1872,9 @@ class Llama:
         """
         if not data:
             return 0
-        buf = ffi.new(f"uint8_t[{len(data)}]")
-        ffi.memmove(buf, data, len(data))
+        # Zero-copy: create a C pointer directly into the Python buffer
+        # (the C function only reads from this buffer)
+        buf = ffi.from_buffer("uint8_t[]", data)
         return self._lib.llama_state_seq_set_data(self._ctx, buf, len(data), seq_id)
 
     def state_get_size(self) -> int:
@@ -1898,8 +1899,8 @@ class Llama:
         """
         if not data:
             return 0
-        buf = ffi.new(f"uint8_t[{len(data)}]")
-        ffi.memmove(buf, data, len(data))
+        # Zero-copy: create a C pointer directly into the Python buffer
+        buf = ffi.from_buffer("uint8_t[]", data)
         return self._lib.llama_state_set_data(self._ctx, buf, len(data))
 
     def memory_seq_cp(self, src_seq_id: int, dst_seq_id: int, p0: int = 0, p1: int = -1) -> None:
