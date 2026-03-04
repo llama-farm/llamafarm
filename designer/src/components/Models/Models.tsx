@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import FontIcon from '../../common/FontIcon'
@@ -10,8 +11,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { Input } from '../ui/input'
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { parsePromptSets } from '../../utils/promptSets'
@@ -35,13 +36,13 @@ import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
 import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-import { useToast } from '../ui/toast'
+import { useToast } from '@/components/ui/toast'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
+} from '@/components/ui/tooltip'
 import {
   sanitizeModelName,
   formatBytes,
@@ -59,24 +60,29 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '../ui/collapsible'
-import { Checkbox } from '../ui/checkbox'
-import { Label } from '../ui/label'
+} from '@/components/ui/collapsible'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../ui/select'
-import { ChevronDown } from 'lucide-react'
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { ChevronDown, Package } from 'lucide-react'
 import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
+import { VisionPanel } from '../Vision/VisionPanel'
+import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { AddonInstallProgress } from '../Addons'
+import { AddonInstallSidePane } from '../Addons'
 
 interface TabBarProps {
   activeTab: string
   onChange: (tabId: string) => void
-  tabs: { id: string; label: string }[]
+  tabs: { id: string; label: React.ReactNode }[]
 }
 
 function TabBar({ activeTab, onChange, tabs }: TabBarProps) {
@@ -1876,7 +1882,7 @@ export function AddOrChangeModels({
                   >
                     Description
                   </label>
-                  <textarea
+                  <Textarea
                     id="device-model-description"
                     rows={2}
                     placeholder="Enter model description"
@@ -2084,7 +2090,7 @@ export function AddOrChangeModels({
                       >
                         Description
                       </label>
-                      <textarea
+                      <Textarea
                         id="model-description"
                         rows={2}
                         placeholder="Enter model description"
@@ -2668,8 +2674,16 @@ const Models = () => {
   const updateProject = useUpdateProject()
   const { toast } = useToast()
   const [searchParams] = useSearchParams()
-  const initialTab = searchParams.get('tab') === 'training' ? 'training' : 'project'
+  const initialTab = searchParams.get('tab') === 'training' ? 'training' : searchParams.get('tab') === 'vision' ? 'vision' : 'project'
   const [activeTab, setActiveTab] = useState(initialTab)
+  const [showAddonInstall, setShowAddonInstall] = useState(false)
+  const [visionInstallTaskId, setVisionInstallTaskId] = useState<string | null>(null)
+  const [installingVisionAddon, setInstallingVisionAddon] = useState(false)
+  const { data: addonsData } = useListAddons()
+  const visionAddon = addonsData?.find((addon) => addon.name === 'vision')
+  const isVisionInstalled = visionAddon?.installed ?? false
+  const installAddonMutation = useInstallAddon()
+  const queryClient = useQueryClient()
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -3216,7 +3230,7 @@ const Models = () => {
 
   return (
     <div
-      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? `gap-3 ${activeTab === 'vision' ? '' : 'pb-32'}` : ''}`}
     >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">
@@ -3237,6 +3251,7 @@ const Models = () => {
             tabs={[
               { id: 'project', label: 'Inference models' },
               { id: 'training', label: 'Trained models' },
+              { id: 'vision', label: <span className="flex items-center gap-1.5">Vision <Package className="w-3.5 h-3.5 text-muted-foreground" /></span> },
             ]}
           />
 
@@ -3290,7 +3305,89 @@ const Models = () => {
               </>
             ))}
           {activeTab === 'training' && <TrainedModels />}
+          {activeTab === 'vision' && (
+            isVisionInstalled ? (
+              <div className="flex-1 min-h-0">
+                <VisionPanel />
+              </div>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-md">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                    <FontIcon type="model" className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="text-lg font-medium text-foreground mb-2">
+                    Vision requires an add-on
+                  </div>
+                  <div className="text-sm text-muted-foreground mb-6">
+                    This feature requires the Vision add-on to be installed.
+                    Install it to enable object detection, classification, training, and more.
+                  </div>
+                  <Button onClick={() => setShowAddonInstall(true)} disabled={installingVisionAddon}>
+                    {installingVisionAddon ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Installing...
+                      </span>
+                    ) : 'Add'}
+                  </Button>
+                </div>
+              </div>
+            )
+          )}
         </>
+      )}
+
+      {showAddonInstall && (
+        <AddonInstallSidePane
+          open={showAddonInstall}
+          onOpenChange={setShowAddonInstall}
+          addons={visionAddon ? [visionAddon] : [{
+            name: 'vision',
+            display_name: 'Vision Pipeline',
+            description: 'Object detection, image classification, and real-time streaming with YOLO and CLIP',
+            component: 'universal-runtime',
+            version: '1.0.0',
+            dependencies: [],
+            packages: ['ultralytics', 'open-clip-torch'],
+            installed: false,
+            installed_at: null,
+          }]}
+          onConfirm={async (selectedAddons) => {
+            setShowAddonInstall(false)
+            if (selectedAddons.length === 0) return
+            setInstallingVisionAddon(true)
+            try {
+              const response = await installAddonMutation.mutateAsync({
+                name: selectedAddons[0],
+                restart_service: true,
+              })
+              setVisionInstallTaskId(response.task_id)
+            } catch (err) {
+              setInstallingVisionAddon(false)
+              toast({
+                message: err instanceof Error ? err.message : 'Failed to install vision addon',
+              })
+            }
+          }}
+        />
+      )}
+
+      {visionInstallTaskId && (
+        <AddonInstallProgress
+          taskId={visionInstallTaskId}
+          addonName="Vision Pipeline"
+          onComplete={() => {
+            setVisionInstallTaskId(null)
+            setInstallingVisionAddon(false)
+            queryClient.invalidateQueries({ queryKey: addonKeys.list() })
+            toast({ message: 'Vision Pipeline addon installed and ready to use.' })
+          }}
+          onCancel={() => {
+            setVisionInstallTaskId(null)
+            setInstallingVisionAddon(false)
+          }}
+        />
       )}
 
       {/* Inline multi-select on cards replaces separate dialog */}

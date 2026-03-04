@@ -107,11 +107,36 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
         # on Python 3.13 aarch64 (GC during gguf_reader causes crash)
         gc_was_enabled = gc.isenabled()
         gc.disable()
+        reader = None
         try:
             reader = GGUFReader(gguf_path)
+        except (ValueError, KeyError) as e:
+            # Some GGUF files use newer quantization types (e.g. Q6_K_XL = type 39)
+            # that the Python gguf library doesn't support yet. The error occurs
+            # during tensor parsing, but metadata fields are already parsed by then.
+            # Monkey-patch to skip tensor building and retry.
+            logger.warning(
+                f"GGUF tensor parsing failed ({e}), retrying with metadata-only read"
+            )
+            try:
+                # Use lock to prevent concurrent monkey-patch conflicts
+                with _cache_lock:
+                    _orig_build_tensors = GGUFReader._build_tensors
+                    GGUFReader._build_tensors = lambda self, *a, **kw: None
+                    try:
+                        reader = GGUFReader(gguf_path)
+                    finally:
+                        GGUFReader._build_tensors = _orig_build_tensors
+                if reader is not None:
+                    reader.tensors = []
+            except Exception as inner_e:
+                logger.warning(f"Metadata-only GGUF read also failed: {inner_e}")
         finally:
             if gc_was_enabled:
                 gc.enable()
+
+        if reader is None:
+            return metadata
 
         # Extract all needed metadata in a single pass through fields
         bos_id = None

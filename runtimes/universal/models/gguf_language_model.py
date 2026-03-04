@@ -836,6 +836,8 @@ class GGUFLanguageModel(BaseModel):
         top_p: float,
         stop: list[str] | None,
         thinking_budget: int | None,
+        kv_cache_data: bytes | None = None,
+        kv_cache_tokens: int = 0,
     ) -> str:
         """Generate completion from a pre-formatted prompt string.
 
@@ -848,6 +850,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences
             thinking_budget: Maximum tokens for thinking
+            kv_cache_data: Serialized KV cache state to restore
+            kv_cache_tokens: Number of tokens in the cached state
 
         Returns:
             Generated text as a string
@@ -878,6 +882,8 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop or [],
                     logits_processor=logits_processor,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 )
             except Exception as e:
                 logger.error(
@@ -909,6 +915,8 @@ class GGUFLanguageModel(BaseModel):
         thinking_budget: int | None = None,
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
+        kv_cache_data: bytes | None = None,
+        kv_cache_tokens: int = 0,
     ) -> str:
         """Generate chat completion (non-streaming).
 
@@ -959,6 +967,8 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop,
                     thinking_budget=thinking_budget,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 )
 
         # Fallback: use prompt injection + chat completion
@@ -995,6 +1005,8 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop or [],
                     logits_processor=logits_processor,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 )
             except Exception as e:
                 logger.error(
@@ -1025,6 +1037,8 @@ class GGUFLanguageModel(BaseModel):
         top_p: float,
         stop: list[str] | None,
         thinking_budget: int | None,
+        kv_cache_data: bytes | None = None,
+        kv_cache_tokens: int = 0,
     ) -> AsyncGenerator[str, None]:
         """Stream completion from a pre-formatted prompt string.
 
@@ -1037,6 +1051,8 @@ class GGUFLanguageModel(BaseModel):
             top_p: Nucleus sampling threshold
             stop: List of stop sequences
             thinking_budget: Maximum tokens for thinking
+            kv_cache_data: Serialized KV cache state to restore
+            kv_cache_tokens: Number of tokens in the cached state
 
         Yields:
             Generated text tokens as strings
@@ -1065,6 +1081,8 @@ class GGUFLanguageModel(BaseModel):
                 stop=stop or [],
                 stream=True,
                 logits_processor=logits_processor,
+                kv_cache_data=kv_cache_data,
+                kv_cache_tokens=kv_cache_tokens,
             ):
                 delta = chunk["choices"][0].get("delta", {})
                 content = delta.get("content", "")
@@ -1102,6 +1120,8 @@ class GGUFLanguageModel(BaseModel):
                     stop=stop or [],
                     stream=True,
                     logits_processor=logits_processor,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 ):
                     delta = chunk["choices"][0].get("delta", {})
                     content = delta.get("content", "")
@@ -1153,6 +1173,8 @@ class GGUFLanguageModel(BaseModel):
         thinking_budget: int | None = None,
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
+        kv_cache_data: bytes | None = None,
+        kv_cache_tokens: int = 0,
     ) -> AsyncGenerator[str, None]:
         """Generate chat completion with streaming (async generator).
 
@@ -1201,6 +1223,8 @@ class GGUFLanguageModel(BaseModel):
                     top_p=top_p,
                     stop=stop,
                     thinking_budget=thinking_budget,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 ):
                     yield token
                 return
@@ -1238,6 +1262,8 @@ class GGUFLanguageModel(BaseModel):
                 stop=stop or [],
                 stream=True,
                 logits_processor=logits_processor,
+                kv_cache_data=kv_cache_data,
+                kv_cache_tokens=kv_cache_tokens,
             ):
                 delta = chunk["choices"][0].get("delta", {})
                 content = delta.get("content", "")
@@ -1275,6 +1301,8 @@ class GGUFLanguageModel(BaseModel):
                     stop=stop or [],
                     stream=True,
                     logits_processor=logits_processor,
+                    kv_cache_data=kv_cache_data,
+                    kv_cache_tokens=kv_cache_tokens,
                 ):
                     delta = chunk["choices"][0].get("delta", {})
                     content = delta.get("content", "")

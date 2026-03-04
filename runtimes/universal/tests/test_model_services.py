@@ -222,16 +222,15 @@ class TestTrainingExecutor:
 class TestRobustScaler:
     """Test that anomaly model uses RobustScaler."""
 
-    def test_robust_scaler_used(self):
+    @pytest.mark.asyncio
+    async def test_robust_scaler_used(self):
         """Test AnomalyModel uses RobustScaler not StandardScaler."""
         from models.anomaly_model import AnomalyModel
 
         model = AnomalyModel("test", "cpu", backend="isolation_forest")
 
         # After _initialize_backend is called, scaler should be RobustScaler
-        import asyncio
-
-        asyncio.get_event_loop().run_until_complete(model.load())
+        await model.load()
 
         from sklearn.preprocessing import RobustScaler
 

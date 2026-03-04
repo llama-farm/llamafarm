@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.tsx'
 import './index.css'
 import { ThemeProvider } from './contexts/ThemeContext'
-import { PackageModalProvider } from './contexts/PackageModalContext'
+import { BundleModalProvider } from './contexts/BundleModalContext'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,9 +29,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter>
-          <PackageModalProvider>
+          <BundleModalProvider>
             <App />
-          </PackageModalProvider>
+          </BundleModalProvider>
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

@@ -1,18 +1,19 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject } from '../../hooks/useProjects'
 import { useDatabaseManager } from '../../hooks/useDatabaseManager'
-import { useToast } from '../ui/toast'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
+import { useToast } from '@/components/ui/toast'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/checkbox'
 import FontIcon from '../../common/FontIcon'
 import {
   getDefaultConfigForRetrieval,
@@ -751,10 +752,9 @@ function AddRetrievalStrategy() {
         </div>
         <div className="mt-3">
           <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={makeDefault}
-              onChange={e => setMakeDefault(e.target.checked)}
+              onCheckedChange={(checked) => setMakeDefault(checked === true)}
             />
             <span>Make default</span>
           </label>

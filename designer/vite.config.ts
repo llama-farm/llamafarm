@@ -66,6 +66,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // Proxy vision endpoints directly to Universal Runtime (must be before /v1 catch-all)
+      '/v1/vision': {
+        target: 'http://localhost:11540',
+        changeOrigin: true,
+        secure: false,
+      },
       // Proxy /v1/* (including voice WebSocket paths) to the backend server
       '/v1': {
         target: process.env.API_URL || 'http://localhost:14345',
@@ -73,8 +79,6 @@ export default defineConfig({
         secure: false,
         ws: true,
       },
-      // Proxy all /api/* requests to the backend server
-      // Rewrite /api/v1/* to /v1/* since backend doesn't have /api prefix
       '/api': {
         target: process.env.API_URL || 'http://localhost:14345',
         changeOrigin: true,

@@ -99,6 +99,24 @@ sanitize_name() {
     echo "$name" | sed 's|/|-|g' | sed 's|[^a-zA-Z0-9_-]|-|g'
 }
 
+# Resolve editor command for wt edit
+# Checks: WT_EDITOR -> VISUAL -> EDITOR -> auto-detect (code, cursor)
+resolve_editor() {
+    if [[ -n "${WT_EDITOR:-}" ]]; then
+        echo "$WT_EDITOR"
+    elif [[ -n "${VISUAL:-}" ]]; then
+        echo "$VISUAL"
+    elif [[ -n "${EDITOR:-}" ]]; then
+        echo "$EDITOR"
+    elif command -v code &> /dev/null; then
+        echo "code"
+    elif command -v cursor &> /dev/null; then
+        echo "cursor"
+    else
+        echo ""
+    fi
+}
+
 # Compute port offset using hash of worktree name
 # Returns a value in range 100-999
 compute_port_offset() {
@@ -832,10 +850,13 @@ cmd_create() {
     # Create the git worktree
     cd "$REPO_DIR"
     if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
-        # Branch exists, use it
+        # Local branch exists, use it
         git worktree add "$wt_path" "$branch_name"
+    elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name" 2>/dev/null; then
+        # Remote branch exists, create local tracking branch
+        git worktree add --track -b "$branch_name" "$wt_path" "origin/$branch_name"
     else
-        # Branch doesn't exist, create new branch from current HEAD
+        # Branch doesn't exist anywhere, create new branch from current HEAD
         git worktree add -b "$branch_name" "$wt_path"
     fi
 
@@ -1741,6 +1762,71 @@ EOF
     fi
 }
 
+cmd_edit() {
+    local branch_name=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                branch_name="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$branch_name" ]]; then
+        die "Usage: wt edit <branch>"
+    fi
+
+    local wt_name
+    wt_name=$(sanitize_name "$branch_name")
+    local wt_path
+    wt_path=$(get_worktree_path "$wt_name")
+
+    # Resolve editor upfront so we fail fast
+    local editor
+    editor=$(resolve_editor)
+    if [[ -z "$editor" ]]; then
+        die "No editor found. Set WT_EDITOR, VISUAL, or EDITOR, or install VS Code (code) or Cursor (cursor)."
+    fi
+
+    if worktree_exists "$wt_name"; then
+        # Worktree already exists, just open it
+        log_info "Opening '$wt_name' in $editor..."
+        "$editor" "$wt_path"
+        return 0
+    fi
+
+    # Worktree doesn't exist — check if the git branch exists (local or remote)
+    cd "$REPO_DIR"
+    if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+        # Local branch exists
+        log_info "Branch '$branch_name' exists but has no worktree. Creating one..."
+        cmd_create "$branch_name"
+    elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name" 2>/dev/null; then
+        # Remote branch exists — create worktree which will track it
+        log_info "Branch '$branch_name' found on remote. Creating worktree..."
+        cmd_create "$branch_name"
+    else
+        # Branch doesn't exist anywhere — ask user
+        log_warn "Branch '$branch_name' does not exist locally or on remote."
+        read -r -p "Create branch and worktree? [y/N] " response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_info "Cancelled"
+            return 0
+        fi
+        cmd_create "$branch_name"
+    fi
+
+    # Refresh path in case create changed anything
+    wt_path=$(get_worktree_path "$wt_name")
+    log_info "Opening '$wt_name' in $editor..."
+    "$editor" "$wt_path"
+}
+
 cmd_gc() {
     log_info "Scanning for orphaned data directories..."
 
@@ -2226,11 +2312,11 @@ _wt_completions() {
 
     if [[ $COMP_CWORD -eq 1 ]]; then
         # Complete commands
-        COMPREPLY=($(compgen -W "create list delete switch install build start stop restart logs status proxy lf url open health vscode cursor prune gc doctor init self-install help" -- "$cur"))
+        COMPREPLY=($(compgen -W "create list delete switch install build start stop restart logs status proxy lf url open health vscode cursor edit prune gc doctor init self-install help" -- "$cur"))
     elif [[ $COMP_CWORD -eq 2 ]]; then
         # Complete worktree names for commands that take them
         case "$cmd" in
-            switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor)
+            switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor|edit)
                 local wt_root="${WT_ROOT:-$HOME/worktrees/llamafarm}"
                 if [[ -d "$wt_root" ]]; then
                     local worktrees=$(ls -1 "$wt_root" 2>/dev/null | grep -v "^\.wt$")
@@ -2322,6 +2408,7 @@ _wt() {
         'health:Check health of all services'
         'vscode:Open worktree in VS Code with proper settings'
         'cursor:Open worktree in Cursor with proper settings'
+        'edit:Open branch in default IDE (auto-creates worktree)'
         'prune:Remove worktrees for merged branches'
         'gc:Clean up orphaned data directories'
         'doctor:Diagnose common issues'
@@ -2363,7 +2450,7 @@ _wt() {
             ;;
         argument)
             case "${words[2]}" in
-                switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor)
+                switch|cd|delete|rm|install|build|start|stop|restart|status|lf|url|open|health|vscode|cursor|edit)
                     _describe -t worktrees 'worktree' worktrees
                     ;;
                 logs)
@@ -2445,6 +2532,7 @@ complete -c wt -n "__fish_use_subcommand" -a "open" -d "Open Designer in browser
 complete -c wt -n "__fish_use_subcommand" -a "health" -d "Check health of all services"
 complete -c wt -n "__fish_use_subcommand" -a "vscode" -d "Open in VS Code with settings"
 complete -c wt -n "__fish_use_subcommand" -a "cursor" -d "Open in Cursor with settings"
+complete -c wt -n "__fish_use_subcommand" -a "edit" -d "Open branch in IDE (auto-creates worktree)"
 complete -c wt -n "__fish_use_subcommand" -a "prune" -d "Remove worktrees for merged branches"
 complete -c wt -n "__fish_use_subcommand" -a "gc" -d "Clean up orphaned data"
 complete -c wt -n "__fish_use_subcommand" -a "doctor" -d "Diagnose common issues"
@@ -2461,7 +2549,7 @@ function __wt_worktrees
     end
 end
 
-complete -c wt -n "__fish_seen_subcommand_from switch cd delete rm install build start stop restart status lf url open health vscode cursor" -a "(__wt_worktrees)"
+complete -c wt -n "__fish_seen_subcommand_from switch cd delete rm install build start stop restart status lf url open health vscode cursor edit" -a "(__wt_worktrees)"
 complete -c wt -n "__fish_seen_subcommand_from logs" -a "server rag runtime designer all"
 complete -c wt -n "__fish_seen_subcommand_from proxy" -a "start stop status install uninstall reload"
 complete -c wt -n "__fish_seen_subcommand_from init" -a "bash zsh fish"
@@ -2516,6 +2604,7 @@ UTILITIES:
     health [name]       Check health of all services
     vscode [name]       Open worktree in VS Code with proper settings
     cursor [name]       Open worktree in Cursor with proper settings
+    edit <branch>       Open branch in default IDE (auto-creates worktree)
     prune               Remove worktrees for merged branches
     gc                  Clean up orphaned data directories
     doctor              Diagnose common issues (ports, deps, etc.)
@@ -2530,6 +2619,7 @@ OPTIONS:
 ENVIRONMENT:
     WT_ROOT             Worktree directory (default: ~/worktrees/llamafarm)
     WT_DATA_ROOT        Data directory (default: ~/.llamafarm/worktrees)
+    WT_EDITOR           IDE command for 'wt edit' (falls back to VISUAL, EDITOR, code, cursor)
 
 EXAMPLES:
     wt create feat/new-feature    # Create and setup new worktree
@@ -2571,6 +2661,7 @@ main() {
         health)     cmd_health "$@" ;;
         vscode)     cmd_vscode "$@" ;;
         cursor)     cmd_cursor "$@" ;;
+        edit)       cmd_edit "$@" ;;
         prune)      cmd_prune "$@" ;;
         gc)         cmd_gc "$@" ;;
         doctor)     cmd_doctor "$@" ;;

@@ -67,6 +67,16 @@ class ChatCompletionsService:
 
         self.load_language = load_language
 
+    _cache_manager = None
+
+    @classmethod
+    def set_cache_manager(cls, manager):
+        cls._cache_manager = manager
+
+    @classmethod
+    def _get_cache_manager(cls):
+        return cls._cache_manager
+
     async def _transcribe_audio(self, audio_data: bytes, audio_format: str = "wav") -> str:
         """Transcribe audio using the STT model.
 
@@ -599,8 +609,56 @@ class ChatCompletionsService:
                     total_max_tokens,
                     effective_max_tokens,
                     thinking_tokens,
-                    _,
+                    context_usage_info,
                 ) = await prepare_generation()
+
+                # ── KV Cache: check for cache hit (streaming) ────────────
+                _stream_kv_data = None
+                _stream_kv_tokens = 0
+                _stream_cache_info = None
+                _s_return_cache_key = None
+                _stream_cache_manager = self._get_cache_manager()
+                if _stream_cache_manager and is_gguf:
+                    _s_cache_key = chat_request.cache_key
+                    if _s_cache_key is None and chat_request.extra_body:
+                        _s_cache_key = chat_request.extra_body.get("cache_key")
+
+                    _s_return_cache_key = chat_request.return_cache_key
+                    if _s_return_cache_key is None and chat_request.extra_body:
+                        _s_return_cache_key = chat_request.extra_body.get("return_cache_key")
+
+                    if _s_cache_key:
+                        match = _stream_cache_manager.validate_and_match(
+                            cache_key=_s_cache_key,
+                            model_id=chat_request.model,
+                            messages=messages_dict,
+                            tools=tools_dict,
+                        )
+                        if match["status"] == "hit" and match["entry"]:
+                            entry = match["entry"]
+                            kv_data = entry.kv_data
+                            if not kv_data and entry.disk_path:
+                                from pathlib import Path as _Path
+                                dp = _Path(entry.disk_path)
+                                if dp.exists():
+                                    kv_data = dp.read_bytes()
+                            if kv_data:
+                                _stream_kv_data = kv_data
+                                _stream_kv_tokens = entry.token_count
+                            entry.touch()
+                            _stream_cache_info = {
+                                "hit": True, "status": "hit",
+                                "cache_key": _s_cache_key,
+                                "reused_tokens": entry.token_count,
+                                "has_kv_data": bool(kv_data),
+                            }
+                            logger.info(f"KV cache hit (streaming): {_s_cache_key[:8]}…, kv_data={'yes' if kv_data else 'no'}")
+                        else:
+                            _stream_cache_info = {
+                                "hit": False, "status": match["status"],
+                                "cache_key": _s_cache_key,
+                                "reason": match.get("reason"),
+                            }
 
                 # Return SSE stream
                 async def generate_sse():
@@ -652,6 +710,8 @@ class ChatCompletionsService:
                             thinking_budget=(thinking_tokens or None) if is_gguf else None,
                             tools=tools_for_generation,
                             tool_choice=chat_request.tool_choice,
+                            kv_cache_data=_stream_kv_data,
+                            kv_cache_tokens=_stream_kv_tokens,
                         )
 
                     # State machine for incremental tool call streaming
@@ -905,6 +965,31 @@ class ChatCompletionsService:
                     )
                     yield f"data: {final_chunk.model_dump_json(exclude_none=True)}\n\n".encode()
                     await asyncio.sleep(0)
+
+                    # ── KV Cache: save post-generation state (streaming) ──
+                    if _stream_cache_manager and is_gguf and (_s_return_cache_key or _stream_cache_info):
+                        try:
+                            full_msgs = list(messages_dict) + [
+                                {"role": "assistant", "content": accumulated_content}
+                            ]
+                            new_entry = await _stream_cache_manager.save_after_generation(
+                                model=model.llama,
+                                model_id=chat_request.model,
+                                parent_key=chat_request.cache_key,
+                                messages=full_msgs,
+                                tools=tools_dict,
+                                prompt_tokens=context_usage_info.prompt_tokens if context_usage_info else 0,
+                            )
+                            cache_event = dict(_stream_cache_info) if _stream_cache_info else {}
+                            cache_event["new_cache_key"] = new_entry.cache_key
+                            cache_event["cached_tokens"] = new_entry.token_count
+                            # Use a named SSE event type so OpenAI SDK clients
+                            # ignore it (they only process default "message" events)
+                            yield f"event: x_cache\ndata: {json.dumps(cache_event)}\n\n".encode()
+                            await asyncio.sleep(0)
+                        except Exception as e:
+                            logger.warning(f"Failed to save streaming post-gen cache: {e}", exc_info=True)
+
                     yield b"data: [DONE]\n\n"
 
                 return StreamingResponse(
@@ -930,6 +1015,75 @@ class ChatCompletionsService:
                 thinking_tokens,
                 context_usage_info,
             ) = await prepare_generation()
+
+            # ── KV Cache: check for cache hit ────────────────────────────────
+            cache_info = None
+            return_cache_key = None
+            _kv_cache_data = None
+            _kv_cache_tokens = 0
+            cache_manager = self._get_cache_manager()
+            if cache_manager and is_gguf:
+                import time as _time
+                _cache_start = _time.time()
+
+                cache_key = chat_request.cache_key
+                if cache_key is None and chat_request.extra_body:
+                    cache_key = chat_request.extra_body.get("cache_key")
+
+                return_cache_key = chat_request.return_cache_key
+                if return_cache_key is None and chat_request.extra_body:
+                    return_cache_key = chat_request.extra_body.get("return_cache_key")
+
+                if cache_key:
+                    match = cache_manager.validate_and_match(
+                        cache_key=cache_key,
+                        model_id=chat_request.model,
+                        messages=messages_dict,
+                        tools=tools_dict,
+                    )
+                    if match["status"] == "hit" and match["entry"]:
+                        entry = match["entry"]
+                        # Load KV data for restore (from ram or disk)
+                        kv_data = entry.kv_data
+                        if not kv_data and entry.disk_path:
+                            from pathlib import Path as _Path
+                            dp = _Path(entry.disk_path)
+                            if dp.exists():
+                                kv_data = dp.read_bytes()
+                        if kv_data:
+                            _kv_cache_data = kv_data
+                            _kv_cache_tokens = entry.token_count
+                        entry.touch()
+                        cache_info = {
+                            "hit": True,
+                            "status": "hit",
+                            "cache_key": cache_key,
+                            "reused_tokens": entry.token_count,
+                            "has_kv_data": bool(kv_data),
+                            "time_saved_ms": round((_time.time() - _cache_start) * 1000, 2),
+                        }
+                        logger.info(
+                            f"KV cache hit: {cache_key[:8]}…, "
+                            f"{entry.token_count} tokens, "
+                            f"kv_data={'yes' if kv_data else 'no'}"
+                        )
+                    elif match["status"] == "partial_hit":
+                        cache_info = {
+                            "hit": False,
+                            "status": "partial_hit",
+                            "cache_key": cache_key,
+                            "reused_tokens": match["reusable_tokens"],
+                            "invalidated_at": match.get("invalidated_at"),
+                            "reason": match["reason"],
+                        }
+                    else:
+                        cache_info = {
+                            "hit": False,
+                            "status": "miss",
+                            "cache_key": cache_key,
+                            "reused_tokens": 0,
+                            "reason": match["reason"],
+                        }
 
             if use_native_audio and audio_bytes:
                 # Use native audio processing (no STT transcription)
@@ -957,6 +1111,8 @@ class ChatCompletionsService:
                     thinking_budget=(thinking_tokens or None) if is_gguf else None,
                     tools=tools_for_generation,
                     tool_choice=chat_request.tool_choice,
+                    kv_cache_data=_kv_cache_data,
+                    kv_cache_tokens=_kv_cache_tokens,
                 )
 
             # Debug log the raw response from the model
@@ -1031,6 +1187,35 @@ class ChatCompletionsService:
                         f"{json.dumps(response, indent=2, default=str)}"
                     )
 
+                # ── KV Cache: save after tool-call generation ────────────────
+                if cache_manager and is_gguf and (return_cache_key or cache_info):
+                    try:
+                        # Strip tool call markup from content for cache
+                        clean_content = strip_tool_call_from_content(response_text)
+                        full_messages = list(messages_dict) + [
+                            {"role": "assistant", "content": clean_content}
+                        ]
+                        _prompt_tokens = (
+                            context_usage_info.prompt_tokens if context_usage_info else 0
+                        )
+                        new_entry = await cache_manager.save_after_generation(
+                            model=model.llama,
+                            model_id=chat_request.model,
+                            parent_key=chat_request.cache_key,
+                            messages=full_messages,
+                            tools=tools_dict,
+                            prompt_tokens=_prompt_tokens,
+                        )
+                        if cache_info is None:
+                            cache_info = {}
+                        cache_info["new_cache_key"] = new_entry.cache_key
+                        cache_info["cached_tokens"] = new_entry.token_count
+                    except Exception as e:
+                        logger.warning(f"Failed to save tool-call post-gen cache: {e}")
+
+                if cache_info:
+                    response["x_cache"] = cache_info
+
                 return response
 
             # Build response with optional thinking field (Ollama-compatible)
@@ -1066,6 +1251,38 @@ class ChatCompletionsService:
             # Add context usage info if available
             if context_usage_info:
                 response["x_context_usage"] = context_usage_info.model_dump()
+
+            # ── KV Cache: save post-generation state ────────────────────────
+            if cache_manager and is_gguf and (return_cache_key or cache_info):
+                try:
+                    # Build full conversation including the response
+                    # Use messages_dict (original request messages) not prepared_messages
+                    # to avoid segment hash drift from inject_thinking_control
+                    full_messages = list(messages_dict) + [
+                        {"role": "assistant", "content": parsed.content}
+                    ]
+                    # Get exact prompt token count for KV restore accuracy
+                    _prompt_tokens = (
+                        context_usage_info.prompt_tokens if context_usage_info else 0
+                    )
+                    new_entry = await cache_manager.save_after_generation(
+                        model=model.llama,
+                        model_id=chat_request.model,
+                        parent_key=chat_request.cache_key,
+                        messages=full_messages,
+                        tools=tools_dict,
+                        prompt_tokens=_prompt_tokens,
+                    )
+                    if cache_info is None:
+                        cache_info = {}
+                    cache_info["new_cache_key"] = new_entry.cache_key
+                    cache_info["cached_tokens"] = new_entry.token_count
+                except Exception as e:
+                    logger.warning(f"Failed to save post-generation cache: {e}")
+
+            # Add cache info to response
+            if cache_info:
+                response["x_cache"] = cache_info
 
             # Debug log the response
             if logger.isEnabledFor(logging.DEBUG):

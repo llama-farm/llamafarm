@@ -217,6 +217,8 @@ class TestToolCallingE2E:
             thinking_budget=None,
             tools=None,
             tool_choice=None,
+            kv_cache_data=None,
+            kv_cache_tokens=0,
         ):
             tokens = [
                 "I'll ",

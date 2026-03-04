@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Plus, Play, Pause, Trash2, Mic } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import { VoiceRecorder } from './VoiceRecorder'
 import type { VoiceClone } from '../../types/ml'
 
