@@ -631,7 +631,7 @@ class ChatCompletionsService:
                         match = _stream_cache_manager.validate_and_match(
                             cache_key=_s_cache_key,
                             model_id=chat_request.model,
-                            messages=prepared_messages,
+                            messages=messages_dict,
                             tools=tools_dict,
                         )
                         if match["status"] == "hit" and match["entry"]:
@@ -969,7 +969,7 @@ class ChatCompletionsService:
                     # ── KV Cache: save post-generation state (streaming) ──
                     if _stream_cache_manager and is_gguf and (_s_return_cache_key or _stream_cache_info):
                         try:
-                            full_msgs = list(prepared_messages) + [
+                            full_msgs = list(messages_dict) + [
                                 {"role": "assistant", "content": accumulated_content}
                             ]
                             new_entry = await _stream_cache_manager.save_after_generation(
@@ -1038,7 +1038,7 @@ class ChatCompletionsService:
                     match = cache_manager.validate_and_match(
                         cache_key=cache_key,
                         model_id=chat_request.model,
-                        messages=prepared_messages,
+                        messages=messages_dict,
                         tools=tools_dict,
                     )
                     if match["status"] == "hit" and match["entry"]:
@@ -1192,7 +1192,7 @@ class ChatCompletionsService:
                     try:
                         # Strip tool call markup from content for cache
                         clean_content = strip_tool_call_from_content(response_text)
-                        full_messages = list(prepared_messages) + [
+                        full_messages = list(messages_dict) + [
                             {"role": "assistant", "content": clean_content}
                         ]
                         _prompt_tokens = (
@@ -1256,7 +1256,9 @@ class ChatCompletionsService:
             if cache_manager and is_gguf and (return_cache_key or cache_info):
                 try:
                     # Build full conversation including the response
-                    full_messages = list(prepared_messages) + [
+                    # Use messages_dict (original request messages) not prepared_messages
+                    # to avoid segment hash drift from inject_thinking_control
+                    full_messages = list(messages_dict) + [
                         {"role": "assistant", "content": parsed.content}
                     ]
                     # Get exact prompt token count for KV restore accuracy
