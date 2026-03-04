@@ -133,8 +133,9 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
                     total += len(part.get("text", ""))
                 elif part.get("type") == "image_url":
                     # Count base64 data URI size to prevent bypass
-                    url = part.get("image_url", {}).get("url", "")
-                    total += len(url)
+                    image_url = part.get("image_url")
+                    if isinstance(image_url, dict):
+                        total += len(image_url.get("url", ""))
             return total
         return 0
 

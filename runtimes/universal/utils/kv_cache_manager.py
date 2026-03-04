@@ -655,8 +655,7 @@ class KVCacheManager:
         """Move a ram entry to disk.
 
         Note: This performs synchronous disk I/O. When called from _enforce_budget()
-        under the async lock, it blocks the event loop briefly. For large KV states,
-        consider calling _demote_to_disk_async() instead.
+        under the async lock, it blocks the event loop briefly.
         """
         if not entry.kv_data:
             return
