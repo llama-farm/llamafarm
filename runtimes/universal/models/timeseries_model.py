@@ -22,6 +22,7 @@ Security Notes:
 - Serialization uses joblib for classical models
 """
 
+import functools
 import logging
 import time
 import uuid
@@ -84,19 +85,23 @@ class BackendInfo:
     unavailable_reason: str | None = None
 
 
-def _check_backend_available(name: str) -> tuple[bool, str | None]:
-    """Check if a backend's dependencies are installed."""
+@functools.lru_cache(maxsize=None)
+def check_backend_available(name: str) -> tuple[bool, str | None]:
+    """Check if a backend's dependencies are installed.
+
+    Results are cached since dependency availability is static for the
+    lifetime of a running process.
+    """
     import importlib.util
 
     if name in ("arima", "exponential_smoothing", "theta"):
         if importlib.util.find_spec("darts") is None:
-            return False, "darts is not installed (pip install darts)"
-        # ARIMA specifically needs statsforecast
+            return False, "Required dependency 'darts' is not installed"
         if name == "arima" and importlib.util.find_spec("statsforecast") is None:
-            return False, "statsforecast is not installed (pip install statsforecast)"
+            return False, "Required dependency 'statsforecast' is not installed"
     elif name in ("chronos", "chronos-bolt"):
         if importlib.util.find_spec("chronos") is None:
-            return False, "chronos is not installed (pip install chronos-forecasting)"
+            return False, "Required dependency 'chronos' is not installed"
     return True, None
 
 
@@ -140,7 +145,7 @@ def get_backends_info() -> list[BackendInfo]:
         ),
     ]
     for b in backends:
-        available, reason = _check_backend_available(b.name)
+        available, reason = check_backend_available(b.name)
         b.available = available
         b.unavailable_reason = reason
     return backends

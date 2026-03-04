@@ -36,7 +36,7 @@ from api_types.timeseries import (
 from core.logging import UniversalRuntimeLogger
 from models.timeseries_model import (
     TimeseriesModel,
-    _check_backend_available,
+    check_backend_available,
     get_backends_info,
     is_valid_backend,
     list_saved_models,
@@ -170,11 +170,12 @@ async def fit_timeseries(request: TimeseriesFitRequest) -> TimeseriesFitResponse
         )
 
     # Check if backend dependencies are installed
-    available, reason = _check_backend_available(backend)
+    available, reason = check_backend_available(backend)
     if not available:
+        logger.warning("Backend '%s' unavailable: %s", backend, reason)
         raise HTTPException(
             status_code=422,
-            detail=f"Backend '{backend}' is not available: {reason}. "
+            detail=f"Backend '{backend}' is not available. "
             f"Use GET /v1/timeseries/backends to see available backends.",
         )
 
