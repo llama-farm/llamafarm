@@ -609,7 +609,7 @@ class ChatCompletionsService:
                     total_max_tokens,
                     effective_max_tokens,
                     thinking_tokens,
-                    _,
+                    context_usage_info,
                 ) = await prepare_generation()
 
                 # ── KV Cache: check for cache hit (streaming) ────────────
@@ -988,7 +988,7 @@ class ChatCompletionsService:
                             yield f"event: x_cache\ndata: {json.dumps(cache_event)}\n\n".encode()
                             await asyncio.sleep(0)
                         except Exception as e:
-                            logger.warning(f"Failed to save streaming post-gen cache: {e}")
+                            logger.warning(f"Failed to save streaming post-gen cache: {e}", exc_info=True)
 
                     yield b"data: [DONE]\n\n"
 
