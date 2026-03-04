@@ -1242,7 +1242,7 @@ class ChatCompletionsService:
                                 ],
                             },
                             "finish_reason": "tool_calls",
-                            "logprobs": normalized_logprobs,
+                            **({"logprobs": normalized_logprobs} if chat_request.logprobs else {}),
                         }
                     ],
                     "usage": {
@@ -1307,7 +1307,7 @@ class ChatCompletionsService:
                         "index": 0,
                         "message": {"role": "assistant", "content": parsed.content},
                         "finish_reason": "stop",
-                        "logprobs": normalized_logprobs,
+                        **({"logprobs": normalized_logprobs} if chat_request.logprobs else {}),
                     }
                 ],
                 "usage": {
