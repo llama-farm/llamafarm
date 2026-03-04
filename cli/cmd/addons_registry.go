@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/llamafarm/cli/cmd/orchestrator"
 	"github.com/llamafarm/cli/cmd/utils"
@@ -92,21 +92,13 @@ func (r *AddonRegistryStore) load() error {
 		}
 	}
 
-	// If no valid registry directory found, return error with search paths
+	// 4. Fall back to embedded registry (always available in the binary)
 	if registryDir == "" {
-		searchPaths := []string{}
-		if lfDir != "" {
-			searchPaths = append(searchPaths, filepath.Join(lfDir, "src", "addons", "registry"))
-		}
-		if exePath, _ := os.Executable(); exePath != "" {
-			searchPaths = append(searchPaths, filepath.Join(filepath.Dir(exePath), "..", "addons", "registry"))
-		}
-		searchPaths = append(searchPaths, filepath.Join("..", "addons", "registry"))
-
-		return fmt.Errorf("addon registry directory not found. Searched:\n  - %s", strings.Join(searchPaths, "\n  - "))
+		utils.LogDebug("Using embedded addon registry")
+		return r.loadFromEmbedded()
 	}
 
-	// Load all .yaml files from the directory
+	// Load all .yaml files from the on-disk directory
 	entries, e := os.ReadDir(registryDir)
 	if e != nil {
 		return fmt.Errorf("failed to read addon registry directory at %s: %w", registryDir, e)
@@ -124,40 +116,77 @@ func (r *AddonRegistryStore) load() error {
 			continue
 		}
 
-		var addon AddonDefinition
-		if e := yaml.Unmarshal(data, &addon); e != nil {
-			utils.LogDebug(fmt.Sprintf("Warning: failed to parse %s: %v", entry.Name(), e))
+		if e := r.parseAddon(entry.Name(), data); e != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: %v", e))
 			continue
 		}
-
-		// Validate required fields
-		if addon.Name == "" {
-			utils.LogDebug(fmt.Sprintf("Warning: addon in %s missing name field", entry.Name()))
-			continue
-		}
-
-		// Map string hardware notes to HardwareCapability enum
-		addon.HardwareNotes = make(map[orchestrator.HardwareCapability]string)
-		for key, value := range addon.HardwareNotesRaw {
-			switch key {
-			case "cuda":
-				addon.HardwareNotes[orchestrator.HardwareCUDA] = value
-			case "metal":
-				addon.HardwareNotes[orchestrator.HardwareMetal] = value
-			case "rocm":
-				addon.HardwareNotes[orchestrator.HardwareROCm] = value
-			case "cpu":
-				addon.HardwareNotes[orchestrator.HardwareCPU] = value
-			}
-		}
-
-		r.addons[addon.Name] = &addon
 	}
 
 	if len(r.addons) == 0 {
 		return fmt.Errorf("no valid addons found in %s", registryDir)
 	}
 
+	return nil
+}
+
+// loadFromEmbedded reads addon YAML files from the embedded registry filesystem.
+func (r *AddonRegistryStore) loadFromEmbedded() error {
+	entries, e := fs.ReadDir(embeddedRegistry, "registry")
+	if e != nil {
+		return fmt.Errorf("failed to read embedded addon registry: %w", e)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
+			continue
+		}
+
+		data, e := fs.ReadFile(embeddedRegistry, "registry/"+entry.Name())
+		if e != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: failed to read embedded %s: %v", entry.Name(), e))
+			continue
+		}
+
+		if e := r.parseAddon(entry.Name(), data); e != nil {
+			utils.LogDebug(fmt.Sprintf("Warning: %v", e))
+			continue
+		}
+	}
+
+	if len(r.addons) == 0 {
+		return fmt.Errorf("no valid addons found in embedded registry")
+	}
+
+	return nil
+}
+
+// parseAddon unmarshals YAML data into an AddonDefinition and adds it to the store.
+func (r *AddonRegistryStore) parseAddon(filename string, data []byte) error {
+	var addon AddonDefinition
+	if e := yaml.Unmarshal(data, &addon); e != nil {
+		return fmt.Errorf("failed to parse %s: %v", filename, e)
+	}
+
+	if addon.Name == "" {
+		return fmt.Errorf("addon in %s missing name field", filename)
+	}
+
+	// Map string hardware notes to HardwareCapability enum
+	addon.HardwareNotes = make(map[orchestrator.HardwareCapability]string)
+	for key, value := range addon.HardwareNotesRaw {
+		switch key {
+		case "cuda":
+			addon.HardwareNotes[orchestrator.HardwareCUDA] = value
+		case "metal":
+			addon.HardwareNotes[orchestrator.HardwareMetal] = value
+		case "rocm":
+			addon.HardwareNotes[orchestrator.HardwareROCm] = value
+		case "cpu":
+			addon.HardwareNotes[orchestrator.HardwareCPU] = value
+		}
+	}
+
+	r.addons[addon.Name] = &addon
 	return nil
 }
 

@@ -119,7 +119,7 @@ class MCPToolFactory:
                 client_session=persistent_session,
             )
 
-            tool_names = [getattr(t, "mcp_tool_name", t.__name__) for t in tools]
+            tool_names = [getattr(t, "tool_name", t.__name__) for t in tools]
             logger.info(
                 "Created MCP tools with persistent session",
                 server_name=server_name,

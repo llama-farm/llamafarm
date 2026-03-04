@@ -91,6 +91,9 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'models/vision', label: 'Vision Pipeline' },
         { type: 'doc', id: 'models/anomaly-detection', label: 'Anomaly Detection' },
         { type: 'doc', id: 'models/ml-addons', label: 'ML Addons' },
+        { type: 'doc', id: 'models/kv-cache', label: 'KV Cache (Prompt Caching)' },
+        { type: 'doc', id: 'models/vision-eval', label: 'Vision Evaluation' },
+        { type: 'doc', id: 'models/vision-tracking', label: 'Vision Object Tracking' },
       ],
     },
     {

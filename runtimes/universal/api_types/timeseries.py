@@ -60,6 +60,12 @@ class TimeseriesBackendInfo(BaseModel):
     speed: Literal["fast", "medium", "slow"] = Field(
         ..., description="Relative execution speed"
     )
+    available: bool = Field(
+        True, description="Whether required dependencies are installed"
+    )
+    unavailable_reason: str | None = Field(
+        None, description="Why the backend is unavailable (if not available)"
+    )
 
 
 # =============================================================================

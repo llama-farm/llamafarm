@@ -85,6 +85,7 @@ def llama_farm_api() -> fastapi.FastAPI:
     register_exception_handlers(app)
 
     app.include_router(routers.addons_router)
+    app.include_router(routers.bundle_router, prefix=API_PREFIX)
     app.include_router(routers.adtk_router, prefix=API_PREFIX)
     app.include_router(routers.catboost_router, prefix=API_PREFIX)
     app.include_router(routers.drift_router, prefix=API_PREFIX)

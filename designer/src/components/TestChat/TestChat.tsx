@@ -4,6 +4,7 @@ import { Mic, MicOff, Loader2, Volume2, Download } from 'lucide-react'
 import FontIcon from '../../common/FontIcon'
 import { ChatboxMessage } from '../../types/chatbox'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProjectChatParams } from '../../hooks/useProjectChat'
 import { useStreamingChatCompletionMessage } from '../../hooks/useChatCompletions'
@@ -32,7 +33,6 @@ import type { AddonInfo } from '../../types/addons'
 import { AddonInstallSidePane } from '../Addons/AddonInstallSidePane'
 import { AddonInstallProgress } from '../Addons/AddonInstallProgress'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   DOCUMENT_SCANNING_BACKEND_DISPLAY,
   DOCUMENT_SCANNING_LANGUAGES,

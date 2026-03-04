@@ -41,17 +41,19 @@ class ToolDefinition:
         )
 
     @classmethod
-    def from_mcp_tool(cls, tool_class: type) -> "ToolDefinition":
-        """Convert MCP tool class to ToolDefinition.
+    def from_tool_class(cls, tool_class: type) -> "ToolDefinition":
+        """Convert tool class to ToolDefinition.
 
         Args:
-            tool_class: The MCP tool class (from atomic-agents)
+            tool_class: The tool class (from atomic-agents or builtin tools)
 
         Returns:
             ToolDefinition with extracted name, description, and parameters
         """
-        tool_name = getattr(tool_class, "mcp_tool_name", tool_class.__name__)
-        tool_description = tool_class.__doc__ or "No description"
+        tool_name = getattr(
+            tool_class, "tool_name", getattr(tool_class, "__name__", "unknown")
+        )
+        tool_description = getattr(tool_class, "__doc__", None) or "No description"
 
         # Get input schema from tool
         input_schema_class = getattr(tool_class, "input_schema", None)
