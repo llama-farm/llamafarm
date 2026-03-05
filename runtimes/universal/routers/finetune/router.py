@@ -18,6 +18,7 @@ from finetune.trainer import (
     FineTuneTrainer,
     SFTJobConfig,
 )
+from pydantic import BaseModel
 from routers.finetune.types import (
     CPTRequest,
     JobStatus,
@@ -411,16 +412,6 @@ class EvalRequest(BaseModel):
     temperature: float = 0.0
     exact_match: bool = True
     """When True, use case-insensitive exact match. When False, use substring match."""
-
-
-from pydantic import BaseModel as _BaseModel  # noqa: E402 – already imported at top
-
-
-class EvalRequest(_BaseModel):  # type: ignore[no-redef]
-    dataset: list[dict]
-    max_tokens: int = 128
-    temperature: float = 0.0
-    exact_match: bool = True
 
 
 @router.post("/jobs/{job_id}/eval")
