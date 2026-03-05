@@ -2,7 +2,7 @@
  * Status panel showing streaming detector state and statistics
  */
 
-import { Badge } from '../ui/badge'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '../../lib/utils'
 import type { StreamingStatus } from '../../types/ml'
 

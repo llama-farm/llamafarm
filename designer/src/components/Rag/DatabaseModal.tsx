@@ -5,8 +5,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
-import { useToast } from '../ui/toast'
+} from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/toast'
+import { Selector } from '@/components/ui/selector'
 import type { Database } from '../../hooks/useDatabaseManager'
 
 export type DatabaseModalMode = 'create' | 'edit'
@@ -258,13 +259,6 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
       ? existingDatabases.flatMap(db => db.retrieval_strategies || [])
       : []
 
-  const selectStyle = {
-    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-    backgroundPosition: 'right 0.75rem center',
-    backgroundRepeat: 'no-repeat',
-    backgroundSize: '1.5em 1.5em',
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
       <DialogContent
@@ -307,34 +301,25 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
               )}
             </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground">Type</label>
-              <select
-                className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                style={selectStyle}
-                value={type}
-                onChange={e =>
-                  setType(e.target.value as 'ChromaStore' | 'QdrantStore')
-                }
-                disabled={isLoading}
-              >
-                <option value="ChromaStore">ChromaStore</option>
-                <option value="QdrantStore">QdrantStore</option>
-              </select>
-            </div>
+            <Selector
+              label="Type"
+              value={type}
+              onChange={v => setType(v as 'ChromaStore' | 'QdrantStore')}
+              options={[
+                { value: 'ChromaStore', label: 'ChromaStore' },
+                { value: 'QdrantStore', label: 'QdrantStore' },
+              ]}
+              disabled={isLoading}
+              className="mt-0"
+            />
 
             {mode === 'create' && (
               <>
                 <div>
-                  <label className="text-xs text-muted-foreground">
-                    Copy strategies from
-                  </label>
-                  <select
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                    style={selectStyle}
+                  <Selector
+                    label="Copy strategies from"
                     value={copyFromDb}
-                    onChange={e => {
-                      const newCopyFromDb = e.target.value
+                    onChange={newCopyFromDb => {
                       setCopyFromDb(newCopyFromDb)
 
                       // If switching to a database and current selections are "None",
@@ -344,7 +329,6 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                           db => db.name === newCopyFromDb
                         )
                         if (selectedDb) {
-                          // Only reset if current selection is "None" (empty string)
                           if (!defaultEmbedding || defaultEmbedding === '') {
                             setDefaultEmbedding(
                               selectedDb.default_embedding_strategy || ''
@@ -357,7 +341,6 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                           }
                         }
                       } else {
-                        // Switching back to "none" - reset to defaults if they were empty
                         if (!defaultEmbedding || defaultEmbedding === '') {
                           setDefaultEmbedding('semantic_embeddings')
                         }
@@ -366,15 +349,15 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                         }
                       }
                     }}
+                    options={[
+                      { value: 'none', label: 'None' },
+                      ...existingDatabases.map(db => ({
+                        value: db.name,
+                        label: db.name,
+                      })),
+                    ]}
                     disabled={isLoading}
-                  >
-                    <option value="none">None</option>
-                    {existingDatabases.map(db => (
-                      <option key={db.name} value={db.name}>
-                        {db.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   {copyFromDb !== 'none' ? (
                     <p className="text-xs text-muted-foreground mt-1">
                       This will copy all embedding and retrieval strategies from{' '}
@@ -388,71 +371,49 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                   )}
                 </div>
 
-                <div>
-                  <label className="text-xs text-muted-foreground">
-                    Default embedding strategy
-                  </label>
-                  <select
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                    style={selectStyle}
-                    value={defaultEmbedding}
-                    onChange={e => setDefaultEmbedding(e.target.value)}
-                    disabled={isLoading}
-                  >
-                    <option value="">None</option>
-                    {copyFromDb === 'none' ? (
-                      <>
-                        <option value="semantic_embeddings">
-                          semantic_embeddings
-                        </option>
-                        {allEmbeddingStrategies.map(emb => (
-                          <option key={emb.name} value={emb.name}>
-                            {emb.name}
-                          </option>
-                        ))}
-                      </>
-                    ) : (
-                      availableEmbeddings.map(emb => (
-                        <option key={emb.name} value={emb.name}>
-                          {emb.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
+                <Selector
+                  label="Default embedding strategy"
+                  value={defaultEmbedding}
+                  onChange={v => setDefaultEmbedding(v)}
+                  options={[
+                    { value: '', label: 'None' },
+                    ...(copyFromDb === 'none'
+                      ? [
+                          { value: 'semantic_embeddings', label: 'semantic_embeddings' },
+                          ...allEmbeddingStrategies.map(emb => ({
+                            value: emb.name,
+                            label: emb.name,
+                          })),
+                        ]
+                      : availableEmbeddings.map(emb => ({
+                          value: emb.name,
+                          label: emb.name,
+                        }))),
+                  ]}
+                  disabled={isLoading}
+                />
 
-                <div>
-                  <label className="text-xs text-muted-foreground">
-                    Default retrieval strategy
-                  </label>
-                  <select
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                    style={selectStyle}
-                    value={defaultRetrieval}
-                    onChange={e => setDefaultRetrieval(e.target.value)}
-                    disabled={isLoading}
-                  >
-                    <option value="">None</option>
-                    {copyFromDb === 'none' ? (
-                      <>
-                        <option value="comprehensive_search">
-                          comprehensive_search
-                        </option>
-                        {allRetrievalStrategies.map(ret => (
-                          <option key={ret.name} value={ret.name}>
-                            {ret.name}
-                          </option>
-                        ))}
-                      </>
-                    ) : (
-                      availableRetrievals.map(ret => (
-                        <option key={ret.name} value={ret.name}>
-                          {ret.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
+                <Selector
+                  label="Default retrieval strategy"
+                  value={defaultRetrieval}
+                  onChange={v => setDefaultRetrieval(v)}
+                  options={[
+                    { value: '', label: 'None' },
+                    ...(copyFromDb === 'none'
+                      ? [
+                          { value: 'comprehensive_search', label: 'comprehensive_search' },
+                          ...allRetrievalStrategies.map(ret => ({
+                            value: ret.name,
+                            label: ret.name,
+                          })),
+                        ]
+                      : availableRetrievals.map(ret => ({
+                          value: ret.name,
+                          label: ret.name,
+                        }))),
+                  ]}
+                  disabled={isLoading}
+                />
               </>
             )}
           </div>
@@ -464,24 +425,16 @@ const DatabaseModal: React.FC<DatabaseModalProps> = ({
                   Deleting this database will leave {affectedDatasets.length}{' '}
                   dataset{affectedDatasets.length > 1 ? 's' : ''} unassigned.
                 </p>
-                <div>
-                  <label className="text-xs text-muted-foreground">
-                    Assign these datasets to:
-                  </label>
-                  <select
-                    className="w-full mt-1 bg-transparent rounded-lg py-2 pl-3 pr-10 border border-input text-foreground appearance-none"
-                    style={selectStyle}
-                    value={reassignToDb}
-                    onChange={e => setReassignToDb(e.target.value)}
-                    disabled={isLoading || otherDatabases.length === 0}
-                  >
-                    {otherDatabases.map(db => (
-                      <option key={db.name} value={db.name}>
-                        {db.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Selector
+                  label="Assign these datasets to:"
+                  value={reassignToDb}
+                  onChange={v => setReassignToDb(v)}
+                  options={otherDatabases.map(db => ({
+                    value: db.name,
+                    label: db.name,
+                  }))}
+                  disabled={isLoading || otherDatabases.length === 0}
+                />
                 <p className="text-xs text-muted-foreground">
                   Affected datasets:{' '}
                   {affectedDatasets.map(d => d.name).join(', ')}

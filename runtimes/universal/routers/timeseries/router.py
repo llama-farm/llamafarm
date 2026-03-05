@@ -36,6 +36,7 @@ from api_types.timeseries import (
 from core.logging import UniversalRuntimeLogger
 from models.timeseries_model import (
     TimeseriesModel,
+    check_backend_available,
     get_backends_info,
     is_valid_backend,
     list_saved_models,
@@ -142,6 +143,8 @@ async def list_backends() -> TimeseriesBackendsResponse:
                 requires_training=b.requires_training,
                 supports_confidence_intervals=b.supports_confidence_intervals,
                 speed=b.speed,
+                available=b.available,
+                unavailable_reason=b.unavailable_reason,
             )
             for b in backends_info
         ]
@@ -164,6 +167,16 @@ async def fit_timeseries(request: TimeseriesFitRequest) -> TimeseriesFitResponse
         raise HTTPException(
             status_code=400,
             detail=f"Unknown backend: {backend}. Use GET /v1/timeseries/backends to see available options.",
+        )
+
+    # Check if backend dependencies are installed
+    available, reason = check_backend_available(backend)
+    if not available:
+        logger.warning("Backend '%s' unavailable: %s", backend, reason)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Backend '{backend}' is not available. "
+            f"Use GET /v1/timeseries/backends to see available backends.",
         )
 
     # Convert data to list of dicts if needed

@@ -766,3 +766,6 @@ thoughts
 training/
 
 .playwright-mcp/
+demofly/
+control/
+regsync/

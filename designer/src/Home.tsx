@@ -26,6 +26,7 @@ import {
 } from './utils/projectValidation'
 import { Label } from './components/ui/label'
 import { Input } from './components/ui/input'
+import { Selector } from './components/ui/selector'
 import { useDemoModal } from './contexts/DemoModalContext'
 import { getFileBasedDemos } from './config/demos'
 import { useGitHubStars } from './hooks/useGitHubStars'
@@ -736,17 +737,18 @@ function Home() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <select
-              className="px-3 py-2 rounded-lg border border-input bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            <Selector
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as any)}
-            >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="a-z">A-Z</option>
-              <option value="z-a">Z-A</option>
-              <option value="model">By Model</option>
-            </select>
+              onChange={v => setSortBy(v as any)}
+              options={[
+                { value: 'newest', label: 'Newest First' },
+                { value: 'oldest', label: 'Oldest First' },
+                { value: 'a-z', label: 'A-Z' },
+                { value: 'z-a', label: 'Z-A' },
+                { value: 'model', label: 'By Model' },
+              ]}
+              className="w-auto"
+            />
           </div>
         )}
 

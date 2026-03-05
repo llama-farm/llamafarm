@@ -89,6 +89,9 @@ jobs:
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
 
+          # Copy addon registry for embedding
+          cp -f ../addons/registry/*.yaml cmd/registry/
+
           # Build the binary
           go build -ldflags="-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
 

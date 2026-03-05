@@ -34,8 +34,10 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 from pathlib import Path
+from urllib.error import URLError
 from urllib.request import urlretrieve
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
@@ -565,6 +567,31 @@ def build_fat_wheel(component: str, output_dir: Path, version: str) -> Path:
 # ============================================================================
 
 
+def _download_with_retries(
+    url: str, dest: Path, max_retries: int = 3, backoff: float = 5.0
+) -> Path:
+    """Download a URL with retry and exponential backoff.
+
+    Removes partial downloads on failure to avoid cache corruption.
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            urlretrieve(url, dest)
+            return dest
+        except (URLError, OSError, ConnectionError) as e:
+            # Clean up partial download
+            if dest.exists():
+                dest.unlink()
+            if attempt == max_retries:
+                print(f"ERROR: Download failed after {max_retries} attempts: {e}")
+                raise
+            wait = backoff * attempt
+            print(f"  Download attempt {attempt}/{max_retries} failed: {e}")
+            print(f"  Retrying in {wait:.0f}s...")
+            time.sleep(wait)
+    return dest  # unreachable, but keeps type-checkers happy
+
+
 def download_pyapp_source(cache_dir: Path) -> Path:
     """Download and extract the PyApp source release.
 
@@ -584,7 +611,7 @@ def download_pyapp_source(cache_dir: Path) -> Path:
 
     if not archive_path.exists():
         print(f"Downloading PyApp v{PYAPP_VERSION} source...")
-        urlretrieve(PYAPP_SOURCE_URL, archive_path)
+        _download_with_retries(PYAPP_SOURCE_URL, archive_path)
         print("Download complete.")
 
     print("Extracting PyApp source...")
@@ -685,16 +712,29 @@ def build_pyapp_binary(
             print(f"  {key}={val}")
 
     print("\nRunning cargo build (this may take a while on first run)...")
-    result = subprocess.run(
-        ["cargo", "build", "--release"],
-        cwd=source_dir,
-        env=env,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        print(f"ERROR: cargo build failed with code {result.returncode}")
-        sys.exit(1)
+    max_cargo_retries = 3
+    for attempt in range(1, max_cargo_retries + 1):
+        result = subprocess.run(
+            ["cargo", "build", "--release"],
+            cwd=source_dir,
+            env=env,
+            check=False,
+        )
+        if result.returncode == 0:
+            break
+        if attempt < max_cargo_retries:
+            wait = 5 * attempt
+            print(
+                f"  cargo build attempt {attempt}/{max_cargo_retries} failed "
+                f"(exit {result.returncode}), retrying in {wait}s..."
+            )
+            time.sleep(wait)
+        else:
+            print(
+                f"ERROR: cargo build failed after {max_cargo_retries} attempts "
+                f"(exit {result.returncode})"
+            )
+            sys.exit(1)
 
     # Find the built binary
     target_dir = source_dir / "target" / "release"

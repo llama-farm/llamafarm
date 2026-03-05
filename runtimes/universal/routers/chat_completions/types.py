@@ -71,6 +71,8 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int | None = None
     stream: bool | None = False
     stop: str | list[str] | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = Field(default=None, ge=0, le=20)
     presence_penalty: float | None = 0.0
     frequency_penalty: float | None = 0.0
     user: str | None = None
@@ -102,6 +104,10 @@ class ChatCompletionRequest(BaseModel):
     # Maximum tokens to spend on thinking before forcing answer generation
     # When reached, model is nudged to close </think> and provide answer
     thinking_budget: int | None = None
+
+    # KV Cache parameters
+    cache_key: str | None = None  # Cache key from /v1/cache/prepare or previous response
+    return_cache_key: bool | None = None  # Return a cache_key in the response for multi-turn chaining
 
     # Context management parameters
     # Whether to automatically truncate messages if context is exceeded

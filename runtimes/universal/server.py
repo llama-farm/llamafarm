@@ -57,7 +57,10 @@ from routers.audio import router as audio_router
 from routers.audio import set_speech_loader
 from routers.audio_chat import router as audio_chat_router
 from routers.audio_speech import router as audio_speech_router
+from routers.cache import router as cache_router
+from routers.cache import set_cache_language_loader, set_cache_manager
 from routers.chat_completions import router as chat_completions_router
+from routers.chat_completions.service import ChatCompletionsService
 from routers.classifier import (
     router as classifier_router,
 )
@@ -70,6 +73,7 @@ from routers.classifier import (
 from routers.classifier import (
     set_state as set_classifier_state,
 )
+
 try:
     from routers.explain import router as explain_router
     from routers.explain import set_explain_state, set_model_getter
@@ -92,13 +96,21 @@ from routers.vision import (
 )
 from routers.vision import (
     set_classification_loader,
+    set_detect_classify_loaders,
     set_detection_loader,
     set_document_loader,
+    set_eval_models_dir,
     set_file_image_getter,
     set_model_export_loader,
     set_ocr_loader,
     set_streaming_detection_loader,
+    set_tracking_models_dir,
     set_vision_models_dir,
+    set_sample_data_dir,
+    start_session_cleanup,
+    start_tracking_cleanup,
+    stop_session_cleanup,
+    stop_tracking_cleanup,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -330,6 +342,25 @@ async def lifespan(app: FastAPI):
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
 
+    # Start KV cache manager + GC
+    from utils.kv_cache_manager import (
+        KVCacheManager,
+        start_kv_cache_gc,
+        stop_kv_cache_gc,
+    )
+    global _kv_cache_manager
+    _kv_cache_manager = KVCacheManager()
+    set_cache_manager(_kv_cache_manager)
+    set_cache_language_loader(load_language)
+    ChatCompletionsService.set_cache_manager(_kv_cache_manager)
+    start_kv_cache_gc(_kv_cache_manager)
+    logger.info("KV cache manager started")
+
+    # Start vision streaming session cleanup (needs running event loop)
+    start_session_cleanup()
+    start_tracking_cleanup()
+    logger.info("Vision session cleanup task started")
+
     yield
 
     # Shutdown
@@ -341,6 +372,13 @@ async def lifespan(app: FastAPI):
         await _finetune_trainer.stop()
         logger.info("Fine-tuning worker stopped")
 
+    # Stop KV cache GC task
+    await stop_kv_cache_gc()
+
+    # Stop vision cleanup tasks
+    await stop_session_cleanup()
+    await stop_tracking_cleanup()
+
     # Stop cleanup task
     if _cleanup_task is not None:
         _cleanup_task.cancel()
@@ -348,26 +386,30 @@ async def lifespan(app: FastAPI):
             await _cleanup_task
         logger.info("Model cleanup task stopped")
 
-    # Unload all remaining models
-    if _models:
-        logger.info(f"Unloading {len(_models)} remaining model(s)")
-        for cache_key, model in list(_models.items()):
-            try:
-                await model.unload()
-                logger.info(f"Unloaded model: {cache_key}")
-            except Exception as e:
-                logger.error(f"Error unloading model {cache_key}: {e}")
-        _models.clear()
+    # Unload all remaining models (including addon caches)
+    all_caches: list[tuple[ModelCache | None, str]] = [
+        (_models, "models"),
+        (_classifiers, "classifiers"),
+    ]
+    if _HAS_TIMESERIES:
+        all_caches.append((_timeseries, "timeseries"))
+    if _HAS_ADTK:
+        all_caches.append((_adtk, "adtk"))
+    if _HAS_DRIFT:
+        all_caches.append((_drift, "drift"))
+    if _HAS_CATBOOST:
+        all_caches.append((_catboost, "catboost"))
 
-    if _classifiers:
-        logger.info(f"Unloading {len(_classifiers)} remaining classifier(s)")
-        for cache_key, model in list(_classifiers.items()):
-            try:
-                await model.unload()
-                logger.info(f"Unloaded classifier: {cache_key}")
-            except Exception as e:
-                logger.error(f"Error unloading classifier {cache_key}: {e}")
-        _classifiers.clear()
+    for cache, cache_name in all_caches:
+        if cache and len(cache) > 0:
+            logger.info(f"Unloading {len(cache)} remaining {cache_name}")
+            for cache_key, model in list(cache.items()):
+                try:
+                    await model.unload()
+                    logger.info(f"Unloaded {cache_name}: {cache_key}")
+                except Exception as e:
+                    logger.error(f"Error unloading {cache_name} {cache_key}: {e}")
+            cache.clear()
 
     logger.info("Shutdown complete")
 
@@ -400,6 +442,7 @@ if _HAS_EXPLAIN:
 app.include_router(audio_router)
 app.include_router(audio_speech_router)
 app.include_router(audio_chat_router)
+app.include_router(cache_router)
 app.include_router(chat_completions_router)
 app.include_router(classifier_router)
 app.include_router(files_router)
@@ -420,6 +463,53 @@ if _HAS_CATBOOST:
 if _HAS_FINETUNE:
     app.include_router(finetune_router)
 
+
+
+# ── Model management endpoints ──────────────────────────────────────────────
+
+@app.post("/v1/models/unload", tags=["models"])
+async def unload_all_models():
+    """Unload all loaded models to free memory.
+
+    Useful before loading a large model, or between benchmark runs
+    to ensure a clean memory state.
+    """
+    unloaded = []
+    for cache_key, model in list(_models.items()):
+        try:
+            await model.unload()
+            unloaded.append(cache_key)
+        except Exception as e:
+            logger.error(f"Error unloading {cache_key}: {e}")
+    _models.clear()
+
+    # Also clear classifier and addon caches
+    addon_caches: list[tuple[ModelCache | None, str]] = [
+        (_classifiers, "classifier"),
+    ]
+    if _HAS_TIMESERIES:
+        addon_caches.append((_timeseries, "timeseries"))
+    if _HAS_ADTK:
+        addon_caches.append((_adtk, "adtk"))
+    if _HAS_DRIFT:
+        addon_caches.append((_drift, "drift"))
+    if _HAS_CATBOOST:
+        addon_caches.append((_catboost, "catboost"))
+
+    for cache, cache_name in addon_caches:
+        if cache and len(cache) > 0:
+            for cache_key, model in list(cache.items()):
+                try:
+                    await model.unload()
+                    unloaded.append(cache_key)
+                except Exception as e:
+                    logger.error(f"Error unloading {cache_name} {cache_key}: {e}")
+            cache.clear()
+
+    logger.info(f"Unloaded {len(unloaded)} models: {unloaded}")
+    return {"unloaded": len(unloaded), "models": unloaded}
+
+
 # Model unload timeout configuration (in seconds)
 # Default: 5 minutes (300 seconds)
 MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT", "300"))
@@ -438,6 +528,7 @@ _current_device = None
 _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 _finetune_trainer: "FineTuneTrainer | None" = None
+_kv_cache_manager = None
 
 # Data directories
 _LF_DATA_DIR = get_data_dir()
@@ -1223,9 +1314,14 @@ set_document_loader(load_document)
 set_file_image_getter(get_file_images)
 set_detection_loader(load_detection_model)
 set_classification_loader(load_classification_model)
+set_detect_classify_loaders(load_detection_model, load_classification_model)
 set_streaming_detection_loader(load_detection_model)
+set_tracking_models_dir(VISION_MODELS_DIR)
 set_vision_models_dir(VISION_MODELS_DIR)
+set_sample_data_dir(_LF_DATA_DIR)
+set_eval_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
+# NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 
 # Vision training
 set_trainer_model_loader(load_detection_model)

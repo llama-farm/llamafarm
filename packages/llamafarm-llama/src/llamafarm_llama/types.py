@@ -19,12 +19,13 @@ class ChatMessage(TypedDict, total=False):
     tool_call_id: Optional[str]
 
 
-class ChatCompletionChoice(TypedDict):
+class ChatCompletionChoice(TypedDict, total=False):
     """A single completion choice."""
 
     index: int
     message: ChatMessage
     finish_reason: Optional[str]
+    logprobs: Optional[dict[str, Any]]
 
 
 class ChatCompletionUsage(TypedDict):

@@ -8,20 +8,20 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '../../ui/dialog'
+} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../ui/select'
+} from '@/components/ui/select'
 import { useDocumentPreview } from '../../../hooks/useDocumentPreview'
 import { useAvailableStrategies } from '../../../hooks/useDatasets'
 import { PreviewPanel } from './PreviewPanel'
 import { OriginalDocumentPanel } from './OriginalDocumentPanel'
 import { Loader2, RefreshCw } from 'lucide-react'
-import { Button } from '../../ui/button'
+import { Button } from '@/components/ui/button'
 
 interface DocumentPreviewModalProps {
   isOpen: boolean
