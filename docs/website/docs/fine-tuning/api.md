@@ -223,35 +223,6 @@ List supported chat templates and auto-detect the best template for a model.
 
 ---
 
-### POST /v1/finetune/estimate
-
-Estimate training time for a given configuration.
-
-**Request Body:**
-
-```json
-{
-  "dataset_size": 1000,
-  "model_size": "8B",
-  "epochs": 3,
-  "backend": "mlx"
-}
-```
-
-**Response:**
-
-```json
-{
-  "estimated_minutes": 40.0,
-  "estimated_hours": 0.67,
-  "dataset_size": 1000,
-  "epochs": 3,
-  "model_size": "8B",
-  "backend": "mlx",
-  "note": "This is a rough estimate. Actual time varies significantly."
-}
-```
-
 ## Error Handling
 
 All endpoints return standard HTTP error codes:

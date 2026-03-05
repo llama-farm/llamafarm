@@ -78,7 +78,7 @@ curl -X POST http://localhost:11540/v1/finetune/cpt \
 | Parameter | Default | Description |
 |---|---|---|
 | `model` | *required* | HuggingFace model name |
-| `dataset` | *required* | Training data (`[{{"text": "..."}}, ...]`) |
+| `dataset` | *required* | Training data (`[{"text": "..."}, ...]`) |
 | `epochs` | `1` | Number of epochs (CPT typically needs only 1) |
 | `batch_size` | `2` | Batch size |
 | `learning_rate` | `5e-5` | Learning rate (lower than SFT — preserving existing knowledge) |
@@ -110,7 +110,7 @@ curl -X POST http://localhost:11540/v1/finetune/cpt \
     "dataset": [... your domain documents ...],
     "epochs": 1
   }'
-# → produces adapter in ~/.llamafarm/models/llm/\{cpt_job_id\}/
+# → produces adapter in ~/.llamafarm/models/llm/{cpt_job_id}/
 
 # Step 2: SFT — teach it how to respond
 # (use the CPT-adapted model as base for SFT)

@@ -30,7 +30,7 @@ Fine-tuning works with any HuggingFace model supported by Unsloth. Tested models
 | `mistralai/Mistral-7B-Instruct-v0.3` | 7B | European languages, code | `mistral` |
 | `microsoft/Phi-4` | 14B | Code, math, reasoning | `phi` |
 | `google/gemma-3-1b-it` | 1B | Edge deployment, rapid iteration | `gemma` |
-| `unsloth/FunctionGemma-270M` | 270M | Tool/function calling | `gemma` |
+| `unsloth/functiongemma-270m-it` | 270M | Tool/function calling | `gemma` |
 
 :::info GGUF Models Cannot Be Fine-Tuned Directly
 If you have a `.gguf` file, you need the original HuggingFace model. The API will detect GGUF references and suggest the base model.
@@ -67,7 +67,7 @@ curl -X POST http://localhost:11540/v1/finetune/validate \
 curl -X POST http://localhost:11540/v1/finetune/sft \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "unsloth/FunctionGemma-270M",
+    "model": "unsloth/functiongemma-270m-it",
     "dataset": [
       {"conversations": [
         {"from": "human", "value": "What is LlamaFarm?"},
@@ -87,7 +87,7 @@ curl http://localhost:11540/v1/finetune/jobs/{job_id}
 
 ## Next Steps
 
-- [SFT Training Guide](./sft) — Detailed supervised fine-tuning walkthrough
-- [CPT Training Guide](./cpt) — Domain adaptation with unlabeled text
-- [API Reference](./api) — Full endpoint documentation
-- [Dataset Formats](./datasets) — Supported data formats and examples
+- [SFT Training Guide](./sft.md) — Detailed supervised fine-tuning walkthrough
+- [CPT Training Guide](./cpt.md) — Domain adaptation with unlabeled text
+- [API Reference](./api.md) — Full endpoint documentation
+- [Dataset Formats](./datasets.md) — Supported data formats and examples
