@@ -57,6 +57,27 @@ def make_tool_call(*, name: str, arguments: str):
     )
 
 
+def make_tool_call_chunk(
+    *,
+    index: int = 0,
+    id: str | None = None,
+    type: str | None = None,
+    name: str | None = None,
+    arguments: str | None = None,
+):
+    """Create a streaming tool call chunk.
+
+    First chunk typically has: type="function", id="call_xxx", name="tool_name", arguments="" or partial
+    Subsequent chunks typically have: type=None, id=None, name=None, arguments="<partial args>"
+    """
+    return ChoiceDeltaToolCall(
+        index=index,
+        type=type,
+        id=id,
+        function=ChoiceDeltaToolCallFunction(name=name, arguments=arguments),
+    )
+
+
 def make_chunk(
     *,
     content: str | None,
@@ -285,7 +306,7 @@ class TestChatOrchestratorAgent:
 
         # Mock MCP tool
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(
@@ -333,7 +354,7 @@ class TestChatOrchestratorAgent:
         )
 
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(
@@ -400,7 +421,7 @@ class TestChatOrchestratorAgent:
         ]
 
         mock_tool_class = MagicMock()
-        mock_tool_class.mcp_tool_name = "test_tool"
+        mock_tool_class.tool_name = "test_tool"
         mock_tool_class.__name__ = "TestTool"
         mock_tool_instance = AsyncMock()
         mock_tool_instance.arun = AsyncMock(side_effect=Exception("Tool failed"))
@@ -472,7 +493,7 @@ class TestChatOrchestratorAgent:
             # Mock tool
             mock_tool_class = MagicMock()
             mock_tool_class.__name__ = "TestTool"
-            mock_tool_class.mcp_tool_name = "test_tool"
+            mock_tool_class.tool_name = "test_tool"
             mock_tool_instance = AsyncMock()
             mock_tool_instance.arun = AsyncMock(
                 return_value=SimpleNamespace(result="Tool result")
@@ -532,6 +553,99 @@ class TestChatOrchestratorAgent:
                 ]
                 assert "Final answer" in final_contents
                 mock_tool_instance.arun.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_run_async_stream_tool_call_chunked_arguments(self, base_config):
+        """Test streaming tool calls with arguments split across multiple chunks.
+
+        This tests the fix for the bug where subsequent chunks with type=None
+        were being skipped, causing empty arguments.
+        """
+        with tempfile.TemporaryDirectory() as project_dir:
+            agent = ChatOrchestratorAgent(
+                project_config=base_config,
+                project_dir=project_dir,
+            )
+            agent._mcp_enabled = True
+
+            # Mock tool that expects {"operation": "list"}
+            mock_tool_class = MagicMock()
+            mock_tool_class.__name__ = "TasksTool"
+            mock_tool_class.tool_name = "tasks"
+            mock_tool_instance = AsyncMock()
+            mock_tool_instance.arun = AsyncMock(
+                return_value=SimpleNamespace(result="Task list: []")
+            )
+            mock_tool_class.return_value = mock_tool_instance
+            mock_tool_class.input_schema = MagicMock()
+            mock_tool_class.input_schema.model_json_schema.return_value = {
+                "type": "object",
+                "properties": {
+                    "tool_name": {"type": "string"},
+                    "operation": {"type": "string"},
+                },
+                "required": ["tool_name", "operation"],
+            }
+            mock_tool_class.input_schema.return_value = MagicMock()
+            agent._mcp_tools = [mock_tool_class]
+
+            # Simulate chunked streaming: arguments split across 3 chunks
+            # First chunk: type="function", name="tasks", arguments='{"oper'
+            # Second chunk: type=None, name=None, arguments='ation": '
+            # Third chunk: type=None, name=None, arguments='"list"}'
+            first_tool_chunk = make_tool_call_chunk(
+                index=0,
+                type="function",
+                id="call_123",
+                name="tasks",
+                arguments='{"oper',
+            )
+            second_tool_chunk = make_tool_call_chunk(
+                index=0,
+                type=None,
+                id=None,
+                name=None,
+                arguments='ation": ',
+            )
+            third_tool_chunk = make_tool_call_chunk(
+                index=0,
+                type=None,
+                id=None,
+                name=None,
+                arguments='"list"}',
+            )
+
+            async def first_stream(*args, **kwargs):
+                yield make_chunk(content=None, tool_calls=[first_tool_chunk])
+                yield make_chunk(content=None, tool_calls=[second_tool_chunk])
+                yield make_chunk(
+                    content=None,
+                    tool_calls=[third_tool_chunk],
+                    finish_reason="tool_calls",
+                )
+
+            async def second_stream(*args, **kwargs):
+                yield make_chunk(content="Here are your tasks", finish_reason="stop")
+
+            with patch.object(
+                agent._client,
+                "stream_chat",
+                side_effect=[first_stream(), second_stream()],
+            ):
+                user_input = LFChatCompletionUserMessageParam(
+                    role="user", content="List my tasks"
+                )
+                chunks = []
+                async for chunk in agent.run_async_stream(messages=[user_input]):
+                    chunks.append(chunk)
+
+                # The tool should have been called with the complete arguments
+                mock_tool_instance.arun.assert_awaited()
+
+                # Verify the input_schema was called with the accumulated arguments
+                mock_tool_class.input_schema.assert_called_once()
+                schema_call_kwargs = mock_tool_class.input_schema.call_args
+                assert "operation" in str(schema_call_kwargs)
 
     def test_enable_persistence(self, base_config):
         """Test enabling persistence."""
@@ -656,10 +770,10 @@ class TestChatOrchestratorAgent:
             # Mock tools
             mock_tool1 = MagicMock()
             mock_tool1.__name__ = "Tool1"
-            mock_tool1.mcp_tool_name = "tool1"
+            mock_tool1.tool_name = "tool1"
             mock_tool2 = MagicMock()
             mock_tool2.__name__ = "Tool2"
-            mock_tool2.mcp_tool_name = "tool2"
+            mock_tool2.tool_name = "tool2"
 
             with patch("agents.chat_orchestrator.MCPToolFactory") as mock_factory:
                 mock_factory_instance = AsyncMock()
@@ -671,8 +785,8 @@ class TestChatOrchestratorAgent:
                 await agent.enable_mcp()
 
                 assert len(agent._mcp_tools) == 2
-                assert agent._mcp_tools[0].mcp_tool_name == "tool1"
-                assert agent._mcp_tools[1].mcp_tool_name == "tool2"
+                assert agent._mcp_tools[0].tool_name == "tool1"
+                assert agent._mcp_tools[1].tool_name == "tool2"
 
     @pytest.mark.asyncio
     async def test_mcp_servers_subset_selection(self, config_with_multiple_mcp_servers):

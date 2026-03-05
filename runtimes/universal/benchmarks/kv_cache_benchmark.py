@@ -249,13 +249,23 @@ def make_request(
     with httpx.stream(
         "POST", f"{base_url}/v1/chat/completions", json=payload, timeout=120.0
     ) as resp:
+        next_is_cache = False
         for line in resp.iter_lines():
+            # Named SSE event: "event: x_cache" means the next data line is cache info
+            if line == "event: x_cache":
+                next_is_cache = True
+                continue
             if not line.startswith("data: "):
                 continue
             data = line[6:]
             if data == "[DONE]":
                 break
             chunk = json.loads(data)
+            if next_is_cache:
+                x_cache = chunk
+                next_is_cache = False
+                continue
+            # Legacy: inline x_cache in chunk (non-streaming responses)
             if "x_cache" in chunk:
                 x_cache = chunk["x_cache"]
                 continue
@@ -305,7 +315,7 @@ def run_benchmark(base_url: str):
     history.append({"role": "user", "content": TURN2_USER})
     print("\n[Turn 2] Full history + follow-up (~20 new tokens), sends cache_key_1")
     r2 = make_request(base_url, history, cache_key=r1["cache_key"], return_cache_key=True)
-    xc2 = r2.get("x_cache", {})
+    xc2 = r2.get("x_cache") or {}
     print(f"  TTFT: {r2['ttft_ms']}ms")
     print(f"  Cache: hit={xc2.get('hit')}, reused_tokens={xc2.get('reused_tokens')}")
     print(f"  cache_key_2 = {r2['cache_key']}")
@@ -320,7 +330,7 @@ def run_benchmark(base_url: str):
     n_msgs = len(history)
     print(f"\n[Turn 3] {n_msgs}-message history + follow-up (~30 new tokens), sends cache_key_2")
     r3 = make_request(base_url, history, cache_key=r2["cache_key"], return_cache_key=True)
-    xc3 = r3.get("x_cache", {})
+    xc3 = r3.get("x_cache") or {}
     print(f"  TTFT: {r3['ttft_ms']}ms")
     print(f"  Cache: hit={xc3.get('hit')}, reused_tokens={xc3.get('reused_tokens')}")
 
@@ -339,17 +349,27 @@ def run_benchmark(base_url: str):
     t3 = r3["ttft_ms"]
     t3b = r3_base["ttft_ms"]
 
+    # Guard against None TTFT values (e.g. if streaming response had no tokens)
+    if any(t is None for t in (t1, t2, t3, t3b)):
+        print("\n  WARNING: Some TTFT values are None — cannot compute speedup ratios")
+        print(f"  t1={t1}, t2={t2}, t3={t3}, t3_baseline={t3b}")
+        return
+
     print(f"\n{'─'*70}")
     print("  RESULTS (TTFT, streaming)")
     print(f"{'─'*70}")
     print(f"  {'Step':<35} {'TTFT':>8}  {'vs baseline':>12}")
     print(f"  {'─'*35} {'─'*8}  {'─'*12}")
     print(f"  {'Turn 1 (cold start)':<35} {t1:>7.0f}ms  {'—':>12}")
-    print(f"  {'Turn 2 (cached, cache_key_1)':<35} {t2:>7.0f}ms  {t1/t2:>10.1f}x faster")
-    print(f"  {'Turn 3 (cached, cache_key_2)':<35} {t3:>7.0f}ms  {t3b/t3:>10.1f}x faster")
+    t2_speedup = f"{t1/t2:>10.1f}x faster" if t2 > 0 else "N/A"
+    t3_speedup = f"{t3b/t3:>10.1f}x faster" if t3 > 0 else "N/A"
+    print(f"  {'Turn 2 (cached, cache_key_1)':<35} {t2:>7.0f}ms  {t2_speedup}")
+    print(f"  {'Turn 3 (cached, cache_key_2)':<35} {t3:>7.0f}ms  {t3_speedup}")
     print(f"  {'Turn 3 (no cache, baseline)':<35} {t3b:>7.0f}ms  {'baseline':>12}")
-    print(f"\n  Cache saves ~{t3b - t3:.0f}ms per turn ({t3b/t3:.0f}x faster)")
-    print(f"  Cached TTFT is constant (~{(t2+t3)/2:.0f}ms) regardless of history length")
+    if t3 > 0:
+        print(f"\n  Cache saves ~{t3b - t3:.0f}ms per turn ({t3b/t3:.0f}x faster)")
+    avg = (t2 + t3) / 2
+    print(f"  Cached TTFT is constant (~{avg:.0f}ms) regardless of history length")
     print()
 
 
@@ -391,7 +411,7 @@ def run_prepare_benchmark(base_url: str):
     print("\n[Turn 1 — pre-warmed] System+RAG + user question, sends prepare cache_key")
     r_warm = make_request(base_url, msgs_cached, cache_key=ck_warm, return_cache_key=True)
     print(f"  TTFT: {r_warm['ttft_ms']}ms")
-    xc = r_warm.get("x_cache", {})
+    xc = r_warm.get("x_cache") or {}
     print(f"  Cache: hit={xc.get('hit')}, reused_tokens={xc.get('reused_tokens')}")
 
     # ── Pollute ──────────────────────────────────────────────────────────

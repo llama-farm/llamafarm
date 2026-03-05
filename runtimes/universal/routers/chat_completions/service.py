@@ -61,6 +61,55 @@ logger = logging.getLogger(__name__)
 
 
 class ChatCompletionsService:
+    @staticmethod
+    def _normalize_logprobs_payload(logprobs_payload, top_logprobs: int | None = None):
+        """Normalize backend logprobs into OpenAI chat choice.logprobs shape."""
+        if not isinstance(logprobs_payload, dict):
+            return None
+
+        # Already OpenAI-style from backend
+        content = logprobs_payload.get("content")
+        if isinstance(content, list):
+            return {"content": content}
+
+        tokens = logprobs_payload.get("tokens")
+        token_logprobs = logprobs_payload.get("token_logprobs")
+        top_items = logprobs_payload.get("top_logprobs")
+
+        if not isinstance(tokens, list) or not isinstance(token_logprobs, list):
+            return None
+
+        normalized = []
+        for idx, token in enumerate(tokens):
+            if not isinstance(token, str):
+                continue
+            lp = token_logprobs[idx] if idx < len(token_logprobs) else None
+            entry = {
+                "token": token,
+                "logprob": lp,
+                "bytes": list(token.encode("utf-8", errors="ignore")) or None,
+            }
+
+            if isinstance(top_items, list) and idx < len(top_items):
+                token_top = top_items[idx]
+                if isinstance(token_top, dict):
+                    pairs = list(token_top.items())
+                    if top_logprobs is not None:
+                        pairs = pairs[:top_logprobs]
+                    entry["top_logprobs"] = [
+                        {
+                            "token": str(t),
+                            "logprob": float(v) if v is not None else None,
+                            "bytes": list(str(t).encode("utf-8", errors="ignore"))
+                            or None,
+                        }
+                        for t, v in pairs
+                        if v is not None
+                    ]
+            normalized.append(entry)
+
+        return {"content": normalized} if normalized else None
+
     def __init__(self):
         # import here to avoid circular import
         from server import load_language
@@ -609,7 +658,7 @@ class ChatCompletionsService:
                     total_max_tokens,
                     effective_max_tokens,
                     thinking_tokens,
-                    _,
+                    context_usage_info,
                 ) = await prepare_generation()
 
                 # ── KV Cache: check for cache hit (streaming) ────────────
@@ -619,9 +668,6 @@ class ChatCompletionsService:
                 _s_return_cache_key = None
                 _stream_cache_manager = self._get_cache_manager()
                 if _stream_cache_manager and is_gguf:
-                    import time as _time
-                    _s_cache_start = _time.time()  # noqa: F841 — reserved for future cache timing metrics
-
                     _s_cache_key = chat_request.cache_key
                     if _s_cache_key is None and chat_request.extra_body:
                         _s_cache_key = chat_request.extra_body.get("cache_key")
@@ -981,24 +1027,17 @@ class ChatCompletionsService:
                                 parent_key=chat_request.cache_key,
                                 messages=full_msgs,
                                 tools=tools_dict,
+                                prompt_tokens=context_usage_info.prompt_tokens if context_usage_info else 0,
                             )
-                            # Emit cache info in a valid ChatCompletionChunk envelope
-                            # so OpenAI SDK clients can parse it without errors
-                            cache_event = _stream_cache_info or {}
+                            cache_event = dict(_stream_cache_info) if _stream_cache_info else {}
                             cache_event["new_cache_key"] = new_entry.cache_key
                             cache_event["cached_tokens"] = new_entry.token_count
-                            cache_chunk = {
-                                "id": f"chatcmpl-cache-{new_entry.cache_key[:8]}",
-                                "object": "chat.completion.chunk",
-                                "created": int(_time.time()),
-                                "model": chat_request.model,
-                                "choices": [],
-                                "x_cache": cache_event,
-                            }
-                            yield f"data: {json.dumps(cache_chunk)}\n\n".encode()
+                            # Use a named SSE event type so OpenAI SDK clients
+                            # ignore it (they only process default "message" events)
+                            yield f"event: x_cache\ndata: {json.dumps(cache_event)}\n\n".encode()
                             await asyncio.sleep(0)
                         except Exception as e:
-                                logger.warning(f"Failed to save streaming post-gen cache: {e}")
+                            logger.warning(f"Failed to save streaming post-gen cache: {e}", exc_info=True)
 
                     yield b"data: [DONE]\n\n"
 
@@ -1025,6 +1064,8 @@ class ChatCompletionsService:
                 thinking_tokens,
                 context_usage_info,
             ) = await prepare_generation()
+
+            response_logprobs = None
 
             # ── KV Cache: check for cache hit ────────────────────────────────
             cache_info = None
@@ -1110,20 +1151,39 @@ class ChatCompletionsService:
                 )
             else:
                 # Standard text generation (audio already transcribed if present)
-                response_text = await model.generate(
-                    messages=prepared_messages,
-                    max_tokens=effective_max_tokens,
-                    temperature=chat_request.temperature
-                    if chat_request.temperature is not None
-                    else 0.7,
-                    top_p=chat_request.top_p,
-                    stop=chat_request.stop,
-                    thinking_budget=(thinking_tokens or None) if is_gguf else None,
-                    tools=tools_for_generation,
-                    tool_choice=chat_request.tool_choice,
-                    kv_cache_data=_kv_cache_data,
-                    kv_cache_tokens=_kv_cache_tokens,
-                )
+                if is_gguf and chat_request.logprobs:
+                    detailed = await model.generate_with_logprobs(
+                        messages=prepared_messages,
+                        max_tokens=effective_max_tokens,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
+                        top_p=chat_request.top_p,
+                        stop=chat_request.stop,
+                        thinking_budget=(thinking_tokens or None),
+                        tools=tools_for_generation,
+                        tool_choice=chat_request.tool_choice,
+                        top_logprobs=chat_request.top_logprobs,
+                        kv_cache_data=_kv_cache_data,
+                        kv_cache_tokens=_kv_cache_tokens,
+                    )
+                    response_text = detailed.get("content", "")
+                    response_logprobs = detailed.get("logprobs")
+                else:
+                    response_text = await model.generate(
+                        messages=prepared_messages,
+                        max_tokens=effective_max_tokens,
+                        temperature=chat_request.temperature
+                        if chat_request.temperature is not None
+                        else 0.7,
+                        top_p=chat_request.top_p,
+                        stop=chat_request.stop,
+                        thinking_budget=(thinking_tokens or None) if is_gguf else None,
+                        tools=tools_for_generation,
+                        tool_choice=chat_request.tool_choice,
+                        kv_cache_data=_kv_cache_data,
+                        kv_cache_tokens=_kv_cache_tokens,
+                    )
 
             # Debug log the raw response from the model
             if logger.isEnabledFor(logging.DEBUG):
@@ -1141,6 +1201,10 @@ class ChatCompletionsService:
             tool_choice_mode, _ = parse_tool_choice(chat_request.tool_choice)
             if tools_dict and tool_choice_mode != "none":
                 tool_calls = detect_tool_call_in_content(parsed.content)
+
+            normalized_logprobs = self._normalize_logprobs_payload(
+                response_logprobs, chat_request.top_logprobs
+            )
 
             if tool_calls:
                 # Log detected tool calls
@@ -1178,6 +1242,7 @@ class ChatCompletionsService:
                                 ],
                             },
                             "finish_reason": "tool_calls",
+                            **({"logprobs": normalized_logprobs} if chat_request.logprobs else {}),
                         }
                     ],
                     "usage": {
@@ -1197,6 +1262,35 @@ class ChatCompletionsService:
                         f"{json.dumps(response, indent=2, default=str)}"
                     )
 
+                # ── KV Cache: save after tool-call generation ────────────────
+                if cache_manager and is_gguf and (return_cache_key or cache_info):
+                    try:
+                        # Strip tool call markup from content for cache
+                        clean_content = strip_tool_call_from_content(response_text)
+                        full_messages = list(messages_dict) + [
+                            {"role": "assistant", "content": clean_content}
+                        ]
+                        _prompt_tokens = (
+                            context_usage_info.prompt_tokens if context_usage_info else 0
+                        )
+                        new_entry = await cache_manager.save_after_generation(
+                            model=model.llama,
+                            model_id=chat_request.model,
+                            parent_key=chat_request.cache_key,
+                            messages=full_messages,
+                            tools=tools_dict,
+                            prompt_tokens=_prompt_tokens,
+                        )
+                        if cache_info is None:
+                            cache_info = {}
+                        cache_info["new_cache_key"] = new_entry.cache_key
+                        cache_info["cached_tokens"] = new_entry.token_count
+                    except Exception as e:
+                        logger.warning(f"Failed to save tool-call post-gen cache: {e}")
+
+                if cache_info:
+                    response["x_cache"] = cache_info
+
                 return response
 
             # Build response with optional thinking field (Ollama-compatible)
@@ -1213,6 +1307,7 @@ class ChatCompletionsService:
                         "index": 0,
                         "message": {"role": "assistant", "content": parsed.content},
                         "finish_reason": "stop",
+                        **({"logprobs": normalized_logprobs} if chat_request.logprobs else {}),
                     }
                 ],
                 "usage": {
@@ -1237,6 +1332,8 @@ class ChatCompletionsService:
             if cache_manager and is_gguf and (return_cache_key or cache_info):
                 try:
                     # Build full conversation including the response
+                    # Use messages_dict (original request messages) not prepared_messages
+                    # to avoid segment hash drift from inject_thinking_control
                     full_messages = list(messages_dict) + [
                         {"role": "assistant", "content": parsed.content}
                     ]

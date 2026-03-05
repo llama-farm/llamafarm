@@ -120,6 +120,7 @@ eval "$(wt init zsh)"
 | `wt health [name]` | Check health of all services |
 | `wt vscode [name]` | Open in VS Code with proper settings |
 | `wt cursor [name]` | Open in Cursor with proper settings |
+| `wt edit <branch>` | Open branch in default IDE (auto-creates worktree if needed) |
 | `wt prune` | Remove worktrees for merged branches |
 | `wt gc` | Clean up orphaned data directories |
 | `wt doctor` | Diagnose common issues |
@@ -183,6 +184,7 @@ This requires Caddy (`brew install caddy`) and uses `.localhost` domains which r
 |----------|---------|-------------|
 | `WT_ROOT` | `~/worktrees/llamafarm` | Directory for git worktrees |
 | `WT_DATA_ROOT` | `~/.llamafarm/worktrees` | Directory for isolated data |
+| `WT_EDITOR` | (auto-detect) | IDE command for `wt edit` (falls back to `VISUAL`, `EDITOR`, `code`, `cursor`) |
 
 ## Generated Files
 

@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import ModeToggle from '../ModeToggle'
 import { Button } from '@/components/ui/button'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
-import { usePackageModal } from '../../contexts/PackageModalContext'
+import { useBundleModal } from '../../contexts/BundleModalContext'
 import Prompts from './GeneratedOutput/Prompts'
 import { useModeWithReset } from '../../hooks/useModeWithReset'
 import { useActiveProject } from '../../hooks/useActiveProject'
@@ -12,7 +12,7 @@ import type { ProjectConfig } from '../../types/config'
 
 const Prompt = () => {
   const [mode, setMode] = useModeWithReset('designer')
-  const { openPackageModal } = usePackageModal()
+  const { openBundleModal } = useBundleModal()
   const activeProject = useActiveProject()
   const { data: projectResp } = useProject(
     activeProject?.namespace || '',
@@ -43,10 +43,9 @@ const Prompt = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={openPackageModal}
-            disabled
+            onClick={openBundleModal}
           >
-            Package
+            Bundle
           </Button>
         </div>
       </div>

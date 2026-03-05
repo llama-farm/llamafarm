@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from utils.kv_cache_manager import (
     CacheBudget,
     CacheEntry,
@@ -366,9 +368,7 @@ def test_restore_from_disk(tmp_path):
     model.memory_seq_rm = MagicMock()
     model.state_seq_load = MagicMock(return_value=13)
 
-    result = asyncio.get_event_loop().run_until_complete(
-        mgr.restore(entry, model, seq_id=0)
-    )
+    result = asyncio.run(mgr.restore(entry, model, seq_id=0))
     assert result is True
     assert entry.tier == "ram"  # promoted back to ram
     model.state_seq_load.assert_called_once()
@@ -421,3 +421,164 @@ def test_list_entries():
     entries = mgr.list_entries()
     assert len(entries) == 1
     assert entries[0]["cache_key"] == "list_me"
+
+
+# ── Async Tests: prepare() ────────────────────────────────────────────────
+
+
+def _make_mock_model(kv_data: bytes = b"fake_kv", token_count: int = 42):
+    """Create a mock Llama model for KV cache tests."""
+    model = MagicMock()
+    model._apply_chat_template = MagicMock(return_value="<|im_start|>system\ntest<|im_end|>")
+    model.tokenize = MagicMock(return_value=list(range(token_count)))
+    model._lib = MagicMock()
+    model._memory = MagicMock()
+    model._decode_batch = MagicMock(return_value=True)
+    model.state_seq_save = MagicMock(return_value=kv_data)
+    model.state_seq_load = MagicMock(return_value=len(kv_data))
+    model.memory_seq_rm = MagicMock()
+    return model
+
+
+@pytest.mark.asyncio
+async def test_prepare_without_model():
+    """prepare() without model creates segment-only entry."""
+    mgr = KVCacheManager()
+    msgs = [{"role": "system", "content": "You are helpful."}]
+    entry = await mgr.prepare(model_id="test-model", messages=msgs)
+
+    assert entry.cache_key
+    assert entry.model_id == "test-model"
+    assert len(entry.segments) > 0
+    assert entry.kv_data == b""
+    assert entry.token_count > 0  # estimated from content
+
+
+@pytest.mark.asyncio
+async def test_prepare_with_model():
+    """prepare() with model serializes real KV state."""
+    mgr = KVCacheManager()
+    model = _make_mock_model(kv_data=b"real_kv_state", token_count=10)
+    msgs = [{"role": "system", "content": "You are helpful."}]
+
+    entry = await mgr.prepare(model_id="test-model", messages=msgs, model=model)
+
+    assert entry.kv_data == b"real_kv_state"
+    assert entry.token_count == 10
+    assert entry.size_bytes == len(b"real_kv_state")
+    model._decode_batch.assert_called_once()
+    model.state_seq_save.assert_called_once_with(0)
+
+
+@pytest.mark.asyncio
+async def test_prepare_dedup():
+    """prepare() deduplicates entries with same content hash."""
+    mgr = KVCacheManager()
+    msgs = [{"role": "system", "content": "You are helpful."}]
+
+    entry1 = await mgr.prepare(model_id="test-model", messages=msgs)
+    entry2 = await mgr.prepare(model_id="test-model", messages=msgs)
+
+    assert entry1.cache_key == entry2.cache_key
+    assert entry1.hit_count == 1  # touched by dedup
+
+
+@pytest.mark.asyncio
+async def test_prepare_concurrent_dedup():
+    """Concurrent prepare() calls with same content don't create duplicates."""
+    mgr = KVCacheManager()
+    msgs = [{"role": "system", "content": "Same prompt for all."}]
+
+    entries = await asyncio.gather(
+        mgr.prepare(model_id="m", messages=msgs),
+        mgr.prepare(model_id="m", messages=msgs),
+        mgr.prepare(model_id="m", messages=msgs),
+    )
+
+    keys = {e.cache_key for e in entries}
+    assert len(keys) == 1  # all resolved to same entry
+
+
+# ── Async Tests: save_after_generation() ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_save_after_generation():
+    """save_after_generation() captures KV state from model."""
+    mgr = KVCacheManager()
+    model = _make_mock_model(kv_data=b"post_gen_kv", token_count=50)
+    msgs = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there!"},
+    ]
+
+    entry = await mgr.save_after_generation(
+        model=model, model_id="test-model", parent_key=None,
+        messages=msgs, prompt_tokens=50,
+    )
+
+    assert entry.kv_data == b"post_gen_kv"
+    assert entry.token_count == 50
+    assert entry.model_id == "test-model"
+    model.state_seq_save.assert_called_once_with(0)
+
+
+@pytest.mark.asyncio
+async def test_save_after_generation_dedup():
+    """save_after_generation() deduplicates with same content."""
+    mgr = KVCacheManager()
+    model = _make_mock_model(kv_data=b"kv1")
+    msgs = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi!"},
+    ]
+
+    entry1 = await mgr.save_after_generation(
+        model=model, model_id="m", parent_key=None, messages=msgs, prompt_tokens=10,
+    )
+    entry2 = await mgr.save_after_generation(
+        model=model, model_id="m", parent_key=None, messages=msgs, prompt_tokens=10,
+    )
+
+    assert entry1.cache_key == entry2.cache_key
+
+
+@pytest.mark.asyncio
+async def test_save_then_validate_hit():
+    """Saved entry can be validated as a cache hit."""
+    mgr = KVCacheManager()
+    model = _make_mock_model(kv_data=b"hit_test_kv")
+    msgs = [
+        {"role": "system", "content": "Be concise."},
+        {"role": "user", "content": "What is 2+2?"},
+        {"role": "assistant", "content": "4"},
+    ]
+
+    entry = await mgr.save_after_generation(
+        model=model, model_id="my-model", parent_key=None,
+        messages=msgs, prompt_tokens=20,
+    )
+
+    result = mgr.validate_and_match(entry.cache_key, "my-model", msgs)
+    assert result["status"] == "hit"
+    assert result["entry"] is entry
+
+
+# ── Async Tests: restore() ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_restore_from_ram():
+    """restore() loads KV state from RAM entry."""
+    mgr = KVCacheManager()
+    model = _make_mock_model()
+
+    entry = CacheEntry(
+        cache_key="ram_entry", model_id="m", segments=[], content_hash="h",
+        token_count=10, tier="ram", kv_data=b"ram_kv_data",
+    )
+
+    result = await mgr.restore(entry, model, seq_id=0)
+    assert result is True
+    model.state_seq_load.assert_called_once()

@@ -98,6 +98,18 @@ def start_session_cleanup() -> None:
         _cleanup_task = asyncio.create_task(_session_cleanup_loop())
 
 
+async def stop_session_cleanup() -> None:
+    """Cancel the background session cleanup task (call during shutdown)."""
+    global _cleanup_task
+    if _cleanup_task is not None and not _cleanup_task.done():
+        _cleanup_task.cancel()
+        import contextlib
+        with contextlib.suppress(asyncio.CancelledError):
+            await _cleanup_task
+        logger.info("Vision session cleanup task stopped")
+    _cleanup_task = None
+
+
 def _get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:

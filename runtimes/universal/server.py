@@ -99,12 +99,18 @@ from routers.vision import (
     set_detect_classify_loaders,
     set_detection_loader,
     set_document_loader,
+    set_eval_models_dir,
     set_file_image_getter,
     set_model_export_loader,
     set_ocr_loader,
+    set_sample_data_dir,
     set_streaming_detection_loader,
+    set_tracking_models_dir,
     set_vision_models_dir,
     start_session_cleanup,
+    start_tracking_cleanup,
+    stop_session_cleanup,
+    stop_tracking_cleanup,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
@@ -330,6 +336,7 @@ async def lifespan(app: FastAPI):
 
     # Start vision streaming session cleanup (needs running event loop)
     start_session_cleanup()
+    start_tracking_cleanup()
     logger.info("Vision session cleanup task started")
 
     yield
@@ -340,6 +347,10 @@ async def lifespan(app: FastAPI):
     # Stop KV cache GC task
     await stop_kv_cache_gc()
 
+    # Stop vision cleanup tasks
+    await stop_session_cleanup()
+    await stop_tracking_cleanup()
+
     # Stop cleanup task
     if _cleanup_task is not None:
         _cleanup_task.cancel()
@@ -347,26 +358,30 @@ async def lifespan(app: FastAPI):
             await _cleanup_task
         logger.info("Model cleanup task stopped")
 
-    # Unload all remaining models
-    if _models:
-        logger.info(f"Unloading {len(_models)} remaining model(s)")
-        for cache_key, model in list(_models.items()):
-            try:
-                await model.unload()
-                logger.info(f"Unloaded model: {cache_key}")
-            except Exception as e:
-                logger.error(f"Error unloading model {cache_key}: {e}")
-        _models.clear()
+    # Unload all remaining models (including addon caches)
+    all_caches: list[tuple[ModelCache | None, str]] = [
+        (_models, "models"),
+        (_classifiers, "classifiers"),
+    ]
+    if _HAS_TIMESERIES:
+        all_caches.append((_timeseries, "timeseries"))
+    if _HAS_ADTK:
+        all_caches.append((_adtk, "adtk"))
+    if _HAS_DRIFT:
+        all_caches.append((_drift, "drift"))
+    if _HAS_CATBOOST:
+        all_caches.append((_catboost, "catboost"))
 
-    if _classifiers:
-        logger.info(f"Unloading {len(_classifiers)} remaining classifier(s)")
-        for cache_key, model in list(_classifiers.items()):
-            try:
-                await model.unload()
-                logger.info(f"Unloaded classifier: {cache_key}")
-            except Exception as e:
-                logger.error(f"Error unloading classifier {cache_key}: {e}")
-        _classifiers.clear()
+    for cache, cache_name in all_caches:
+        if cache and len(cache) > 0:
+            logger.info(f"Unloading {len(cache)} remaining {cache_name}")
+            for cache_key, model in list(cache.items()):
+                try:
+                    await model.unload()
+                    logger.info(f"Unloaded {cache_name}: {cache_key}")
+                except Exception as e:
+                    logger.error(f"Error unloading {cache_name} {cache_key}: {e}")
+            cache.clear()
 
     logger.info("Shutdown complete")
 
@@ -438,14 +453,28 @@ async def unload_all_models():
             logger.error(f"Error unloading {cache_key}: {e}")
     _models.clear()
 
-    # Also clear classifier cache
-    for cache_key, model in list(_classifiers.items()):
-        try:
-            await model.unload()
-            unloaded.append(cache_key)
-        except Exception as e:
-            logger.error(f"Error unloading classifier {cache_key}: {e}")
-    _classifiers.clear()
+    # Also clear classifier and addon caches
+    addon_caches: list[tuple[ModelCache | None, str]] = [
+        (_classifiers, "classifier"),
+    ]
+    if _HAS_TIMESERIES:
+        addon_caches.append((_timeseries, "timeseries"))
+    if _HAS_ADTK:
+        addon_caches.append((_adtk, "adtk"))
+    if _HAS_DRIFT:
+        addon_caches.append((_drift, "drift"))
+    if _HAS_CATBOOST:
+        addon_caches.append((_catboost, "catboost"))
+
+    for cache, cache_name in addon_caches:
+        if cache and len(cache) > 0:
+            for cache_key, model in list(cache.items()):
+                try:
+                    await model.unload()
+                    unloaded.append(cache_key)
+                except Exception as e:
+                    logger.error(f"Error unloading {cache_name} {cache_key}: {e}")
+            cache.clear()
 
     logger.info(f"Unloaded {len(unloaded)} models: {unloaded}")
     return {"unloaded": len(unloaded), "models": unloaded}
@@ -1256,7 +1285,10 @@ set_detection_loader(load_detection_model)
 set_classification_loader(load_classification_model)
 set_detect_classify_loaders(load_detection_model, load_classification_model)
 set_streaming_detection_loader(load_detection_model)
+set_tracking_models_dir(VISION_MODELS_DIR)
 set_vision_models_dir(VISION_MODELS_DIR)
+set_sample_data_dir(_LF_DATA_DIR)
+set_eval_models_dir(VISION_MODELS_DIR)
 set_model_export_loader(load_detection_model)
 # NOTE: start_session_cleanup() is called in lifespan() where event loop is running
 

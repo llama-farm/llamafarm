@@ -71,6 +71,8 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int | None = None
     stream: bool | None = False
     stop: str | list[str] | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = Field(default=None, ge=0, le=20)
     presence_penalty: float | None = 0.0
     frequency_penalty: float | None = 0.0
     user: str | None = None

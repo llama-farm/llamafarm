@@ -17,6 +17,7 @@ const Data = lazy(() => import('../assets/icons/Data'))
 const Edit = lazy(() => import('../assets/icons/Edit'))
 const Fade = lazy(() => import('../assets/icons/Fade'))
 const Integration = lazy(() => import('../assets/icons/Integration'))
+const Loader = lazy(() => import('../assets/icons/Loader'))
 const MoonFilled = lazy(() => import('../assets/icons/MoonFilled'))
 const OpenPanel = lazy(() => import('../assets/icons/OpenPanel'))
 const Prompt = lazy(() => import('../assets/icons/Prompt'))
@@ -30,7 +31,9 @@ const ThumbsDown = lazy(() => import('../assets/icons/ThumbsDown'))
 const ThumbsDownFilled = lazy(() => import('../assets/icons/ThumbsDownFilled'))
 const ThumbsUp = lazy(() => import('../assets/icons/ThumbsUp'))
 const ThumbsUpFilled = lazy(() => import('../assets/icons/ThumbsUpFilled'))
+const Rocket = lazy(() => import('../assets/icons/Rocket'))
 const Trashcan = lazy(() => import('../assets/icons/Trashcan'))
+const Download = lazy(() => import('../assets/icons/Download'))
 const Upload = lazy(() => import('../assets/icons/Upload'))
 const UserAvatar = lazy(() => import('../assets/icons/UserAvatar'))
 const Info = lazy(() => import('../assets/icons/Info'))
@@ -56,6 +59,8 @@ type FontIconTypes =
   | 'code'
   | 'dashboard'
   | 'data'
+  | 'download'
+  | 'rocket'
   | 'tools-alt'
   | 'edit'
   | 'fade'
@@ -136,6 +141,10 @@ const FontIcon: React.FC<FontIconProps> = ({
         return <Dashboard />
       case 'data':
         return <Data />
+      case 'download':
+        return <Download />
+      case 'rocket':
+        return <Rocket />
       case 'tools-alt':
         return <ToolsAlt />
       case 'edit':
@@ -145,7 +154,7 @@ const FontIcon: React.FC<FontIconProps> = ({
       case 'integration':
         return <Integration />
       case 'loading':
-        return <RecentlyViewed /> // Use RecentlyViewed icon for loading (with animate-spin in className)
+        return <Loader />
       case 'moon-filled':
         return <MoonFilled />
       case 'open-panel':

@@ -1248,6 +1248,8 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
         kv_cache_data: Optional[bytes] = None,
         kv_cache_tokens: int = 0,
         **kwargs,
@@ -1304,7 +1306,7 @@ class Llama:
             try:
                 import psutil
                 available_mb = psutil.virtual_memory().available / (1024 * 1024)
-                # Require at least 2x the KV data size as headroom
+                # KV data must fit within 40% of available memory
                 if kv_data_mb > available_mb * 0.4:
                     logger.warning(
                         f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
@@ -1368,7 +1370,15 @@ class Llama:
         if stream:
             return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
         else:
-            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
+            return self._complete(
+                tokens,
+                max_tokens,
+                stop,
+                logits_processor,
+                t_start,
+                return_logprobs=logprobs,
+                top_logprobs=top_logprobs,
+            )
 
     def create_completion(
         self,
@@ -1384,6 +1394,8 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
         kv_cache_data: Optional[bytes] = None,
         kv_cache_tokens: int = 0,
         **kwargs,
@@ -1487,7 +1499,15 @@ class Llama:
         if stream:
             return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
         else:
-            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
+            return self._complete(
+                tokens,
+                max_tokens,
+                stop,
+                logits_processor,
+                t_start,
+                return_logprobs=logprobs,
+                top_logprobs=top_logprobs,
+            )
 
     def _complete(
         self,
@@ -1496,31 +1516,98 @@ class Llama:
         stop: Optional[List[str]],
         logits_processor: Optional[Callable],
         t_start: float,
+        return_logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
     ) -> ChatCompletionResponse:
         """Generate a non-streaming completion."""
         generated_tokens = []
         finish_reason = "length"
         t_first_token = None
+        collected_logprobs: List[dict] = []
+
+        n_vocab = int(self._lib.llama_vocab_n_tokens(self._vocab))
 
         for i in range(max_tokens):
-            # Apply logits processor if provided
+            # Apply logits processor if provided (read logits before sampling)
             if logits_processor is not None:
                 import numpy as np
                 logits_ptr = self._lib.llama_get_logits(self._ctx)
-                n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
-                # Use numpy for efficient array operations (avoids 2x 151k iterations)
                 logits_array = np.ctypeslib.as_array(
                     ffi.cast("float*", logits_ptr), shape=(n_vocab,)
                 )
                 processed = logits_processor(
                     prompt_tokens + generated_tokens, logits_array
                 )
-                # Write back efficiently with numpy
                 if processed is not logits_array:
                     np.copyto(logits_array, processed)
 
-            token = self._sample_token()
+            # Capture logits snapshot BEFORE sampling (only when needed).
+            # Use ffi.buffer → numpy for performance (262k vocab = 1MB float32).
+            # This is safe here because we only do it when return_logprobs=True
+            # (conditional path — not touching logits on baseline calls).
+            if return_logprobs:
+                import math
+
+                import numpy as np
+
+                logits_ptr = self._lib.llama_get_logits(self._ctx)
+                try:
+                    logits_snap = np.frombuffer(
+                        ffi.buffer(logits_ptr, n_vocab * 4), dtype=np.float32
+                    ).copy().astype(np.float64)
+                    logits_fallback = None
+                except Exception:
+                    # Fallback: capture via direct element access before sampling
+                    logits_snap = None
+                    logits_fallback = [float(logits_ptr[j]) for j in range(n_vocab)]
+
+            token = int(self._sample_token())
             generated_tokens.append(token)
+
+            if return_logprobs:
+                if logits_snap is None:
+                    # pure Python fallback path
+                    logits_list = logits_fallback
+                    max_logit = max(logits_list)
+                    log_denom = max_logit + math.log(sum(math.exp(v - max_logit) for v in logits_list))
+                    sampled_logit = logits_list[token]
+                    top_logits = sorted(enumerate(logits_list), key=lambda x: x[1], reverse=True)
+                else:
+                    max_logit = float(logits_snap.max())
+                    log_denom = max_logit + math.log(float(np.exp(logits_snap - max_logit).sum()))
+                    sampled_logit = float(logits_snap[token])
+
+                token_text = self.detokenize([token])
+                entry = {
+                    "token": token_text,
+                    "logprob": sampled_logit - log_denom,
+                    "bytes": list(token_text.encode("utf-8", errors="ignore")) or None,
+                }
+
+                if top_logprobs and top_logprobs > 0:
+                    k = min(int(top_logprobs), int(n_vocab))
+                    if logits_snap is None:
+                        top_k = top_logits[:k]
+                    else:
+                        top_idx = np.argpartition(logits_snap, -k)[-k:]
+                        top_idx = top_idx[np.argsort(logits_snap[top_idx])[::-1]]
+                        top_k = [(int(tid), float(logits_snap[tid])) for tid in top_idx]
+                    top_entries = []
+                    for tid, lv in top_k:
+                        top_token_text = self.detokenize([tid])
+                        top_entries.append(
+                            {
+                                "token": top_token_text,
+                                "logprob": lv - log_denom,
+                                "bytes": list(
+                                    top_token_text.encode("utf-8", errors="ignore")
+                                )
+                                or None,
+                            }
+                        )
+                    entry["top_logprobs"] = top_entries
+
+                collected_logprobs.append(entry)
 
             # Log TTFT on first token
             if i == 0:
@@ -1543,6 +1630,11 @@ class Llama:
                         generated_tokens = self.tokenize(
                             text, add_special=False, parse_special=False
                         )
+                        # Trim logprobs to match trimmed tokens
+                        if return_logprobs:
+                            collected_logprobs = collected_logprobs[
+                                : len(generated_tokens)
+                            ]
                         break
                 if finish_reason == "stop":
                     break
@@ -1574,6 +1666,9 @@ class Llama:
                     "index": 0,
                     "message": {"role": "assistant", "content": content},
                     "finish_reason": finish_reason,
+                    "logprobs": {"content": collected_logprobs}
+                    if return_logprobs
+                    else None,
                 }
             ],
             "usage": {
@@ -1872,8 +1967,9 @@ class Llama:
         """
         if not data:
             return 0
-        buf = ffi.new(f"uint8_t[{len(data)}]")
-        ffi.memmove(buf, data, len(data))
+        # Zero-copy: create a C pointer directly into the Python buffer
+        # (the C function only reads from this buffer)
+        buf = ffi.from_buffer("uint8_t[]", data)
         return self._lib.llama_state_seq_set_data(self._ctx, buf, len(data), seq_id)
 
     def state_get_size(self) -> int:
@@ -1898,8 +1994,8 @@ class Llama:
         """
         if not data:
             return 0
-        buf = ffi.new(f"uint8_t[{len(data)}]")
-        ffi.memmove(buf, data, len(data))
+        # Zero-copy: create a C pointer directly into the Python buffer
+        buf = ffi.from_buffer("uint8_t[]", data)
         return self._lib.llama_state_set_data(self._ctx, buf, len(data))
 
     def memory_seq_cp(self, src_seq_id: int, dst_seq_id: int, p0: int = 0, p1: int = -1) -> None:

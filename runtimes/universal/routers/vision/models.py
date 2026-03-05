@@ -3,6 +3,7 @@
 import contextlib
 import json
 import logging
+import shutil
 import time
 from collections.abc import Callable, Coroutine
 from datetime import datetime
@@ -140,3 +141,17 @@ async def load_model(name: str) -> dict[str, Any]:
         with contextlib.suppress(Exception):  # best-effort metadata read
             meta = json.loads((model_path / "metadata.json").read_text())
     return {"name": name, "metadata": meta, "loaded": True}
+
+
+@router.delete("/v1/vision/models/{name}")
+@handle_endpoint_errors("vision_delete_model")
+async def delete_model(name: str) -> dict[str, Any]:
+    """Delete a saved model."""
+    # Iterate direct children to avoid constructing paths from user input
+    d = _models_dir()
+    for child in d.iterdir():
+        if child.is_dir() and child.name == name:
+            shutil.rmtree(child)
+            logger.info("Deleted model '%s'", name)
+            return {"name": name, "deleted": True}
+    raise HTTPException(status_code=404, detail=f"Model '{name}' not found")
