@@ -70,10 +70,12 @@ The interactive canvas component supports:
 
 | Action | Method | Route |
 |---|---|---|
-| Analyze image | POST | `/v1/ml/vision/analyze` |
-| Train model | POST | `/v1/ml/vision/train` |
-| Detect objects | POST | `/v1/ml/vision/detect` |
-| List models | GET | `/v1/ml/vision/models` |
+| Detect objects | POST | `/v1/vision/detect` |
+| Classify image | POST | `/v1/vision/classify` |
+| Detect + Classify | POST | `/v1/vision/detect_classify` |
+| OCR | POST | `/v1/vision/ocr` |
+| Train model | POST | `/v1/vision/train` |
+| List models | GET | `/v1/vision/models` |
 
 ## Route
 

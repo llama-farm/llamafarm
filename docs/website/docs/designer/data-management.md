@@ -73,9 +73,9 @@ You can:
 |---|---|---|
 | List datasets | GET | `/v1/projects/{ns}/{project}/datasets` |
 | Create dataset | POST | `/v1/projects/{ns}/{project}/datasets` |
-| Upload files | POST | `/v1/projects/{ns}/{project}/datasets/{id}/files` |
-| Process dataset | POST | `/v1/projects/{ns}/{project}/datasets/{id}/process` |
-| Preview document | GET | `/v1/projects/{ns}/{project}/databases/{db}/preview` |
+| Upload files | POST | `/v1/projects/{ns}/{project}/datasets/{dataset}/data` |
+| Process dataset | POST | `/v1/projects/{ns}/{project}/datasets/{dataset}/actions` |
+| Preview document | POST | `/v1/projects/{ns}/{project}/rag/databases/{database_name}/preview` |
 
 ## Route
 

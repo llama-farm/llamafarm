@@ -62,16 +62,17 @@ Use the built-in query tester to:
 
 | Action | Method | Route |
 |---|---|---|
-| List databases | GET | `/v1/projects/{ns}/{project}/databases` |
-| Create database | POST | `/v1/projects/{ns}/{project}/databases` |
-| List strategies | GET | `/v1/projects/{ns}/{project}/databases/{db}/strategies` |
-| Query | POST | `/v1/projects/{ns}/{project}/databases/{db}/query` |
+| List databases | GET | `/v1/projects/{ns}/{project}/rag/databases` |
+| Create database | POST | `/v1/projects/{ns}/{project}/rag/databases` |
+| RAG query | POST | `/v1/projects/{ns}/{project}/rag/query` |
+| RAG health | GET | `/v1/projects/{ns}/{project}/rag/health` |
 
 ## Route
 
 ```
 /chat/databases
-/chat/databases/:strategyId
-/chat/databases/:strategyId/embedding
-/chat/databases/:strategyId/retrieval
+/chat/databases/add-embedding
+/chat/databases/add-retrieval
+/chat/rag/:strategyId/change-embedding
+/chat/rag/:strategyId/retrieval
 ```

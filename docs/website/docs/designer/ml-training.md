@@ -89,12 +89,12 @@ For real-time monitoring, the streaming mode provides:
 
 | Action | Method | Route |
 |---|---|---|
-| Train classifier | POST | `/v1/ml/classifiers/train` |
-| Predict (classifier) | POST | `/v1/ml/classifiers/predict` |
-| List classifier models | GET | `/v1/ml/classifiers` |
-| Train anomaly model | POST | `/v1/ml/anomaly/train` |
+| Train classifier | POST | `/v1/ml/classifier/fit` |
+| Predict (classifier) | POST | `/v1/ml/classifier/predict` |
+| List classifier models | GET | `/v1/ml/classifier/models` |
+| Train anomaly model | POST | `/v1/ml/anomaly/fit` |
 | Score anomaly | POST | `/v1/ml/anomaly/score` |
-| List anomaly models | GET | `/v1/ml/anomaly` |
+| List anomaly models | GET | `/v1/ml/anomaly/models` |
 
 ## Route
 

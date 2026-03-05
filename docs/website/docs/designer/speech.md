@@ -65,10 +65,10 @@ If addons aren't installed, an inline prompt lets you install them directly or n
 
 | Action | Method | Route |
 |---|---|---|
-| Transcribe audio | POST | `/v1/ml/speech/transcribe` |
-| Synthesize speech | POST | `/v1/ml/speech/synthesize` |
-| List voices | GET | `/v1/ml/speech/voices` |
-| Clone voice | POST | `/v1/ml/speech/clone` |
+| Transcribe audio | POST | `/v1/audio/transcriptions` (Universal Runtime) |
+| Synthesize speech | POST | `/v1/{ns}/{project}/audio/speech` |
+| List voices | GET | `/v1/{ns}/{project}/audio/voices` |
+| Stream transcription | WebSocket | `/v1/audio/transcriptions/stream` (Universal Runtime) |
 
 ## Route
 

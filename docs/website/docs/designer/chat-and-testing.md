@@ -103,9 +103,9 @@ Sample inputs are provided for both to get started quickly.
 |---|---|---|
 | Chat completion | POST | `/v1/projects/{ns}/{project}/chat/completions` |
 | Chat (streaming) | POST | `/v1/projects/{ns}/{project}/chat/completions` (SSE) |
-| Scan document | POST | `/v1/ml/vision/scan` |
-| Create embeddings | POST | `/v1/ml/embeddings` |
-| Rerank documents | POST | `/v1/ml/rerank` |
+| Extract document | POST | `/v1/vision/documents/extract` |
+| Create embeddings | POST | `/v1/nlp/embeddings` |
+| Rerank documents | POST | `/v1/nlp/rerank` |
 
 ## Route
 

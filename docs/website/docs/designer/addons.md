@@ -43,9 +43,9 @@ Some addons depend on others. When uninstalling an addon that other addons depen
 | Action | Method | Route |
 |---|---|---|
 | List addons | GET | `/v1/addons` |
-| Install addon | POST | `/v1/addons/{name}/install` |
-| Uninstall addon | POST | `/v1/addons/{name}/uninstall` |
-| Task status | GET | `/v1/addons/tasks/{taskId}` |
+| Install addon | POST | `/v1/addons/install` |
+| Uninstall addon | POST | `/v1/addons/uninstall` |
+| Task status | GET | `/v1/addons/tasks/{task_id}` |
 
 ## Route
 
