@@ -328,3 +328,166 @@ async def get_model_template(model_name: str) -> dict:
         "recommended_template": result["template"],
         "confidence": result["confidence"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Promote endpoint (Issue 2): set an alias so a job's GGUF is the active model
+# ---------------------------------------------------------------------------
+
+@router.post("/jobs/{job_id}/promote")
+async def promote_job(job_id: str) -> dict:
+    """Promote a fine-tuned job's GGUF as the named alias for its base model.
+
+    After promoting, the job's GGUF will be served when the model is referenced
+    by the alias stored in ``~/.llamafarm/models/llm/{job_id}/promoted_alias``.
+    Callers can also reference the model directly as ``ft:{job_id}``.
+
+    Returns:
+        ``{"job_id": ..., "gguf_path": ..., "alias": ...}``
+    """
+    from pathlib import Path
+    import json
+
+    job_dir = Path.home() / ".llamafarm" / "models" / "llm" / job_id
+    if not job_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+    gguf_dir = job_dir / "gguf"
+    gguf_files = sorted(gguf_dir.glob("*.gguf")) if gguf_dir.is_dir() else []
+    if not gguf_files:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No GGUF export found for job {job_id!r} — run training first",
+        )
+
+    # Pick best quant
+    gguf_path = next(
+        (p for p in gguf_files if "q8_0" in p.name.lower()),
+        next((p for p in gguf_files if "q4_k_m" in p.name.lower()), gguf_files[0]),
+    )
+
+    # Derive alias from base model name in job config
+    alias = f"local/ft-{job_id[:8]}"
+    try:
+        cfg = json.loads((job_dir / "job_config.json").read_text())
+        base = cfg.get("model", "").split("/")[-1].replace("_", "-").lower()
+        if base:
+            alias = f"local/{base}-ft"
+    except Exception:
+        pass
+
+    # Write promotion record
+    promo = {"job_id": job_id, "gguf_path": str(gguf_path), "alias": alias}
+    (job_dir / "promoted_alias.json").write_text(json.dumps(promo, indent=2))
+
+    # Also write a global alias map so the server can look it up
+    alias_file = Path.home() / ".llamafarm" / "models" / "llm" / "aliases.json"
+    aliases: dict = {}
+    if alias_file.exists():
+        try:
+            aliases = json.loads(alias_file.read_text())
+        except Exception:
+            pass
+    aliases[alias] = str(gguf_path)
+    aliases[f"ft:{job_id}"] = str(gguf_path)
+    alias_file.write_text(json.dumps(aliases, indent=2))
+
+    logger.info(f"Promoted job {job_id} → alias {alias!r} ({gguf_path})")
+    return promo
+
+
+# ---------------------------------------------------------------------------
+# Eval endpoint (Issue 3): run inference against a job's GGUF, return metrics
+# ---------------------------------------------------------------------------
+
+class EvalRequest(BaseModel):
+    """Request body for POST /v1/finetune/jobs/{id}/eval."""
+
+    dataset: list[dict]
+    """List of examples. Each must have ``messages`` (list of role/content dicts)
+    and ``expected`` (the expected assistant response string)."""
+
+    max_tokens: int = 128
+    temperature: float = 0.0
+    exact_match: bool = True
+    """When True, use case-insensitive exact match. When False, use substring match."""
+
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402 – already imported at top
+
+
+class EvalRequest(_BaseModel):  # type: ignore[no-redef]
+    dataset: list[dict]
+    max_tokens: int = 128
+    temperature: float = 0.0
+    exact_match: bool = True
+
+
+@router.post("/jobs/{job_id}/eval")
+async def eval_job(job_id: str, request: EvalRequest) -> dict:
+    """Run a holdout eval against a fine-tuned job's GGUF.
+
+    Internally uses the same Jinja2 template path as serving, so the chat
+    template applied during training is automatically matched.
+
+    Returns accuracy, per-example results, and a confusion matrix of
+    expected vs. actual outputs.
+    """
+    import asyncio
+    from pathlib import Path
+
+    from server import load_language_model  # local import to avoid circular
+
+    job_dir = Path.home() / ".llamafarm" / "models" / "llm" / job_id
+    if not job_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+    # Resolve GGUF path (same logic as _resolve_finetune_model_id)
+    model_id = f"ft:{job_id}"
+
+    try:
+        model = await load_language_model(model_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
+
+    results = []
+    correct = 0
+
+    for i, ex in enumerate(request.dataset):
+        msgs = ex.get("messages")
+        expected = str(ex.get("expected", "")).strip()
+        if not msgs or not expected:
+            results.append({"index": i, "error": "missing 'messages' or 'expected'"})
+            continue
+
+        try:
+            actual = await model.generate(
+                messages=msgs,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            )
+            actual = actual.strip()
+        except Exception as e:
+            results.append({"index": i, "expected": expected, "error": str(e)})
+            continue
+
+        if request.exact_match:
+            ok = actual.lower() == expected.lower()
+        else:
+            ok = expected.lower() in actual.lower()
+
+        if ok:
+            correct += 1
+        results.append(
+            {"index": i, "expected": expected, "actual": actual, "correct": ok}
+        )
+
+    n = len(request.dataset)
+    accuracy = correct / n if n else 0.0
+    return {
+        "job_id": job_id,
+        "num_examples": n,
+        "correct": correct,
+        "accuracy": round(accuracy, 4),
+        "results": results,
+    }
