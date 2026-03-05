@@ -6,7 +6,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
 
 type Props = {
   open: boolean
@@ -94,7 +95,7 @@ function ImportSampleProjectModal({
             <label className="text-xs text-muted-foreground">
               Project description
             </label>
-            <textarea
+            <Textarea
               className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={description}
               onChange={e => setDescription(e.target.value)}

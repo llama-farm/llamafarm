@@ -6,14 +6,37 @@ health checks while still providing up-to-date information.
 """
 
 import logging
+import os
 import time
-from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
 
-from celery import signature
-
 logger = logging.getLogger(__name__)
+
+
+def _get_pid_dir() -> Path:
+    """Get the PID directory (mirrors llamafarm_common.pidfile logic)."""
+    try:
+        _home = Path.home()
+    except RuntimeError:
+        _fb = (
+            os.environ.get("USERPROFILE")
+            or os.environ.get("APPDATA")
+            or os.environ.get("LOCALAPPDATA")
+        )
+        _home = Path(_fb) if _fb else Path.cwd()
+    lf_data_dir = os.getenv("LF_DATA_DIR", str(_home / ".llamafarm"))
+    return Path(lf_data_dir) / "pids"
+
+
+def _is_process_alive(pid: int) -> bool:
+    """Check whether a process is running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
 
 
 class RAGHealthCache:
@@ -23,10 +46,10 @@ class RAGHealthCache:
     This class provides non-blocking access to RAG health information by:
     1. Maintaining a cache of the last known health status
     2. Periodically updating the cache in the background
-    3. Falling back to fast ping checks when needed
+    3. Using PID file checks for reliable cross-deploy-mode health detection
     """
 
-    def __init__(self, update_interval: int = 30, timeout: float = 5.0):
+    def __init__(self, update_interval: int = 10, timeout: float = 5.0):
         """
         Initialize the RAG health cache.
 
@@ -94,158 +117,45 @@ class RAGHealthCache:
 
     def _perform_health_check(self) -> dict[str, Any] | None:
         """
-        Perform the actual health check by calling the RAG health task.
+        Check RAG worker health via its PID file.
+
+        This approach works reliably in both source and binary (PyApp)
+        deploy modes because it avoids Celery imports and subprocess
+        invocations that behave differently across environments.
 
         Returns:
-            Health data dict or None if check failed
+            Health data dict or None if the worker is not running
         """
-        try:
-            from celery import current_task
+        pid_file = _get_pid_dir() / "rag.pid"
 
-            from core.celery.celery import app as celery_app  # type: ignore
-
-            # Check if we're already inside a Celery task context
-            # Use multiple methods to detect task context for better reliability
-            in_task_context = False
-            try:
-                if current_task is not None:
-                    task_id = (
-                        getattr(current_task.request, "id", None)
-                        if hasattr(current_task, "request")
-                        else None
-                    )
-                    in_task_context = bool(task_id)
-                    logger.debug(
-                        f"Health check task context detection: current_task={current_task}, task_id={task_id}, in_context={in_task_context}"
-                    )
-            except Exception as e:
-                logger.debug(f"Health check task context detection failed: {e}")
-                # Default to assuming we're in a task context to be safe
-                in_task_context = True
-
-            # Try comprehensive health check first
-            health_task = signature("rag.health_check", app=celery_app)
-            result = health_task.apply_async(
-                expires=datetime.now(UTC) + timedelta(seconds=10)
-            )
-
-            try:
-                health_data = self._safe_get_result(
-                    result, self.timeout, in_task_context
-                )
-                if isinstance(health_data, dict):
-                    return health_data
-            except Exception:
-                # Comprehensive check failed, try simple ping
-                ping_task = signature("rag.ping", app=celery_app)
-                ping_result = ping_task.apply_async(
-                    expires=datetime.now(UTC) + timedelta(seconds=10)
-                )
-
-                try:
-                    ping_data = self._safe_get_result(
-                        ping_result, 2.0, in_task_context
-                    )  # Shorter timeout for ping
-                    if isinstance(ping_data, dict):
-                        # Convert ping response to health format
-                        return {
-                            "status": ping_data.get("status", "degraded"),
-                            "timestamp": ping_data.get("timestamp", int(time.time())),
-                            "message": "RAG worker responding (ping only)",
-                            "worker_id": ping_data.get("worker_id", "unknown"),
-                            "checks": {
-                                "connectivity": {
-                                    "status": "healthy",
-                                    "message": "RAG worker reachable",
-                                }
-                            },
-                            "metrics": {"latency_ms": ping_data.get("latency_ms", 0)},
-                            "errors": [],
-                            "ping_only": True,
-                        }
-                except Exception:
-                    logger.warning(
-                        "RAG health check failed: Ping check failed", exc_info=True
-                    )
-                    pass
-
+        if not pid_file.exists():
             return None
 
-        except Exception as e:
-            logger.warning(f"RAG health check failed: {e}")
+        try:
+            pid_text = pid_file.read_text().strip()
+            if not pid_text:
+                return None
+            pid = int(pid_text)
+        except (ValueError, OSError):
             return None
 
-    def _safe_get_result(self, result, timeout: float, in_task_context: bool):
-        """
-        Safely get result from a Celery task, avoiding result.get() within task context.
+        if not _is_process_alive(pid):
+            return None
 
-        Args:
-            result: Celery AsyncResult object
-            timeout: Timeout in seconds
-            in_task_context: Whether we're currently inside a Celery task
-
-        Returns:
-            Task result data
-
-        Raises:
-            Exception: If task fails or times out
-        """
-        # Always use polling approach to be extra safe
-        # This avoids any potential issues with task context detection
-        logger.debug(
-            f"Getting task result, in_task_context={in_task_context}, timeout={timeout}"
-        )
-
-        poll_interval = 0.1  # 100ms polling
-        waited = 0.0
-
-        # Poll for result completion with proper error handling for Windows filesystem backend
-        while waited < timeout:
-            try:
-                status = result.status
-                if status not in ("PENDING", "STARTED"):
-                    break
-            except Exception as e:
-                logger.warning(f"Error accessing task status during health check: {e}")
-                # If we can't access status, wait and try again
-                time.sleep(poll_interval)
-                waited += poll_interval
-                continue
-
-            time.sleep(poll_interval)
-            waited += poll_interval
-
-        # Safely get final status and result with error handling
-        try:
-            final_status = result.status
-            logger.debug(f"Task completed with status: {final_status}")
-        except Exception as e:
-            logger.error(f"Error accessing final task status in health check: {e}")
-            raise Exception(f"Failed to get task status for health check: {e}") from e
-
-        if final_status == "SUCCESS":
-            try:
-                return result.result
-            except Exception as e:
-                logger.error(f"Error accessing task result in health check: {e}")
-                raise Exception(
-                    f"Failed to get task result for health check: {e}"
-                ) from e
-        elif final_status == "FAILURE":
-            # Get the exception info and raise it
-            try:
-                if hasattr(result, "traceback") and result.traceback:
-                    raise Exception(f"Task failed: {result.traceback}")
-                else:
-                    raise Exception(f"Task failed with status: {final_status}")
-            except Exception as e:
-                logger.error(f"Error accessing failure details in health check: {e}")
-                raise Exception(
-                    f"Task failed but couldn't get error details: {e}"
-                ) from e
-        else:
-            # Timeout or other status
-            raise Exception(f"Task timed out or failed: {final_status}")
+        return {
+            "status": "healthy",
+            "timestamp": int(time.time()),
+            "message": "RAG worker responding",
+            "worker_id": f"pid:{pid}",
+            "checks": {
+                "connectivity": {
+                    "status": "healthy",
+                    "message": "RAG worker process alive",
+                }
+            },
+            "metrics": {"latency_ms": 0},
+            "errors": [],
+        }
 
     def get_cached_health(self) -> dict[str, Any]:
         """
@@ -261,16 +171,15 @@ class RAGHealthCache:
             )
 
             if self.cache is None:
-                # No cache yet, try immediate check with short timeout
-                immediate_health = self._perform_quick_check()
+                # No cache yet — return unhealthy immediately.
+                # Background thread will populate the cache shortly.
+                # Do NOT perform sync checks here as they block the event loop.
                 return {
-                    "status": "degraded" if immediate_health else "unhealthy",
-                    "message": "RAG worker responding"
-                    if immediate_health
-                    else "RAG worker not responding",
+                    "status": "unhealthy",
+                    "message": "RAG worker not responding (waiting for background check)",
                     "timestamp": int(now),
                     "cache_age_seconds": 0,
-                    "source": "immediate_check",
+                    "source": "initial",
                 }
 
             # Return cached data with metadata
@@ -284,48 +193,6 @@ class RAGHealthCache:
                 cached_health["message"] = f"Cached status (stale: {cache_age}s old)"
 
             return cached_health
-
-    def _perform_quick_check(self) -> bool:
-        """
-        Perform a quick connectivity check.
-
-        Returns:
-            True if RAG worker is reachable, False otherwise
-        """
-        try:
-            from celery import current_task
-
-            from core.celery.celery import app as celery_app  # type: ignore
-
-            # Check if we're already inside a Celery task context
-            # Use multiple methods to detect task context for better reliability
-            in_task_context = False
-            try:
-                if current_task is not None:
-                    task_id = (
-                        getattr(current_task.request, "id", None)
-                        if hasattr(current_task, "request")
-                        else None
-                    )
-                    in_task_context = bool(task_id)
-                    logger.debug(
-                        f"Quick check task context detection: current_task={current_task}, task_id={task_id}, in_context={in_task_context}"
-                    )
-            except Exception as e:
-                logger.debug(f"Quick check task context detection failed: {e}")
-                # Default to assuming we're in a task context to be safe
-                in_task_context = True
-
-            ping_task = signature("rag.ping", app=celery_app)
-            result = ping_task.apply_async()
-            ping_data = self._safe_get_result(
-                result, 1.0, in_task_context
-            )  # Very short timeout
-
-            return isinstance(ping_data, dict) and ping_data.get("status") == "healthy"
-
-        except Exception:
-            return False
 
     def force_update(self) -> dict[str, Any]:
         """

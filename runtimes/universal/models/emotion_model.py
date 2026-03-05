@@ -13,6 +13,8 @@ Designed for real-time voice pipelines where emotion context can:
 - Detect frustration for escalation
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +22,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import torch
 
 from .base import BaseModel
 
@@ -108,6 +109,10 @@ class EmotionModel(BaseModel):
 
     async def load(self) -> None:
         """Load the emotion recognition model."""
+        # Re-create executor if it was destroyed by unload()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1)
+
         try:
             from transformers import (
                 AutoFeatureExtractor,
@@ -207,6 +212,8 @@ class EmotionModel(BaseModel):
 
         def _sync_classify():
             """Run classification synchronously in thread pool."""
+            import torch
+
             # Resample if needed
             processed_audio = audio
             if sample_rate != EXPECTED_SAMPLE_RATE:
@@ -280,6 +287,8 @@ class EmotionModel(BaseModel):
 
         def _sync_classify_batch():
             """Run batch classification synchronously."""
+            import torch
+
             # Resample if needed
             processed_segments = []
             for seg in audio_segments:

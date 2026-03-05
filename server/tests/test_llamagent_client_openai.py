@@ -8,10 +8,12 @@ Tests the OpenAI client implementation including:
 - Message format conversion
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from config.datamodel import Model, PromptMessage, PromptSet, Provider
+from config.datamodel import Model, PromptMessage, PromptSet, Provider, ToolCallStrategy
+from pydantic import BaseModel
 
 from agents.base.clients.client import LFAgentClient
 from agents.base.clients.openai import LFAgentClientOpenAI
@@ -183,3 +185,113 @@ class TestLFAgentClientOpenAI:
 
         assert len(chunks) == 1
         assert chunks[0].choices[0].delta.content == "Response"
+
+    @pytest.mark.asyncio
+    @patch("agents.base.clients.openai.LFAgentClientOpenAI._wrap_with_instructor")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
+    async def test_chat_structured_response(
+        self, mock_openai_class, mock_wrap_instructor, client
+    ):
+        """Test structured output path with response model."""
+
+        class StructuredResponse(BaseModel):
+            name: str
+            age: int
+
+        structured = StructuredResponse(name="Ada", age=37)
+        mock_instructor = AsyncMock()
+        mock_instructor.chat.completions.create = AsyncMock(return_value=structured)
+        mock_wrap_instructor.return_value = mock_instructor
+        mock_openai_class.return_value = AsyncMock()
+
+        client.set_response_model(StructuredResponse)
+        messages = [LFChatCompletionUserMessageParam(role="user", content="Hello")]
+        response = await client.chat(messages=messages)
+
+        content = response.choices[0].message.content
+        assert json.loads(content) == {"name": "Ada", "age": 37}
+
+        assert mock_instructor.chat.completions.create.await_count == 1
+        assert (
+            mock_instructor.chat.completions.create.call_args.kwargs["response_model"]
+            is StructuredResponse
+        )
+
+    @pytest.mark.asyncio
+    @patch("agents.base.clients.openai.LFAgentClientOpenAI._wrap_with_instructor")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
+    async def test_chat_structured_response_does_not_forward_user_tools(
+        self, mock_openai_class, mock_wrap_instructor, client
+    ):
+        """Instructor manages tools for response_model; user tools must not be forwarded."""
+
+        class StructuredResponse(BaseModel):
+            ok: bool
+
+        structured = StructuredResponse(ok=True)
+        mock_instructor = AsyncMock()
+        mock_instructor.chat.completions.create = AsyncMock(return_value=structured)
+        mock_wrap_instructor.return_value = mock_instructor
+        mock_openai_class.return_value = AsyncMock()
+
+        client.set_response_model(StructuredResponse)
+        messages = [LFChatCompletionUserMessageParam(role="user", content="Hello")]
+        tools = [
+            ToolDefinition(
+                name="external_tool",
+                description="Should not be passed to instructor create()",
+                parameters={"type": "object", "properties": {}},
+            )
+        ]
+
+        await client.chat(messages=messages, tools=tools)
+
+        kwargs = mock_instructor.chat.completions.create.call_args.kwargs
+        assert kwargs["response_model"] is StructuredResponse
+        assert "tools" not in kwargs
+
+    @pytest.mark.asyncio
+    @patch("agents.base.clients.openai.LFAgentClientOpenAI._wrap_with_instructor")
+    @patch("agents.base.clients.openai.AsyncOpenAI")
+    async def test_chat_structured_response_skips_prompt_tool_injection(
+        self, mock_openai_class, mock_wrap_instructor, client
+    ):
+        """Prompt-based tool injection must not alter instructor-bound messages."""
+
+        class StructuredResponse(BaseModel):
+            ok: bool
+
+        structured = StructuredResponse(ok=True)
+        mock_instructor = AsyncMock()
+        mock_instructor.chat.completions.create = AsyncMock(return_value=structured)
+        mock_wrap_instructor.return_value = mock_instructor
+        mock_openai_class.return_value = AsyncMock()
+
+        client._model_config.tool_call_strategy = ToolCallStrategy.prompt_based
+        client.set_response_model(StructuredResponse)
+
+        original_system = "You are a helpful assistant."
+        messages = [
+            {"role": "system", "content": original_system},
+            LFChatCompletionUserMessageParam(role="user", content="Hello"),
+        ]
+        tools = [
+            ToolDefinition(
+                name="external_tool",
+                description="Should not be injected into system prompt",
+                parameters={"type": "object", "properties": {}},
+            )
+        ]
+
+        await client.chat(messages=messages, tools=tools)
+
+        kwargs = mock_instructor.chat.completions.create.call_args.kwargs
+        sent_messages = kwargs["messages"]
+        assert sent_messages[0]["content"] == original_system
+
+    def test_wrap_with_instructor_invalid_mode_has_clear_error(self, model_config):
+        model_config.instructor_mode = "foo"
+        client = LFAgentClientOpenAI(model_config=model_config)
+
+        with pytest.raises(ValueError, match="Invalid instructor_mode 'foo'"):
+            client._wrap_with_instructor(MagicMock())

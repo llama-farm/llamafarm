@@ -60,6 +60,9 @@ type ChatConfig struct {
 	RAGRetrievalStrategy string
 	RAGTopK              int
 	RAGScoreThreshold    float64
+
+	// Structured output
+	Structured bool
 }
 
 // StreamChunk represents a piece of the streaming response
@@ -157,6 +160,9 @@ func (m *ChatManager) StreamMessages(messages []Message, handler func(StreamChun
 		m.activeMu.Unlock()
 	}()
 
+	if cfg.Structured {
+		return m.executeNonStreamingRequest(ctx, req, handler)
+	}
 	return m.executeStreamingRequest(ctx, req, handler)
 }
 
@@ -485,7 +491,7 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 		return nil, err
 	}
 
-	streamTrue := true
+	stream := !cfg.Structured
 	// Filter out client messages - they're only for display
 	var filteredMessages []Message
 	for _, msg := range messages {
@@ -494,7 +500,7 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 		}
 	}
 
-	request := ChatRequest{Messages: filteredMessages, Stream: &streamTrue}
+	request := ChatRequest{Messages: filteredMessages, Stream: &stream}
 
 	// Include model if specified
 	if cfg.Model != "" {
@@ -532,9 +538,13 @@ func (m *ChatManager) buildHTTPRequest(messages []Message) (*http.Request, error
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
-	req.Header.Set("Connection", "keep-alive")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("Cache-Control", "no-cache")
+		req.Header.Set("Connection", "keep-alive")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 
 	sessionID := m.GetSessionID()
 	if sessionID != "" {
@@ -587,6 +597,62 @@ func (m *ChatManager) executeStreamingRequest(ctx context.Context, req *http.Req
 	}
 
 	return m.parseStreamingResponse(resp.Body, handler)
+}
+
+func (m *ChatManager) executeNonStreamingRequest(ctx context.Context, req *http.Request, handler func(StreamChunk) error) error {
+	req = req.WithContext(ctx)
+
+	utils.LogDebug(fmt.Sprintf("HTTP %s %s", req.Method, req.URL.String()))
+	utils.LogHeaders("request", req.Header)
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("server returned error %d and body read failed: %v", resp.StatusCode, readErr)
+		}
+		return fmt.Errorf("server returned error %d: %s", resp.StatusCode, utils.PrettyServerError(resp, body))
+	}
+
+	utils.LogDebug(fmt.Sprintf("Response status: %d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
+	utils.LogHeaders("response", resp.Header)
+
+	// Update session ID from response header
+	if sessionIDHeader := resp.Header.Get("X-Session-ID"); sessionIDHeader != "" {
+		cfg := m.GetConfig()
+		if cfg.SessionMode != SessionModeStateless {
+			if err := m.SetSessionID(sessionIDHeader); err != nil {
+				utils.LogDebug(fmt.Sprintf("Failed to save session: %v", err))
+			}
+		}
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var chatResponse ChatResponse
+	if err := json.Unmarshal(body, &chatResponse); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(chatResponse.Choices) == 0 {
+		return fmt.Errorf("no response choices returned")
+	}
+
+	if err := handler(StreamChunk{
+		Type:    ChunkTypeContent,
+		Content: chatResponse.Choices[0].Message.Content,
+	}); err != nil {
+		return err
+	}
+
+	return handler(StreamChunk{Type: ChunkTypeDone})
 }
 
 func (m *ChatManager) parseStreamingResponse(body io.Reader, handler func(StreamChunk) error) error {

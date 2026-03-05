@@ -17,7 +17,13 @@ Beyond text generation, the Universal Runtime provides a comprehensive suite of 
 | [Custom Classification](#custom-text-classification-setfit) | `POST /v1/classifier/*` | Train your own classifier with few examples |
 | [Named Entity Recognition](#named-entity-recognition-ner) | `POST /v1/ner` | Extract people, places, organizations |
 | [Reranking](#reranking-cross-encoder) | `POST /v1/rerank` | Improve RAG retrieval accuracy |
-| [Anomaly Detection](#anomaly-detection) | `POST /v1/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Anomaly Detection](#anomaly-detection) | `POST /v1/ml/anomaly/*` | Detect outliers in numeric/mixed data |
+| [Vision Pipeline](./vision.md) | `POST /v1/vision/*` | YOLO detection, CLIP classification, cascade streaming |
+| [Time-Series Forecasting](./ml-addons.md#time-series-forecasting) | `POST /v1/timeseries/*` | ARIMA, Chronos, Exponential Smoothing |
+| [ADTK Anomaly Detection](./ml-addons.md#time-series-anomaly-detection-adtk) | `POST /v1/adtk/*` | Level shifts, spikes, seasonal anomalies |
+| [Data Drift Detection](./ml-addons.md#data-drift-detection) | `POST /v1/drift/*` | KS, Chi-squared, MMD drift monitoring |
+| [CatBoost](./ml-addons.md#catboost-gradient-boosting) | `POST /v1/catboost/*` | Gradient boosting with categorical features |
+| [SHAP Explainability](./ml-addons.md#shap-explainability) | `POST /v1/explain/*` | Feature contributions for any ML model |
 
 ## Starting the Universal Runtime
 
@@ -613,11 +619,11 @@ Detect outliers and anomalies in numeric and mixed data using multiple algorithm
 
 See the dedicated [Anomaly Detection Guide](./anomaly-detection.md) for complete documentation.
 
-### Quick Example
+### Quick Example (LlamaFarm API - Recommended)
 
 ```bash
 # 1. Train on normal data
-curl -X POST http://localhost:11540/v1/anomaly/fit \
+curl -X POST http://localhost:14345/v1/ml/anomaly/fit \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",
@@ -627,7 +633,7 @@ curl -X POST http://localhost:11540/v1/anomaly/fit \
   }'
 
 # 2. Detect anomalies in new data
-curl -X POST http://localhost:11540/v1/anomaly/detect \
+curl -X POST http://localhost:14345/v1/ml/anomaly/detect \
   -H "Content-Type: application/json" \
   -d '{
     "model": "api-monitor",

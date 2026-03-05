@@ -26,6 +26,9 @@ jobs:
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
+        exclude:
+          - goos: darwin
+            goarch: amd64
 
     steps:
       - name: Checkout code
@@ -86,6 +89,9 @@ jobs:
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
 
+          # Copy addon registry for embedding
+          cp -f ../addons/registry/*.yaml cmd/registry/
+
           # Build the binary
           go build -ldflags="-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${{ steps.version.outputs.version }}'" -o "${BINARY_NAME}" .
 
@@ -115,8 +121,6 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: darwin
-            goarch: amd64
           - goos: darwin
             goarch: arm64
           - goos: windows

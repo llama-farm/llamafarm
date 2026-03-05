@@ -1,5 +1,5 @@
 import json
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from config.datamodel import Dataset
@@ -127,7 +127,7 @@ async def delete_dataset(namespace: str, project: str, dataset: str):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-class DatasetActionType(str, Enum):
+class DatasetActionType(StrEnum):
     PROCESS = "process"
     DELETE_FILE_CHUNKS = "delete_file_chunks"
     DELETE_DATASET_CHUNKS = "delete_dataset_chunks"
@@ -139,6 +139,10 @@ class DatasetActionRequest(BaseModel):
     )
     file_hash: str | None = Field(
         None, description="File hash for delete_file_chunks action"
+    )
+    parser_overrides: dict[str, dict[str, Any]] | None = Field(
+        default=None,
+        description="Optional parser config overrides for PROCESS actions",
     )
 
 
@@ -188,7 +192,9 @@ async def actions(
         return f"{req.base_url}v1/projects/{namespace}/{project}/tasks/{task_id}"
 
     if action_type == DatasetActionType.PROCESS:
-        launch = DatasetService.start_dataset_ingestion(namespace, project, dataset)
+        launch = DatasetService.start_dataset_ingestion(
+            namespace, project, dataset, parser_overrides=request.parser_overrides
+        )
         return {
             "message": launch.message,
             "task_uri": task_uri(launch.task_id),

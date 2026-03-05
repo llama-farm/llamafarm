@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import FontIcon from '../../common/FontIcon'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'

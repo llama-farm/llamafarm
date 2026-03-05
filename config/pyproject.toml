@@ -17,11 +17,12 @@ dependencies = [
   "jsonref>=1.1.0",
   "jsonschema>=4.23.0",
   "jsonschema-path>=0.3.4",
+  "pydantic>=2.11.7",
   "PyYAML>=6.0",
   "ruamel.yaml>=0.18.0",
   "tomli>=2.0.0; python_version<'3.11'",
   "tomli-w>=1.0.0",
-  "urllib3>=2.3.0",
+  "urllib3>=2.6.3",
 ]
 
 [dependency-groups]

@@ -19,7 +19,7 @@ import {
 } from '../../test/factories/projectFactory'
 
 // Base URL must match what apiClient uses in test environment
-const API_BASE = 'http://localhost:14345/v1'
+const API_BASE = '/api/v1'
 
 describe('projectService', () => {
   beforeEach(() => {

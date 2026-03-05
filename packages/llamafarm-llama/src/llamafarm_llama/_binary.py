@@ -427,7 +427,7 @@ def _extract_with_symlinks(src_path: Path, dest_path: Path) -> None:
     # If we couldn't resolve the symlink chain (e.g., 0-byte file on CI),
     # search for the versioned library directly
     if not current.exists() or current.stat().st_size < 1000:
-        logger.debug(f"Symlink resolution failed, searching for versioned library")
+        logger.debug("Symlink resolution failed, searching for versioned library")
         # Look for versioned files like libllama.so.0.0.7694 or libllama.0.0.7694.dylib
         if lib_name.endswith(".so"):
             # Linux: libllama.so.X.Y.Z (e.g., libllama.so.0.0.7694)
@@ -562,8 +562,8 @@ def download_binary(
         artifact = manifest["artifact"].format(version=version)
         url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{version}/{artifact}"
 
-    print(f"Downloading llama.cpp {version} for {platform_key}...")
-    print(f"  URL: {url}")
+    logger.info(f"Downloading llama.cpp {version} for {platform_key}...")
+    logger.info(f"  URL: {url}")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -578,6 +578,7 @@ def download_binary(
                 total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
                 chunk_size = 8192
+                last_pct = -1
 
                 with open(archive_path, "wb") as f:
                     while True:
@@ -588,12 +589,9 @@ def download_binary(
                         downloaded += len(chunk)
                         if total_size > 0:
                             pct = downloaded * 100 // total_size
-                            print(
-                                f"\r  Progress: {pct}% ({downloaded}/{total_size} bytes)",
-                                end="",
-                                flush=True,
-                            )
-                print()  # Newline after progress
+                            if pct >= last_pct + 10:
+                                logger.info(f"  Progress: {pct}% ({downloaded}/{total_size} bytes)")
+                                last_pct = pct
         except (URLError, HTTPError) as e:
             raise RuntimeError(f"Failed to download {url}: {e}") from e
 
@@ -642,7 +640,7 @@ def download_binary(
         # Copy any additional dependencies (Windows DLLs, CUDA libs, etc.)
         _copy_dependencies(extract_dir, dest_dir)
 
-        print(f"  Installed to: {lib_dest}")
+        logger.info(f"  Installed to: {lib_dest}")
         return lib_dest
 
 
@@ -754,7 +752,7 @@ def clear_cache():
     cache_dir = _get_cache_dir()
     if cache_dir.exists():
         shutil.rmtree(cache_dir)
-        print(f"Cleared cache: {cache_dir}")
+        logger.info(f"Cleared cache: {cache_dir}")
 
 
 def get_binary_info() -> dict:

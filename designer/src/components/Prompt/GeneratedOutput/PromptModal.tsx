@@ -5,14 +5,15 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../../ui/dialog'
+} from '@/components/ui/dialog'
 import FontIcon from '../../../common/FontIcon'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../../ui/dropdown-menu'
+} from '@/components/ui/dropdown-menu'
+import { Textarea } from '@/components/ui/textarea'
 
 export type PromptModalMode = 'create' | 'edit'
 
@@ -144,7 +145,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
             <label className="text-xs text-muted-foreground mb-0">
               Prompt text
             </label>
-            <textarea
+            <Textarea
               rows={10}
               className="w-full mt-1 bg-transparent rounded-lg py-2 px-3 border border-input text-foreground font-mono text-sm"
               placeholder="You are a helpful assistant. When context is provided, cite sources by title. If no relevant information is found, answer from general knowledge."

@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.0.27](https://github.com/llama-farm/llamafarm/compare/v0.0.26...v0.0.27) (2026-02-16)
+
+
+### Features
+
+* addons ([#748](https://github.com/llama-farm/llamafarm/issues/748)) ([c026511](https://github.com/llama-farm/llamafarm/commit/c026511bbb2d5a58ba7d514cdc32ad04e3af0411))
+* **anomaly:** add comprehensive docs, use-cases, and full demo ([#715](https://github.com/llama-farm/llamafarm/issues/715)) ([fe988ad](https://github.com/llama-farm/llamafarm/commit/fe988ad572e0e6542c2b2aba4392d686e433f2cc))
+* binary component builds ([#681](https://github.com/llama-farm/llamafarm/issues/681)) ([a9858e4](https://github.com/llama-farm/llamafarm/commit/a9858e48546d668386826dced2a0cf897d0aa7c4))
+* **config:** add per-model RAG defaults ([#759](https://github.com/llama-farm/llamafarm/issues/759)) ([4ad4a6c](https://github.com/llama-farm/llamafarm/commit/4ad4a6cd40916b383e5123c7d91798757b6e07db))
+* **designer:** show RAG source chunks in test outputs ([#740](https://github.com/llama-farm/llamafarm/issues/740)) ([be5ea97](https://github.com/llama-farm/llamafarm/commit/be5ea9719fb277d6bde364ee44fed4703a1cca07))
+* **server:** cascading default data processing strategies ([#697](https://github.com/llama-farm/llamafarm/issues/697)) ([882a643](https://github.com/llama-farm/llamafarm/commit/882a643f00a5842a58579a9cda3921f4472763ac))
+* **server:** change default port from 8000 to 14345 ([#731](https://github.com/llama-farm/llamafarm/issues/731)) ([7150e75](https://github.com/llama-farm/llamafarm/commit/7150e755c6e538e75a17b28f4dfd050eaffd4069))
+
+
+### Bug Fixes
+
+* **audio:** designer error handling  ([#722](https://github.com/llama-farm/llamafarm/issues/722)) ([dc41a42](https://github.com/llama-farm/llamafarm/commit/dc41a424ce054662adc235fee0801810289b6d57))
+* **designer:** improve delete UX and handle ghost projects ([#739](https://github.com/llama-farm/llamafarm/issues/739)) ([cb002d4](https://github.com/llama-farm/llamafarm/commit/cb002d43d44ece7df5e6559a8c29e71f7eca5661))
+* **designer:** preserve project name when opening delete modal ([10ba578](https://github.com/llama-farm/llamafarm/commit/10ba578deb043de33c23356f3aff820c5b8e76ae))
+* **designer:** remove redundant save calls causing 404 on train button ([#741](https://github.com/llama-farm/llamafarm/issues/741)) ([05d0779](https://github.com/llama-farm/llamafarm/commit/05d0779ba9310fb8e92f65f9595d1f0198ea7caf))
+* **designer:** sequential addon install and auto-enable after install ([#767](https://github.com/llama-farm/llamafarm/issues/767)) ([c4e78f9](https://github.com/llama-farm/llamafarm/commit/c4e78f9701f39543bb1f38423a05126ea4c10ee1))
+* **designer:** update onboarding checklist after demo project conversion ([#745](https://github.com/llama-farm/llamafarm/issues/745)) ([1e8ee89](https://github.com/llama-farm/llamafarm/commit/1e8ee899ba9dff7f39c53b87ec9d594f73cc694b))
+* **runtime:** add smart GPU allocation to prevent multi-model OOM crashes ([#761](https://github.com/llama-farm/llamafarm/issues/761)) ([848d103](https://github.com/llama-farm/llamafarm/commit/848d10346d6a6bbb80aa249702b5d475cc310f81))
+* **server:** API system prompts override config system prompts ([#763](https://github.com/llama-farm/llamafarm/issues/763)) ([97f1e3c](https://github.com/llama-farm/llamafarm/commit/97f1e3c35603087bd5d14e885f05fbc657fed570))
+* **universal-runtime:** prevent event loop blocking during model loading ([#743](https://github.com/llama-farm/llamafarm/issues/743)) ([b3d7f31](https://github.com/llama-farm/llamafarm/commit/b3d7f31f1fe7263aacc6dc2283413fa9fc62824c))
+
+
+### Miscellaneous Chores
+
+* release 0.0.27 ([9aff4e9](https://github.com/llama-farm/llamafarm/commit/9aff4e9e8d96cd8cee3b565e75fcfb323d2e56c8))
+
 ## [0.0.26](https://github.com/llama-farm/llamafarm/compare/v0.0.25...v0.0.26) (2026-01-27)
 
 

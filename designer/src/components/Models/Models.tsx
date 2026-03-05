@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Button } from '../ui/button'
+import { Button } from '@/components/ui/button'
 import PageActions from '../common/PageActions'
 import ConfigEditor from '../ConfigEditor/ConfigEditor'
 import FontIcon from '../../common/FontIcon'
@@ -10,8 +11,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../ui/dropdown-menu'
-import { Input } from '../ui/input'
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog'
+} from '@/components/ui/dialog'
 import { useActiveProject } from '../../hooks/useActiveProject'
 import { useProject, useUpdateProject } from '../../hooks/useProjects'
 import { parsePromptSets } from '../../utils/promptSets'
@@ -35,13 +36,13 @@ import { DiskSpaceWarningDialog } from './DiskSpaceWarningDialog'
 import { DiskSpaceErrorDialog } from './DiskSpaceErrorDialog'
 import { useConfigPointer } from '../../hooks/useConfigPointer'
 import type { ProjectConfig } from '../../types/config'
-import { useToast } from '../ui/toast'
+import { useToast } from '@/components/ui/toast'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../ui/tooltip'
+} from '@/components/ui/tooltip'
 import {
   sanitizeModelName,
   formatBytes,
@@ -54,14 +55,34 @@ import {
   type LocalModelGroup,
   type ModelVariant,
 } from './modelConstants'
-import type { InferenceModel, ModelStatus } from './types'
+import type { InferenceModel, ModelStatus, ExtraBody, CacheQuantizationType } from './types'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { ChevronDown, Package } from 'lucide-react'
 import { CloudModelsForm } from './CloudModelsForm'
 import TrainedModels from './TrainedModels'
+import { VisionPanel } from '../Vision/VisionPanel'
+import { useListAddons, useInstallAddon, addonKeys } from '../../hooks/useAddons'
+import { AddonInstallProgress } from '../Addons'
+import { AddonInstallSidePane } from '../Addons'
 
 interface TabBarProps {
   activeTab: string
   onChange: (tabId: string) => void
-  tabs: { id: string; label: string }[]
+  tabs: { id: string; label: React.ReactNode }[]
 }
 
 function TabBar({ activeTab, onChange, tabs }: TabBarProps) {
@@ -192,6 +213,318 @@ function RenameModelModal({
   )
 }
 
+// Cache type options for KV quantization (llama.cpp defaults to f16)
+const CACHE_TYPE_OPTIONS: { value: CacheQuantizationType; label: string }[] = [
+  { value: 'f16', label: 'f16 (default)' },
+  { value: 'q8_0', label: 'q8_0' },
+  { value: 'q4_0', label: 'q4_0' },
+]
+
+interface AdvancedSettingsProps {
+  modelId: string
+  extraBody?: ExtraBody
+  isOpen: boolean
+  onOpenChange: (modelId: string | null) => void
+  onSettingsChange: (modelId: string, settings: ExtraBody) => void
+}
+
+function AdvancedSettings({
+  modelId,
+  extraBody,
+  isOpen,
+  onOpenChange,
+  onSettingsChange,
+}: AdvancedSettingsProps) {
+  // Local state for debounced saves
+  const [localSettings, setLocalSettings] = useState<ExtraBody>(extraBody || {})
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Sync local state when extraBody prop changes (e.g., from server)
+  useEffect(() => {
+    setLocalSettings(extraBody || {})
+  }, [extraBody])
+
+  // Debounced save effect
+  useEffect(() => {
+    // Skip if no changes from original
+    const hasChanges = JSON.stringify(localSettings) !== JSON.stringify(extraBody || {})
+    if (!hasChanges) return
+
+    setSaveStatus('saving')
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Debounce save by 800ms
+    saveTimeoutRef.current = setTimeout(() => {
+      onSettingsChange(modelId, localSettings)
+      setSaveStatus('saved')
+
+      // Reset status after 2s
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current)
+      }
+      statusTimeoutRef.current = setTimeout(() => {
+        setSaveStatus('idle')
+      }, 2000)
+    }, 800)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [localSettings, extraBody, modelId, onSettingsChange])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current)
+    }
+  }, [])
+
+  const handleChange = <K extends keyof ExtraBody>(key: K, value: ExtraBody[K]) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleNumberChange = (key: keyof ExtraBody, rawValue: string, min?: number) => {
+    const value = rawValue === '' ? undefined : parseInt(rawValue, 10)
+    if (value === undefined || (!isNaN(value) && (min === undefined || value >= min))) {
+      handleChange(key, value as ExtraBody[typeof key])
+    }
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={open => onOpenChange(open ? modelId : null)}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full pt-2 border-t border-border/50 mt-2">
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${
+            isOpen ? 'rotate-0' : '-rotate-90'
+          }`}
+        />
+        <span>Advanced settings</span>
+        {saveStatus === 'saving' && (
+          <span className="ml-auto text-[10px] text-muted-foreground">Saving...</span>
+        )}
+        {saveStatus === 'saved' && (
+          <span className="ml-auto text-[10px] text-green-600 dark:text-green-400">Saved ✓</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        <TooltipProvider>
+          <div className="grid grid-cols-3 gap-x-6">
+            {/* Left column: Number inputs */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">Context</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Context window size in tokens. Leave empty for auto-detection based on model and available memory.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_ctx ?? ''}
+                  onChange={e => handleNumberChange('n_ctx', e.target.value, 512)}
+                  className="h-8 text-sm"
+                  placeholder="auto"
+                  min={512}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">Batch</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Batch size for prompt processing. Default: 2048. Use 512 on low-memory devices.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_batch ?? ''}
+                  onChange={e => handleNumberChange('n_batch', e.target.value, 1)}
+                  className="h-8 text-sm"
+                  placeholder="2048"
+                  min={1}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">GPU Layers</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">Layers to offload to GPU. Use -1 for all layers (recommended). Reduce if running out of VRAM.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Input
+                  type="number"
+                  value={localSettings.n_gpu_layers ?? ''}
+                  onChange={e => handleNumberChange('n_gpu_layers', e.target.value, -1)}
+                  className="h-8 text-sm"
+                  placeholder="-1"
+                  min={-1}
+                />
+              </div>
+            </div>
+
+            {/* Middle column: Dropdowns */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">KV Keys</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">KV cache quantization. f16 is safest. q8_0/q4_0 reduce memory but may affect quality slightly.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={localSettings.cache_type_k || ''}
+                  onValueChange={value => handleChange('cache_type_k', value as CacheQuantizationType)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="f16 (default)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CACHE_TYPE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground">KV Values</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                        <FontIcon type="info" className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="text-xs">KV cache quantization. f16 is safest. q8_0/q4_0 reduce memory but may affect quality slightly.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={localSettings.cache_type_v || ''}
+                  onValueChange={value => handleChange('cache_type_v', value as CacheQuantizationType)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="f16 (default)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CACHE_TYPE_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Right column: Checkboxes */}
+            <div className="flex flex-col gap-3 pt-5">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-flash-attn`}
+                  checked={localSettings.flash_attn ?? false}
+                  onCheckedChange={checked => handleChange('flash_attn', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-flash-attn`} className="text-xs cursor-pointer">
+                  Flash Attn
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Flash attention for faster inference. Recommended for modern GPUs (RTX 30xx+, Apple Silicon).</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-mmap`}
+                  checked={localSettings.use_mmap ?? false}
+                  onCheckedChange={checked => handleChange('use_mmap', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-mmap`} className="text-xs cursor-pointer">
+                  mmap
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Memory-map model file. Usually leave off. Can help with very large models.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id={`${modelId}-mlock`}
+                  checked={localSettings.use_mlock ?? false}
+                  onCheckedChange={checked => handleChange('use_mlock', !!checked)}
+                />
+                <Label htmlFor={`${modelId}-mlock`} className="text-xs cursor-pointer">
+                  mlock
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-muted-foreground/60 hover:text-muted-foreground">
+                      <FontIcon type="info" className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px]">
+                    <p className="text-xs">Lock model in RAM. Usually leave off to allow OS memory management.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+        </TooltipProvider>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 function ModelCard({
   model,
   onMakeDefault,
@@ -205,7 +538,15 @@ function ModelCard({
   availableDeviceModels,
   onModelChange,
   existingModelNames = [],
-}: ModelCardProps & { existingModelNames?: string[] }) {
+  expandedSettingsModelId,
+  onExpandedSettingsChange,
+  onAdvancedSettingsChange,
+}: ModelCardProps & {
+  existingModelNames?: string[]
+  expandedSettingsModelId?: string | null
+  onExpandedSettingsChange?: (modelId: string | null) => void
+  onAdvancedSettingsChange?: (modelId: string, settings: ExtraBody) => void
+}) {
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false)
 
   return (
@@ -323,6 +664,17 @@ function ModelCard({
           onRename={onRename}
         />
       )}
+
+      {/* Advanced settings for GGUF models only (universal provider) */}
+      {model.provider === 'universal' && onAdvancedSettingsChange && onExpandedSettingsChange && (
+        <AdvancedSettings
+          modelId={model.id}
+          extraBody={model.extra_body}
+          isOpen={expandedSettingsModelId === model.id}
+          onOpenChange={onExpandedSettingsChange}
+          onSettingsChange={onAdvancedSettingsChange}
+        />
+      )}
     </div>
   )
 }
@@ -339,6 +691,9 @@ function ProjectInferenceModels({
   availableProjectModels,
   availableDeviceModels,
   onModelChange,
+  expandedSettingsModelId,
+  onExpandedSettingsChange,
+  onAdvancedSettingsChange,
 }: {
   models: InferenceModel[]
   onMakeDefault: (id: string) => void
@@ -351,6 +706,9 @@ function ProjectInferenceModels({
   availableProjectModels: Array<{ identifier: string; name: string }>
   availableDeviceModels: Array<{ identifier: string; name: string }>
   onModelChange: (modelId: string, newModelIdentifier: string) => void
+  expandedSettingsModelId: string | null
+  onExpandedSettingsChange: (modelId: string | null) => void
+  onAdvancedSettingsChange: (modelId: string, settings: ExtraBody) => void
 }) {
   const existingNames = models.map(m => m.name)
 
@@ -373,6 +731,9 @@ function ProjectInferenceModels({
             onModelChange(m.id, newModelIdentifier)
           }
           existingModelNames={existingNames}
+          expandedSettingsModelId={expandedSettingsModelId}
+          onExpandedSettingsChange={onExpandedSettingsChange}
+          onAdvancedSettingsChange={onAdvancedSettingsChange}
         />
       ))}
     </div>
@@ -1521,7 +1882,7 @@ export function AddOrChangeModels({
                   >
                     Description
                   </label>
-                  <textarea
+                  <Textarea
                     id="device-model-description"
                     rows={2}
                     placeholder="Enter model description"
@@ -1729,7 +2090,7 @@ export function AddOrChangeModels({
                       >
                         Description
                       </label>
-                      <textarea
+                      <Textarea
                         id="model-description"
                         rows={2}
                         placeholder="Enter model description"
@@ -2313,12 +2674,21 @@ const Models = () => {
   const updateProject = useUpdateProject()
   const { toast } = useToast()
   const [searchParams] = useSearchParams()
-  const initialTab = searchParams.get('tab') === 'training' ? 'training' : 'project'
+  const initialTab = searchParams.get('tab') === 'training' ? 'training' : searchParams.get('tab') === 'vision' ? 'vision' : 'project'
   const [activeTab, setActiveTab] = useState(initialTab)
+  const [showAddonInstall, setShowAddonInstall] = useState(false)
+  const [visionInstallTaskId, setVisionInstallTaskId] = useState<string | null>(null)
+  const [installingVisionAddon, setInstallingVisionAddon] = useState(false)
+  const { data: addonsData } = useListAddons()
+  const visionAddon = addonsData?.find((addon) => addon.name === 'vision')
+  const isVisionInstalled = visionAddon?.installed ?? false
+  const installAddonMutation = useInstallAddon()
+  const queryClient = useQueryClient()
   const [mode, setMode] = useModeWithReset('designer')
   const [projectModels, setProjectModels] = useState<InferenceModel[]>([])
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<string | null>(null)
+  const [expandedSettingsModelId, setExpandedSettingsModelId] = useState<string | null>(null)
 
   // Fetch cached models from device
   const { data: cachedModelsResponse } = useCachedModels()
@@ -2382,6 +2752,8 @@ const Models = () => {
         badges: [localityBadge],
         isDefault,
         status: 'ready' as ModelStatus,
+        provider,
+        extra_body: model?.extra_body,
       }
     })
 
@@ -2416,6 +2788,64 @@ const Models = () => {
       )
     } catch (error) {
       console.error('Failed to set default model:', error)
+    }
+  }
+
+  const handleAdvancedSettingsChange = async (modelId: string, settings: ExtraBody) => {
+    if (
+      !activeProject?.namespace ||
+      !activeProject?.project ||
+      !projectResponse?.project?.config
+    )
+      return
+
+    const currentConfig = projectResponse.project.config
+    const runtime = currentConfig.runtime || {}
+    const runtimeModels = runtime.models || []
+
+    // Update the specific model's extra_body
+    // Match by composite id (name || model) to avoid updating multiple models
+    const updatedModels = runtimeModels.map((m: any) => {
+      if ((m.name || m.model) === modelId) {
+        return { ...m, extra_body: settings }
+      }
+      return m
+    })
+
+    const nextConfig = {
+      ...currentConfig,
+      runtime: {
+        ...runtime,
+        models: updatedModels,
+      },
+    }
+
+    // Store original settings for potential revert
+    const originalModel = projectModels.find(m => m.id === modelId)
+    const originalSettings = originalModel?.extra_body
+
+    // Optimistically update local state
+    setProjectModels(prev =>
+      prev.map(m =>
+        m.id === modelId ? { ...m, extra_body: settings } : m
+      )
+    )
+
+    try {
+      await updateProject.mutateAsync({
+        namespace: activeProject.namespace,
+        projectId: activeProject.project,
+        request: { config: nextConfig },
+      })
+    } catch (error) {
+      console.error('Failed to update advanced settings:', error)
+      // Explicitly revert the optimistic update
+      setProjectModels(prev =>
+        prev.map(m =>
+          m.id === modelId ? { ...m, extra_body: originalSettings } : m
+        )
+      )
+      toast({ message: 'Failed to save advanced settings', variant: 'destructive' })
     }
   }
 
@@ -2800,7 +3230,7 @@ const Models = () => {
 
   return (
     <div
-      className={`h-full w-full flex flex-col ${mode === 'designer' ? 'gap-3 pb-32' : ''}`}
+      className={`h-full w-full flex flex-col ${mode === 'designer' ? `gap-3 ${activeTab === 'vision' ? '' : 'pb-32'}` : ''}`}
     >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl">
@@ -2821,6 +3251,7 @@ const Models = () => {
             tabs={[
               { id: 'project', label: 'Inference models' },
               { id: 'training', label: 'Trained models' },
+              { id: 'vision', label: <span className="flex items-center gap-1.5">Vision <Package className="w-3.5 h-3.5 text-muted-foreground" /></span> },
             ]}
           />
 
@@ -2867,11 +3298,96 @@ const Models = () => {
                 availableProjectModels={availableProjectModels}
                 availableDeviceModels={availableDeviceModels}
                 onModelChange={handleModelChange}
+                expandedSettingsModelId={expandedSettingsModelId}
+                onExpandedSettingsChange={setExpandedSettingsModelId}
+                onAdvancedSettingsChange={handleAdvancedSettingsChange}
               />
               </>
             ))}
           {activeTab === 'training' && <TrainedModels />}
+          {activeTab === 'vision' && (
+            isVisionInstalled ? (
+              <div className="flex-1 min-h-0">
+                <VisionPanel />
+              </div>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center px-6 py-10 rounded-xl border border-border bg-card/40 max-w-md">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 border border-primary/30">
+                    <FontIcon type="model" className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="text-lg font-medium text-foreground mb-2">
+                    Vision requires an add-on
+                  </div>
+                  <div className="text-sm text-muted-foreground mb-6">
+                    This feature requires the Vision add-on to be installed.
+                    Install it to enable object detection, classification, training, and more.
+                  </div>
+                  <Button onClick={() => setShowAddonInstall(true)} disabled={installingVisionAddon}>
+                    {installingVisionAddon ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Installing...
+                      </span>
+                    ) : 'Add'}
+                  </Button>
+                </div>
+              </div>
+            )
+          )}
         </>
+      )}
+
+      {showAddonInstall && (
+        <AddonInstallSidePane
+          open={showAddonInstall}
+          onOpenChange={setShowAddonInstall}
+          addons={visionAddon ? [visionAddon] : [{
+            name: 'vision',
+            display_name: 'Vision Pipeline',
+            description: 'Object detection, image classification, and real-time streaming with YOLO and CLIP',
+            component: 'universal-runtime',
+            version: '1.0.0',
+            dependencies: [],
+            packages: ['ultralytics', 'open-clip-torch'],
+            installed: false,
+            installed_at: null,
+          }]}
+          onConfirm={async (selectedAddons) => {
+            setShowAddonInstall(false)
+            if (selectedAddons.length === 0) return
+            setInstallingVisionAddon(true)
+            try {
+              const response = await installAddonMutation.mutateAsync({
+                name: selectedAddons[0],
+                restart_service: true,
+              })
+              setVisionInstallTaskId(response.task_id)
+            } catch (err) {
+              setInstallingVisionAddon(false)
+              toast({
+                message: err instanceof Error ? err.message : 'Failed to install vision addon',
+              })
+            }
+          }}
+        />
+      )}
+
+      {visionInstallTaskId && (
+        <AddonInstallProgress
+          taskId={visionInstallTaskId}
+          addonName="Vision Pipeline"
+          onComplete={() => {
+            setVisionInstallTaskId(null)
+            setInstallingVisionAddon(false)
+            queryClient.invalidateQueries({ queryKey: addonKeys.list() })
+            toast({ message: 'Vision Pipeline addon installed and ready to use.' })
+          }}
+          onCancel={() => {
+            setVisionInstallTaskId(null)
+            setInstallingVisionAddon(false)
+          }}
+        />
       )}
 
       {/* Inline multi-select on cards replaces separate dialog */}

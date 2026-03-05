@@ -73,6 +73,7 @@ class Llama:
         n_threads_batch: Optional[int] = None,
         n_gpu_layers: int = 0,
         main_gpu: int = 0,
+        split_mode: int = 1,
         tensor_split: Optional[List[float]] = None,
         vocab_only: bool = False,
         use_mmap: bool = True,
@@ -100,8 +101,12 @@ class Llama:
             n_threads: Number of threads for generation. None = auto.
             n_threads_batch: Number of threads for batch processing. None = auto.
             n_gpu_layers: Number of layers to offload to GPU. -1 = all.
-            main_gpu: Main GPU to use.
-            tensor_split: How to split tensors across GPUs.
+            main_gpu: Main GPU to use (0-indexed).
+            split_mode: How to split the model across GPUs.
+                0 = NONE (entire model on main_gpu),
+                1 = LAYER (split layers across GPUs, default),
+                2 = ROW (split rows within layers).
+            tensor_split: How to split tensors across GPUs (proportional weights).
             vocab_only: Only load vocabulary.
             use_mmap: Use memory mapping.
             use_mlock: Lock model in memory.
@@ -151,6 +156,7 @@ class Llama:
             n_gpu_layers = 999  # Offload all layers to GPU
         model_params.n_gpu_layers = n_gpu_layers
         model_params.main_gpu = main_gpu
+        model_params.split_mode = split_mode
         model_params.vocab_only = vocab_only
         model_params.use_mmap = use_mmap
         model_params.use_mlock = use_mlock
@@ -1242,6 +1248,10 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
+        kv_cache_data: Optional[bytes] = None,
+        kv_cache_tokens: int = 0,
         **kwargs,
     ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
         """
@@ -1259,6 +1269,8 @@ class Llama:
             stream: Stream the response.
             seed: Random seed.
             logits_processor: Custom logits processor (for ThinkingBudgetProcessor).
+            kv_cache_data: Serialized KV cache state to restore (skips prefix decode).
+            kv_cache_tokens: Number of tokens in the cached prefix.
 
         Returns:
             Chat completion response or stream of chunks.
@@ -1280,14 +1292,69 @@ class Llama:
         # Clear KV cache
         self._lib.llama_memory_clear(self._memory, True)
 
-        # Decode prompt (this is the main TTFT cost)
-        if not self._decode_batch(tokens):
-            raise RuntimeError("Failed to decode prompt")
-        t_prompt = time.perf_counter()
+        # KV cache restore path: load cached prefix, decode only delta tokens
+        # Note: kv_cache_tokens may exceed len(tokens) when the cached state includes
+        # generated tokens (e.g., thinking tags) that aren't in the new prompt.
+        # In that case, we still restore the full KV state (which is a superset)
+        # and decode no delta tokens — the model picks up from where it left off.
+        if kv_cache_data and kv_cache_tokens > 0:
+            # Memory safety check: KV restore writes into GPU/system memory.
+            # If the data is too large relative to available memory, skip restore
+            # to avoid SEGFAULT from Metal/CUDA allocation failure.
+            kv_data_mb = len(kv_cache_data) / (1024 * 1024)
+            skip_restore = False
+            try:
+                import psutil
+                available_mb = psutil.virtual_memory().available / (1024 * 1024)
+                # KV data must fit within 40% of available memory
+                if kv_data_mb > available_mb * 0.4:
+                    logger.warning(
+                        f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
+                        f"{available_mb:.0f}MB available (need 40% headroom). "
+                        f"Falling back to full decode to avoid potential SEGFAULT."
+                    )
+                    skip_restore = True
+            except ImportError:  # psutil not required — memory check is best-effort
+                pass  # psutil not available, proceed without check
 
-        logger.info(
-            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
-            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+            if not skip_restore:
+                consumed = self.state_seq_load(kv_cache_data, 0)
+            else:
+                consumed = 0
+
+            if consumed > 0:
+                # Clamp: if cached tokens > prompt tokens, no delta needed
+                effective_cached = min(kv_cache_tokens, len(tokens))
+                delta_tokens = tokens[effective_cached:]
+                if delta_tokens:
+                    if not self._decode_batch(delta_tokens):
+                        raise RuntimeError("Failed to decode delta tokens after KV restore")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"KV restore ({kv_cache_tokens} cached, {effective_cached} used): {(t_prompt - t_tokenize)*1000:.1f}ms, "
+                    f"Delta decode ({len(delta_tokens)} new tokens)"
+                )
+            else:
+                # Restore failed or skipped, fall back to full decode
+                logger.warning("KV cache restore failed or skipped, falling back to full decode")
+                self._lib.llama_memory_clear(self._memory, True)
+                if not self._decode_batch(tokens):
+                    raise RuntimeError("Failed to decode prompt")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms [cache restore failed]"
+                )
+        else:
+            # Standard path: decode all tokens
+            if not self._decode_batch(tokens):
+                raise RuntimeError("Failed to decode prompt")
+            t_prompt = time.perf_counter()
+
+            logger.info(
+                f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
         )
 
         # Create sampler
@@ -1303,7 +1370,15 @@ class Llama:
         if stream:
             return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
         else:
-            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
+            return self._complete(
+                tokens,
+                max_tokens,
+                stop,
+                logits_processor,
+                t_start,
+                return_logprobs=logprobs,
+                top_logprobs=top_logprobs,
+            )
 
     def create_completion(
         self,
@@ -1319,6 +1394,10 @@ class Llama:
         stream: bool = False,
         seed: Optional[int] = None,
         logits_processor: Optional[Callable] = None,
+        logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
+        kv_cache_data: Optional[bytes] = None,
+        kv_cache_tokens: int = 0,
         **kwargs,
     ) -> Union[ChatCompletionResponse, Iterator[ChatCompletionChunk]]:
         """
@@ -1357,15 +1436,55 @@ class Llama:
         # Clear KV cache
         self._lib.llama_memory_clear(self._memory, True)
 
-        # Decode prompt (this is the main TTFT cost)
-        if not self._decode_batch(tokens):
-            raise RuntimeError("Failed to decode prompt")
-        t_prompt = time.perf_counter()
+        # KV cache restore path: load cached prefix, decode only delta tokens
+        if kv_cache_data and kv_cache_tokens > 0:
+            # Memory safety check (same as create_chat_completion)
+            kv_data_mb = len(kv_cache_data) / (1024 * 1024)
+            skip_restore = False
+            try:
+                import psutil
+                available_mb = psutil.virtual_memory().available / (1024 * 1024)
+                if kv_data_mb > available_mb * 0.4:
+                    logger.warning(
+                        f"KV cache restore skipped: data={kv_data_mb:.0f}MB but only "
+                        f"{available_mb:.0f}MB available. Falling back to full decode."
+                    )
+                    skip_restore = True
+            except ImportError:
+                pass
 
-        logger.info(
-            f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
-            f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
-        )
+            consumed = 0 if skip_restore else self.state_seq_load(kv_cache_data, 0)
+            if consumed > 0:
+                effective_cached = min(kv_cache_tokens, len(tokens))
+                delta_tokens = tokens[effective_cached:]
+                if delta_tokens:
+                    if not self._decode_batch(delta_tokens):
+                        raise RuntimeError("Failed to decode delta tokens after KV restore")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"KV restore ({kv_cache_tokens} cached, {effective_cached} used): {(t_prompt - t_tokenize)*1000:.1f}ms, "
+                    f"Delta ({len(delta_tokens)} new tokens)"
+                )
+            else:
+                logger.warning("KV cache restore failed or skipped, falling back to full decode")
+                self._lib.llama_memory_clear(self._memory, True)
+                if not self._decode_batch(tokens):
+                    raise RuntimeError("Failed to decode prompt")
+                t_prompt = time.perf_counter()
+                logger.info(
+                    f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                    f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms [fallback]"
+                )
+        else:
+            # Standard path: decode all tokens
+            if not self._decode_batch(tokens):
+                raise RuntimeError("Failed to decode prompt")
+            t_prompt = time.perf_counter()
+            logger.info(
+                f"[TTFT] Tokenization: {(t_tokenize - t_start)*1000:.1f}ms, "
+                f"Prompt processing ({len(tokens)} tokens): {(t_prompt - t_tokenize)*1000:.1f}ms"
+            )
 
         # Create sampler
         self._create_sampler(
@@ -1380,7 +1499,15 @@ class Llama:
         if stream:
             return self._stream_completion(tokens, max_tokens, stop, logits_processor, t_start)
         else:
-            return self._complete(tokens, max_tokens, stop, logits_processor, t_start)
+            return self._complete(
+                tokens,
+                max_tokens,
+                stop,
+                logits_processor,
+                t_start,
+                return_logprobs=logprobs,
+                top_logprobs=top_logprobs,
+            )
 
     def _complete(
         self,
@@ -1389,31 +1516,98 @@ class Llama:
         stop: Optional[List[str]],
         logits_processor: Optional[Callable],
         t_start: float,
+        return_logprobs: bool = False,
+        top_logprobs: Optional[int] = None,
     ) -> ChatCompletionResponse:
         """Generate a non-streaming completion."""
         generated_tokens = []
         finish_reason = "length"
         t_first_token = None
+        collected_logprobs: List[dict] = []
+
+        n_vocab = int(self._lib.llama_vocab_n_tokens(self._vocab))
 
         for i in range(max_tokens):
-            # Apply logits processor if provided
+            # Apply logits processor if provided (read logits before sampling)
             if logits_processor is not None:
                 import numpy as np
                 logits_ptr = self._lib.llama_get_logits(self._ctx)
-                n_vocab = self._lib.llama_vocab_n_tokens(self._vocab)
-                # Use numpy for efficient array operations (avoids 2x 151k iterations)
                 logits_array = np.ctypeslib.as_array(
                     ffi.cast("float*", logits_ptr), shape=(n_vocab,)
                 )
                 processed = logits_processor(
                     prompt_tokens + generated_tokens, logits_array
                 )
-                # Write back efficiently with numpy
                 if processed is not logits_array:
                     np.copyto(logits_array, processed)
 
-            token = self._sample_token()
+            # Capture logits snapshot BEFORE sampling (only when needed).
+            # Use ffi.buffer → numpy for performance (262k vocab = 1MB float32).
+            # This is safe here because we only do it when return_logprobs=True
+            # (conditional path — not touching logits on baseline calls).
+            if return_logprobs:
+                import math
+
+                import numpy as np
+
+                logits_ptr = self._lib.llama_get_logits(self._ctx)
+                try:
+                    logits_snap = np.frombuffer(
+                        ffi.buffer(logits_ptr, n_vocab * 4), dtype=np.float32
+                    ).copy().astype(np.float64)
+                    logits_fallback = None
+                except Exception:
+                    # Fallback: capture via direct element access before sampling
+                    logits_snap = None
+                    logits_fallback = [float(logits_ptr[j]) for j in range(n_vocab)]
+
+            token = int(self._sample_token())
             generated_tokens.append(token)
+
+            if return_logprobs:
+                if logits_snap is None:
+                    # pure Python fallback path
+                    logits_list = logits_fallback
+                    max_logit = max(logits_list)
+                    log_denom = max_logit + math.log(sum(math.exp(v - max_logit) for v in logits_list))
+                    sampled_logit = logits_list[token]
+                    top_logits = sorted(enumerate(logits_list), key=lambda x: x[1], reverse=True)
+                else:
+                    max_logit = float(logits_snap.max())
+                    log_denom = max_logit + math.log(float(np.exp(logits_snap - max_logit).sum()))
+                    sampled_logit = float(logits_snap[token])
+
+                token_text = self.detokenize([token])
+                entry = {
+                    "token": token_text,
+                    "logprob": sampled_logit - log_denom,
+                    "bytes": list(token_text.encode("utf-8", errors="ignore")) or None,
+                }
+
+                if top_logprobs and top_logprobs > 0:
+                    k = min(int(top_logprobs), int(n_vocab))
+                    if logits_snap is None:
+                        top_k = top_logits[:k]
+                    else:
+                        top_idx = np.argpartition(logits_snap, -k)[-k:]
+                        top_idx = top_idx[np.argsort(logits_snap[top_idx])[::-1]]
+                        top_k = [(int(tid), float(logits_snap[tid])) for tid in top_idx]
+                    top_entries = []
+                    for tid, lv in top_k:
+                        top_token_text = self.detokenize([tid])
+                        top_entries.append(
+                            {
+                                "token": top_token_text,
+                                "logprob": lv - log_denom,
+                                "bytes": list(
+                                    top_token_text.encode("utf-8", errors="ignore")
+                                )
+                                or None,
+                            }
+                        )
+                    entry["top_logprobs"] = top_entries
+
+                collected_logprobs.append(entry)
 
             # Log TTFT on first token
             if i == 0:
@@ -1436,6 +1630,11 @@ class Llama:
                         generated_tokens = self.tokenize(
                             text, add_special=False, parse_special=False
                         )
+                        # Trim logprobs to match trimmed tokens
+                        if return_logprobs:
+                            collected_logprobs = collected_logprobs[
+                                : len(generated_tokens)
+                            ]
                         break
                 if finish_reason == "stop":
                     break
@@ -1467,6 +1666,9 @@ class Llama:
                     "index": 0,
                     "message": {"role": "assistant", "content": content},
                     "finish_reason": finish_reason,
+                    "logprobs": {"content": collected_logprobs}
+                    if return_logprobs
+                    else None,
                 }
             ],
             "usage": {
@@ -1732,6 +1934,81 @@ class Llama:
         self._lib.llama_memory_clear(self._memory, True)
         if self._sampler is not None:
             self._lib.llama_sampler_reset(self._sampler)
+
+    # ── KV Cache State Serialization ────────────────────────────────────────
+
+    def state_seq_get_size(self, seq_id: int = 0) -> int:
+        """Get the size in bytes needed to serialize a sequence's KV cache state."""
+        return self._lib.llama_state_seq_get_size(self._ctx, seq_id)
+
+    def state_seq_save(self, seq_id: int = 0) -> bytes:
+        """Serialize a sequence's KV cache state to bytes.
+
+        Returns the KV cache state as a bytes object that can be restored later
+        with state_seq_load(). This captures the attention key/value tensors
+        for all tokens processed under the given sequence ID.
+        """
+        size = self._lib.llama_state_seq_get_size(self._ctx, seq_id)
+        if size == 0:
+            return b""
+        buf = ffi.new(f"uint8_t[{size}]")
+        written = self._lib.llama_state_seq_get_data(self._ctx, buf, size, seq_id)
+        if written == 0:
+            return b""
+        return ffi.buffer(buf, written)[:]
+
+    def state_seq_load(self, data: bytes, seq_id: int = 0) -> int:
+        """Restore a sequence's KV cache state from bytes.
+
+        Loads previously saved KV cache state into the given sequence ID.
+        Returns the number of bytes consumed, or 0 on failure.
+
+        The sequence's existing KV cache is replaced by the loaded state.
+        """
+        if not data:
+            return 0
+        # Zero-copy: create a C pointer directly into the Python buffer
+        # (the C function only reads from this buffer)
+        buf = ffi.from_buffer("uint8_t[]", data)
+        return self._lib.llama_state_seq_set_data(self._ctx, buf, len(data), seq_id)
+
+    def state_get_size(self) -> int:
+        """Get the size in bytes needed to serialize the full context state."""
+        return self._lib.llama_state_get_size(self._ctx)
+
+    def state_save(self) -> bytes:
+        """Serialize the full context state (all sequences) to bytes."""
+        size = self._lib.llama_state_get_size(self._ctx)
+        if size == 0:
+            return b""
+        buf = ffi.new(f"uint8_t[{size}]")
+        written = self._lib.llama_state_get_data(self._ctx, buf, size)
+        if written == 0:
+            return b""
+        return ffi.buffer(buf, written)[:]
+
+    def state_load(self, data: bytes) -> int:
+        """Restore the full context state (all sequences) from bytes.
+
+        Returns the number of bytes consumed, or 0 on failure.
+        """
+        if not data:
+            return 0
+        # Zero-copy: create a C pointer directly into the Python buffer
+        buf = ffi.from_buffer("uint8_t[]", data)
+        return self._lib.llama_state_set_data(self._ctx, buf, len(data))
+
+    def memory_seq_cp(self, src_seq_id: int, dst_seq_id: int, p0: int = 0, p1: int = -1) -> None:
+        """Copy KV cache from one sequence to another."""
+        self._lib.llama_memory_seq_cp(self._memory, src_seq_id, dst_seq_id, p0, p1)
+
+    def memory_seq_rm(self, seq_id: int, p0: int = 0, p1: int = -1) -> bool:
+        """Remove KV cache entries for a sequence in position range [p0, p1)."""
+        return self._lib.llama_memory_seq_rm(self._memory, seq_id, p0, p1)
+
+    def memory_seq_keep(self, seq_id: int) -> None:
+        """Keep only the KV cache for the given sequence, remove all others."""
+        self._lib.llama_memory_seq_keep(self._memory, seq_id)
 
     def close(self):
         """Explicitly close and free resources."""

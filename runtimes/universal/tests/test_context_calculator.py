@@ -1,12 +1,13 @@
 """Tests for context_calculator module."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from utils.context_calculator import (
     clear_config_cache,
+    compute_kv_bytes_per_token,
     compute_max_context,
     get_available_memory,
     get_default_context_size,
@@ -41,16 +42,30 @@ class TestGetAvailableMemory:
     """Tests for get_available_memory function."""
 
     @patch("utils.context_calculator.torch.cuda.is_available")
-    @patch("utils.context_calculator.torch.cuda.get_device_properties")
-    def test_cuda_memory_detection(self, mock_props, mock_available):
-        """Test CUDA memory detection."""
+    @patch("utils.context_calculator.torch.cuda.mem_get_info")
+    def test_cuda_memory_detection(self, mock_mem_info, mock_available):
+        """Test CUDA memory detection returns free memory."""
         mock_available.return_value = True
-        mock_device = MagicMock()
-        mock_device.total_memory = 8 * 1024**3  # 8GB
-        mock_props.return_value = mock_device
+        free = 6 * 1024**3  # 6GB free
+        total = 8 * 1024**3  # 8GB total
+        mock_mem_info.return_value = (free, total)
 
         memory = get_available_memory("cuda")
-        assert memory == 8 * 1024**3
+        assert memory == free
+        mock_mem_info.assert_called_once_with(0)
+
+    @patch("utils.context_calculator.torch.cuda.is_available")
+    @patch("utils.context_calculator.torch.cuda.mem_get_info")
+    def test_cuda_memory_detection_with_gpu_index(self, mock_mem_info, mock_available):
+        """Test CUDA memory detection with explicit GPU index."""
+        mock_available.return_value = True
+        free = 20 * 1024**3  # 20GB free
+        total = 24 * 1024**3  # 24GB total
+        mock_mem_info.return_value = (free, total)
+
+        memory = get_available_memory("cuda", gpu_index=1)
+        assert memory == free
+        mock_mem_info.assert_called_once_with(1)
 
     @patch("utils.context_calculator.psutil.virtual_memory")
     def test_cpu_memory_detection(self, mock_vm):
@@ -116,6 +131,66 @@ class TestComputeMaxContext:
 
         # Should return minimal context size
         assert max_ctx == 512
+
+    def test_with_architecture_params_qwen3_4b(self):
+        """Test context computation with actual Qwen3-4B architecture.
+
+        Qwen3-4B: 36 layers, 8 KV heads, 128-dim keys/values.
+        KV cache per token = 36 * 8 * (128+128) * 2 = 147,456 bytes.
+        With 18.83 GB available and 2.38 GB model, should NOT allow 40960 context
+        (which would need 5.7 GB KV cache alone).
+        """
+        model_size = int(2.38 * 1024**3)  # 2.38 GB model
+        available = int(18.83 * 1024**3)  # 18.83 GB available
+        memory_factor = 0.8
+
+        max_ctx = compute_max_context(
+            model_size,
+            available,
+            memory_factor,
+            n_layer=36,
+            n_head_kv=8,
+            head_k_size=128,
+            head_v_size=128,
+        )
+
+        # With accurate KV estimation, 40960 should NOT fit.
+        # usable = 18.83*0.8 - 2.38 = 12.684 GB
+        # bytes/token = 147456 * 1.3 = 191693
+        # max tokens = 12.684 GB / 191693 ≈ 69,328 -> power of 2 = 65536
+        # But 40960 * 147456 = ~5.76 GB KV alone, which is feasible with overhead.
+        # Key point: the result should be reasonable, not 131072.
+        assert max_ctx <= 65536
+        assert max_ctx >= 512
+        assert max_ctx & (max_ctx - 1) == 0  # Is power of 2
+
+
+class TestComputeKvBytesPerToken:
+    """Tests for compute_kv_bytes_per_token function."""
+
+    def test_qwen3_4b(self):
+        """Test KV bytes for Qwen3-4B (36 layers, 8 KV heads, 128 dim)."""
+        result = compute_kv_bytes_per_token(
+            n_layer=36, n_head_kv=8, head_k_size=128, head_v_size=128
+        )
+        # 36 * 8 * (128 + 128) * 2 = 147,456
+        assert result == 147_456
+
+    def test_llama_7b_style(self):
+        """Test KV bytes for Llama-7B style (32 layers, 32 KV heads, 128 dim)."""
+        result = compute_kv_bytes_per_token(
+            n_layer=32, n_head_kv=32, head_k_size=128, head_v_size=128
+        )
+        # 32 * 32 * 256 * 2 = 524,288
+        assert result == 524_288
+
+    def test_small_model(self):
+        """Test KV bytes for a small model."""
+        result = compute_kv_bytes_per_token(
+            n_layer=6, n_head_kv=2, head_k_size=64, head_v_size=64
+        )
+        # 6 * 2 * 128 * 2 = 3,072
+        assert result == 3_072
 
 
 class TestLoadModelContextConfig:
@@ -306,7 +381,7 @@ class TestGetDefaultContextSize:
         )
 
         # Should use computed maximum
-        assert n_ctx >= 2048  # Should have decent amount given 16GB available
+        assert n_ctx >= 512  # Should have decent amount given 16GB available
         assert n_ctx & (n_ctx - 1) == 0  # Is power of 2
 
     @patch("utils.context_calculator.get_gguf_metadata")

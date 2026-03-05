@@ -15,6 +15,7 @@ import {
   addMessageToPersistentSession,
   type ChatMessage,
 } from '../utils/projectSessionManager'
+import type { RAGSource } from '../types/chat'
 
 export interface ProjectSessionOptions {
   chatService: 'designer' | 'project'
@@ -33,7 +34,8 @@ export interface ProjectSessionActions {
   addMessage: (
     content: string,
     role: 'user' | 'assistant' | 'tool',
-    tool_call_id?: string
+    tool_call_id?: string,
+    sources?: RAGSource[]
   ) => ChatMessage
   addTempMessage: (message: ChatMessage) => void
   addPersistentMessage: (message: ChatMessage) => void
@@ -195,14 +197,15 @@ export function useProjectSession(
     (
       content: string,
       role: 'user' | 'assistant' | 'tool',
-      tool_call_id?: string
+      tool_call_id?: string,
+      sources?: RAGSource[]
     ): ChatMessage => {
       if (!content || content.trim() === '') {
         throw new Error('Cannot add empty message')
       }
 
       try {
-        const message = createMessage(role, content, tool_call_id)
+        const message = createMessage(role, content, tool_call_id, sources)
 
         if (isTemporaryMode) {
           addTempMessage(message)

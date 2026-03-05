@@ -340,6 +340,7 @@ class SessionRecord:
     namespace: str
     project_id: str
     agent: ChatOrchestratorAgent
+    config_last_modified: float | None
     created_at: float
     last_used: float
     request_count: int
@@ -351,6 +352,14 @@ _agent_sessions_lock = threading.RLock()
 
 def _session_key(namespace: str, project_id: str, session_id: str) -> str:
     return f"{namespace}:{project_id}:{session_id}"
+
+
+def _get_config_last_modified_timestamp(project_dir: str) -> float | None:
+    """Return config mtime snapshot for session cache invalidation."""
+    last_modified = ProjectService.get_project_last_modified(project_dir)
+    if last_modified is None:
+        return None
+    return last_modified.timestamp()
 
 
 def _cleanup_expired_sessions(now: float | None = None) -> None:
@@ -444,6 +453,18 @@ class ChatRequest(BaseModel):
         "Example: {'user_name': 'Alice', 'company': 'Acme Corp'}",
     )
 
+    # RAG sources visibility for debugging/testing
+    include_sources: bool | None = Field(
+        default=None,
+        description="Include retrieved RAG chunks in streaming response as custom SSE event.",
+    )
+    sources_limit: int | None = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of sources to include (default 10, max 50).",
+    )
+
 
 @router.post(
     "/{namespace}/{project_id}/chat/completions", response_model=ChatCompletion
@@ -459,7 +480,10 @@ async def chat(
 ):
     """Send a message to the chat agent"""
     project_dir = ProjectService.get_project_dir(namespace, project_id)
+    config_last_modified = _get_config_last_modified_timestamp(project_dir)
     project_config = ProjectService.load_config(namespace, project_id)
+    schema_ref = getattr(project_config, "schema_", None)
+    schema_enabled = bool(schema_ref)
 
     # Parse active project from header (format: "namespace/project")
     active_project_namespace = None
@@ -496,7 +520,7 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or request.model != record.agent.model_name:
+            if record is None or request.model != record.agent.model_name or record.config_last_modified != config_last_modified:
                 agent = await ChatOrchestratorAgentFactory.create_agent(
                     project_config=project_config,
                     project_dir=project_dir,
@@ -510,6 +534,7 @@ async def chat(
                     namespace=namespace,
                     project_id=project_id,
                     agent=agent,
+                    config_last_modified=config_last_modified,
                     created_at=now,
                     last_used=now,
                     request_count=1,
@@ -560,6 +585,11 @@ async def chat(
         ) from e
 
     if request.stream:
+        if schema_enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Streaming is not supported when schema is configured.",
+            )
         return create_streaming_response_from_iterator(
             request,
             project_chat_service.stream_chat(
@@ -578,6 +608,8 @@ async def chat(
                 think=request.think,
                 thinking_budget=request.thinking_budget,
                 max_tokens=request.max_tokens,
+                include_sources=request.include_sources or False,
+                sources_limit=request.sources_limit or 10,
             ),
             session_id if not stateless else "",
             default_message=FALLBACK_ECHO_RESPONSE,
@@ -602,6 +634,18 @@ async def chat(
             max_tokens=request.max_tokens,
         )
     except Exception as e:
+        error_msg = str(e)
+
+        # Detect HuggingFace gated model authentication errors
+        if "gated repo" in error_msg.lower() or "401 client error" in error_msg.lower():
+            # Extract model name if present
+            model_name = agent.model if agent and hasattr(agent, 'model') else "this model"
+            raise HTTPException(
+                status_code=401,
+                detail=f"Model '{model_name}' requires authentication. Please authenticate with HuggingFace using 'huggingface-cli login' or select a different model in Models & Settings.",
+            ) from e
+
+        # Generic error fallback
         raise HTTPException(
             status_code=500,
             detail=f"Chat service failed to generate a response: {e}",
@@ -753,7 +797,7 @@ def _process_group_children(
             try:
                 result_data = child.result
                 # Handle tuple/list format: (success, details)
-                if isinstance(result_data, (list, tuple)) and len(result_data) >= 2:
+                if isinstance(result_data, list | tuple) and len(result_data) >= 2:
                     _success, details = result_data[0], result_data[1]
                     if isinstance(details, dict):
                         file_status["filename"] = details.get("filename", filename)
@@ -941,7 +985,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                             result_data = child.result
                             # Inject file_hash into the result for frontend consumption
                             if (
-                                isinstance(result_data, (list, tuple))
+                                isinstance(result_data, list | tuple)
                                 and len(result_data) >= 2
                             ):
                                 # Format: [success, details] - inject hash into details
@@ -982,7 +1026,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
 
                 for result in results:
                     # Handle multiple result formats
-                    if isinstance(result, (list, tuple)) and len(result) >= 2:
+                    if isinstance(result, list | tuple) and len(result) >= 2:
                         # New format: [success, info]
                         success, info = result[0], result[1]
                     elif isinstance(result, dict):
@@ -1084,7 +1128,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
                             result_data = child.result
                             # Inject file_hash into the result for frontend consumption
                             if (
-                                isinstance(result_data, (list, tuple))
+                                isinstance(result_data, list | tuple)
                                 and len(result_data) >= 2
                             ):
                                 # Format: [success, details] - inject hash into details
@@ -1217,7 +1261,7 @@ async def get_task(namespace: str, project_id: str, task_id: str):
             pass
 
     if res.info:
-        if isinstance(res.info, (dict, list, str, int, float, bool, type(None))):
+        if isinstance(res.info, dict | list | str | int | float | bool | type(None)):
             response.meta = res.info
         else:
             response.meta = {"message": str(res.info)}

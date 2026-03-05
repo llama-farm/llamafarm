@@ -25,6 +25,7 @@ import DatasetView from './components/Data/DatasetView'
 import Prompt from './components/Prompt/Prompt'
 import Test from './components/Test'
 import Dashboard from './components/Dashboard/Dashboard'
+import DeployPage from './components/Deploy/DeployPage'
 import Models from './components/Models/Models'
 import AddInferenceModels from './components/Models/AddInferenceModels'
 import AnomalyModel from './components/Models/AnomalyModel'
@@ -33,6 +34,7 @@ import Databases from './components/Rag/Databases'
 import StrategyView from './components/Rag/StrategyView'
 import ChangeEmbeddingModel from './components/Rag/ChangeEmbeddingModel'
 import SampleProjects from './components/Samples/SampleProjects'
+import { ManageAddons } from './pages/ManageAddons'
 // @ts-ignore - component is TSX local file
 import AddEmbeddingStrategy from './components/Rag/AddEmbeddingStrategy'
 // Removed legacy per-strategy pages in favor of unified StrategyView
@@ -157,15 +159,17 @@ function AppContent() {
                       {/* Redirect '/projects' to Home; Home will scroll to projects */}
                       <Route path="/projects" element={<Home />} />
                       <Route path="/samples" element={<SampleProjects />} />
+                      <Route path="/addons" element={<ManageAddons />} />
                       <Route path="/chat" element={<Chat />}>
                         <Route
                           index
                           element={<Navigate to="/chat/dashboard" replace />}
                         />
                         <Route path="dashboard" element={<Dashboard />} />
+                        <Route path="deploy" element={<DeployPage />} />
                         <Route
                           path="versions"
-                          element={<Navigate to="/chat/dashboard" replace />}
+                          element={<Navigate to="/chat/deploy" replace />}
                         />
                         <Route path="data" element={<Data />} />
                         <Route

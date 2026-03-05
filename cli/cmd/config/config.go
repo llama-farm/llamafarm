@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -51,29 +52,69 @@ func loadConfigFile(filePath string) (*LlamaFarmConfig, error) {
 		return nil, fmt.Errorf("failed to read config file %s: %w", filePath, err)
 	}
 
-	fileExt := strings.ToLower(filepath.Ext(filePath))
-
 	var config LlamaFarmConfig
-	switch strings.ToLower(fileExt) {
+	if err := parseConfigData(filePath, data, &config); err != nil {
+		return nil, err
+	}
+
+	// Store raw config data for environment resolution
+	fileExt := strings.ToLower(filepath.Ext(filePath))
+	switch fileExt {
 	case ".yaml", ".yml":
-		if err := yaml.Unmarshal(data, &config); err != nil {
-			return nil, fmt.Errorf("failed to parse YAML config file %s: %w", filePath, err)
-		}
+		SetRawConfigData(data, "yaml")
 	case ".toml":
-		// TOML support temporarily disabled due to dependency issues
-		// For now, skip TOML files and let YAML/JSON take precedence
-		if err := toml.Unmarshal(data, &config); err != nil {
-			return nil, fmt.Errorf("failed to parse TOML config file %s: %w", filePath, err)
-		}
+		SetRawConfigData(data, "toml")
 	case ".json":
-		if err := json.Unmarshal(data, &config); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON config file %s: %w", filePath, err)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported config file extension: %s", fileExt)
+		SetRawConfigData(data, "json")
 	}
 
 	return &config, nil
+}
+
+func parseConfigData(filePath string, data []byte, target interface{}) error {
+	fileExt := strings.ToLower(filepath.Ext(filePath))
+
+	switch fileExt {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, target); err != nil {
+			return fmt.Errorf("failed to parse YAML config file %s: %w", filePath, err)
+		}
+	case ".toml":
+		if err := toml.Unmarshal(data, target); err != nil {
+			return fmt.Errorf("failed to parse TOML config file %s: %w", filePath, err)
+		}
+	case ".json":
+		if err := json.Unmarshal(data, target); err != nil {
+			return fmt.Errorf("failed to parse JSON config file %s: %w", filePath, err)
+		}
+	default:
+		return fmt.Errorf("unsupported config file extension: %s", fileExt)
+	}
+
+	return nil
+}
+
+// LoadSchemaRef loads only the optional top-level schema reference.
+func LoadSchemaRef(configDir string) (string, error) {
+	configFile, err := FindConfigFile(configDir)
+	if err != nil {
+		return "", fmt.Errorf("no llamafarm config file (yaml/toml/json) found in %s", configDir)
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read config file %s: %w", configFile, err)
+	}
+
+	type schemaConfig struct {
+		Schema string `json:"schema,omitempty" yaml:"schema,omitempty" toml:"schema,omitempty"`
+	}
+	var cfg schemaConfig
+	if err := parseConfigData(configFile, data, &cfg); err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(cfg.Schema), nil
 }
 
 // FindConfigFile searches for llamafarm config files (yaml/toml/json) in the specified directory
@@ -176,6 +217,16 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 
 	// Atomically rename temp file to target file
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(path); err == nil {
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("failed to remove existing config at %s: %w", path, err)
+			}
+		}
+	}
+
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}

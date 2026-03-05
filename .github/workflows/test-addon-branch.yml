@@ -1,0 +1,345 @@
+name: Test Addon from Branch
+
+# Test addon changes from a feature branch before merging to main.
+# This workflow:
+# 1. Checks out the specified branch
+# 2. Builds addon wheels from that branch's code
+# 3. Creates a temporary snapshot release
+# 4. Uploads wheels for testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build from (e.g., feat-addons, fix-stt-packages)"
+        required: true
+        type: string
+      addon:
+        description: "Addon to build (or 'all' for all addons)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - stt
+          - tts
+          - onnxruntime
+          - all
+      platform:
+        description: "Platform to build for (or 'all' for enabled platforms only)"
+        required: true
+        default: "macos-arm64"
+        type: choice
+        options:
+          - macos-arm64
+          - linux-x86_64
+          - linux-arm64
+          - all
+          # Disabled platforms (see addons/platforms.yaml):
+          # - macos-x86_64 (runner unavailable)
+          # - windows-x86_64 (file locking issues)
+      create_release:
+        description: "Create a snapshot release with the wheels"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # Generate the build matrix based on selected addon/platform
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - id: set-matrix
+        shell: bash
+        run: |
+          # Read enabled platforms from platforms.yaml (single source of truth)
+          ALL_PLATFORMS=$(yq eval '.platforms[] | select(.enabled == true) | {"platform": .name, "runner": .runner}' addons/platforms.yaml -o=json | jq -s '.')
+
+          echo "Enabled platforms from platforms.yaml:"
+          echo "$ALL_PLATFORMS" | jq .
+
+          ADDON="${{ github.event.inputs.addon }}"
+          PLATFORM="${{ github.event.inputs.platform }}"
+
+          # Determine addons to build
+          if [[ "$ADDON" == "all" ]]; then
+            # Auto-discover addons that have packages (need wheel builds),
+            # matching the same logic as tools/generate_platform_matrix.py
+            ADDONS=$(for f in addons/registry/*.yaml; do
+              NAME=$(yq eval '.name' "$f")
+              PKG_COUNT=$(yq eval '.packages | length' "$f")
+              if [[ -n "$NAME" && "$PKG_COUNT" -gt 0 ]]; then
+                echo "\"$NAME\""
+              fi
+            done | jq -s '.')
+          else
+            ADDONS="[\"$ADDON\"]"
+          fi
+
+          # Determine platforms to build
+          if [[ "$PLATFORM" == "all" ]]; then
+            PLATFORMS="$ALL_PLATFORMS"
+          else
+            # Check if the requested platform is enabled
+            PLATFORMS=$(echo "$ALL_PLATFORMS" | jq --arg p "$PLATFORM" '[.[] | select(.platform == $p)]')
+            if [[ $(echo "$PLATFORMS" | jq 'length') -eq 0 ]]; then
+              echo "Error: Platform '$PLATFORM' is not enabled in addons/platforms.yaml"
+              exit 1
+            fi
+          fi
+
+          # Build the matrix JSON: cross-product of platforms x addons
+          MATRIX=$(jq -cn \
+            --argjson platforms "$PLATFORMS" \
+            --argjson addons "$ADDONS" \
+            '{include: [
+              $platforms[] as $p | $addons[] as $a |
+              {platform: $p.platform, runner: $p.runner, addon: $a}
+            ]}')
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  build-from-branch:
+    name: Build ${{ matrix.addon }} for ${{ matrix.platform }} from branch
+    needs: setup
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    env:
+      BRANCH_SAFE: ${{ github.event.inputs.branch }}
+
+    steps:
+      - name: Sanitize branch name
+        shell: bash
+        run: |
+          SANITIZED="${BRANCH_SAFE//\//-}"
+          SANITIZED="${SANITIZED//$'\n'/}"
+          SANITIZED="${SANITIZED//$'\r'/}"
+          echo "BRANCH_SAFE=${SANITIZED}" >> "$GITHUB_ENV"
+
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pip
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Build addon wheels
+        shell: bash
+        run: |
+          python tools/build_addon_wheels.py \
+            --addon ${{ matrix.addon }} \
+            --platform ${{ matrix.platform }} \
+            --output dist/addons
+
+      - name: List build output
+        shell: bash
+        run: |
+          echo "Build output:"
+          ls -lh dist/addons/ || echo "No output found"
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist/addons
+          if command -v sha256sum &> /dev/null; then
+            HASH_CMD="sha256sum"
+          else
+            HASH_CMD="shasum -a 256"
+          fi
+          for file in ${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz; do
+            if [ -f "$file" ]; then
+              $HASH_CMD "$file" > "$file.sha256"
+              echo "SHA256: $(cat $file.sha256)"
+            fi
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: addon-wheels-${{ matrix.addon }}-${{ matrix.platform }}-${{ env.BRANCH_SAFE }}
+          path: |
+            dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz
+            dist/addons/${{ matrix.addon }}-wheels-${{ matrix.platform }}.tar.gz.sha256
+          retention-days: 3
+          if-no-files-found: error
+
+  create-snapshot-release:
+    name: Create Snapshot Release
+    if: github.event.inputs.create_release == 'true'
+    needs: build-from-branch
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.create-release.outputs.tag_name }}
+    env:
+      BRANCH_SAFE: ${{ github.event.inputs.branch }}
+
+    steps:
+      - name: Sanitize branch name
+        run: |
+          SANITIZED="${BRANCH_SAFE//\//-}"
+          SANITIZED="${SANITIZED//$'\n'/}"
+          SANITIZED="${SANITIZED//$'\r'/}"
+          echo "BRANCH_SAFE=${SANITIZED}" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Generate snapshot version
+        id: version
+        run: |
+          # Create a snapshot version based on branch name and timestamp
+          BRANCH_SAFE="${{ env.BRANCH_SAFE }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          VERSION="snapshot-${BRANCH_SAFE}-${TIMESTAMP}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Create release tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "Snapshot release from branch ${BRANCH}"
+          git push origin "v${VERSION}"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          pattern: addon-wheels-*-${{ env.BRANCH_SAFE }}
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-assets
+          find dist/ -name "*.tar.gz" -o -name "*.sha256" | while read file; do
+            cp "$file" release-assets/
+          done
+          ls -lh release-assets/
+
+      - name: Create GitHub release
+        id: create-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.event.inputs.branch }}
+          ADDON: ${{ github.event.inputs.addon }}
+          PLATFORM: ${{ github.event.inputs.platform }}
+        run: |
+
+          cat > release-notes.md <<EOF
+          ## Branch Testing Snapshot
+
+          **Branch:** \`$BRANCH\`
+          **Addon:** \`$ADDON\`
+          **Platform:** \`$PLATFORM\`
+          **Commit:** \`${{ github.sha }}\`
+
+          ### Testing Instructions
+
+          To test this build:
+
+          \`\`\`bash
+          # Set the snapshot release tag
+          export LF_ADDON_RELEASE_TAG=v$VERSION
+
+          # Install the addon
+          lf addons install $ADDON
+
+          # Start the service
+          lf services start universal-runtime
+
+          # Test functionality...
+          \`\`\`
+
+          ### Cleanup
+
+          \`\`\`bash
+          # Remove the addon
+          unset LF_ADDON_RELEASE_TAG
+          lf addons uninstall $ADDON
+
+          # Delete this snapshot release
+          gh release delete v$VERSION --yes
+          git push origin :refs/tags/v$VERSION
+          \`\`\`
+
+          ---
+          **Note:** This is a temporary snapshot for testing. Do not use in production.
+          This release will be automatically deleted after 30 days.
+          EOF
+
+          gh release create "v$VERSION" \
+            --draft \
+            --prerelease \
+            --title "Snapshot: $BRANCH ($ADDON @ $PLATFORM)" \
+            --notes-file release-notes.md \
+            release-assets/*
+
+          echo "tag_name=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Created snapshot release: v$VERSION"
+
+  summary:
+    name: Output Summary
+    needs: [build-from-branch, create-snapshot-release]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Create summary
+        env:
+          BRANCH: ${{ github.event.inputs.branch }}
+          ADDON: ${{ github.event.inputs.addon }}
+          PLATFORM: ${{ github.event.inputs.platform }}
+          CREATE_RELEASE: ${{ github.event.inputs.create_release }}
+          TAG_NAME: ${{ needs.create-snapshot-release.outputs.tag_name }}
+        run: |
+          echo "## Branch Addon Testing" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${BRANCH}" >> $GITHUB_STEP_SUMMARY
+          echo "**Addon:** ${ADDON}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${PLATFORM}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$CREATE_RELEASE" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Test with:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "export LF_ADDON_RELEASE_TAG=${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+            echo "lf addons install ${ADDON}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts available for download from workflow run." >> $GITHUB_STEP_SUMMARY
+          fi

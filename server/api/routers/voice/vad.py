@@ -10,14 +10,14 @@ correctly even when audio is sent faster than real-time.
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-class VADState(str, Enum):
+class VADState(StrEnum):
     """Voice activity state."""
 
     IDLE = "idle"  # No speech detected yet
@@ -31,7 +31,7 @@ class VADConfig:
 
     # Energy threshold for speech detection (0.0-1.0)
     # Lower = more sensitive, higher = less sensitive
-    speech_threshold: float = 0.01
+    speech_threshold: float = 0.015
 
     # How long silence must persist after speech to trigger end (seconds)
     # Lower = faster response, higher = fewer false positives

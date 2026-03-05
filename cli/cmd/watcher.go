@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -247,10 +248,7 @@ func resolveConfigPaths(namespace, project string) (*ConfigPaths, error) {
 	cwd := utils.GetEffectiveCWD()
 
 	// Find config files in both locations
-	cwdConfigPath, err := config.FindConfigFile(cwd)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: No llamafarm config file found in current directory: %v\n", err)
-	}
+	cwdConfigPath, _ := config.FindConfigFile(cwd)
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -354,6 +352,16 @@ func syncConfigFiles(sourcePath, targetPath string) error {
 	}
 
 	// Atomically rename temp file to target file
+	// On Windows, os.Rename fails if destination exists. Remove it first.
+	// On Unix, os.Rename atomically replaces the destination, so no removal needed.
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(targetPath); err == nil {
+			if err := os.Remove(targetPath); err != nil {
+				return fmt.Errorf("failed to remove existing file at %s: %w", targetPath, err)
+			}
+		}
+	}
+
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return fmt.Errorf("failed to rename temp file to target: %w", err)
 	}

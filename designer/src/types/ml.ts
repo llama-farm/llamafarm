@@ -93,26 +93,73 @@ export interface ClassifierListModelsResponse {
 // Anomaly Detection Types
 // =============================================================================
 
+// All 12 PyOD-supported anomaly detection backends
 export type AnomalyBackend =
-  | 'isolation_forest'
-  | 'one_class_svm'
-  | 'local_outlier_factor'
-  | 'autoencoder'
+  // Fast (Parameter-Free) - Recommended for most use cases
+  | 'ecod'                  // Empirical Cumulative Distribution - fast, parameter-free, general purpose
+  | 'hbos'                  // Histogram-based - very fast, good for high dimensions
+  | 'copod'                 // Copula-based - fast, interpretable results
+  // Legacy (Well-Tested)
+  | 'isolation_forest'      // Tree-based ensemble - classic default
+  | 'one_class_svm'         // SVM-based - good for small datasets
+  | 'local_outlier_factor'  // Density-based - good for clustered anomalies
+  // Advanced
+  | 'knn'                   // K-nearest neighbors - distance-based
+  | 'mcd'                   // Minimum Covariance Determinant - for Gaussian data
+  | 'cblof'                 // Clustering-based - for grouped data
+  | 'suod'                  // Ensemble - most robust, combines multiple methods
+  | 'loda'                  // Lightweight - good for streaming data
+  | 'autoencoder'           // Neural network - for complex patterns
 
-// Map display names to API identifiers
-export const ANOMALY_BACKEND_MAP: Record<string, AnomalyBackend> = {
-  'auto': 'isolation_forest', // default
-  'isolation-forest': 'isolation_forest',
-  'one-class-svm': 'one_class_svm',
-  'autoencoder': 'autoencoder',
-  'local-outlier-factor': 'local_outlier_factor',
+// Backend metadata from server's /v1/ml/anomaly/backends endpoint
+export interface AnomalyBackendInfo {
+  backend: AnomalyBackend
+  name: string
+  description: string
+  category: 'fast' | 'legacy' | 'distance' | 'clustering' | 'ensemble' | 'streaming' | 'deep_learning'
+  speed: 'very_fast' | 'fast' | 'medium' | 'slow'
+  memory: 'low' | 'medium' | 'high'
+  best_for: string
+  is_legacy: boolean
 }
 
-export const ANOMALY_BACKEND_DISPLAY: Record<AnomalyBackend, string> = {
-  'isolation_forest': 'Isolation Forest',
-  'one_class_svm': 'One-Class SVM',
-  'local_outlier_factor': 'Local Outlier Factor',
-  'autoencoder': 'Autoencoder',
+// Static display info for backends (when server not available)
+export const ANOMALY_BACKEND_DISPLAY: Record<AnomalyBackend, { name: string; description: string; category: string }> = {
+  // Fast (Parameter-Free) - Recommended
+  'ecod': { name: 'ECOD', description: 'Fast, parameter-free, general purpose', category: 'fast' },
+  'hbos': { name: 'HBOS', description: 'Fastest algorithm, good for high dimensions', category: 'fast' },
+  'copod': { name: 'COPOD', description: 'Fast, interpretable results', category: 'fast' },
+  // Legacy (Well-Tested)
+  'isolation_forest': { name: 'Isolation Forest', description: 'Classic tree-based ensemble', category: 'legacy' },
+  'one_class_svm': { name: 'One-Class SVM', description: 'Good for small datasets', category: 'legacy' },
+  'local_outlier_factor': { name: 'Local Outlier Factor', description: 'Good for clustered anomalies', category: 'legacy' },
+  // Advanced
+  'knn': { name: 'KNN', description: 'Distance-based anomaly detection', category: 'distance' },
+  'mcd': { name: 'MCD', description: 'For multivariate Gaussian data', category: 'distance' },
+  'cblof': { name: 'CBLOF', description: 'Clustering-based detection', category: 'clustering' },
+  'suod': { name: 'SUOD', description: 'Ensemble - most robust', category: 'ensemble' },
+  'loda': { name: 'LODA', description: 'Lightweight, good for streaming', category: 'streaming' },
+  'autoencoder': { name: 'AutoEncoder', description: 'Neural network for complex patterns', category: 'deep_learning' },
+}
+
+// Map display names to API identifiers (backwards compatibility)
+export const ANOMALY_BACKEND_MAP: Record<string, AnomalyBackend> = {
+  'auto': 'ecod', // default - fast and parameter-free
+  'ecod': 'ecod',
+  'hbos': 'hbos',
+  'copod': 'copod',
+  'isolation-forest': 'isolation_forest',
+  'isolation_forest': 'isolation_forest',
+  'one-class-svm': 'one_class_svm',
+  'one_class_svm': 'one_class_svm',
+  'local-outlier-factor': 'local_outlier_factor',
+  'local_outlier_factor': 'local_outlier_factor',
+  'knn': 'knn',
+  'mcd': 'mcd',
+  'cblof': 'cblof',
+  'suod': 'suod',
+  'loda': 'loda',
+  'autoencoder': 'autoencoder',
 }
 
 // =============================================================================
@@ -213,7 +260,7 @@ export interface FeatureColumn {
 
 export interface AnomalyFitRequest {
   model: string
-  backend?: AnomalyBackend // default: "isolation_forest"
+  backend?: AnomalyBackend // default: "ecod" (fast, parameter-free)
   data: number[][] | Record<string, unknown>[] // numeric arrays OR dict-based with schema
   schema?: Record<string, FeatureEncodingType> // required for dict-based data
   contamination?: number // 0-0.5, default: 0.1
@@ -1007,4 +1054,70 @@ export interface SpeechHistoryEntry {
   voiceId?: string
   // Shared
   error?: string
+}
+
+// ============================================================================
+// Streaming Anomaly Detection
+// ============================================================================
+
+// Status of the streaming detector
+export type StreamingStatus = 'collecting' | 'ready' | 'retraining'
+
+// Request to process data through a streaming detector
+export interface StreamingAnomalyRequest {
+  model: string
+  data: Record<string, unknown> | Record<string, unknown>[]
+  backend?: AnomalyBackend
+  min_samples?: number // default: 50
+  retrain_interval?: number // default: 100
+  window_size?: number // default: 1000
+  threshold?: number // default: 0.5
+  contamination?: number // default: 0.1
+  // Polars feature engineering
+  rolling_windows?: number[] // e.g., [5, 10, 20]
+  include_lags?: boolean
+  lag_periods?: number[] // e.g., [1, 2, 5]
+}
+
+// Result for a single data point
+export interface StreamingAnomalyResult {
+  index: number
+  score: number | null // null during cold start
+  is_anomaly: boolean | null // null during cold start
+  raw_score: number | null
+  status: StreamingStatus
+  samples_collected: number
+  samples_until_ready: number // 0 when ready
+  model_version: number
+}
+
+// Response from streaming anomaly endpoint
+export interface StreamingAnomalyResponse {
+  status: StreamingStatus
+  results: StreamingAnomalyResult[]
+  model_version: number
+  samples_collected: number
+  threshold: number
+  processing_time_ms: number
+}
+
+// Stats for a streaming detector
+export interface StreamingDetectorStats {
+  model_id: string
+  backend: AnomalyBackend
+  status: StreamingStatus
+  model_version: number
+  samples_collected: number
+  total_processed: number
+  samples_since_retrain: number
+  min_samples: number
+  retrain_interval: number
+  window_size: number
+  threshold: number
+  is_ready: boolean
+}
+
+// Response from list detectors endpoint
+export interface StreamingDetectorListResponse {
+  detectors: StreamingDetectorStats[]
 }

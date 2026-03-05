@@ -15,6 +15,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-cli:
     name: Build CLI Binaries
@@ -28,9 +32,6 @@ jobs:
           - goos: linux
             goarch: arm64
             output: llamafarm-linux-arm64
-          - goos: darwin
-            goarch: amd64
-            output: llamafarm-darwin-amd64
           - goos: darwin
             goarch: arm64
             output: llamafarm-darwin-arm64
@@ -112,6 +113,9 @@ jobs:
           else
             VERSION=${GITHUB_SHA::8}
           fi
+
+          # Copy addon registry for embedding
+          cp -f ../addons/registry/*.yaml cmd/registry/
 
           # Build with version info (schema compilation and type generation already done by generate-types)
           go build -ldflags "-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .

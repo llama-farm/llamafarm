@@ -80,6 +80,15 @@ else:
 PYEOF
 fi
 
+# Fix deploy_models: the schema default is true, but go-jsonschema generates
+# a plain bool which cannot distinguish "omitted" from "set to false".
+# Change it to *bool so callers can detect the difference.
+if grep -q 'DeployModels bool' types.go; then
+    sed -i.bak 's/DeployModels bool/DeployModels *bool/' types.go
+    rm -f types.go.bak
+    echo "Fixed DeployModels bool → *bool for nullable default handling"
+fi
+
 # Clean up temporary JSON file
 rm -f schema.json schema.yaml
 

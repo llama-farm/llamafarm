@@ -33,6 +33,11 @@ class GGUFMetadata:
     chat_template: str | None = None
     bos_token: str = ""
     eos_token: str = ""
+    # Architecture params for KV cache size estimation
+    n_layer: int | None = None
+    n_head_kv: int | None = None
+    head_k_size: int | None = None
+    head_v_size: int | None = None
     # Raw fields for any additional lookups
     _raw_fields: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -102,11 +107,36 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
         # on Python 3.13 aarch64 (GC during gguf_reader causes crash)
         gc_was_enabled = gc.isenabled()
         gc.disable()
+        reader = None
         try:
             reader = GGUFReader(gguf_path)
+        except (ValueError, KeyError) as e:
+            # Some GGUF files use newer quantization types (e.g. Q6_K_XL = type 39)
+            # that the Python gguf library doesn't support yet. The error occurs
+            # during tensor parsing, but metadata fields are already parsed by then.
+            # Monkey-patch to skip tensor building and retry.
+            logger.warning(
+                f"GGUF tensor parsing failed ({e}), retrying with metadata-only read"
+            )
+            try:
+                # Use lock to prevent concurrent monkey-patch conflicts
+                with _cache_lock:
+                    _orig_build_tensors = GGUFReader._build_tensors
+                    GGUFReader._build_tensors = lambda self, *a, **kw: None
+                    try:
+                        reader = GGUFReader(gguf_path)
+                    finally:
+                        GGUFReader._build_tensors = _orig_build_tensors
+                if reader is not None:
+                    reader.tensors = []
+            except Exception as inner_e:
+                logger.warning(f"Metadata-only GGUF read also failed: {inner_e}")
         finally:
             if gc_was_enabled:
                 gc.enable()
+
+        if reader is None:
+            return metadata
 
         # Extract all needed metadata in a single pass through fields
         bos_id = None
@@ -129,6 +159,23 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                         )
                 except (IndexError, ValueError, TypeError):
                     pass
+
+            # Architecture params for KV cache estimation
+            # Keys are prefixed by architecture (e.g., qwen3.block_count),
+            # so we match by suffix.
+            _arch_field_map = {
+                ".block_count": "n_layer",
+                ".attention.head_count_kv": "n_head_kv",
+                ".attention.key_length": "head_k_size",
+                ".attention.value_length": "head_v_size",
+            }
+            for suffix, attr in _arch_field_map.items():
+                if key.endswith(suffix) and field.data:
+                    try:
+                        val = int(field.parts[field.data[0]])
+                        setattr(metadata, attr, val)
+                    except (IndexError, ValueError, TypeError) as e:
+                        logger.debug("Could not parse GGUF field %s: %s", key, e)
 
             # Chat template
             if key == "tokenizer.chat_template":
