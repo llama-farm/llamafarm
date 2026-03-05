@@ -7,6 +7,86 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.28</strong> — 2026-03-05</summary>
+<think>
+
+</think>
+
+## LlamaFarm 0.0.28: Building Blocks for Smarter AI Workflows
+
+This release focuses on expanding the capabilities of LlamaFarm, making it easier to build, deploy, and manage AI models with greater flexibility and reliability. We’ve introduced new tools, improved performance, and fixed issues that were impacting the user experience.
+
+---
+
+### New Features & Enhancements
+
+**Deploy Models with Ease**  
+We've added a new `deploy` command to the CLI and a bundled packaging system, making it simple to package and deploy models as self-contained units. This is especially useful for sharing models with teams or deploying in production environments.
+
+**Visual Designer for Deployment**  
+A new Bundle UI has been added to the Designer, allowing users to create and manage deployment workflows visually. This makes it easier to build complex model pipelines without needing to write code.
+
+**ML Addons for Specialized Tasks**  
+We've introduced several new ML addons, including support for time series analysis, drift detection, and CatBoost. These can be easily enabled or disabled, giving users the flexibility to tailor their AI workflows to specific needs.
+
+**Enhanced Log Support for GGUF Models**  
+Users can now access log probabilities for GGUF chat completions, which is helpful for understanding model behavior and improving the quality of generated responses.
+
+**Improved Server-Side KV Cache**  
+We’ve implemented a more efficient server-side key-value cache that supports multi-turn chaining and pre-warming, which helps maintain performance during long conversations with large models.
+
+**Built-in Tools System**  
+A new tools system has been added to the server, including a `tasks` tool. This allows users to run custom functions directly within the AI platform, opening up new possibilities for automation and integration.
+
+**Structured Output Support**  
+Models can now return structured outputs, which is especially useful for applications that require precise data formatting, such as data pipelines or API integrations.
+
+**Vision API Improvements**  
+The vision API has seen significant improvements, including better evaluation pipelines and object tracking. This makes it easier to build and test computer vision models within LlamaFarm.
+
+**Vision UI for Designer**  
+A new Vision UI has been added to the Designer, allowing users to build and manage vision workflows visually, including detection, classification, and training.
+
+**Vision MVP with Basic Functionality**  
+We've launched a vision MVP that includes core capabilities like detection, classification, training, and feedback loops. This provides a solid foundation for building more advanced vision models.
+
+---
+
+### Bug Fixes & Stability Improvements
+
+**CI Process Optimization**  
+We fixed an issue where the prose changelog was causing an ARG_MAX overflow in the CI pipeline, making the build process more reliable.
+
+**Addon Registry Integration**  
+The addon registry is now embedded into the binary for released builds, ensuring that models and tools are available without needing to download external packages.
+
+**Content Budget Calculations**  
+We've improved the math behind content budget calculations, ensuring that model usage is tracked accurately and efficiently.
+
+**Remote Access for Designer**  
+Users can now access the Designer remotely, which is especially useful for collaborative workflows or when working with headless environments.
+
+**Improved Addon Bundling**  
+We’ve fixed an issue where base-install dependencies were being included in addon wheel bundles, ensuring that addons are self-contained and easier to manage.
+
+**Better Error Handling for Timeseries**  
+If a timeseries backend is unavailable, the system now returns a 422 error instead of a 500, which helps users understand and resolve issues more quickly.
+
+---
+
+### Other Updates
+
+We've also completed the release process for version 0.0.28, ensuring that everything is ready for users to try out and provide feedback.
+
+---
+
+LlamaFarm 0.0.28 is a major step forward in making AI development more intuitive, efficient, and powerful. Whether you're building models, managing workflows, or exploring new capabilities like vision, there's something here to help you get more done. Let us know what you think!
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.28)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.27</strong> — 2026-02-16</summary>
 
 **LlamaFarm 0.0.27: Addons, Smarter RAG, and Runtime Resilience**
