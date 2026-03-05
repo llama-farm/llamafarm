@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.0.28](https://github.com/llama-farm/llamafarm/compare/v0.0.27...v0.0.28) (2026-03-05)
+
+
+### Features
+
+* **cli:** add deploy command and bundle packaging ([#772](https://github.com/llama-farm/llamafarm/issues/772)) ([da1bb13](https://github.com/llama-farm/llamafarm/commit/da1bb13b8429bd044712f7f8aed023cbac655e5f))
+* **designer:** Bundle UI for deployment workflow ([#783](https://github.com/llama-farm/llamafarm/issues/783)) ([906b9e3](https://github.com/llama-farm/llamafarm/commit/906b9e31c6be48acc330ef2156616032e7d11169))
+* ML addons — timeseries, ADTK, drift, CatBoost (addon-based, cherry-pickable) ([#766](https://github.com/llama-farm/llamafarm/issues/766)) ([55850d6](https://github.com/llama-farm/llamafarm/commit/55850d6dae7c28450d5fc15b1e9c12f6ee434c97))
+* **runtime:** add logprobs support for GGUF chat completions ([#791](https://github.com/llama-farm/llamafarm/issues/791)) ([79c9874](https://github.com/llama-farm/llamafarm/commit/79c98741b031d1dd138e38bba3a8b88017bb8642))
+* Server-Side KV Cache with Multi-Turn Chaining and Pre-Warming ([#782](https://github.com/llama-farm/llamafarm/issues/782)) ([e750ed1](https://github.com/llama-farm/llamafarm/commit/e750ed19b5d25d83ca2c66173719844533576d9f))
+* **server:** add builtin tools system with tasks tool ([#738](https://github.com/llama-farm/llamafarm/issues/738)) ([952597c](https://github.com/llama-farm/llamafarm/commit/952597c51a33799b64001ded3dd3b1c8196ede8b))
+* support structured outputs ([#724](https://github.com/llama-farm/llamafarm/issues/724)) ([55fa703](https://github.com/llama-farm/llamafarm/commit/55fa703702cc18a167fc6521a8bfd1f548e3ba4e))
+* vision API improvements, evaluation pipeline, and object tracking ([#780](https://github.com/llama-farm/llamafarm/issues/780)) ([f9635a4](https://github.com/llama-farm/llamafarm/commit/f9635a476e118cec8f79bd49ae00c5c1d3feb1f5))
+* Vision UI for Designer ([#777](https://github.com/llama-farm/llamafarm/issues/777)) ([6542c74](https://github.com/llama-farm/llamafarm/commit/6542c7474a6d8a65af7790b0edee23992893e5e6))
+* **vision:** detect+classify combo, session TTL cleanup, COCO dataset support ([#774](https://github.com/llama-farm/llamafarm/issues/774)) ([96151ab](https://github.com/llama-farm/llamafarm/commit/96151ab2ae3d9cf7b0634b4109d7a30635d29984))
+* **vision:** Vision MVP — detect, classify, train, cascade, feedback ([#765](https://github.com/llama-farm/llamafarm/issues/765)) ([bda3c6e](https://github.com/llama-farm/llamafarm/commit/bda3c6e1d31444e4ba20c64ffa4b0f90abb1be44))
+
+
+### Bug Fixes
+
+* **ci:** read prose changelog from file to avoid ARG_MAX overflow ([ccae0a0](https://github.com/llama-farm/llamafarm/commit/ccae0a0c4402ddd45ef782d317b909d2b971abf3))
+* **cli:** embed addon registry into binary for released builds ([#792](https://github.com/llama-farm/llamafarm/issues/792)) ([38b481e](https://github.com/llama-farm/llamafarm/commit/38b481e5219c0ec56cefadd116b08d4b7fa42dcc))
+* content budget math ([#779](https://github.com/llama-farm/llamafarm/issues/779)) ([84e05bc](https://github.com/llama-farm/llamafarm/commit/84e05bc410ae0f5b1ab739a0d79b2a92965b63a7))
+* **designer:** remote access ([#750](https://github.com/llama-farm/llamafarm/issues/750)) ([e35b050](https://github.com/llama-farm/llamafarm/commit/e35b050fe72ea5909706d03a1a317d79b68ad034))
+* exclude base-install dependencies from addon wheel bundles ([#770](https://github.com/llama-farm/llamafarm/issues/770)) ([c72f0dd](https://github.com/llama-farm/llamafarm/commit/c72f0dd2552ee57cd3587f786b02399aad04a640))
+* return 422 for unavailable timeseries backends instead of 500 ([#787](https://github.com/llama-farm/llamafarm/issues/787)) ([ce4f933](https://github.com/llama-farm/llamafarm/commit/ce4f933cdc1fa6daf9c7f26d33dd328eca6849e9))
+
+
+### Miscellaneous Chores
+
+* release 0.0.28 ([91c924d](https://github.com/llama-farm/llamafarm/commit/91c924de8588456c3eaba89571e14448386d3c7a))
+
 ## [0.0.27](https://github.com/llama-farm/llamafarm/compare/v0.0.26...v0.0.27) (2026-02-16)
 
 
