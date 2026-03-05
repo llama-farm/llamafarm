@@ -2,7 +2,7 @@
 
 This guide walks through each section of the Designer web UI, explaining what you can do and how to use the various features.
 
-## Projects
+## [Projects & Getting Started](./getting-started.md)
 
 The Projects section is your starting point in the Designer. From the home page, you can:
 
@@ -26,12 +26,9 @@ Click on any project card on the home page to switch to that project. Your curre
 
 From any project page, click the project name dropdown in the header and select "Edit project" to update the project brief or rename the project.
 
-## Dashboard
+## [Dashboard](./dashboard.md)
 
 The Dashboard provides an at-a-glance view of your active project.
-
-![Designer Dashboard](./screenshots/dashboard.png)
-*The Dashboard showing project overview and key metrics*
 
 ### What You'll See
 
@@ -44,12 +41,9 @@ The Dashboard provides an at-a-glance view of your active project.
 
 The Dashboard is read-only and designed for quick reference. Use the action buttons to jump directly to relevant sections when you need to make changes.
 
-## Data Management
+## [Data Management](./data-management.md)
 
 The Data section is where you manage datasets and configure how files are processed.
-
-![Data Management Interface](./screenshots/data-management.png)
-*Managing datasets and processing strategies*
 
 ### Processing Strategies
 
@@ -95,7 +89,7 @@ Toggle to Config Editor mode to see the raw YAML configuration for datasets and 
 - Making bulk changes
 - Understanding the underlying structure
 
-## Models
+## [Models](./models.md)
 
 The Models section lets you configure which AI models your project uses.
 
@@ -126,12 +120,9 @@ Adjust runtime behavior:
 
 Use the "Test Connection" button to verify your model configuration works before saving.
 
-## Databases (RAG Configuration)
+## [Databases (RAG Configuration)](./databases.md)
 
 The Databases section is where you configure Retrieval-Augmented Generation.
-
-![RAG Configuration](./screenshots/rag-config.png)
-*Configuring vector databases and retrieval strategies*
 
 ### Vector Databases
 
@@ -166,7 +157,7 @@ Use the built-in query tester to:
 3. Verify relevance and ranking
 4. Adjust retrieval parameters if needed
 
-## Prompts
+## [Prompts](./prompts.md)
 
 The Prompts section helps you design and test system prompts.
 
@@ -200,7 +191,7 @@ Browse example prompts for common use cases:
 - Code generation
 - Data extraction
 
-## Chat Interface
+## [Chat & Testing](./chat-and-testing.md)
 
 The Chat section provides an interactive way to test your AI project.
 
@@ -236,7 +227,7 @@ The chat interface shows:
 
 Use this information to tune your RAG configuration for better results.
 
-## Config Editor
+## [Config Editor](./config-editor.md)
 
 Every section in the Designer includes a toggle between Designer mode (visual) and Config Editor mode (raw YAML).
 

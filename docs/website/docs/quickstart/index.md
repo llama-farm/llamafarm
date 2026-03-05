@@ -7,11 +7,7 @@ sidebar_position: 1
 
 Get LlamaFarm installed, ingest a dataset, and run your first RAG-powered chat in minutes.
 
-## 1. Prerequisites
-
-- [Ollama](https://ollama.com/download) — Local model runtime (or any OpenAI-compatible provider)
-
-## 2. Install LlamaFarm
+## 1. Install LlamaFarm
 
 ### Option A: Desktop App (Easiest)
 
@@ -24,7 +20,7 @@ Download the all-in-one desktop application:
 | **Linux (x86_64)**  | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-x86_64.AppImage) |
 | **Linux (arm64)**   | [⬇️ Download](https://github.com/llama-farm/llamafarm/releases/latest/download/LlamaFarm-desktop-app-linux-arm64.AppImage)  |
 
-The desktop app bundles everything you need—no additional installation required.
+The desktop app bundles everything you need—no additional installation required. Launch it and the built-in Designer will guide you through project setup with an onboarding wizard.
 
 ### Option B: CLI Installation
 
@@ -65,22 +61,7 @@ Verify installation:
 lf --help
 ```
 
-## 3. Configure Your Runtime (Ollama)
-
-For best RAG results with longer documents, increase the Ollama context window:
-
-1. Open the Ollama app
-2. Navigate to **Settings → Advanced**
-3. Adjust the context window size (recommended: 32K+ for documents)
-
-Pull a model if you haven't already:
-
-```bash
-ollama pull llama3.2
-ollama pull nomic-embed-text  # For embeddings
-```
-
-## 4. Create a Project
+## 2. Create a Project
 
 ```bash
 lf init my-project
@@ -89,7 +70,7 @@ cd my-project
 
 This creates `llamafarm.yaml` with default runtime, prompts, and RAG configuration.
 
-## 5. Start LlamaFarm
+## 3. Start LlamaFarm
 
 ```bash
 lf start
@@ -103,11 +84,20 @@ This command:
 
 Hit `Ctrl+C` to exit the chat UI when you're done.
 
-:::tip Use the Designer Web UI
-Prefer a visual interface? Open `http://localhost:14345` in your browser to access the Designer—manage projects, upload datasets, configure models, and test prompts without touching the command line.
+### Use the Designer Web UI
 
-See the [Designer documentation](../designer/index.md) for details.
-:::
+Open `http://localhost:14345` in your browser to access the **Designer** — a visual interface for managing your entire project without touching the command line.
+
+When you open a new project in the Designer, the **onboarding wizard** walks you through setup step by step:
+
+1. **What are you building?** — Describe your project's purpose
+2. **Pick a model** — Choose from available local models or connect an API
+3. **Add data** — Upload documents for RAG or skip for later
+4. **Test it out** — Send your first message and see it work
+
+The wizard generates your `llamafarm.yaml` configuration automatically. After setup, you get full access to the [Dashboard](../designer/dashboard.md), [Prompts editor](../designer/prompts.md), [Data management](../designer/data-management.md), [RAG configuration](../designer/databases.md), [Model settings](../designer/models.md), and [Test interface](../designer/chat-and-testing.md).
+
+See the [Designer documentation](../designer/index.md) for the full guide.
 
 ### Running Services Manually
 
@@ -128,7 +118,7 @@ nx start server           # Terminal 1
 nx start universal-runtime # Terminal 2
 ```
 
-## 6. Chat with Your Project
+## 4. Chat with Your Project
 
 ```bash
 # Interactive chat (opens TUI)
@@ -144,7 +134,7 @@ Useful options:
 - `--database`, `--retrieval-strategy` — Override RAG behavior
 - `--curl` — Print the equivalent curl command
 
-## 7. Create and Populate a Dataset
+## 5. Create and Populate a Dataset
 
 ```bash
 # Create a dataset
@@ -156,7 +146,7 @@ lf datasets upload research-notes ./examples/fda_rag/files/*.pdf
 # lf datasets upload research-notes ./examples/fda_rag/files/*.pdf --no-process
 ```
 
-## 8. Process Documents
+## 6. Process Documents
 
 ```bash
 lf datasets process research-notes    # Only needed if you skipped auto-processing
@@ -166,7 +156,7 @@ This sends documents through the RAG pipeline—parsing, chunking, embedding, an
 
 For large PDFs, processing may take a few minutes. The CLI shows progress indicators.
 
-## 9. Query with RAG
+## 7. Query with RAG
 
 ```bash
 lf rag query --database main_db "What are the key findings?"
@@ -179,7 +169,7 @@ Useful flags:
 - `--include-metadata` — Show document sources
 - `--include-score` — Show relevance scores
 
-## 10. Next Steps
+## 8. Next Steps
 
 - [Designer Web UI](../designer/index.md) — Visual interface for managing projects
 - [Configuration Guide](../configuration/index.md) — Deep dive into `llamafarm.yaml`
