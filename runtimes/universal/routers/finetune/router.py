@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 
@@ -385,10 +386,8 @@ async def promote_job(job_id: str) -> dict:
     alias_file = Path.home() / ".llamafarm" / "models" / "llm" / "aliases.json"
     aliases: dict = {}
     if alias_file.exists():
-        try:
+        with contextlib.suppress(Exception):
             aliases = json.loads(alias_file.read_text())
-        except Exception:
-            pass
     aliases[alias] = str(gguf_path)
     aliases[f"ft:{job_id}"] = str(gguf_path)
     alias_file.write_text(json.dumps(aliases, indent=2))
@@ -439,7 +438,7 @@ async def eval_job(job_id: str, request: EvalRequest) -> dict:
     try:
         model = await load_language_model(model_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}") from e
 
     results = []
     correct = 0

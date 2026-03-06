@@ -62,8 +62,8 @@ def _find_hf_to_gguf_converter() -> Path | None:
             p = gguf_dir / "convert_hf_to_gguf.py"
             if p.exists():
                 return p
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Could not locate convert_hf_to_gguf.py via gguf package: %s", e)
 
     return None
 
@@ -434,9 +434,9 @@ def main():
             result_path = output_dir / "result.json"
             with open(result_path, "w") as f:
                 json.dump(result, f, indent=2)
-        except Exception:
-            pass
-        
+        except Exception as save_err:
+            logger.error("Failed to write result.json: %s", save_err, exc_info=True)
+
         sys.exit(1)
 
 
