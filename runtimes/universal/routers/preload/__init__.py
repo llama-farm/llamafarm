@@ -3,6 +3,10 @@ Preload router for Universal Runtime.
 
 Provides endpoints to manually trigger model preloading and check status.
 These endpoints run directly on the Universal Runtime.
+
+The /v1/preload endpoint does NOT accept user-supplied paths.
+It only reads from the runtime's working directory to prevent path traversal attacks.
+The main LlamaFarm server handles path validation and sends preload requests.
 """
 
 import logging
@@ -16,10 +20,13 @@ router = APIRouter(prefix="/v1/preload", tags=["preload"])
 
 
 class PreloadRequest(BaseModel):
-    """Request to manually trigger model preload."""
+    """Request to manually trigger model preload.
 
-    config_path: str | None = None
-    """Optional path to llamafarm.yaml. If None, searches current directory."""
+    No config_path parameter - reads from working directory only.
+    This prevents path traversal attacks entirely.
+    """
+
+    pass  # No parameters - always uses default config search
 
 
 class PreloadResponse(BaseModel):
@@ -55,18 +62,21 @@ def set_preload_function(fn):
 async def trigger_preload(request: PreloadRequest | None = None):
     """Manually trigger model preloading.
 
-    This reads llamafarm.yaml (or the specified config), finds models with
-    preload: true, and loads them with optimal concurrency based on system
-    resources.
+    This reads llamafarm.yaml from the runtime's working directory,
+    finds models with preload: true, and loads them with optimal
+    concurrency based on system resources.
+
+    This endpoint does NOT accept a config_path parameter.
+    It always reads from the working directory to prevent path traversal attacks.
+    The main LlamaFarm server is responsible for validating project paths
+    and triggering preloads for specific projects.
 
     **Note**: This is idempotent - models already in cache are marked as
     "already_loaded" and not reloaded.
 
     **Example Request**:
     ```json
-    {
-        "config_path": "/path/to/llamafarm.yaml"
-    }
+    {}
     ```
 
     **Example Response**:
@@ -112,11 +122,11 @@ async def trigger_preload(request: PreloadRequest | None = None):
     if request is None:
         request = PreloadRequest()
 
-    logger.info(f"Manual preload triggered (config_path={request.config_path})")
+    logger.info("Manual preload triggered (using working directory config)")
 
     try:
-        # Call the preload function (preload_models_from_config from server.py)
-        result = await _preload_fn(config_path=request.config_path)
+        # ALWAYS use None (default search in working directory)
+        result = await _preload_fn(config_path=None)
 
         summary = result.get("summary", {})
         loaded = summary.get("loaded", 0)
