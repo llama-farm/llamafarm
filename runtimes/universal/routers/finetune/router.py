@@ -375,8 +375,12 @@ async def promote_job(job_id: str) -> dict:
         base = cfg.get("model", "").split("/")[-1].replace("_", "-").lower()
         if base:
             alias = f"local/{base}-ft"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to derive alias from job_config.json for job %r: %s",
+            job_id,
+            exc,
+        )
 
     # Write promotion record
     promo = {"job_id": job_id, "gguf_path": str(gguf_path), "alias": alias}
