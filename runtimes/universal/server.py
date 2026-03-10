@@ -540,6 +540,59 @@ _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 _kv_cache_manager = None
 
+
+_pinned_model_ids: set[str] = set()
+
+# Flag to ensure we only try to load the pin registry once per worker process.
+_pin_registry_loaded: bool = False
+
+
+def _populate_pin_registry_from_config() -> None:
+    """Read llamafarm.yaml and register any models with pin: true.
+
+    This is called lazily the first time load_language() is invoked in a worker
+    process, before any model is loaded. This ensures that even a freshly-spawned
+    uvicorn worker that hasn't run the startup preload yet will automatically pin
+    models that are configured with pin: true when they are loaded by any caller
+    (including /chat/completions).
+
+    This function is intentionally synchronous and lightweight - it reads a small
+    YAML file once and populates a set. Any errors are silently ignored so that
+    model loading is never blocked by config read failures.
+    """
+    global _pin_registry_loaded
+    if _pin_registry_loaded:
+        return
+    _pin_registry_loaded = True
+
+    try:
+        repo_root = str(Path(__file__).resolve().parents[2])
+        path_inserted = False
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+            path_inserted = True
+        try:
+            from config.helpers.loader import load_config
+
+            config = load_config()
+        finally:
+            if path_inserted and repo_root in sys.path:
+                sys.path.remove(repo_root)
+
+        if hasattr(config, "runtime") and hasattr(config.runtime, "models"):
+            for model_cfg in config.runtime.models:
+                provider = getattr(model_cfg, "provider", None)
+                pin = getattr(model_cfg, "pin", False)
+                model_id = getattr(model_cfg, "model", None)
+                if provider == "universal" and pin and model_id:
+                    _pinned_model_ids.add(model_id)
+                    logger.debug(
+                        f"Pin registry (lazy): registered '{model_cfg.name}' ({model_id})"
+                    )
+    except Exception as e:
+        logger.debug(f"Pin registry lazy load skipped: {e}")
+
+
 # Data directories
 _LF_DATA_DIR = get_data_dir()
 CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
@@ -687,6 +740,8 @@ async def load_language(
     pin: bool = False,
 ):
     """Load a causal language model (GGUF or transformers format)."""
+
+    _populate_pin_registry_from_config()
     cache_key = _make_language_cache_key(
         model_id,
         n_ctx,
@@ -741,10 +796,11 @@ async def load_language(
                 await model.load()
                 _models[cache_key] = model
 
-                # Pin the model if requested
-                if pin:
-                    _models.pin(cache_key)
-                    logger.info(f"Pinned model: {cache_key}")
+    effective_pin = pin or (model_id in _pinned_model_ids)
+
+    if effective_pin and not _models.is_pinned(cache_key):
+        _models.pin(cache_key)
+        logger.info(f"Pinned model: {cache_key}")
 
     # Return model (get() refreshes TTL automatically)
     return _models.get(cache_key)
@@ -1070,6 +1126,12 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
                 elif not isinstance(extra_body, dict):
                     extra_body = {}
 
+            if pin:
+                _pinned_model_ids.add(model_id)
+                logger.info(
+                    f"Registered model '{model_name}' ({model_id}) in pin registry"
+                )
+
             models_to_load.append((model_name, model_id, pin, extra_body))
 
     if not models_to_load:
@@ -1157,13 +1219,24 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
     for name, path, pin, extra_body in models_to_load:
 
         async def load_task(n=name, p=path, pn=pin, eb=extra_body):
-            return await loader.load_one(
+            result = await loader.load_one(
                 model_name=n,
                 model_path=p,
                 pin=pn,
                 load_fn=lambda mp, pn: load_model_wrapper(mp, pn, eb),
                 is_loaded_fn=is_model_loaded,
             )
+
+            from utils.concurrent_loader import LoadStatus
+
+            if pn and result.status == LoadStatus.ALREADY_LOADED:
+                cache_key = _make_language_cache_key(p)
+                if cache_key in _models and not _models.is_pinned(cache_key):
+                    _models.pin(cache_key)
+                    logger.info(
+                        f"Applied pin to already-loaded model '{n}' ({cache_key})"
+                    )
+            return result
 
         tasks.append(load_task())
 
