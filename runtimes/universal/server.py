@@ -136,8 +136,6 @@ from utils.safe_home import get_data_dir
 from vision_training.trainer import set_trainer_model_loader
 
 repo_root = Path(__file__).resolve().parents[2]
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -979,6 +977,12 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
         }
     """
 
+    repo_root = str(Path(__file__).resolve().parents[2])
+    path_inserted = False
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+        path_inserted = True
+
     try:
         from config.helpers.loader import load_config
     except ImportError:
@@ -994,6 +998,9 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
                 "total_time_seconds": 0.0,
             },
         }
+    finally:
+        if path_inserted:
+            sys.path.remove(repo_root)
 
     device = get_device()
     resource_info = get_resource_info(device)

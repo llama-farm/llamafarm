@@ -216,7 +216,7 @@ async def create_project(namespace: str, request: CreateProjectRequest):
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create project: {str(e)}",
+            detail="Failed to create project. Check server logs for details.",
         ) from e
 
 
@@ -307,7 +307,7 @@ async def preload_project_models(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to preload models: {str(e)}",
+            detail="Failed to preload models. Check server logs for details.",
         ) from e
 
 
@@ -395,7 +395,7 @@ async def get_project_health(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get project health: {str(e)}",
+            detail="Failed to get project health. Check server logs for details.",
         ) from e
 
 
@@ -554,7 +554,8 @@ async def delete_project(namespace: str, project_id: str):
         )
         # Return 500 for other failures
         raise HTTPException(
-            status_code=500, detail=f"Failed to delete project: {str(e)}"
+            status_code=500,
+            detail="Failed to delete project. Check server logs for details.",
         ) from e
 
 
@@ -746,7 +747,11 @@ async def chat(
                 agent_sessions.pop(key, None)
                 record = None
 
-            if record is None or request.model != record.agent.model_name or record.config_last_modified != config_last_modified:
+            if (
+                record is None
+                or request.model != record.agent.model_name
+                or record.config_last_modified != config_last_modified
+            ):
                 agent = await ChatOrchestratorAgentFactory.create_agent(
                     project_config=project_config,
                     project_dir=project_dir,

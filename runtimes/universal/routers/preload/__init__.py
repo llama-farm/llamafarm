@@ -9,6 +9,7 @@ It only reads from the runtime's working directory to prevent path traversal att
 The main LlamaFarm server handles path validation and sends preload requests.
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -47,6 +48,7 @@ class PreloadResponse(BaseModel):
 
 # Dependency injection - set by server.py during startup
 _preload_fn = None
+_preload_lock = asyncio.Lock()
 
 
 def set_preload_function(fn):
@@ -122,35 +124,42 @@ async def trigger_preload(request: PreloadRequest | None = None):
     if request is None:
         request = PreloadRequest()
 
+    if _preload_lock.locked():
+        raise HTTPException(
+            status_code=429,
+            detail="A model preload operation is already in progress. Please wait for it to complete.",
+        )
+
     logger.info("Manual preload triggered (using working directory config)")
 
     try:
-        # ALWAYS use None (default search in working directory)
-        result = await _preload_fn(config_path=None)
+        async with _preload_lock:
+            # ALWAYS use None (default search in working directory)
+            result = await _preload_fn(config_path=None)
 
-        summary = result.get("summary", {})
-        loaded = summary.get("loaded", 0)
-        failed = summary.get("failed", 0)
+            summary = result.get("summary", {})
+            loaded = summary.get("loaded", 0)
+            failed = summary.get("failed", 0)
 
-        if failed > 0 and loaded == 0:
-            status = "failed"
-        elif failed > 0:
-            status = "partial"
-        else:
-            status = "success"
+            if failed > 0 and loaded == 0:
+                status = "failed"
+            elif failed > 0:
+                status = "partial"
+            else:
+                status = "success"
 
-        return PreloadResponse(
-            status=status,
-            results=result.get("results", {}),
-            summary=summary,
-            resources=result.get("resources"),
-        )
+            return PreloadResponse(
+                status=status,
+                results=result.get("results", {}),
+                summary=summary,
+                resources=result.get("resources"),
+            )
 
     except Exception as e:
         logger.error(f"Preload failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Preload failed: {str(e)}",
+            detail="Model preload failed. Check server logs for details.",
         ) from e
 
 
