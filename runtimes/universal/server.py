@@ -541,14 +541,14 @@ _cleanup_task: asyncio.Task | None = None
 _kv_cache_manager = None
 
 
-_pinned_model_ids: set[str] = set()
+_pinned_cache_keys: set[str] = set()
 
 # Flag to ensure we only try to load the pin registry once per worker process.
 _pin_registry_loaded: bool = False
 
 
 def _populate_pin_registry_from_config() -> None:
-    """Read llamafarm.yaml and register any models with pin: true.
+    """Read llamafarm.yaml and register cache keys for models with pin: true.
 
     This is called lazily the first time load_language() is invoked in a worker
     process, before any model is loaded. This ensures that even a freshly-spawned
@@ -556,14 +556,13 @@ def _populate_pin_registry_from_config() -> None:
     models that are configured with pin: true when they are loaded by any caller
     (including /chat/completions).
 
-    This function is intentionally synchronous and lightweight - it reads a small
-    YAML file once and populates a set. Any errors are silently ignored so that
-    model loading is never blocked by config read failures.
+    Stores fully-parameterized cache keys (not bare model IDs) so only the exact
+    configured variant is pinned — other runtime variants of the same model_id
+    that arrive via /chat/completions with different params are NOT affected.
     """
     global _pin_registry_loaded
     if _pin_registry_loaded:
         return
-    _pin_registry_loaded = True
 
     try:
         repo_root = str(Path(__file__).resolve().parents[2])
@@ -585,10 +584,34 @@ def _populate_pin_registry_from_config() -> None:
                 pin = getattr(model_cfg, "pin", False)
                 model_id = getattr(model_cfg, "model", None)
                 if provider == "universal" and pin and model_id:
-                    _pinned_model_ids.add(model_id)
-                    logger.debug(
-                        f"Pin registry (lazy): registered '{model_cfg.name}' ({model_id})"
+                    # Build cache key using the same extra_body params the
+                    # preload would use, so we only pin the configured variant.
+                    extra_body = {}
+                    if hasattr(model_cfg, "extra_body") and model_cfg.extra_body:
+                        raw = model_cfg.extra_body
+                        if hasattr(raw, "model_dump"):
+                            extra_body = raw.model_dump()
+                        elif isinstance(raw, dict):
+                            extra_body = raw
+                    cache_key = _make_language_cache_key(
+                        model_id,
+                        extra_body.get("n_ctx"),
+                        extra_body.get("n_batch"),
+                        extra_body.get("n_gpu_layers"),
+                        extra_body.get("n_threads"),
+                        extra_body.get("flash_attn"),
+                        extra_body.get("use_mmap"),
+                        extra_body.get("use_mlock"),
+                        extra_body.get("cache_type_k"),
+                        extra_body.get("cache_type_v"),
+                        extra_body.get("preferred_quantization"),
                     )
+                    _pinned_cache_keys.add(cache_key)
+                    logger.debug(
+                        f"Pin registry (lazy): registered '{model_cfg.name}' key={cache_key}"
+                    )
+
+        _pin_registry_loaded = True
     except Exception as e:
         logger.debug(f"Pin registry lazy load skipped: {e}")
 
@@ -796,7 +819,7 @@ async def load_language(
                 await model.load()
                 _models[cache_key] = model
 
-    effective_pin = pin or (model_id in _pinned_model_ids)
+    effective_pin = pin or (cache_key in _pinned_cache_keys)
 
     if effective_pin and not _models.is_pinned(cache_key):
         _models.pin(cache_key)
@@ -1127,9 +1150,22 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
                     extra_body = {}
 
             if pin:
-                _pinned_model_ids.add(model_id)
-                logger.info(
-                    f"Registered model '{model_name}' ({model_id}) in pin registry"
+                cache_key = _make_language_cache_key(
+                    model_id,
+                    extra_body.get("n_ctx"),
+                    extra_body.get("n_batch"),
+                    extra_body.get("n_gpu_layers"),
+                    extra_body.get("n_threads"),
+                    extra_body.get("flash_attn"),
+                    extra_body.get("use_mmap"),
+                    extra_body.get("use_mlock"),
+                    extra_body.get("cache_type_k"),
+                    extra_body.get("cache_type_v"),
+                    extra_body.get("preferred_quantization"),
+                )
+                _pinned_cache_keys.add(cache_key)
+                logger.debug(
+                    f"Registered model '{model_name}' key={cache_key} in pin registry"
                 )
 
             models_to_load.append((model_name, model_id, pin, extra_body))
@@ -1230,11 +1266,25 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
             from utils.concurrent_loader import LoadStatus
 
             if pn and result.status == LoadStatus.ALREADY_LOADED:
-                cache_key = _make_language_cache_key(p)
-                if cache_key in _models and not _models.is_pinned(cache_key):
-                    _models.pin(cache_key)
+                already_cache_key = _make_language_cache_key(
+                    p,
+                    eb.get("n_ctx"),
+                    eb.get("n_batch"),
+                    eb.get("n_gpu_layers"),
+                    eb.get("n_threads"),
+                    eb.get("flash_attn"),
+                    eb.get("use_mmap"),
+                    eb.get("use_mlock"),
+                    eb.get("cache_type_k"),
+                    eb.get("cache_type_v"),
+                    eb.get("preferred_quantization"),
+                )
+                if already_cache_key in _models and not _models.is_pinned(
+                    already_cache_key
+                ):
+                    _models.pin(already_cache_key)
                     logger.info(
-                        f"Applied pin to already-loaded model '{n}' ({cache_key})"
+                        f"Applied pin to already-loaded model '{n}' ({already_cache_key})"
                     )
             return result
 

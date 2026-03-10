@@ -41,6 +41,10 @@ def reset_server_globals():
     server._classifiers = ModelCache(ttl=server.MODEL_UNLOAD_TIMEOUT)
     server._cleanup_task = None
 
+    # Reset pin registry state
+    server._pinned_cache_keys.clear()
+    server._pin_registry_loaded = False
+
     yield
 
     # Restore original caches
@@ -155,6 +159,9 @@ async def test_cleanup_idle_models(reset_server_globals, mock_model):
     # Since ModelCache uses time.monotonic(), we need to mock the TTL behavior
     old_ttl = server._models._ttl
     server._models._ttl = 0  # Make everything appear expired
+
+    # Wait a tiny bit to ensure time.monotonic()
+    await asyncio.sleep(0.02)
 
     # Pop expired items (simulates cleanup task)
     expired = server._models.pop_expired()
@@ -310,6 +317,9 @@ async def test_cleanup_handles_unload_errors(reset_server_globals):
     # Set TTL to 0 to make everything appear expired
     original_ttl = server._models._ttl
     server._models._ttl = 0
+
+    # Wait a tiny bit to ensure time.monotonic()
+    await asyncio.sleep(0.02)
 
     # Pop expired items
     expired = server._models.pop_expired()
