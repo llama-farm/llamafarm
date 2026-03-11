@@ -1,6 +1,6 @@
 ---
 name: typescript-skills
-description: Shared TypeScript best practices for Designer and Electron subsystems.
+description: Enforces strict TypeScript patterns, naming conventions, and type safety for LlamaFarm Designer and Electron subsystems. Use when writing or reviewing .ts/.tsx files in designer/ or electron-app/.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---

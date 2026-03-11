@@ -1,6 +1,6 @@
 ---
 name: python-skills
-description: Shared Python best practices for LlamaFarm. Covers patterns, async, typing, testing, error handling, and security.
+description: Enforces Python coding standards, async patterns, type safety, and security practices across all LlamaFarm Python components. Use when writing or reviewing Python code in server/, rag/, runtimes/, config/, or common/.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---

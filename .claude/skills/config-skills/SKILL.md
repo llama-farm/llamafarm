@@ -1,6 +1,6 @@
 ---
 name: config-skills
-description: Configuration module patterns for LlamaFarm. Covers Pydantic v2 models, JSONSchema generation, YAML processing, and validation.
+description: Generates Pydantic v2 models from JSONSchema, processes YAML configs, and validates LlamaFarm configuration files. Use when editing schema.yaml, modifying config loading, or adding custom validators in config/.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---
@@ -125,8 +125,10 @@ When modifying the configuration schema:
 
 1. **Edit** `schema.yaml` (or referenced schemas like `../rag/schema.yaml`)
 2. **Run** `nx run generate-types` to compile and generate types
-3. **Update** `validators.py` if new cross-field constraints are needed
-4. **Test** with `uv run pytest config/tests/`
+3. **Verify** `schema.deref.yaml` was generated and `datamodel.py` reflects changes
+4. **Update** `validators.py` if new cross-field constraints are needed
+5. **Test** with `uv run pytest config/tests/ -v`
+6. **Lint** with `ruff check config/ --fix && ruff format config/`
 
 ## Common Commands
 

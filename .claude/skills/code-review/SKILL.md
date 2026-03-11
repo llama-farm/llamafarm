@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Comprehensive code review for diffs. Analyzes changed code for security vulnerabilities, anti-patterns, and quality issues. Auto-detects domain (frontend/backend) from file paths.
+description: Reviews code diffs for security vulnerabilities, anti-patterns, and quality issues. Auto-detects domain (frontend/backend) from file paths. Use when reviewing a PR, checking a diff, or requesting feedback on changed code.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Task
 ---
 

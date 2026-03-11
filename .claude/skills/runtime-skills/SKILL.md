@@ -1,6 +1,6 @@
 ---
 name: runtime-skills
-description: Universal Runtime best practices for PyTorch inference, Transformers models, and FastAPI serving. Covers device management, model loading, memory optimization, and performance tuning.
+description: Loads PyTorch and Transformers models, manages GPU/MPS/CPU devices, and serves inference via FastAPI in LlamaFarm Universal Runtime. Use when working on model loading, memory optimization, or inference endpoints in runtimes/universal/.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---
