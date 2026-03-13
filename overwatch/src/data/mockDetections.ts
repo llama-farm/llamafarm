@@ -30,20 +30,36 @@ export const detectionScenarios: DetectionScenario[] = [
   { type: 'vehicle', confidence: 0.89, offsetLat: 0.001, offsetLng: -0.003, delayMs: 28000 },
 ]
 
+// Simple MGRS-like grid reference for mock data
+function toMGRS(lat: number, lng: number): string {
+  const zone = Math.floor((lng + 180) / 6) + 1
+  const letters = 'CDEFGHJKLMNPQRSTUVWX'
+  const letterIdx = Math.min(Math.max(Math.floor((lat + 80) / 8), 0), letters.length - 1)
+  const colLetters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const rowLetters = 'ABCDEFGHJKLMNPQRSTUV'
+  const col = colLetters[Math.floor(Math.abs(lng * 10)) % colLetters.length]
+  const row = rowLetters[Math.floor(Math.abs(lat * 10)) % rowLetters.length]
+  const easting = String(Math.floor(Math.abs((lng % 1) * 100000))).padStart(5, '0')
+  const northing = String(Math.floor(Math.abs((lat % 1) * 100000))).padStart(5, '0')
+  return `${zone}${letters[letterIdx]} ${col}${row} ${easting} ${northing}`
+}
+
 // Generate a detection from a scenario
 export function createDetection(
   scenario: DetectionScenario,
   dronePosition: { lat: number; lng: number },
   droneId: string
 ): Detection {
+  const position = {
+    lat: dronePosition.lat + scenario.offsetLat,
+    lng: dronePosition.lng + scenario.offsetLng
+  }
   return {
     id: `det-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     type: scenario.type,
     confidence: scenario.confidence,
-    position: {
-      lat: dronePosition.lat + scenario.offsetLat,
-      lng: dronePosition.lng + scenario.offsetLng
-    },
+    position,
+    mgrs: toMGRS(position.lat, position.lng),
     timestamp: new Date(),
     droneId,
     flagged: false,

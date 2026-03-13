@@ -16,8 +16,8 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0a0a0a;
-  color: #ffffff;
+  background-color: #0d1b2a;
+  color: #b8c4d0;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -37,7 +37,7 @@ html {
 
 /* Leaflet dark theme overrides */
 .leaflet-container {
-  background-color: #0a0a0a;
+  background-color: #0d1b2a;
 }
 
 .leaflet-control-zoom {
@@ -45,9 +45,9 @@ html {
 }
 
 .leaflet-control-zoom a {
-  background-color: #1f1f1f !important;
-  color: #ffffff !important;
-  border: 1px solid #2a2a2a !important;
+  background-color: #1b2838 !important;
+  color: #b8c4d0 !important;
+  border: 1px solid #1e2d3d !important;
   width: 40px !important;
   height: 40px !important;
   line-height: 40px !important;
@@ -55,12 +55,12 @@ html {
 }
 
 .leaflet-control-zoom a:hover {
-  background-color: #2a2a2a !important;
+  background-color: #243447 !important;
 }
 
 .leaflet-control-attribution {
-  background-color: rgba(10, 10, 10, 0.8) !important;
-  color: #666 !important;
+  background-color: rgba(13, 27, 42, 0.8) !important;
+  color: #4a5868 !important;
   font-size: 10px !important;
   padding: 2px 6px !important;
 }
@@ -76,16 +76,16 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: #141414;
+  background: #152232;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: #1e2d3d;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3a;
+  background: #243447;
 }
 
 /* Mobile-first touch targets - min 48px for Android */

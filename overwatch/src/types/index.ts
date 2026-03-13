@@ -1,6 +1,7 @@
 // Drone types
-export type DroneStatus = 'ready' | 'flying' | 'returning' | 'stopped' | 'offline'
+export type DroneStatus = 'ready' | 'armed' | 'flying' | 'returning' | 'stopped' | 'landing' | 'offline'
 export type BatteryLevel = 'good' | 'warning' | 'critical'
+export type ArmState = 'disarmed' | 'armed'
 
 export interface DronePosition {
   lat: number
@@ -12,12 +13,13 @@ export interface Drone {
   name: string
   battery: number
   status: DroneStatus
+  armState: ArmState
   position: DronePosition
   connected: boolean
   homePosition: DronePosition
-  altitude: number    // meters AGL
-  speed: number       // m/s
-  heading: number     // degrees 0-359
+  altitude: number
+  speed: number
+  heading: number
 }
 
 // Detection types
@@ -28,6 +30,7 @@ export interface Detection {
   type: DetectionType
   confidence: number
   position: DronePosition
+  mgrs: string
   timestamp: Date
   droneId: string
   flagged: boolean
@@ -44,13 +47,13 @@ export interface SearchArea {
   assignedDroneId?: string
 }
 
-// View modes
-export type ViewMode = 'fleet' | 'map' | 'feed'
+// View modes — simplified: map is primary, voice log is secondary
+export type ViewMode = 'map' | 'voice'
 
 // Alert types
 export interface Alert {
   id: string
-  type: 'detection' | 'battery' | 'connection'
+  type: 'detection' | 'battery' | 'connection' | 'arm'
   message: string
   detectionId?: string
   droneId?: string
@@ -58,60 +61,51 @@ export interface Alert {
   dismissed: boolean
 }
 
-// Kill confirmation state
+// Voice conversation entry
+export interface VoiceEntry {
+  id: string
+  speaker: 'operator' | 'drone' | 'system'
+  text: string
+  timestamp: Date
+  detectionId?: string
+  type?: DetectionType
+}
+
+// Kill confirmation
 export interface KillConfirmation {
   droneId: string
   droneName: string
   active: boolean
 }
 
-// App state
-export interface AppState {
-  viewMode: ViewMode
-  selectedDroneId: string | null
-  selectedDetectionId: string | null
-  drones: Drone[]
-  detections: Detection[]
-  searchAreas: SearchArea[]
-  alerts: Alert[]
-  killConfirmation: KillConfirmation | null
-  isDrawingArea: boolean
-  pendingLaunch: {
-    droneId: string
-    searchAreaId: string
-  } | null
-}
-
-// Utility types
+// Battery helper
 export function getBatteryLevel(battery: number): BatteryLevel {
-  if (battery >= 30) return 'good'
-  if (battery >= 15) return 'warning'
+  if (battery > 30) return 'good'
+  if (battery > 15) return 'warning'
   return 'critical'
 }
 
+// Color helpers
 export function getDetectionColor(type: DetectionType): string {
   switch (type) {
-    case 'person': return '#ef4444'    // Red
-    case 'vehicle': return '#f59e0b'   // Yellow/Amber
-    case 'animal': return '#22c55e'    // Green
+    case 'person': return '#994444'
+    case 'vehicle': return '#997744'
+    case 'animal': return '#449966'
   }
 }
 
-export function getStatusColor(status: DroneStatus, battery: number): string {
-  if (status === 'offline') return '#666666'
-  if (status === 'stopped') return '#ef4444'
-
-  const level = getBatteryLevel(battery)
-  switch (level) {
-    case 'good': return '#22c55e'
-    case 'warning': return '#f59e0b'
-    case 'critical': return '#ef4444'
-  }
+export function getDroneColor(index: number): string {
+  const colors = ['#3d7cc7', '#1a9e4a', '#c4820a']
+  return colors[index % colors.length]
 }
 
-// Unique color per drone for map icons and selection highlights
-const DRONE_COLORS = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444']
-
-export function getDroneColor(droneIndex: number): string {
-  return DRONE_COLORS[droneIndex % DRONE_COLORS.length]
+export function getStatusColor(status: DroneStatus): string {
+  switch (status) {
+    case 'flying': return '#1a9e4a'
+    case 'armed': return '#c4820a'
+    case 'returning': return '#c4820a'
+    case 'stopped': return '#c43434'
+    case 'offline': return '#4a5868'
+    default: return '#6b7a8a'
+  }
 }

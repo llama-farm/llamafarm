@@ -7,50 +7,58 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Status colors - high contrast for field ops
+        // Status colors - muted for night ops, lower contrast
         status: {
-          good: '#22c55e',      // Green
-          warning: '#f59e0b',   // Amber
-          critical: '#ef4444',  // Red
+          good: '#1a9e4a',
+          warning: '#c4820a',
+          critical: '#c43434',
         },
-        // Detection pin colors
+        // Detection pin colors - muted
         detection: {
-          person: '#ef4444',    // Red
-          vehicle: '#f59e0b',   // Yellow/Amber
-          animal: '#22c55e',    // Green
+          person: '#994444',
+          vehicle: '#997744',
+          animal: '#449966',
         },
-        // Dark theme palette
+        // Dark navy palette - command center at 2am
         surface: {
-          base: '#0a0a0a',
-          raised: '#141414',
-          overlay: '#1f1f1f',
-          border: '#2a2a2a',
-          bar: '#141414',
+          base: '#0d1b2a',
+          raised: '#1b2838',
+          overlay: '#243447',
+          border: '#1e2d3d',
+          bar: '#152232',
         },
-        navy: {
-          50: '#e0e6ed',
-          100: '#c1cdd9',
-          200: '#8899aa',
-          300: '#5a7a94',
-          400: '#3a5a74',
-          500: '#1f1f1f',
-          600: '#141414',
-          700: '#141414',
-          800: '#0a0a0a',
-          900: '#141414',
-        }
+        // Accent
+        accent: {
+          DEFAULT: '#3d7cc7',
+          muted: '#2a5a8f',
+        },
+        // Text
+        text: {
+          primary: '#b8c4d0',
+          secondary: '#6b7a8a',
+          dim: '#4a5868',
+        },
+        // Kill button
+        kill: {
+          DEFAULT: '#b91c1c',
+          hover: '#c43434',
+        },
+        // Arm state
+        arm: {
+          armed: '#c4820a',
+          disarmed: '#4a5868',
+        },
       },
       fontSize: {
-        // Minimum 14px for readability
         'readable': ['14px', '1.4'],
       },
       spacing: {
-        // Min 44px touch targets
         'touch': '44px',
       },
       animation: {
         'pulse-detection': 'pulse-detection 1.5s ease-in-out infinite',
         'slide-in': 'slide-in 0.3s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out',
       },
       keyframes: {
         'pulse-detection': {
@@ -60,6 +68,10 @@ export default {
         'slide-in': {
           '0%': { transform: 'translateY(-100%)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         }
       }
     },

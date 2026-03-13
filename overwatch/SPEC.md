@@ -1,146 +1,248 @@
-# Overwatch PWA — Crawl Phase Spec
+# Overwatch PWA — Updated Spec (Post-AFSOC Call)
 
-## What this is
-Operator dashboard for autonomous drone ISR system. PWA that runs on laptop (Mac/Linux). Primary user: Dani (Sensor Operator) — launches drones, monitors detections, manages fleet from a touch-friendly web interface.
+## What Changed
+Original spec was built around Dani (Sensor Operator) managing 3 drones from fleet view. After the AFSOC sync with Cody (720th STG), we're refocusing:
+
+- **1:1 — one drone to UI** (paired drone support later, same mission)
+- **Voice is the primary interface** — screen is backup
+- **Map opens first** — no fleet selection step
+- **Video feed is secondary** — small PIP, not a primary view
+- **MGRS grid coordinates** on everything
+- **Lower contrast throughout** — no bright whites or saturated colors. Night-adapted eyes.
+- **Voice conversation view** — reviewable log with easy map swap
 
 ## Tech stack
-- React + TypeScript + Vite
-- Leaflet or Mapbox GL JS for maps (prefer Leaflet — no API key needed)
-- Tailwind CSS for styling
-- No backend — all mock data for now. Use realistic mock data that tells Dani's story.
+- React + TypeScript + Vite (existing)
+- Leaflet with CartoDB dark_all tiles (existing)
+- Tailwind CSS (existing)
+- Web Speech API for voice input/output (NEW)
+- All mock data for now (existing)
 
-## Design rules (from benchmarking research)
-- **Dark theme only** — field/night ops
-- **Map-maximized** (ATAK pattern) — map fills the screen, minimal chrome
-- **Large touch targets** — min 44px, designed for gloved/stressed use
-- **High-contrast status colors** — green=good, amber=warning, red=critical
-- **Text ≥14px, icons ≥24px** — readable at arm's length
-- **Minimal UI chrome** — every pixel is map, video, or data
+---
 
-## Dani's flow — 8 screens in one app
+## Theme Update — Lower Contrast
 
-The app tells this story as Dani uses it:
+Update THEME.md values. The current palette is good but needs to go softer:
 
-### 1. Fleet Status (app opens here)
-- Shows 3 drone cards: Bird 1 (green, 94%), Bird 2 (green, 87%), Bird 3 (yellow, 42%)
-- Each card: name, battery bar, status indicator (green/yellow/red), connection status
-- Tap a drone card to select it and transition to map view
-- Pattern: DJI FlightHub sidebar cards
+```
+Background (main):     #0d1b2a (keep)
+Background (cards):    #1b2838 (keep)
+Background (elevated): #243447 (keep)
+Text primary:          #b8c4d0 (was #e0e6ed — softer, less white)
+Text secondary:        #6b7a8a (was #8899aa — dimmer)
+Borders:               #1e2d3d (was #2a3a4a — subtler)
+Accent/interactive:    #3d7cc7 (was #4a9eff — less electric, more muted blue)
 
-### 2. Map View + Draw to Deploy
-- Full-screen dark map (Leaflet with dark tiles — CartoDB dark_all or similar)
-- Selected drone shown on map as an icon
-- Draw tool: click-to-draw a rectangle search area on the map
-- After drawing: "Launch Bird 1 → Search Area? [Confirm]" overlay
-- On confirm: drone icon starts moving along a search pattern (simulated)
-- Pattern: ATAK map-maximized + QGC simplicity
+Status green:          #1a9e4a (was #22c55e — darker, less neon)
+Status amber:          #c4820a (was #f59e0b — warmer, less bright)
+Status red:            #c43434 (was #ef4444 — deeper, less glaring)
 
-### 3. Map with Detection Pins (monitoring)
-- As drone "flies," detection pins appear on the map over time (simulated with timers)
-- Pin colors: 🔴 red = person, 🟡 yellow = vehicle, 🟢 green = animal
-- Pins show small icon indicating type
-- Fleet status strip at bottom: persistent bar showing all drones with battery levels
-- Pattern: ATAK symbology + DJI fleet strip
+Kill button:           #b91c1c (was #dc2626 — darker red, still distinct)
 
-### 4. Alert — Detection Needs Attention
-- When a red (person) pin drops, it pulses/animates
-- Toast notification slides in: "Person detected — 87% confidence — tap to view"
-- Notification is high-contrast, impossible to miss
+Detection pin red:     #994444 (muted)
+Detection pin yellow:  #997744 (muted)
+Detection pin green:   #449966 (muted)
+```
 
-### 5. Detection Detail → Live Feed (PIP swap)
-- Tap a detection pin → detail card pops up: mock photo, classification, confidence %, timestamp, coordinates
-- "Watch Feed" button on the card
-- Tapping "Watch Feed" swaps to live feed view (mock video/placeholder with drone label)
-- Detection bounding box overlay shown on the feed
-- PIP: small map thumbnail in corner (QGC pattern — tap to swap back)
-- Pattern: QGC PIP video switcher
+Rule: **Nothing pure white. Nothing neon. Everything looks like it belongs on a dimmed command center screen at 2am.**
 
-### 6. Flag to Commander
-- On the feed view: "Flag to Commander" button
-- Tapping it shows a brief confirmation: "Flagged to Marco ✓"
-- Returns to map view — the flagged pin now has a small flag icon
+---
 
-### 7. Battery Swap / Handoff
-- After some time, Bird 1's battery in the fleet strip drops to yellow (18%), then red (12%)
-- Alert: "Bird 1 — Low Battery — Send Bird 2?"
-- Tapping "Send Bird 2" shows Bird 2 launching to the same area
-- Bird 1 returns (icon moves back toward origin)
-- Detection pins persist — no gap in coverage
-- Pattern: DJI fleet management
+## Screen Flow (Single Drone)
 
-### 8. Emergency Stop
-- **Kill button: always visible**, bottom-right corner, red, every screen
-- Tapping it: "STOP Bird [X] — Confirm?" with a confirmation slider (QGC pattern)
-- After confirm: "Bird [X] Stopped — Hovering" status
-- "Return to Launch" button appears as follow-up action
+### Screen 1: OPEN → Map (default)
 
-## Layout structure
+App opens directly to full-screen dark map. No fleet selection. The one active drone is shown on the map, status "Ready."
+
+- Drone icon (arrow showing heading) on map
+- Top bar: connection status (subtle dot, not a badge), time
+- Telemetry HUD: altitude, battery %, speed — small, bottom-left, low opacity until needed
+- Voice bar at bottom: mic button + status text
+- Kill button: bottom-right, always visible, muted red until tapped
+- No fleet strip yet (one drone — strip appears if/when paired drone joins)
+
+### Screen 2: DEPLOY → Draw or Voice
+
+**Touch:** Tap draw button → draw rectangle on map → "Launch to search area? [Confirm]"
+**Voice:** "Launch search, altitude 400, lawnmower" → "Copy, launching search pattern" (spoken + displayed in voice bar)
+
+On confirm: drone icon begins moving in search pattern. Pattern overlay shown as subtle dashed line on map.
+
+3 interactions max. No configuration.
+
+### Screen 3: MONITOR → Map + Detections + Voice
+
+Primary operating screen. Operator spends most time here.
+
+- Detection pins appear on map as drone flies (color-coded, muted colors)
+- Each pin: type icon + confidence on hover/tap
+- Voice callouts: "New contact — vehicle — 82% — grid 12S AB 12345 67890" (spoken via synthesis)
+- Voice bar shows last callout text
+- Detection feed: right-side collapsible panel (existing), shows latest 5 detections with MGRS grid
+- Video PIP: small thumbnail, top-right corner, ~120x90px. Tap to expand slightly (not full screen). Shows live feed with bounding box overlay.
+
+### Screen 4: DETAIL → Tap Detection Pin
+
+Tap a pin or voice "detail on last contact":
+- Modal card: classification, confidence %, MGRS grid, timestamp, mock photo
+- "Flag to Commander" button
+- "Watch Feed" → expands PIP slightly + centers map on that detection
+- Tap outside or swipe down to dismiss → back to map
+
+### Screen 5: VOICE CONVERSATION → Swipe or Tap
+
+**New view.** Accessible by tapping the voice bar or swiping up from it.
+
+- Full-screen scrollable log of the voice conversation:
+  - Operator commands (right-aligned, subtle blue bubble)
+  - Drone/Ace responses (left-aligned, muted card)
+  - Detection callouts (left-aligned with type icon + color dot)
+  - Timestamps on each entry
+- Map PIP in corner (tap to go back to map instantly)
+- Voice bar still active at bottom — can speak commands from this view
+- Swipe down or tap map PIP to return to map
+
+This gives the operator a way to review what the drone has reported without scrolling through map pins. Like a chat transcript of the mission.
+
+### Screen 6: BATTERY SWAP
+
+When drone battery hits 18%:
+- Earpiece: "Battery low — 18%. Backup ready."
+- Subtle amber banner at top (not a full overlay): "Bird 1 low — Send Bird 2? [Confirm]"
+- On confirm: Bird 2 launches to same area, Bird 1 returns
+- Detection pins persist — no gap
+
+### Screen 7: COMMS LOSS (NEW)
+
+On connection drop:
+- Earpiece warning tone (two short beeps)
+- Top bar connection dot goes red
+- Subtle but unmissable banner: "COMMS LOST — Drone autonomous" (muted red background, not blinding)
+- Stays until reconnect
+- On reconnect: "COMMS RESTORED" banner (green, fades after 5s) + gap summary in voice conversation log
+
+### Screen 8: EMERGENCY KILL
+
+Kill button always visible, bottom-right, every screen.
+- Tap → confirm slider (existing pattern)
+- Voice: "Kill" → "Confirm kill?" → "Confirm" → "Drone stopped, hovering"
+- After confirm: "Stopped — Hovering" overlay with "Return to Launch" button
+- Audible: "Bird 1 stopped. Hovering."
+
+---
+
+## Voice System Design
+
+### Input (Web Speech API — SpeechRecognition)
+- Continuous listening mode when mic is active
+- Push-to-talk as alternative (tap and hold mic button)
+- Commands parsed for intent:
+  - "Launch [pattern] [altitude] [grid]" → deploy
+  - "Kill" / "Kill all" / "Stop" → emergency
+  - "Status" → reads telemetry
+  - "Any new contacts?" → summarizes recent detections
+  - "Detail on last contact" → opens detection detail
+  - "Flag to commander" → flags current/last detection
+  - "Grid on that" → reads MGRS of last detection
+  - "Return home" → RTH command
+
+### Output (Web Speech API — SpeechSynthesis)
+- Drone acknowledgments: "Copy," "Roger," "Returning"
+- Detection callouts: "[Type] detected — [confidence]% — grid [MGRS]"
+- Status responses: "Battery 78%. Altitude 400 feet. Flying search pattern."
+- Warnings: "Battery low," "Comms lost," "Comms restored"
+- Voice should be: flat, calm, slightly robotic. Not conversational. Military radio cadence.
+
+### Voice Bar UI
 ```
 ┌─────────────────────────────────────────────┐
-│ Top bar: connection status, GPS, time       │
-├─────────────────────────────────────────────┤
-│                                             │
-│              MAP / FEED VIEW                │
-│          (full screen, swappable)           │
-│                                             │
-│  [PIP thumbnail in corner when in feed]     │
-│                                             │
-├─────────────────────────────────────────────┤
-│ Fleet strip: [Bird1 94%] [Bird2 87%] [B3]  │
-└───────────────────────────────────[🔴 KILL]─┘
+│ 🎤  "Vehicle detected — 82% — grid 12S..." │
+│     ↑ tap for voice log    [MIC]            │
+└─────────────────────────────────────────────┘
 ```
+- Left: last message text (scrolls if long)
+- Right: mic button (muted blue when listening, dim when off)
+- Tap the text area → opens voice conversation view
+- Swipe up → opens voice conversation view
 
-## File structure
+---
+
+## MGRS Grid Integration
+
+- All detection detail cards show MGRS grid (not just lat/lng)
+- Tap any point on map → MGRS grid tooltip
+- Voice responses use MGRS format
+- Use a JS library like `mgrs` (npm) for conversion
+- Format: "12S AB 12345 67890" (spoken as individual digits)
+
+---
+
+## Component Changes
+
+### Remove / Demote
+- `FleetStatus` as opening view → map opens first. FleetStatus becomes accessible from a menu or long-press.
+- `FeedView` as full screen → PIP only. Remove the full feed view mode.
+- `ViewMode` type: change from `'fleet' | 'map' | 'feed'` to `'map' | 'voice'` (fleet and feed are overlays/PIPs, not views)
+
+### Add
+- `VoiceBar` — persistent bottom bar with mic + last message
+- `VoiceLog` — full conversation view (new "screen")
+- `CommsLostBanner` — connection loss overlay
+- `MGRSTooltip` — map tap → grid display
+- `useVoice` hook — Web Speech API integration (recognition + synthesis)
+- `useMGRS` hook — lat/lng → MGRS conversion
+
+### Modify
+- `App.tsx` — default to map view, remove fleet as initial, add voice view mode
+- `TopBar` — simplify, lower contrast, connection dot instead of badge
+- `DetectionDetail` — add MGRS grid field
+- `DetectionFeed` — add MGRS to each item
+- `TelemetryHUD` — lower opacity, smaller, bottom-left
+- `KillButton` / `FleetStrip` — muted red (not bright), darker until needed
+- All colors → updated lower-contrast palette
+
+---
+
+## Implementation Order
+
+1. **Theme update** — apply lower-contrast palette everywhere
+2. **Default to map** — remove fleet as opening screen
+3. **Voice bar UI** — add persistent bar (visual only first, no speech API yet)
+4. **Voice conversation view** — scrollable log + map PIP to swap back
+5. **MGRS integration** — add to detection details and map taps
+6. **Web Speech API** — wire voice input + synthesis output
+7. **Comms loss banner** — connection state warning
+8. **Simplify to 1:1** — remove multi-drone fleet selection, single drone focus
+9. **Video PIP only** — remove full feed view, keep small corner PIP
+
+---
+
+## Files to Update
+
 ```
 overwatch/
-  package.json
-  vite.config.ts
-  tsconfig.json
-  index.html
-  tailwind.config.js
-  postcss.config.js
-  src/
-    main.tsx
-    App.tsx
-    index.css (tailwind imports)
-    components/
-      Map/MapView.tsx        — Leaflet dark map with draw, pins, drone icons
-      Feed/FeedView.tsx      — Mock video feed with overlays
-      Fleet/FleetStrip.tsx   — Bottom bar with drone cards
-      Fleet/DroneCard.tsx    — Individual drone status card
-      Detection/DetectionPin.tsx — Map pin component
-      Detection/DetectionDetail.tsx — Detail card popup
-      Detection/AlertToast.tsx — Toast notification
-      Controls/KillButton.tsx — Emergency stop (always visible)
-      Controls/ConfirmSlider.tsx — QGC-style confirmation slider
-      Controls/LaunchConfirm.tsx — Launch confirmation overlay
-      TopBar.tsx             — Status bar
-      PIPThumbnail.tsx       — Picture-in-picture swap thumbnail
-    hooks/
-      useSimulation.ts       — Mock drone flight + detection generation
-      useDrones.ts           — Drone state management
-    types/
-      index.ts               — TypeScript types
-    data/
-      mockDetections.ts      — Realistic mock detection data
-      mockDrones.ts          — Drone fleet mock data
+├── SPEC.md              ← this file (replace)
+├── THEME.md             ← update color values
+├── src/
+│   ├── App.tsx          ← default to map, add voice view
+│   ├── types/index.ts   ← update ViewMode, add VoiceEntry type
+│   ├── hooks/
+│   │   ├── useVoice.ts  ← NEW: Web Speech API
+│   │   └── useMGRS.ts   ← NEW: coordinate conversion
+│   ├── components/
+│   │   ├── Voice/
+│   │   │   ├── VoiceBar.tsx     ← NEW
+│   │   │   └── VoiceLog.tsx     ← NEW
+│   │   ├── Map/
+│   │   │   ├── MapView.tsx      ← add MGRS tooltip
+│   │   │   └── TelemetryHUD.tsx ← lower opacity
+│   │   ├── Detection/
+│   │   │   ├── DetectionDetail.tsx ← add MGRS
+│   │   │   └── DetectionFeed.tsx  ← add MGRS, muted colors
+│   │   ├── Controls/
+│   │   │   └── KillButton.tsx   ← muted red
+│   │   ├── TopBar.tsx           ← simplify, add comms dot
+│   │   └── CommsLostBanner.tsx  ← NEW
+│   └── index.css        ← update color vars
+└── tailwind.config.js   ← update palette
 ```
-
-## Mock data should feel real
-- Drone names: Bird 1, Bird 2, Bird 3
-- Map centered on a realistic area (use Fort Liberty, NC area — 35.14°N, 79.0°W)
-- Detections: mix of persons, vehicles, animals with varying confidence (0.65-0.95)
-- Timestamps: realistic intervals
-- Battery drain: Bird 1 starts at 94% and slowly decreases
-
-## What NOT to build
-- No backend/API integration
-- No real video streaming (use a placeholder/mock frame)
-- No authentication
-- No Marco or Jay screens (Crawl is Dani only)
-- No multi-drone handoff logic (just visual simulation)
-- No DINOv2 re-ID
-- No Ace chat
-
-## Run instructions
-Should start with `npm install && npm run dev` and open on localhost.
