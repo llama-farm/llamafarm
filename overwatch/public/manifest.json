@@ -1,0 +1,18 @@
+{
+  "name": "Overwatch",
+  "short_name": "Overwatch",
+  "description": "Drone ISR Operator Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
