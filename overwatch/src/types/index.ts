@@ -88,9 +88,9 @@ export function getBatteryLevel(battery: number): BatteryLevel {
 // Color helpers
 export function getDetectionColor(type: DetectionType): string {
   switch (type) {
-    case 'person': return '#994444'
-    case 'vehicle': return '#997744'
-    case 'animal': return '#449966'
+    case 'person': return '#6b3333'
+    case 'vehicle': return '#6b5533'
+    case 'animal': return '#336b4d'
   }
 }
 

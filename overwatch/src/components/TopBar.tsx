@@ -13,11 +13,25 @@ interface TopBarProps {
 
 export function TopBar({ connectionStatus, armState = 'disarmed', viewMode = 'map', onSetView, onToggleArm, canDisarm = true }: TopBarProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [confirmingArm, setConfirmingArm] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // Auto-dismiss confirm after 3 seconds
+  useEffect(() => {
+    if (confirmingArm) {
+      const t = setTimeout(() => setConfirmingArm(false), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [confirmingArm])
+
+  // Reset confirm state when arm state changes
+  useEffect(() => {
+    setConfirmingArm(false)
+  }, [armState])
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -35,6 +49,25 @@ export function TopBar({ connectionStatus, armState = 'disarmed', viewMode = 'ma
         : 'text-text-dim hover:text-text-secondary'
     }`
 
+  const handleArmClick = () => {
+    if (armState === 'disarmed') {
+      // Arm immediately — no confirm needed
+      onToggleArm?.()
+      return
+    }
+    if (!canDisarm) return
+    if (confirmingArm) {
+      // Second tap = confirm disarm
+      onToggleArm?.()
+      setConfirmingArm(false)
+    } else {
+      // First tap = show disarm confirm
+      setConfirmingArm(true)
+    }
+  }
+
+  const pillLabel = confirmingArm ? 'DISARM?' : (armState === 'armed' ? 'ARMED' : 'DISARMED')
+
   return (
     <header className="h-11 bg-surface-bar border-b border-surface-border flex items-center justify-between pl-3 pr-0 shrink-0 safe-top">
       {/* Left: Title + Time */}
@@ -44,7 +77,7 @@ export function TopBar({ connectionStatus, armState = 'disarmed', viewMode = 'ma
       </div>
 
       {/* Center: Status cluster */}
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex items-center gap-4 text-xs self-center">
         <div className="flex items-center gap-1.5">
           <div className={`w-2 h-2 rounded-full ${connDot}`} />
           <span className={`${connText} uppercase`}>
@@ -52,18 +85,29 @@ export function TopBar({ connectionStatus, armState = 'disarmed', viewMode = 'ma
           </span>
         </div>
         <button
-          onClick={onToggleArm}
+          onClick={handleArmClick}
           disabled={armState === 'armed' && !canDisarm}
-          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-colors ${
-            armState === 'armed'
-              ? 'border-arm-armed/40 bg-arm-armed/10 hover:bg-arm-armed/20'
-              : 'border-surface-border bg-surface-raised hover:bg-surface-overlay'
+          style={{ height: '26px', maxHeight: '26px', minHeight: '26px', boxSizing: 'border-box' }}
+          className={`inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] leading-none transition-colors outline-none focus:outline-none focus:ring-0 shrink-0 ${
+            confirmingArm
+              ? (armState === 'armed'
+                ? 'border-status-critical/50 bg-status-critical/15 hover:bg-status-critical/25'
+                : 'border-arm-armed/50 bg-arm-armed/15 hover:bg-arm-armed/25')
+              : armState === 'armed'
+                ? 'border-arm-armed/30 bg-arm-armed/10 hover:bg-arm-armed/20'
+                : 'border-surface-border bg-surface-raised hover:bg-surface-overlay'
           } ${armState === 'armed' && !canDisarm ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          title={armState === 'armed' ? (canDisarm ? 'Tap to disarm' : 'Cannot disarm while flying') : 'Tap to arm'}
+          title={confirmingArm ? 'Tap again to confirm' : (armState === 'armed' ? 'Tap to disarm' : 'Tap to arm')}
         >
-          <div className={`w-2 h-2 rounded-full ${armState === 'armed' ? 'bg-arm-armed' : 'bg-arm-disarmed'}`} />
-          <span className={`uppercase text-xs ${armState === 'armed' ? 'text-arm-armed' : 'text-text-dim'}`}>
-            {armState}
+          <div className={`w-1.5 h-1.5 rounded-full ${
+            confirmingArm ? 'animate-pulse' : ''
+          } ${armState === 'armed' ? 'bg-arm-armed' : 'bg-arm-disarmed'}`} />
+          <span className={`uppercase font-medium ${
+            confirmingArm
+              ? (armState === 'armed' ? 'text-status-critical' : 'text-arm-armed')
+              : armState === 'armed' ? 'text-arm-armed' : 'text-text-dim'
+          }`}>
+            {pillLabel}
           </span>
         </button>
       </div>

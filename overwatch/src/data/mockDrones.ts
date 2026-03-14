@@ -17,19 +17,6 @@ export const initialDrones: Drone[] = [
     speed: 0,
     heading: 0
   },
-  {
-    id: 'bird-2',
-    name: 'Bird 2',
-    battery: 87,
-    status: 'ready',
-    armState: 'disarmed',
-    position: { lat: HOME_POSITION.lat + 0.001, lng: HOME_POSITION.lng + 0.001 },
-    connected: true,
-    homePosition: { lat: HOME_POSITION.lat + 0.001, lng: HOME_POSITION.lng + 0.001 },
-    altitude: 0,
-    speed: 0,
-    heading: 0
-  },
 ]
 
 export const MAP_CENTER = HOME_POSITION

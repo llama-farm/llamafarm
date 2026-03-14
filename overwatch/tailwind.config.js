@@ -9,15 +9,15 @@ export default {
       colors: {
         // Status colors - muted for night ops, lower contrast
         status: {
-          good: '#1a9e4a',
-          warning: '#c4820a',
-          critical: '#c43434',
+          good: '#16703a',
+          warning: '#8a5c08',
+          critical: '#8a2424',
         },
-        // Detection pin colors - muted
+        // Detection pin colors - very muted for night ops
         detection: {
-          person: '#994444',
-          vehicle: '#997744',
-          animal: '#449966',
+          person: '#6b3333',
+          vehicle: '#6b5533',
+          animal: '#336b4d',
         },
         // Dark navy palette - command center at 2am
         surface: {
@@ -40,8 +40,8 @@ export default {
         },
         // Kill button
         kill: {
-          DEFAULT: '#b91c1c',
-          hover: '#c43434',
+          DEFAULT: '#7a1a1a',
+          hover: '#8a2424',
         },
         // Arm state
         arm: {

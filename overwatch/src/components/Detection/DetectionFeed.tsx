@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Detection, Alert, Drone } from '../../types'
 import { getDetectionColor } from '../../types'
 
@@ -22,6 +23,7 @@ interface DetectionFeedProps {
 }
 
 export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, onToggleCollapsed, onDetectionClick, onAlertAction, onAlertDismiss, onOpenStream }: DetectionFeedProps) {
+  const [streamCollapsed, setStreamCollapsed] = useState(false)
 
   const feedItems: FeedItem[] = [
     ...alerts.map(a => ({ id: `alert-${a.id}`, type: 'alert' as const, timestamp: a.timestamp, alert: a })),
@@ -33,7 +35,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
 
   const getAlertPriority = (alert: Alert) => {
     switch (alert.type) {
-      case 'detection': return { color: '#ef4444', bg: 'bg-red-500/15', border: 'border-l-red-500', label: 'PERSON DETECTED' }
+      case 'detection': return { color: '#8a2424', bg: 'bg-red-900/15', border: 'border-l-red-900', label: 'PERSON DETECTED' }
       case 'battery': return { color: '#f59e0b', bg: 'bg-amber-500/15', border: 'border-l-amber-500', label: 'LOW BATTERY' }
       case 'connection': return { color: '#6b7280', bg: 'bg-gray-500/15', border: 'border-l-gray-500', label: 'CONNECTION' }
     }
@@ -41,10 +43,10 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'person': return '👤'
-      case 'vehicle': return '🚗'
-      case 'animal': return '🐾'
-      default: return '●'
+      case 'person': return 'PER'
+      case 'vehicle': return 'VEH'
+      case 'animal': return 'ANM'
+      default: return '—'
     }
   }
 
@@ -167,9 +169,22 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
             )}
           </div>
 
-          {/* Stream preview */}
+          {/* Stream preview — collapsible */}
           {isStreaming && selectedDrone && (
             <div className="border-t border-surface-border shrink-0">
+              {/* Toggle bar */}
+              <button
+                onClick={() => setStreamCollapsed(c => !c)}
+                className="w-full flex items-center justify-between px-2.5 py-1 hover:bg-surface-overlay/30 transition-colors"
+              >
+                <span className="text-[10px] text-text-dim">
+                  {(selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? 'LIVE' : 'STANDBY'} — {selectedDrone.name}
+                </span>
+                <svg className={`w-3 h-3 text-text-dim transition-transform ${streamCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {!streamCollapsed && (
               <button
                 onClick={onOpenStream}
                 className="relative w-full aspect-[16/9] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 group"
@@ -196,7 +211,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
                   </div>
                 </div>
                 {(selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? (
-                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-600/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-white">
+                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-red-900/80 px-1.5 py-0.5 rounded text-[10px] font-bold text-text-primary">
                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                     LIVE
                   </div>
@@ -209,6 +224,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
                   {selectedDrone.name}
                 </div>
               </button>
+              )}
             </div>
           )}
         </div>

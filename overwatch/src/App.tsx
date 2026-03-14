@@ -55,64 +55,176 @@ export default function App() {
 
   // Voice command handler — used by both voice recognition and text input
   const handleVoiceCommand = useCallback((command: string) => {
-    // Add the operator's message to the log (voice path does this in recognition handler, text path needs it here)
+    // Add the operator's message to the log
     voice.addEntry('operator', command)
     const cmd = command.toLowerCase()
 
+    // --- Launch / Search ---
     if (cmd.includes('launch') || cmd.includes('go') || cmd.includes('send') || cmd.includes('survey') || cmd.includes('scan') || cmd.includes('search') || cmd.includes('fly') || cmd.includes('patrol')) {
-      voice.speak('Copy, standing by for search area. Draw on map or specify grid.', 'drone')
-    } else if (cmd.includes('kill') || cmd.includes('stop')) {
+      voice.speak('Copy. Standing by for search area. Draw on map or specify grid.', 'drone')
+
+    // --- Kill / Stop ---
+    } else if (cmd.includes('kill') || cmd.includes('stop all')) {
       const drone = drones.find(d => d.id === selectedDroneId)
       if (drone && (drone.status === 'flying' || drone.status === 'returning')) {
         requestKillConfirmation(drone.id)
-        voice.speak('Confirm kill?', 'drone')
+        voice.speak('Copy. Confirm kill?', 'drone')
+      } else {
+        voice.speak('Copy. No active drone to stop.', 'drone')
       }
-    } else if (cmd.includes('confirm')) {
+
+    // --- Confirm ---
+    } else if (cmd.includes('confirm') || cmd.includes('yes') || cmd.includes('affirmative')) {
       if (killConfirmation) {
         stopDrone(killConfirmation.droneId)
         setStoppedDroneId(killConfirmation.droneId)
-        voice.speak(`${killConfirmation.droneName} stopped. Hovering.`, 'drone')
+        voice.speak(`Roger. ${killConfirmation.droneName} stopped. Hovering.`, 'drone')
+      } else {
+        voice.speak('Copy. Nothing to confirm.', 'drone')
       }
-    } else if (cmd.includes('status')) {
+
+    // --- Comms check ---
+    } else if (cmd.includes('comms') || cmd.includes('mesh status') || cmd.includes('connection')) {
+      const connected = drones.filter(d => d.status !== 'offline')
+      const offline = drones.filter(d => d.status === 'offline')
+      const parts = []
+      if (connected.length > 0) parts.push(`${connected.length} drone${connected.length > 1 ? 's' : ''} on mesh: ${connected.map(d => d.name).join(', ')}`)
+      if (offline.length > 0) parts.push(`${offline.length} offline: ${offline.map(d => d.name).join(', ')}`)
+      voice.speak(`Roger. ${parts.join('. ')}.`, 'drone')
+
+    // --- Battery query (specific drone) ---
+    } else if (cmd.includes('battery')) {
+      // Check if they asked about a specific drone by number
+      const droneMatch = cmd.match(/(?:drone|bird)\s*(\d+)/i)
+      if (droneMatch) {
+        const drone = drones.find(d => d.name.toLowerCase().includes(droneMatch[1]))
+        if (drone) {
+          voice.speak(`Roger. ${drone.name}, battery ${drone.battery}%.${drone.battery < 20 ? ' Low battery.' : ''}`, 'drone')
+        } else {
+          voice.speak('Copy. Drone not found.', 'drone')
+        }
+      } else {
+        // All drones battery
+        const report = drones.map(d => `${d.name} ${d.battery}%`).join(', ')
+        voice.speak(`Roger. ${report}.`, 'drone')
+      }
+
+    // --- Status ---
+    } else if (cmd.includes('status') || cmd.includes('sitrep')) {
       const drone = drones.find(d => d.id === selectedDroneId)
       if (drone) {
-        voice.speak(`Battery ${drone.battery}%. Altitude ${drone.altitude} feet. ${drone.status}. ${drone.armState}.`, 'drone')
+        voice.speak(`Roger. ${drone.name}. Battery ${drone.battery}%. Altitude ${drone.altitude} feet. ${drone.status}. ${drone.armState}.`, 'drone')
       }
-    } else if (cmd.includes('arm')) {
-      const drone = drones.find(d => d.id === selectedDroneId)
-      if (drone && drone.armState === 'disarmed') {
-        updateDrone(drone.id, { armState: 'armed', status: 'armed' })
-        voice.speak('Armed. Ready for launch.', 'drone')
+
+    // --- Grid query ---
+    } else if (cmd.includes('grid') || cmd.includes('mgrs') || cmd.includes('coordinates') || cmd.includes('position')) {
+      const recent = detections[detections.length - 1]
+      if (recent) {
+        voice.speak(`Roger. Last contact grid ${recent.mgrs}. ${recent.type}, ${Math.round(recent.confidence * 100)}% confidence.`, 'drone')
+      } else {
+        const drone = drones.find(d => d.id === selectedDroneId)
+        if (drone) {
+          const grid = toMGRS(drone.position.lat, drone.position.lng)
+          voice.speak(`Roger. ${drone.name} position grid ${grid}.`, 'drone')
+        }
       }
+
+    // --- Disarm (must be before arm check) ---
     } else if (cmd.includes('disarm')) {
       const drone = drones.find(d => d.id === selectedDroneId)
       if (drone && drone.armState === 'armed' && drone.status !== 'flying') {
         updateDrone(drone.id, { armState: 'disarmed', status: 'ready' })
-        voice.speak('Disarmed.', 'drone')
+        voice.speak('Roger. Disarmed.', 'drone')
+      } else if (drone?.status === 'flying') {
+        voice.speak('Copy. Cannot disarm while flying. Use kill to stop.', 'drone')
+      } else {
+        voice.speak('Copy. Already disarmed.', 'drone')
       }
-    } else if (cmd.includes('return') || cmd.includes('home') || cmd.includes('rtl')) {
+
+    // --- Arm ---
+    } else if (cmd.includes('arm')) {
+      const drone = drones.find(d => d.id === selectedDroneId)
+      if (drone && drone.armState === 'disarmed') {
+        updateDrone(drone.id, { armState: 'armed', status: 'armed' })
+        voice.speak('Roger. Armed. Ready for launch.', 'drone')
+      } else if (drone?.armState === 'armed') {
+        voice.speak('Copy. Already armed.', 'drone')
+      }
+
+    // --- Return / RTL ---
+    } else if (cmd.includes('return') || cmd.includes('home') || cmd.includes('rtl') || cmd.includes('come back')) {
       const drone = drones.find(d => d.id === selectedDroneId)
       if (drone && drone.status === 'flying') {
         returnDrone(drone.id)
-        voice.speak('Roger, returning to launch.', 'drone')
+        voice.speak('Roger. Returning to launch.', 'drone')
+      } else {
+        voice.speak('Copy. No active flight to return.', 'drone')
       }
-    } else if (cmd.includes('contact') || cmd.includes('detection')) {
+
+    // --- Watch / Track (persistent surveillance) ---
+    } else if (cmd.includes('watch') || cmd.includes('track') || cmd.includes('monitor') || cmd.includes('observe') || cmd.includes('eyes on')) {
+      voice.speak('Copy. Setting persistent watch on target area. Will alert on movement.', 'drone')
+
+    // --- Count detections ---
+    } else if (cmd.includes('how many') || cmd.includes('count')) {
+      const people = detections.filter(d => d.type === 'person').length
+      const vehicles = detections.filter(d => d.type === 'vehicle').length
+      const animals = detections.filter(d => d.type === 'animal').length
+      const parts = []
+      if (people > 0) parts.push(`${people} person${people > 1 ? 's' : ''}`)
+      if (vehicles > 0) parts.push(`${vehicles} vehicle${vehicles > 1 ? 's' : ''}`)
+      if (animals > 0) parts.push(`${animals} animal${animals > 1 ? 's' : ''}`)
+      voice.speak(parts.length > 0 ? `Roger. ${parts.join(', ')}.` : 'Roger. No contacts.', 'drone')
+
+    // --- Priority contact ---
+    } else if (cmd.includes('priority') || cmd.includes('highest') || cmd.includes('urgent')) {
+      const sorted = [...detections].sort((a, b) => b.confidence - a.confidence)
+      const top = sorted[0]
+      if (top) {
+        voice.speak(`Roger. Priority contact: ${top.type}, ${Math.round(top.confidence * 100)}% confidence, grid ${top.mgrs}.`, 'drone')
+      } else {
+        voice.speak('Roger. No contacts.', 'drone')
+      }
+
+    // --- Last contact / detection ---
+    } else if (cmd.includes('contact') || cmd.includes('detection') || cmd.includes('last')) {
       const recent = detections[detections.length - 1]
       if (recent) {
-        voice.speak(`Last contact: ${recent.type}, ${recent.confidence}%, grid ${recent.mgrs}`, 'drone')
+        voice.speak(`Roger. Last contact: ${recent.type}, ${Math.round(recent.confidence * 100)}%, grid ${recent.mgrs}.`, 'drone')
       } else {
-        voice.speak('No contacts.', 'drone')
+        voice.speak('Roger. No contacts.', 'drone')
       }
-    } else if (cmd.includes('flag')) {
+
+    // --- Summarize / Debrief ---
+    } else if (cmd.includes('summarize') || cmd.includes('summary') || cmd.includes('debrief') || cmd.includes('what happened')) {
+      const totalDetections = detections.length
+      const flagged = detections.filter(d => d.flagged).length
+      const people = detections.filter(d => d.type === 'person').length
+      const vehicles = detections.filter(d => d.type === 'vehicle').length
+      const flyingDrones = drones.filter(d => d.status === 'flying').length
+      voice.speak(`Roger. Mission summary: ${totalDetections} total contacts — ${people} persons, ${vehicles} vehicles. ${flagged} flagged for review. ${flyingDrones} drone${flyingDrones !== 1 ? 's' : ''} currently airborne.`, 'drone')
+
+    // --- Flag ---
+    } else if (cmd.includes('flag') || cmd.includes('mark')) {
       const recent = detections[detections.length - 1]
       if (recent && !recent.flagged) {
         flagDetection(recent.id)
-        voice.speak('Flagged to commander.', 'drone')
+        voice.speak('Roger. Flagged to commander.', 'drone')
+      } else if (recent?.flagged) {
+        voice.speak('Copy. Already flagged.', 'drone')
+      } else {
+        voice.speak('Copy. No contact to flag.', 'drone')
       }
+
+    // --- Help ---
+    } else if (cmd.includes('help') || cmd.includes('commands')) {
+      voice.speak('Commands: launch, arm, disarm, status, kill, return, scan, grid, battery, comms, watch, count, priority, summarize, flag, help.', 'drone')
+
+    // --- Fallback ---
     } else {
-      voice.speak('Copy. No matching command. Try: launch, status, kill, arm, return, scan.', 'drone')
+      voice.speak('Copy. Command not recognized. Say help for available commands.', 'drone')
     }
-  }, [drones, selectedDroneId, detections, killConfirmation, requestKillConfirmation, stopDrone, returnDrone, updateDrone, flagDetection])
+  }, [drones, selectedDroneId, detections, killConfirmation, requestKillConfirmation, stopDrone, returnDrone, updateDrone, flagDetection, toMGRS])
 
   // Voice system
   const voice = useVoice({ onCommand: handleVoiceCommand })
@@ -303,16 +415,15 @@ export default function App() {
         />
       )}
 
-      {/* Fleet strip (map view only, minimal for 1:1) */}
-      {viewMode === 'map' && (
-        <FleetStrip
-          drones={drones}
-          selectedDroneId={selectedDroneId}
-          onSelectDrone={(id) => setSelectedDroneId(id)}
-          onKill={handleKillButton}
-          killDisabled={!canKillSelected}
-          selectedDroneName={canKillSelected ? selectedDrone?.name : undefined}
-        />
+      {/* Floating KILL button — bottom-right of map area, left of feed */}
+      {viewMode === 'map' && canKillSelected && (
+        <button
+          onClick={handleKillButton}
+          className="fixed z-[1100] bg-kill hover:bg-kill-hover text-text-primary font-bold text-xs tracking-wider px-3 py-1.5 rounded border border-kill-hover/30 transition-colors"
+          style={{ bottom: '100px', right: '240px' }}
+        >
+          KILL
+        </button>
       )}
 
       {/* Voice bar (always visible except voice log view) */}

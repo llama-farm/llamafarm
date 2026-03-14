@@ -16,10 +16,10 @@ export function DrawButton({ isDrawing, disabled, onClick }: DrawButtonProps) {
         font-medium text-sm tracking-wide
         transition-all
         ${disabled
-          ? 'bg-surface-overlay/80 text-gray-500 cursor-not-allowed'
+          ? 'bg-surface-overlay/80 text-text-dim cursor-not-allowed'
           : isDrawing
-            ? 'bg-green-600 text-white'
-            : 'bg-surface-overlay/90 border border-surface-border text-white active:bg-white/10'
+            ? 'bg-accent-muted/80 text-text-primary border border-accent/30'
+            : 'bg-surface-overlay/90 border border-surface-border text-text-secondary active:bg-surface-raised'
         }
       `}
       style={{ top: '56px', left: '60px', minHeight: '40px', height: '40px' }}

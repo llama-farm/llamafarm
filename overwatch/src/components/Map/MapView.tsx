@@ -212,7 +212,7 @@ export function MapView({
 
       {/* Drawing mode indicator */}
       {isDrawingArea && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-500/90 text-white px-4 py-2 rounded-lg text-sm font-medium z-[1000]">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface-overlay/90 border border-surface-border text-text-secondary px-4 py-2 rounded-lg text-sm font-medium z-[1000]">
           Click and drag to draw search area
         </div>
       )}
