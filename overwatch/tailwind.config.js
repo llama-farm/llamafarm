@@ -25,7 +25,7 @@ export default {
           raised: '#1b2838',
           overlay: '#243447',
           border: '#1e2d3d',
-          bar: '#152232',
+          bar: '#0f1922',
         },
         // Accent
         accent: {

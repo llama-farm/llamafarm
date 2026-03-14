@@ -14,7 +14,7 @@ interface FleetStripProps {
 
 export function FleetStrip({ drones, selectedDroneId, onSelectDrone, onKill, killDisabled, selectedDroneName }: FleetStripProps) {
   return (
-    <div className="h-12 bg-surface-raised border-t border-surface-border flex items-center px-3 shrink-0 fleet-strip">
+    <div className="h-12 bg-surface-raised border-t border-surface-border flex items-center px-3 shrink-0 fleet-strip relative z-[1100]">
       {/* Fleet label */}
       <span className="text-[10px] text-gray-500 uppercase tracking-widest mr-3 shrink-0">Fleet</span>
 

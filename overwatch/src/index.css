@@ -59,14 +59,7 @@ html {
 }
 
 .leaflet-control-attribution {
-  background-color: rgba(13, 27, 42, 0.8) !important;
-  color: #4a5868 !important;
-  font-size: 10px !important;
-  padding: 2px 6px !important;
-}
-
-.leaflet-control-attribution a {
-  color: #888 !important;
+  display: none !important;
 }
 
 /* Custom scrollbar for dark theme */
@@ -141,7 +134,7 @@ input, textarea {
 }
 
 .safe-top {
-  padding-top: calc(var(--safe-area-top) + 8px);
+  padding-top: var(--safe-area-top, 0px);
 }
 
 /* Fleet strip safe area */

@@ -29,6 +29,7 @@ export default function App() {
   const [stoppedDroneId, setStoppedDroneId] = useState<string | null>(null)
   const [commsConnected, setCommsConnected] = useState(true)
   const [commsRestored, setCommsRestored] = useState(false)
+  const [feedCollapsed, setFeedCollapsed] = useState(false)
 
   const { toMGRS } = useMGRS()
 
@@ -52,11 +53,13 @@ export default function App() {
     addBatteryAlert
   } = useDrones()
 
-  // Voice command handler
+  // Voice command handler — used by both voice recognition and text input
   const handleVoiceCommand = useCallback((command: string) => {
+    // Add the operator's message to the log (voice path does this in recognition handler, text path needs it here)
+    voice.addEntry('operator', command)
     const cmd = command.toLowerCase()
 
-    if (cmd.includes('launch') || cmd.includes('go')) {
+    if (cmd.includes('launch') || cmd.includes('go') || cmd.includes('send') || cmd.includes('survey') || cmd.includes('scan') || cmd.includes('search') || cmd.includes('fly') || cmd.includes('patrol')) {
       voice.speak('Copy, standing by for search area. Draw on map or specify grid.', 'drone')
     } else if (cmd.includes('kill') || cmd.includes('stop')) {
       const drone = drones.find(d => d.id === selectedDroneId)
@@ -107,7 +110,7 @@ export default function App() {
         voice.speak('Flagged to commander.', 'drone')
       }
     } else {
-      voice.speak('Say again.', 'drone')
+      voice.speak('Copy. No matching command. Try: launch, status, kill, arm, return, scan.', 'drone')
     }
   }, [drones, selectedDroneId, detections, killConfirmation, requestKillConfirmation, stopDrone, returnDrone, updateDrone, flagDetection])
 
@@ -224,6 +227,19 @@ export default function App() {
         connectionStatus={commsConnected ? 'connected' : 'disconnected'}
         gpsStatus="locked"
         armState={selectedDrone?.armState || 'disarmed'}
+        viewMode={viewMode}
+        onSetView={(v) => setViewMode(v)}
+        onToggleArm={() => {
+          if (!selectedDrone) return
+          if (selectedDrone.armState === 'disarmed') {
+            updateDrone(selectedDrone.id, { armState: 'armed', status: 'armed' })
+            voice.speak('Armed. Ready for launch.', 'drone')
+          } else if (selectedDrone.status !== 'flying' && selectedDrone.status !== 'returning') {
+            updateDrone(selectedDrone.id, { armState: 'disarmed', status: 'ready' })
+            voice.speak('Disarmed.', 'drone')
+          }
+        }}
+        canDisarm={selectedDrone?.status !== 'flying' && selectedDrone?.status !== 'returning'}
       />
 
       {/* Comms loss banner */}
@@ -250,15 +266,6 @@ export default function App() {
             {selectedDrone && (
               <TelemetryHUD drone={selectedDrone} />
             )}
-            <DetectionFeed
-              detections={detections}
-              alerts={alerts}
-              selectedDrone={selectedDrone}
-              onDetectionClick={handleDetectionClick}
-              onAlertAction={handleAlertAction}
-              onAlertDismiss={dismissAlert}
-              onOpenStream={() => {}}
-            />
           </>
         )}
 
@@ -267,10 +274,24 @@ export default function App() {
           <VoiceLog
             entries={voice.entries}
             isListening={voice.isListening}
+            feedCollapsed={feedCollapsed}
             onToggleMic={voice.toggleListening}
-            onBackToMap={() => setViewMode('map')}
+            onTextCommand={handleVoiceCommand}
           />
         )}
+
+        {/* Detection feed — visible in both map and voice views */}
+        <DetectionFeed
+          detections={detections}
+          alerts={alerts}
+          selectedDrone={selectedDrone}
+          collapsed={feedCollapsed}
+          onToggleCollapsed={() => setFeedCollapsed(c => !c)}
+          onDetectionClick={handleDetectionClick}
+          onAlertAction={handleAlertAction}
+          onAlertDismiss={dismissAlert}
+          onOpenStream={() => {}}
+        />
       </main>
 
       {/* Draw button (map view, drone selected and ready/armed) */}
@@ -300,7 +321,7 @@ export default function App() {
           isListening={voice.isListening}
           lastMessage={voice.lastMessage}
           onToggleMic={voice.toggleListening}
-          onOpenLog={() => setViewMode('voice')}
+          onTextCommand={handleVoiceCommand}
         />
       )}
 
