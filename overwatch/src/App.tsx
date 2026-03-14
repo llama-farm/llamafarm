@@ -376,7 +376,7 @@ export default function App() {
               onDetectionClick={handleDetectionClick}
             />
             {selectedDrone && (
-              <TelemetryHUD drone={selectedDrone} />
+              <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
             )}
           </>
         )}
@@ -415,16 +415,7 @@ export default function App() {
         />
       )}
 
-      {/* Floating KILL button — bottom-right of map area, left of feed */}
-      {viewMode === 'map' && canKillSelected && (
-        <button
-          onClick={handleKillButton}
-          className="fixed z-[1100] bg-kill hover:bg-kill-hover text-text-primary font-bold text-xs tracking-wider px-3 py-1.5 rounded border border-kill-hover/30 transition-colors"
-          style={{ bottom: '100px', right: '240px' }}
-        >
-          KILL
-        </button>
-      )}
+      {/* KILL button now lives inside TelemetryHUD */}
 
       {/* Voice bar (always visible except voice log view) */}
       {viewMode !== 'voice' && (

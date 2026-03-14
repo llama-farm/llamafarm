@@ -14,8 +14,6 @@ export function DetectionDetail({
   detection,
   droneName,
   onClose,
-  onWatchFeed,
-  onFlag
 }: DetectionDetailProps) {
   const color = getDetectionColor(detection.type)
   const label = detectionLabels[detection.type]
@@ -36,23 +34,23 @@ export function DetectionDetail({
   }
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-[2000]">
-      <div className="bg-surface-raised rounded-2xl w-80 max-w-[90vw] overflow-hidden shadow-2xl border border-surface-border">
+    <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-[2000]" onClick={onClose}>
+      <div className="bg-surface-raised rounded-2xl w-[420px] max-w-[92vw] overflow-hidden shadow-2xl border border-surface-border" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div
-          className="px-4 py-3 flex items-center justify-between"
-          style={{ backgroundColor: color + '20' }}
+          className="px-4 py-2 flex items-center justify-between border-b border-surface-border"
+          style={{ backgroundColor: color + '10' }}
         >
           <div className="flex items-center gap-2">
             <div
-              className="w-3 h-3 rounded-full"
+              className="w-2.5 h-2.5 rounded-full"
               style={{ backgroundColor: color }}
             />
-            <span className="font-semibold text-white">{label} Detected</span>
+            <span className="font-semibold text-text-primary text-sm">{label} Detected</span>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-overlay text-text-secondary text-lg transition-colors"
           >
             ✕
           </button>
@@ -63,62 +61,32 @@ export function DetectionDetail({
           <img
             src={detection.imageUrl}
             alt={`${label} detection`}
-            className="w-full h-48 object-cover bg-surface-overlay"
+            className="w-full h-52 object-cover bg-black"
           />
 
           {/* Confidence badge */}
-          <div
-            className="absolute top-2 right-2 px-2 py-1 rounded text-xs font-bold text-white"
-            style={{ backgroundColor: color }}
-          >
+          <div className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold font-mono text-text-primary bg-black/60 border border-surface-border">
             {Math.round(detection.confidence * 100)}%
           </div>
-
-          {/* Flagged indicator */}
-          {detection.flagged && (
-            <div className="absolute top-2 left-2 px-2 py-1 rounded text-xs font-bold text-white bg-amber-500 flex items-center gap-1">
-              🚩 Flagged
-            </div>
-          )}
         </div>
 
         {/* Details */}
-        <div className="p-4 space-y-3">
-          {/* Time & Drone */}
+        <div className="p-4 space-y-2.5">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Time</span>
-            <span className="text-white font-mono">{formatTime(detection.timestamp)}</span>
+            <span className="text-text-dim">Time</span>
+            <span className="text-text-primary font-mono">{formatTime(detection.timestamp)}</span>
           </div>
 
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Source</span>
-            <span className="text-white">{droneName}</span>
+            <span className="text-text-dim">Source</span>
+            <span className="text-text-primary">{droneName}</span>
           </div>
 
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Coordinates</span>
-            <span className="text-white font-mono text-xs">
+            <span className="text-text-dim">Coordinates</span>
+            <span className="text-text-primary font-mono text-xs">
               {formatCoords(detection.position.lat, detection.position.lng)}
             </span>
-          </div>
-
-          {/* Actions */}
-          <div className="pt-2 flex gap-2">
-            <button
-              onClick={onWatchFeed}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 rounded-lg transition-colors"
-            >
-              Watch Feed
-            </button>
-
-            {!detection.flagged && (
-              <button
-                onClick={onFlag}
-                className="px-4 bg-amber-600 hover:bg-amber-500 text-white font-medium py-3 rounded-lg transition-colors"
-              >
-                🚩 Flag
-              </button>
-            )}
           </div>
         </div>
       </div>

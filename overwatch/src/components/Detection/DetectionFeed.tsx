@@ -35,7 +35,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
 
   const getAlertPriority = (alert: Alert) => {
     switch (alert.type) {
-      case 'detection': return { color: '#8a2424', bg: 'bg-red-900/15', border: 'border-l-red-900', label: 'PERSON DETECTED' }
+      case 'detection': return { color: '#c45050', bg: 'bg-red-900/15', border: 'border-l-red-800', label: 'PERSON DETECTED' }
       case 'battery': return { color: '#f59e0b', bg: 'bg-amber-500/15', border: 'border-l-amber-500', label: 'LOW BATTERY' }
       case 'connection': return { color: '#6b7280', bg: 'bg-gray-500/15', border: 'border-l-gray-500', label: 'CONNECTION' }
     }
@@ -113,8 +113,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
                         {item.alert.type === 'detection' && (
                           <button
                             onClick={() => onAlertAction(item.alert!)}
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                            style={{ color: priority.color }}
+                            className="text-[10px] font-medium px-2 py-1 rounded bg-surface-overlay border border-surface-border hover:bg-surface-border transition-colors text-text-primary"
                           >
                             View
                           </button>
@@ -122,8 +121,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
                         {item.alert.type === 'battery' && (
                           <button
                             onClick={() => onAlertAction(item.alert!)}
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
-                            style={{ color: priority.color }}
+                            className="text-[10px] font-medium px-2 py-1 rounded bg-surface-overlay border border-surface-border hover:bg-surface-border transition-colors text-text-primary"
                           >
                             Send Backup
                           </button>
@@ -177,7 +175,10 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
                 onClick={() => setStreamCollapsed(c => !c)}
                 className="w-full flex items-center justify-between px-2.5 py-1 hover:bg-surface-overlay/30 transition-colors"
               >
-                <span className="text-[10px] text-text-dim">
+                <span className="text-[10px] text-text-dim flex items-center gap-1.5">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
                   {(selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? 'LIVE' : 'STANDBY'} — {selectedDrone.name}
                 </span>
                 <svg className={`w-3 h-3 text-text-dim transition-transform ${streamCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

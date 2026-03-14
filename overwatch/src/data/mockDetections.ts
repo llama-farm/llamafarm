@@ -67,27 +67,58 @@ export function createDetection(
   }
 }
 
-// Placeholder images for detection types
+// Night vision style placeholder images
 function getPlaceholderImage(type: DetectionType): string {
-  const colors = {
-    person: '#ef4444',
-    vehicle: '#f59e0b',
-    animal: '#22c55e'
+  // Muted green night-vision palette
+  const nvGreen = '#1a3a1a'
+  const nvHighlight = '#2d5a2d'
+  const nvBright = '#3d7a3d'
+  const boxColor = type === 'person' ? '#5a3333' : type === 'vehicle' ? '#5a5033' : '#335a40'
+  const boxStroke = type === 'person' ? '#7a4444' : type === 'vehicle' ? '#7a6a44' : '#447a55'
+
+  const shapes: Record<DetectionType, string> = {
+    person: `
+      <ellipse cx="200" cy="95" rx="14" ry="16" fill="${nvBright}" opacity="0.7"/>
+      <rect x="188" y="112" width="24" height="40" rx="3" fill="${nvHighlight}" opacity="0.6"/>
+      <rect x="185" y="152" width="12" height="30" rx="2" fill="${nvHighlight}" opacity="0.5"/>
+      <rect x="203" y="152" width="12" height="30" rx="2" fill="${nvHighlight}" opacity="0.5"/>
+    `,
+    vehicle: `
+      <rect x="130" y="100" width="100" height="45" rx="6" fill="${nvHighlight}" opacity="0.5"/>
+      <rect x="125" y="115" width="110" height="35" rx="4" fill="${nvBright}" opacity="0.3"/>
+      <circle cx="150" cy="148" r="8" fill="${nvGreen}" stroke="${nvHighlight}" stroke-width="2"/>
+      <circle cx="210" cy="148" r="8" fill="${nvGreen}" stroke="${nvHighlight}" stroke-width="2"/>
+    `,
+    animal: `
+      <ellipse cx="190" cy="130" rx="30" ry="16" fill="${nvHighlight}" opacity="0.5"/>
+      <circle cx="215" cy="120" r="8" fill="${nvBright}" opacity="0.5"/>
+      <rect x="170" y="146" width="5" height="18" rx="1" fill="${nvHighlight}" opacity="0.4"/>
+      <rect x="185" y="146" width="5" height="18" rx="1" fill="${nvHighlight}" opacity="0.4"/>
+      <rect x="200" y="146" width="5" height="18" rx="1" fill="${nvHighlight}" opacity="0.4"/>
+    `
   }
 
-  const icons: Record<DetectionType, string> = {
-    person: '<circle cx="160" cy="100" r="25" fill="' + colors.person + '"/><path d="M160 125 L160 180 M135 150 L185 150 M160 180 L140 220 M160 180 L180 220" stroke="' + colors.person + '" stroke-width="6" fill="none"/>',
-    vehicle: '<rect x="110" y="110" width="100" height="50" rx="8" fill="' + colors.vehicle + '"/><circle cx="135" cy="165" r="12" fill="#333"/><circle cx="185" cy="165" r="12" fill="#333"/>',
-    animal: '<ellipse cx="160" cy="130" rx="45" ry="25" fill="' + colors.animal + '"/><circle cx="195" cy="115" r="12" fill="' + colors.animal + '"/><line x1="120" y1="155" x2="115" y2="180" stroke="' + colors.animal + '" stroke-width="5"/><line x1="145" y1="155" x2="140" y2="180" stroke="' + colors.animal + '" stroke-width="5"/><line x1="175" y1="155" x2="170" y2="180" stroke="' + colors.animal + '" stroke-width="5"/><line x1="200" y1="155" x2="195" y2="180" stroke="' + colors.animal + '" stroke-width="5"/>'
-  }
+  // Noise grain pattern
+  const grainDots = Array.from({ length: 60 }, () => {
+    const x = Math.floor(Math.random() * 400)
+    const y = Math.floor(Math.random() * 240)
+    const o = (Math.random() * 0.15 + 0.05).toFixed(2)
+    return `<circle cx="${x}" cy="${y}" r="1" fill="#4a7a4a" opacity="${o}"/>`
+  }).join('')
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
-      <rect fill="#1a1a1a" width="320" height="240"/>
-      <rect fill="${colors[type]}" opacity="0.2" x="80" y="50" width="160" height="140" rx="4"/>
-      <rect fill="none" stroke="${colors[type]}" stroke-width="3" x="80" y="50" width="160" height="140" rx="4"/>
-      ${icons[type]}
-      <text fill="#ffffff" font-family="system-ui" font-size="12" x="160" y="215" text-anchor="middle">${type.toUpperCase()} DETECTED</text>
+    <svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240">
+      <rect fill="#0a0f0a" width="400" height="240"/>
+      <rect fill="${nvGreen}" opacity="0.15" width="400" height="240"/>
+      ${grainDots}
+      <line x1="0" y1="60" x2="400" y2="60" stroke="${nvGreen}" stroke-width="0.3" opacity="0.3"/>
+      <line x1="0" y1="120" x2="400" y2="120" stroke="${nvGreen}" stroke-width="0.3" opacity="0.3"/>
+      <line x1="0" y1="180" x2="400" y2="180" stroke="${nvGreen}" stroke-width="0.3" opacity="0.3"/>
+      <line x1="200" y1="0" x2="200" y2="240" stroke="${nvGreen}" stroke-width="0.3" opacity="0.2"/>
+      <rect fill="${boxColor}" opacity="0.3" x="120" y="70" width="160" height="120" rx="2"/>
+      <rect fill="none" stroke="${boxStroke}" stroke-width="1.5" x="120" y="70" width="160" height="120" rx="2"/>
+      ${shapes[type]}
+      <text fill="${boxStroke}" font-family="monospace" font-size="10" x="125" y="85" opacity="0.8">TGT</text>
     </svg>
   `
 

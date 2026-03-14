@@ -73,9 +73,9 @@ function DrawTool({ isDrawing, onDrawComplete }: DrawToolProps) {
     <Rectangle
       bounds={currentRect}
       pathOptions={{
-        color: '#22c55e',
+        color: '#16703a',
         weight: 2,
-        fillColor: '#22c55e',
+        fillColor: '#16703a',
         fillOpacity: 0.2,
         dashArray: '5, 5'
       }}
@@ -127,19 +127,15 @@ export function MapView({
     const icon = L.divIcon({
       className: 'detection-marker',
       html: `
-        <div class="${detection.type === 'person' && !detection.flagged ? 'detection-pin-pulse' : ''}" style="
-          width: 24px;
-          height: 24px;
+        <div style="
+          width: 18px;
+          height: 18px;
           border-radius: 50%;
           background-color: ${getDetectionColor(detection.type)};
-          border: 2px solid white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 12px;
+          border: 1.5px solid ${getDetectionColor(detection.type)}88;
+          box-shadow: 0 0 4px ${getDetectionColor(detection.type)}40;
           position: relative;
         ">
-          ${detection.flagged ? '<span style="position: absolute; top: -12px; right: -6px; font-size: 10px;">🚩</span>' : ''}
         </div>
       `,
       iconSize: [24, 24],
@@ -189,9 +185,9 @@ export function MapView({
               [area.bounds.northEast.lat, area.bounds.northEast.lng]
             ]}
             pathOptions={{
-              color: '#22c55e',
+              color: '#16703a',
               weight: 2,
-              fillColor: '#22c55e',
+              fillColor: '#16703a',
               fillOpacity: 0.1
             }}
           />

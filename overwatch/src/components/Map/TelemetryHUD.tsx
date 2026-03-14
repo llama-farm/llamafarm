@@ -2,9 +2,11 @@ import type { Drone } from '../../types'
 
 interface TelemetryHUDProps {
   drone: Drone
+  onKill?: () => void
+  canKill?: boolean
 }
 
-export function TelemetryHUD({ drone }: TelemetryHUDProps) {
+export function TelemetryHUD({ drone, onKill, canKill }: TelemetryHUDProps) {
   const isActive = drone.status === 'flying' || drone.status === 'returning'
 
   const statusColor = drone.status === 'flying' ? 'bg-status-good'
@@ -68,6 +70,16 @@ export function TelemetryHUD({ drone }: TelemetryHUDProps) {
           <div className="w-1.5 h-1.5 rounded-full bg-status-good" />
           <span className="text-[10px] text-text-dim">ON MESH</span>
         </div>
+
+        {/* Kill button */}
+        {canKill && onKill && (
+          <button
+            onClick={onKill}
+            className="mt-2 w-full py-1.5 bg-kill hover:bg-kill-hover text-text-primary font-bold text-xs tracking-wider rounded border border-kill-hover/30 transition-colors pointer-events-auto"
+          >
+            KILL
+          </button>
+        )}
       </div>
     </div>
   )
