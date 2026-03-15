@@ -334,8 +334,11 @@ async def lifespan(app: FastAPI):
         logger.info("CatBoost addon unavailable (catboost not installed)")
 
     try:
-        preload_results = await preload_models_from_config()
+        # Register the preload function FIRST, before executing it.
+        # If the initial preload throws (e.g., config error, OOM), the endpoint
+        # MUST remain available so clients can retry later via API.
         set_preload_function(preload_models_from_config)
+        preload_results = await preload_models_from_config()
         summary = preload_results.get("summary", {})
         if summary.get("loaded", 0) > 0:
             logger.info(
@@ -358,6 +361,7 @@ async def lifespan(app: FastAPI):
         start_kv_cache_gc,
         stop_kv_cache_gc,
     )
+
     global _kv_cache_manager
     _kv_cache_manager = KVCacheManager()
     set_cache_manager(_kv_cache_manager)
@@ -467,8 +471,8 @@ if _HAS_CATBOOST:
     app.include_router(catboost_router)
 
 
-
 # ── Model management endpoints ──────────────────────────────────────────────
+
 
 @app.post("/v1/models/unload", tags=["models"])
 async def unload_all_models():
@@ -1233,10 +1237,23 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
         )
 
     # Check if model is already loaded
-    def is_model_loaded(model_path: str) -> bool:
-        """Check if model is already in cache."""
-        # Generate cache key to check
-        cache_key = _make_language_cache_key(model_path)
+    def is_model_loaded(model_path: str, extra_body: dict | None = None) -> bool:
+        """Check if model is already in cache with exact parameters."""
+        eb = extra_body or {}
+        # Generate specific cache key to check
+        cache_key = _make_language_cache_key(
+            model_path,
+            eb.get("n_ctx"),
+            eb.get("n_batch"),
+            eb.get("n_gpu_layers"),
+            eb.get("n_threads"),
+            eb.get("flash_attn"),
+            eb.get("use_mmap"),
+            eb.get("use_mlock"),
+            eb.get("cache_type_k"),
+            eb.get("cache_type_v"),
+            eb.get("preferred_quantization"),
+        )
         return cache_key in _models
 
     # Prepare models for batch loading
@@ -1255,37 +1272,41 @@ async def preload_models_from_config(config_path: str | None = None) -> dict:
     for name, path, pin, extra_body in models_to_load:
 
         async def load_task(n=name, p=path, pn=pin, eb=extra_body):
+            # Resolve the specific cache key for this model variant once
+            cache_key = _make_language_cache_key(
+                p,
+                eb.get("n_ctx"),
+                eb.get("n_batch"),
+                eb.get("n_gpu_layers"),
+                eb.get("n_threads"),
+                eb.get("flash_attn"),
+                eb.get("use_mmap"),
+                eb.get("use_mlock"),
+                eb.get("cache_type_k"),
+                eb.get("cache_type_v"),
+                eb.get("preferred_quantization"),
+            )
+
             result = await loader.load_one(
                 model_name=n,
                 model_path=p,
                 pin=pn,
                 load_fn=lambda mp, pn: load_model_wrapper(mp, pn, eb),
-                is_loaded_fn=is_model_loaded,
+                # Use a specific check for this model variant's parameters
+                is_loaded_fn=lambda mp: is_model_loaded(mp, eb),
             )
 
             from utils.concurrent_loader import LoadStatus
 
-            if pn and result.status == LoadStatus.ALREADY_LOADED:
-                already_cache_key = _make_language_cache_key(
-                    p,
-                    eb.get("n_ctx"),
-                    eb.get("n_batch"),
-                    eb.get("n_gpu_layers"),
-                    eb.get("n_threads"),
-                    eb.get("flash_attn"),
-                    eb.get("use_mmap"),
-                    eb.get("use_mlock"),
-                    eb.get("cache_type_k"),
-                    eb.get("cache_type_v"),
-                    eb.get("preferred_quantization"),
-                )
-                if already_cache_key in _models and not _models.is_pinned(
-                    already_cache_key
-                ):
-                    _models.pin(already_cache_key)
-                    logger.info(
-                        f"Applied pin to already-loaded model '{n}' ({already_cache_key})"
-                    )
+            # Ensure model is pinned if it was already in cache but not pinned
+            if (
+                pn
+                and result.status == LoadStatus.ALREADY_LOADED
+                and cache_key in _models
+                and not _models.is_pinned(cache_key)
+            ):
+                _models.pin(cache_key)
+                logger.info(f"Applied pin to already-loaded model '{n}' ({cache_key})")
             return result
 
         tasks.append(load_task())

@@ -104,13 +104,13 @@ def _get_process_cgroup_path() -> tuple[str | None, str | None]:
                 hier_id, controllers, cgroup_path = parts
                 if hier_id == "0":
                     # cgroup v2 unified hierarchy
-                    if v2_mount:
+                    if v2_mount is not None:
                         cgroup_v2_dir = v2_mount + cgroup_path
                     else:
                         cgroup_v2_dir = "/sys/fs/cgroup" + cgroup_path
                 elif "memory" in controllers.split(","):
                     # cgroup v1 memory controller
-                    if v1_memory_mount:
+                    if v1_memory_mount is not None:
                         cgroup_v1_memory_dir = v1_memory_mount + cgroup_path
                     else:
                         cgroup_v1_memory_dir = "/sys/fs/cgroup/memory" + cgroup_path
@@ -120,88 +120,86 @@ def _get_process_cgroup_path() -> tuple[str | None, str | None]:
     return cgroup_v2_dir, cgroup_v1_memory_dir
 
 
-def _get_cgroup_memory_limit_bytes() -> int | None:
-    """Check cgroups (v1 and v2) for memory limits for the current process. Returns bytes or None."""
+def _get_cgroup_memory_info() -> tuple[int | None, int | None]:
+    """Evaluate cgroup memory hierarchy and return (effective_limit, available_bytes).
+
+    Walks up the hierarchy to find the tightest bottleneck (limit - usage).
+    Returns (limit, available) or (None, None) if no limits are found.
+    """
     cgroup_v2_dir, cgroup_v1_memory_dir = _get_process_cgroup_path()
 
-    # cgroup v2 - use process-specific path, walk up if needed
-    if cgroup_v2_dir:
-        path = cgroup_v2_dir
-        while path and path != "/":
-            try:
-                with open(os.path.join(path, "memory.max")) as f:
-                    val = f.read().strip()
-                    if val != "max":
-                        return int(val)
-            except (FileNotFoundError, PermissionError, ValueError, OSError):
-                pass
-            path = os.path.dirname(path)
-
-    # cgroup v1 - use process-specific memory controller path
-    if cgroup_v1_memory_dir:
-        try:
-            with open(os.path.join(cgroup_v1_memory_dir, "memory.limit_in_bytes")) as f:
-                val = int(f.read().strip())
-                # cgroup v1 max is usually 9223372036854771712
-                if val < 9223372036854771712:
-                    return val
-        except (FileNotFoundError, PermissionError, ValueError, OSError):
-            pass
-
-    # Fallback to hierarchy root (works when not in a nested cgroup)
-    try:
-        with open("/sys/fs/cgroup/memory.max") as f:
-            val = f.read().strip()
-            if val != "max":
-                return int(val)
-    except (FileNotFoundError, PermissionError, ValueError, OSError):
-        pass
-
-    try:
-        with open("/sys/fs/cgroup/memory/memory.limit_in_bytes") as f:
-            val = int(f.read().strip())
-            if val < 9223372036854771712:
-                return val
-    except (FileNotFoundError, PermissionError, ValueError, OSError):
-        pass
-
-    return None
-
-
-def _get_cgroup_memory_usage_bytes() -> int | None:
-    """Check cgroups (v1 and v2) for memory usage for the current process. Returns bytes or None."""
-    cgroup_v2_dir, cgroup_v1_memory_dir = _get_process_cgroup_path()
+    effective_limit = None
+    min_available = None
 
     # cgroup v2
     if cgroup_v2_dir:
+        path = str(cgroup_v2_dir)
+        while path and path.startswith(
+            "/sys/fs/cgroup"
+        ):  # Safety check for hierarchy walk
+            try:
+                # Read limit at this level
+                limit = None
+                limit_file = os.path.join(path, "memory.max")
+                if os.path.exists(limit_file):
+                    with open(limit_file) as f:
+                        val = f.read().strip()
+                        if val != "max":
+                            limit = int(val)
+
+                # If we found a limit, calculate available at this level
+                if limit is not None:
+                    if effective_limit is None or limit < effective_limit:
+                        effective_limit = limit
+
+                    usage_file = os.path.join(path, "memory.current")
+                    if os.path.exists(usage_file):
+                        try:
+                            with open(usage_file) as f:
+                                usage = int(f.read().strip())
+                                available = max(0, limit - usage)
+                                if min_available is None or available < min_available:
+                                    min_available = available
+                        except (ValueError, OSError):
+                            # usage unreadable: conservatively assume 0 available if limit exists
+                            if min_available is None or min_available > 0:
+                                min_available = 0
+            except (ValueError, OSError):
+                pass
+
+            # Walk up. If we are at the root (/sys/fs/cgroup), dirname is the same
+            parent = os.path.dirname(path)
+            if parent == path:
+                break
+            path = parent
+
+    # cgroup v1 (typically we only care about the specific controller mount for the process)
+    if cgroup_v1_memory_dir and effective_limit is None:
         try:
-            with open(os.path.join(cgroup_v2_dir, "memory.current")) as f:
-                return int(f.read().strip())
-        except (FileNotFoundError, PermissionError, ValueError, OSError):
+            limit = None
+            limit_file = os.path.join(cgroup_v1_memory_dir, "memory.limit_in_bytes")
+            if os.path.exists(limit_file):
+                with open(limit_file) as f:
+                    val = int(f.read().strip())
+                    # cgroup v1 'max' is 0x7FFFFFFFFFFFF000 or 9223372036854771712
+                    if val < 9223372036854771712:
+                        limit = val
+
+            if limit is not None:
+                effective_limit = limit
+                usage_file = os.path.join(cgroup_v1_memory_dir, "memory.usage_in_bytes")
+                if os.path.exists(usage_file):
+                    try:
+                        with open(usage_file) as f:
+                            usage = int(f.read().strip())
+                            available = max(0, limit - usage)
+                            min_available = available
+                    except (ValueError, OSError):
+                        min_available = 0
+        except (ValueError, OSError):
             pass
 
-    # cgroup v1
-    if cgroup_v1_memory_dir:
-        try:
-            with open(os.path.join(cgroup_v1_memory_dir, "memory.usage_in_bytes")) as f:
-                return int(f.read().strip())
-        except (FileNotFoundError, PermissionError, ValueError, OSError):
-            pass
-
-    # Fallback to hierarchy root
-    try:
-        with open("/sys/fs/cgroup/memory.current") as f:
-            return int(f.read().strip())
-    except (FileNotFoundError, PermissionError, ValueError, OSError):
-        pass
-
-    try:
-        with open("/sys/fs/cgroup/memory/memory.usage_in_bytes") as f:
-            return int(f.read().strip())
-    except (FileNotFoundError, PermissionError, ValueError, OSError):
-        pass
-
-    return None
+    return effective_limit, min_available
 
 
 def get_available_ram_gb() -> tuple[float, float]:
@@ -250,7 +248,7 @@ def get_available_ram_gb() -> tuple[float, float]:
         available_gb, total_gb = 4.0, 8.0
 
     # Check for container/cgroup limits (Linux only)
-    cgroup_limit_bytes = _get_cgroup_memory_limit_bytes()
+    cgroup_limit_bytes, cgroup_available_bytes = _get_cgroup_memory_info()
     if cgroup_limit_bytes is not None:
         cgroup_limit_gb = cgroup_limit_bytes / (1024**3)
         if cgroup_limit_gb < total_gb:
@@ -258,14 +256,12 @@ def get_available_ram_gb() -> tuple[float, float]:
             # Not doing this would overestimate safe concurrency in containers.
             total_gb = min(total_gb, cgroup_limit_gb)
 
-            cgroup_usage_bytes = _get_cgroup_memory_usage_bytes()
-            if cgroup_usage_bytes is not None:
-                cgroup_usage_gb = cgroup_usage_bytes / (1024**3)
-                cgroup_available_gb = max(0.0, cgroup_limit_gb - cgroup_usage_gb)
+            if cgroup_available_bytes is not None:
+                cgroup_available_gb = cgroup_available_bytes / (1024**3)
                 # Use the more restrictive of host available vs cgroup available
                 available_gb = min(available_gb, cgroup_available_gb)
             else:
-                # Usage unreadable: conservatively cap available to the cgroup limit too
+                # Available unreadable (but limit exists): conservativesly cap to limit
                 available_gb = min(available_gb, cgroup_limit_gb)
 
     return available_gb, total_gb
