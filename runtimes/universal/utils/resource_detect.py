@@ -55,8 +55,8 @@ class ResourceInfo:
     """Maximum safe concurrency (hard limit)"""
 
 
-def _get_process_cgroup_path() -> tuple[str | None, str | None]:
-    """Return (cgroup_v2_dir, cgroup_v1_memory_dir) for the current process.
+def _get_process_cgroup_path() -> tuple[str | None, str | None, str | None, str | None]:
+    """Return (cgroup_v2_dir, cgroup_v1_memory_dir, v2_mount, v1_mount) for the current process.
 
     Reads /proc/self/cgroup to find the cgroup slice for this process, then
     resolves the mount point from /proc/self/mountinfo so we read the correct
@@ -117,7 +117,7 @@ def _get_process_cgroup_path() -> tuple[str | None, str | None]:
     except (FileNotFoundError, PermissionError, OSError):
         pass
 
-    return cgroup_v2_dir, cgroup_v1_memory_dir
+    return cgroup_v2_dir, cgroup_v1_memory_dir, v2_mount, v1_memory_mount
 
 
 def _get_cgroup_memory_info() -> tuple[int | None, int | None]:
@@ -126,7 +126,12 @@ def _get_cgroup_memory_info() -> tuple[int | None, int | None]:
     Walks up the hierarchy to find the tightest bottleneck (limit - usage).
     Returns (limit, available) or (None, None) if no limits are found.
     """
-    cgroup_v2_dir, cgroup_v1_memory_dir = _get_process_cgroup_path()
+    (
+        cgroup_v2_dir,
+        cgroup_v1_memory_dir,
+        v2_mount,
+        v1_memory_mount,
+    ) = _get_process_cgroup_path()
 
     effective_limit = None
     min_available = None
@@ -134,9 +139,9 @@ def _get_cgroup_memory_info() -> tuple[int | None, int | None]:
     # cgroup v2
     if cgroup_v2_dir:
         path = str(cgroup_v2_dir)
-        while path and path.startswith(
-            "/sys/fs/cgroup"
-        ):  # Safety check for hierarchy walk
+        # Use detected mount point or default to bound the hierarchy walk
+        v2_mount_path = v2_mount if v2_mount is not None else "/sys/fs/cgroup"
+        while path and path.startswith(v2_mount_path):
             try:
                 # Read limit at this level
                 limit = None
