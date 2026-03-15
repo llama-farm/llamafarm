@@ -83,6 +83,27 @@ class ProjectService:
             )
         return norm_path
 
+    # Supported config file names in resolution order
+    CONFIG_FILE_NAMES = [
+        "llamafarm.yaml",
+        "llamafarm.yml",
+        "llamafarm.toml",
+        "llamafarm.json",
+    ]
+
+    @classmethod
+    def get_config_path(cls, project_dir: str) -> str | None:
+        """
+        Return the path to the first config file found in the project directory,
+        checking all supported extensions in order (yaml, yml, toml, json).
+        Returns None if no config file is found.
+        """
+        for config_file in cls.CONFIG_FILE_NAMES:
+            config_path = os.path.join(project_dir, config_file)
+            if os.path.isfile(config_path):
+                return config_path
+        return None
+
     @classmethod
     def get_project_last_modified(cls, project_dir: str) -> datetime | None:
         """
@@ -91,18 +112,10 @@ class ProjectService:
         the project directory is mounted.
         """
         try:
-            # Look for config files in order of preference
-            config_files = [
-                "llamafarm.yaml",
-                "llamafarm.yml",
-                "llamafarm.toml",
-                "llamafarm.json",
-            ]
-            for config_file in config_files:
-                config_path = os.path.join(project_dir, config_file)
-                if os.path.isfile(config_path):
-                    mtime = os.path.getmtime(config_path)
-                    return datetime.fromtimestamp(mtime)
+            config_path = cls.get_config_path(project_dir)
+            if config_path is not None:
+                mtime = os.path.getmtime(config_path)
+                return datetime.fromtimestamp(mtime)
             return None
         except (OSError, ValueError) as e:
             logger.warning(
@@ -582,9 +595,28 @@ class ProjectService:
                 },
             }
 
-        # Get project config path
+        # Get project config path — resolve across all supported extensions
         project_dir = cls.get_project_dir(namespace, project_id)
-        config_path = os.path.join(project_dir, "llamafarm.yaml")
+        config_path = cls.get_config_path(project_dir)
+        if config_path is None:
+            logger.warning(
+                "No config file found for project, cannot preload",
+                namespace=namespace,
+                project_id=project_id,
+                project_dir=project_dir,
+            )
+            return {
+                "status": "failed",
+                "results": {},
+                "summary": {
+                    "loaded": 0,
+                    "failed": 0,
+                    "already_loaded": 0,
+                    "skipped": 0,
+                    "total_time_seconds": 0.0,
+                    "message": "No project config file found",
+                },
+            }
 
         logger.info(
             "Preloading models for project",

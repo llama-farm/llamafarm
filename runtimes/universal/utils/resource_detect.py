@@ -55,9 +55,100 @@ class ResourceInfo:
     """Maximum safe concurrency (hard limit)"""
 
 
+def _get_process_cgroup_path() -> tuple[str | None, str | None]:
+    """Return (cgroup_v2_dir, cgroup_v1_memory_dir) for the current process.
+
+    Reads /proc/self/cgroup to find the cgroup slice for this process, then
+    resolves the mount point from /proc/self/mountinfo so we read the correct
+    nested path rather than assuming the hierarchy root.
+    """
+    cgroup_v2_dir: str | None = None
+    cgroup_v1_memory_dir: str | None = None
+
+    # --- Resolve mount points from mountinfo ---
+    v2_mount: str | None = None
+    v1_memory_mount: str | None = None
+    try:
+        with open("/proc/self/mountinfo") as f:
+            for line in f:
+                parts = line.split()
+                # fields: mount-id parent-id major:minor root mount-point mount-options [optional...] - fstype source super-options
+                # We need at minimum 10 fields; the separator "-" is somewhere after field 6.
+                if len(parts) < 10:
+                    continue
+                mount_point = parts[4]
+                # Find the separator "-" and get fstype after it
+                try:
+                    sep = parts.index("-", 6)
+                    fstype = parts[sep + 1]
+                except (ValueError, IndexError):
+                    continue
+                if fstype == "cgroup2" and v2_mount is None:
+                    v2_mount = mount_point
+                elif fstype == "cgroup" and v1_memory_mount is None:
+                    # Check super-options for "memory"
+                    super_options = parts[sep + 3] if sep + 3 < len(parts) else ""
+                    if "memory" in super_options.split(","):
+                        v1_memory_mount = mount_point
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+
+    # --- Resolve process-specific cgroup slice ---
+    try:
+        with open("/proc/self/cgroup") as f:
+            for line in f:
+                # Format: hierarchy-id:controllers:cgroup-path
+                parts = line.strip().split(":", 2)
+                if len(parts) != 3:
+                    continue
+                hier_id, controllers, cgroup_path = parts
+                if hier_id == "0":
+                    # cgroup v2 unified hierarchy
+                    if v2_mount:
+                        cgroup_v2_dir = v2_mount + cgroup_path
+                    else:
+                        cgroup_v2_dir = "/sys/fs/cgroup" + cgroup_path
+                elif "memory" in controllers.split(","):
+                    # cgroup v1 memory controller
+                    if v1_memory_mount:
+                        cgroup_v1_memory_dir = v1_memory_mount + cgroup_path
+                    else:
+                        cgroup_v1_memory_dir = "/sys/fs/cgroup/memory" + cgroup_path
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+
+    return cgroup_v2_dir, cgroup_v1_memory_dir
+
+
 def _get_cgroup_memory_limit_bytes() -> int | None:
-    """Check cgroups (v1 and v2) for memory limits. Returns bytes or None."""
-    # cgroup v2
+    """Check cgroups (v1 and v2) for memory limits for the current process. Returns bytes or None."""
+    cgroup_v2_dir, cgroup_v1_memory_dir = _get_process_cgroup_path()
+
+    # cgroup v2 - use process-specific path, walk up if needed
+    if cgroup_v2_dir:
+        path = cgroup_v2_dir
+        while path and path != "/":
+            try:
+                with open(os.path.join(path, "memory.max")) as f:
+                    val = f.read().strip()
+                    if val != "max":
+                        return int(val)
+            except (FileNotFoundError, PermissionError, ValueError, OSError):
+                pass
+            path = os.path.dirname(path)
+
+    # cgroup v1 - use process-specific memory controller path
+    if cgroup_v1_memory_dir:
+        try:
+            with open(os.path.join(cgroup_v1_memory_dir, "memory.limit_in_bytes")) as f:
+                val = int(f.read().strip())
+                # cgroup v1 max is usually 9223372036854771712
+                if val < 9223372036854771712:
+                    return val
+        except (FileNotFoundError, PermissionError, ValueError, OSError):
+            pass
+
+    # Fallback to hierarchy root (works when not in a nested cgroup)
     try:
         with open("/sys/fs/cgroup/memory.max") as f:
             val = f.read().strip()
@@ -66,11 +157,9 @@ def _get_cgroup_memory_limit_bytes() -> int | None:
     except (FileNotFoundError, PermissionError, ValueError, OSError):
         pass
 
-    # cgroup v1
     try:
         with open("/sys/fs/cgroup/memory/memory.limit_in_bytes") as f:
             val = int(f.read().strip())
-            # cgroup v1 max is usually 9223372036854771712
             if val < 9223372036854771712:
                 return val
     except (FileNotFoundError, PermissionError, ValueError, OSError):
@@ -80,15 +169,32 @@ def _get_cgroup_memory_limit_bytes() -> int | None:
 
 
 def _get_cgroup_memory_usage_bytes() -> int | None:
-    """Check cgroups (v1 and v2) for memory usage. Returns bytes or None."""
+    """Check cgroups (v1 and v2) for memory usage for the current process. Returns bytes or None."""
+    cgroup_v2_dir, cgroup_v1_memory_dir = _get_process_cgroup_path()
+
     # cgroup v2
+    if cgroup_v2_dir:
+        try:
+            with open(os.path.join(cgroup_v2_dir, "memory.current")) as f:
+                return int(f.read().strip())
+        except (FileNotFoundError, PermissionError, ValueError, OSError):
+            pass
+
+    # cgroup v1
+    if cgroup_v1_memory_dir:
+        try:
+            with open(os.path.join(cgroup_v1_memory_dir, "memory.usage_in_bytes")) as f:
+                return int(f.read().strip())
+        except (FileNotFoundError, PermissionError, ValueError, OSError):
+            pass
+
+    # Fallback to hierarchy root
     try:
         with open("/sys/fs/cgroup/memory.current") as f:
             return int(f.read().strip())
     except (FileNotFoundError, PermissionError, ValueError, OSError):
         pass
 
-    # cgroup v1
     try:
         with open("/sys/fs/cgroup/memory/memory.usage_in_bytes") as f:
             return int(f.read().strip())
@@ -148,14 +254,19 @@ def get_available_ram_gb() -> tuple[float, float]:
     if cgroup_limit_bytes is not None:
         cgroup_limit_gb = cgroup_limit_bytes / (1024**3)
         if cgroup_limit_gb < total_gb:
+            # Always cap total by the cgroup limit, even if usage is unreadable.
+            # Not doing this would overestimate safe concurrency in containers.
+            total_gb = min(total_gb, cgroup_limit_gb)
+
             cgroup_usage_bytes = _get_cgroup_memory_usage_bytes()
             if cgroup_usage_bytes is not None:
                 cgroup_usage_gb = cgroup_usage_bytes / (1024**3)
                 cgroup_available_gb = max(0.0, cgroup_limit_gb - cgroup_usage_gb)
-
-                # Use the more restrictive of host limit vs cgroup limit
+                # Use the more restrictive of host available vs cgroup available
                 available_gb = min(available_gb, cgroup_available_gb)
-                total_gb = min(total_gb, cgroup_limit_gb)
+            else:
+                # Usage unreadable: conservatively cap available to the cgroup limit too
+                available_gb = min(available_gb, cgroup_limit_gb)
 
     return available_gb, total_gb
 

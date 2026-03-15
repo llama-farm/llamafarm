@@ -100,6 +100,23 @@ class ModelCache(Generic[T]):
         self._access[key] = self._timer()
         return self._cache[key]
 
+    def peek(self, key: str, default: T | None = None) -> T | None:
+        """Get item WITHOUT refreshing its TTL or access timestamp.
+
+        Use this for read-only inspection (e.g. status endpoints) so that
+        polling does not keep models alive or skew idle_time_seconds.
+
+        Args:
+            key: Cache key
+            default: Value to return if key not found
+
+        Returns:
+            The cached item, or default if not found
+        """
+        if key not in self._cache:
+            return default
+        return self._cache[key]
+
     def __getitem__(self, key: str) -> T:
         """Get item and refresh TTL. Raises KeyError if not found."""
         if key not in self._cache:

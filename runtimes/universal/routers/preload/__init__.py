@@ -210,7 +210,7 @@ async def get_preload_status():
     # Get loaded models info
     loaded_models = []
     for cache_key in _models:
-        model = _models.get(cache_key)
+        model = _models.peek(cache_key)
         if model:
             idle_time = _models.get_idle_time(cache_key)
             loaded_models.append(

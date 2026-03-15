@@ -449,7 +449,9 @@ async def import_project(
     cfg_abs = _ensure_path_under_examples(os.path.join(_repo_root(), cfg_path))
 
     # Create project and write example config with overridden name/namespace
-    ProjectService.create_project(request.namespace, request.name, config_template=None)
+    _, _ = await ProjectService.create_project(
+        request.namespace, request.name, config_template=None
+    )
 
     with open(cfg_abs) as f:
         cfg_dict = yaml.safe_load(f) or {}

@@ -294,9 +294,10 @@ class ConcurrentModelLoader:
                 )
                 failed_count += 1
             else:
-                # Normal result
-                # Update the stored model_name to match the unique key (so summary prints it clearly if it fails)
-                result.model_name = model_name
+                # Normal result.
+                # Store using the (possibly synthetic) unique dict key, but do NOT mutate
+                # result.model_name — keeping the original name preserves stable identity
+                # semantics and avoids confusion when correlating results with inputs.
                 results[model_name] = result
 
                 if result.status == LoadStatus.LOADED:
