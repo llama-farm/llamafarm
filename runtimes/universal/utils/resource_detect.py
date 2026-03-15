@@ -55,12 +55,58 @@ class ResourceInfo:
     """Maximum safe concurrency (hard limit)"""
 
 
+def _get_cgroup_memory_limit_bytes() -> int | None:
+    """Check cgroups (v1 and v2) for memory limits. Returns bytes or None."""
+    # cgroup v2
+    try:
+        with open("/sys/fs/cgroup/memory.max") as f:
+            val = f.read().strip()
+            if val != "max":
+                return int(val)
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        pass
+
+    # cgroup v1
+    try:
+        with open("/sys/fs/cgroup/memory/memory.limit_in_bytes") as f:
+            val = int(f.read().strip())
+            # cgroup v1 max is usually 9223372036854771712
+            if val < 9223372036854771712:
+                return val
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        pass
+
+    return None
+
+
+def _get_cgroup_memory_usage_bytes() -> int | None:
+    """Check cgroups (v1 and v2) for memory usage. Returns bytes or None."""
+    # cgroup v2
+    try:
+        with open("/sys/fs/cgroup/memory.current") as f:
+            return int(f.read().strip())
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        pass
+
+    # cgroup v1
+    try:
+        with open("/sys/fs/cgroup/memory/memory.usage_in_bytes") as f:
+            return int(f.read().strip())
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        pass
+
+    return None
+
+
 def get_available_ram_gb() -> tuple[float, float]:
     """Get available and total system RAM in GB.
 
     Returns:
         Tuple of (available_gb, total_gb)
     """
+    available_gb = -1.0
+    total_gb = -1.0
+
     try:
         # Try Linux /proc/meminfo first (works on most Linux systems)
         with open("/proc/meminfo") as f:
@@ -76,22 +122,42 @@ def get_available_ram_gb() -> tuple[float, float]:
             available_kb = mem_info.get("MemAvailable", mem_info.get("MemFree", 0))
             total_kb = mem_info.get("MemTotal", 0)
 
-            return available_kb / (1024 * 1024), total_kb / (1024 * 1024)
+            available_gb = float(available_kb / (1024 * 1024))
+            total_gb = float(total_kb / (1024 * 1024))
     except (FileNotFoundError, PermissionError, OSError):
         pass
 
-    # Fallback: try psutil if available
-    try:
-        import psutil
+    if available_gb < 0 or total_gb < 0:
+        # Fallback: try psutil if available
+        try:
+            import psutil
 
-        mem = psutil.virtual_memory()
-        return mem.available / (1024**3), mem.total / (1024**3)
-    except ImportError:
-        pass
+            mem = psutil.virtual_memory()
+            available_gb = float(mem.available / (1024**3))
+            total_gb = float(mem.total / (1024**3))
+        except ImportError:
+            pass
 
-    # Last resort: return conservative estimates
-    logger.warning("Could not detect system memory, using conservative estimates")
-    return 4.0, 8.0  # Assume 4GB available out of 8GB total
+    if available_gb < 0 or total_gb < 0:
+        # Last resort: return conservative estimates
+        logger.warning("Could not detect system memory, using conservative estimates")
+        available_gb, total_gb = 4.0, 8.0
+
+    # Check for container/cgroup limits (Linux only)
+    cgroup_limit_bytes = _get_cgroup_memory_limit_bytes()
+    if cgroup_limit_bytes is not None:
+        cgroup_limit_gb = cgroup_limit_bytes / (1024**3)
+        if cgroup_limit_gb < total_gb:
+            cgroup_usage_bytes = _get_cgroup_memory_usage_bytes()
+            if cgroup_usage_bytes is not None:
+                cgroup_usage_gb = cgroup_usage_bytes / (1024**3)
+                cgroup_available_gb = max(0.0, cgroup_limit_gb - cgroup_usage_gb)
+
+                # Use the more restrictive of host limit vs cgroup limit
+                available_gb = min(available_gb, cgroup_available_gb)
+                total_gb = min(total_gb, cgroup_limit_gb)
+
+    return available_gb, total_gb
 
 
 def get_gpu_memory_info(device: str) -> tuple[float, float, str | None, int]:

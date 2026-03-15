@@ -94,6 +94,8 @@ class LanguageModel(BaseModel):
         thinking_budget: int | None = None,
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = None,
+        kv_cache_data: bytes | None = None,
+        kv_cache_tokens: int = 0,
     ) -> str:
         """Generate chat completion.
 

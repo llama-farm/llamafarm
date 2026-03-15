@@ -155,6 +155,9 @@ async def trigger_preload(request: PreloadRequest | None = None):
                 resources=result.get("resources"),
             )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions to preserve their status codes
+        raise
     except Exception as e:
         logger.error(f"Preload failed: {e}", exc_info=True)
         raise HTTPException(

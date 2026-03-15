@@ -204,6 +204,23 @@ async def create_project(namespace: str, request: CreateProjectRequest):
             preload_result=preload_result,
         )
     except Exception as e:
+        from config import ConfigError
+
+        from api.errors import NotFoundError, ProjectConfigError, ReservedNamespaceError
+
+        if isinstance(
+            e,
+            (
+                NotFoundError,
+                ReservedNamespaceError,
+                ProjectConfigError,
+                ConfigError,
+                HTTPException,
+            ),
+        ):
+            # Let domain-specific errors be handled by global exception handlers
+            raise
+
         from core.logging import FastAPIStructLogger
 
         logger = FastAPIStructLogger()

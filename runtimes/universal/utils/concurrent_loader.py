@@ -272,14 +272,21 @@ class ConcurrentModelLoader:
         for i, result in enumerate(results_list):
             model_name = models[i][0]
 
-            if isinstance(result, Exception):
+            # Append a unique suffix if model_name is already in results
+            base_model_name = model_name
+            duplicate_counter = 1
+            while model_name in results:
+                model_name = f"{base_model_name}_{duplicate_counter}"
+                duplicate_counter += 1
+
+            if isinstance(result, BaseException):
                 # Exception during load (shouldn't happen with proper error handling in load_one)
                 logger.error(
-                    f"Unexpected exception loading '{model_name}': {result}",
+                    f"Unexpected exception loading '{base_model_name}': {result}",
                     exc_info=result,
                 )
                 results[model_name] = ModelLoadResult(
-                    model_name=model_name,
+                    model_name=base_model_name,
                     status=LoadStatus.FAILED,
                     pinned=False,
                     error_message=f"Unexpected error: {result}",
@@ -288,6 +295,8 @@ class ConcurrentModelLoader:
                 failed_count += 1
             else:
                 # Normal result
+                # Update the stored model_name to match the unique key (so summary prints it clearly if it fails)
+                result.model_name = model_name
                 results[model_name] = result
 
                 if result.status == LoadStatus.LOADED:
