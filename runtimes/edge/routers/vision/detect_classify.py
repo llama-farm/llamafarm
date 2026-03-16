@@ -7,7 +7,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
 from services.error_handler import handle_endpoint_errors
@@ -118,7 +118,16 @@ async def detect_and_classify(request: DetectClassifyRequest) -> DetectClassifyR
     cls_model = await _load_classification_fn(request.classification_model)
 
     # Convert image once for cropping
-    pil_image = Image.open(io.BytesIO(image_bytes))
+    try:
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        pil_image.load()
+    except UnidentifiedImageError as e:
+        raise ValueError(
+            "Cannot identify image format. "
+            "Ensure the image is a valid JPEG, PNG, BMP, TIFF, or WebP file."
+        ) from e
+    except OSError as e:
+        raise ValueError(f"Failed to decode image data: {e}") from e
     results: list[ClassifiedDetection] = []
 
     for box in det_result.boxes:

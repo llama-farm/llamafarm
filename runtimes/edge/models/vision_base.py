@@ -97,8 +97,17 @@ class VisionModel(BaseModel):
             return image
         import io
 
-        from PIL import Image
-        img = Image.open(io.BytesIO(image))
+        from PIL import Image, UnidentifiedImageError
+        try:
+            img = Image.open(io.BytesIO(image))
+            img.load()  # Force eager decode so errors surface here, not lazily later
+        except UnidentifiedImageError as e:
+            raise ValueError(
+                "Cannot identify image format. "
+                "Ensure the image is a valid JPEG, PNG, BMP, TIFF, or WebP file."
+            ) from e
+        except OSError as e:
+            raise ValueError(f"Failed to decode image data: {e}") from e
         if img.mode != "RGB":
             img = img.convert("RGB")
         return np.array(img)
@@ -106,10 +115,19 @@ class VisionModel(BaseModel):
     def _image_to_pil(self, image: bytes | np.ndarray):
         import io
 
-        from PIL import Image
+        from PIL import Image, UnidentifiedImageError
         if isinstance(image, np.ndarray):
             return Image.fromarray(image)
-        img = Image.open(io.BytesIO(image))
+        try:
+            img = Image.open(io.BytesIO(image))
+            img.load()  # Force eager decode
+        except UnidentifiedImageError as e:
+            raise ValueError(
+                "Cannot identify image format. "
+                "Ensure the image is a valid JPEG, PNG, BMP, TIFF, or WebP file."
+            ) from e
+        except OSError as e:
+            raise ValueError(f"Failed to decode image data: {e}") from e
         if img.mode != "RGB":
             img = img.convert("RGB")
         return img

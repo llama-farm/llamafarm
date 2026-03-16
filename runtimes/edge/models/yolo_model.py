@@ -36,6 +36,14 @@ class YOLOModel(DetectionModel):
     async def load(self) -> None:
         if self._loaded:
             return
+        # Suppress missing pi_heif — some ultralytics builds register the HEIF PIL
+        # plugin unconditionally, causing an unhandled ImportError on first inference
+        # when the optional `pi_heif` package is not installed.
+        try:
+            import pi_heif
+            pi_heif.register_heif_opener()
+        except ImportError:
+            pass
         from ultralytics import YOLO
 
         self.device = self._resolve_device(self.device)

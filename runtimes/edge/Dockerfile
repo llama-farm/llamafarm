@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
+    libgl1 \
+    libglib2.0-0 \
+    libxcb1 \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,7 +37,8 @@ COPY runtimes/edge/pyproject.toml ./
 # --no-sources skips [tool.uv.sources] which has relative paths for the monorepo
 # layout that don't apply inside the container.
 RUN uv pip install --system --break-system-packages -e /deps/common -e /deps/llamafarm-llama && \
-    uv pip install --system --break-system-packages --no-sources -e .
+    uv pip install --system --break-system-packages --no-sources -e ".[vision]" && \
+    uv pip install --system --break-system-packages pi-heif
 
 # Copy edge runtime application code
 COPY runtimes/edge/ .
@@ -58,7 +62,8 @@ EXPOSE 11540
 ENV LF_RUNTIME_PORT=11540 \
     LF_RUNTIME_HOST=0.0.0.0 \
     LOG_LEVEL=INFO \
-    MODEL_UNLOAD_TIMEOUT=300
+    MODEL_UNLOAD_TIMEOUT=300 \
+    YOLO_AUTOINSTALL=false
 
 # Run the edge runtime
 CMD ["python", "server.py"]
