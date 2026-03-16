@@ -6,7 +6,7 @@ Designed for constrained hardware (Raspberry Pi, Jetson, etc.)
 
 Supports:
 - LLM inference (GGUF via llama.cpp)
-- Vision detection (YOLO)
+- Vision detection (YOLO — Hailo-10H accelerated or CPU fallback)
 - Health checks
 
 This is the "runtime plane" — no RAG, no UI, no model management.
@@ -17,10 +17,13 @@ Environment Variables:
 - CLEANUP_CHECK_INTERVAL: Seconds between cleanup checks (default: 30)
 - LF_RUNTIME_PORT: Server port (default: 11540)
 - LF_RUNTIME_HOST: Server host (default: 0.0.0.0)
+- HAILO_HEF_DIR: Directory containing .hef model files (default: /models)
+- FORCE_CPU_VISION: Set to "1" to skip Hailo detection and use CPU (default: unset)
 """
 
 import asyncio
 import os
+import subprocess
 import warnings
 from contextlib import asynccontextmanager, suppress
 
@@ -113,6 +116,61 @@ def get_device():
     return _current_device
 
 
+# ============================================================================
+# Hardware Detection
+# ============================================================================
+
+_use_hailo: bool | None = None
+
+
+def _detect_hailo() -> bool:
+    """Detect if Hailo-10H PCIe device is present.
+
+    Checks for PCI device ID 1e60:45c4 (Hailo-10H) via lspci,
+    and verifies hailo_platform is importable.
+    """
+    global _use_hailo
+    if _use_hailo is not None:
+        return _use_hailo
+
+    if os.getenv("FORCE_CPU_VISION", "").lower() in ("1", "true", "yes"):
+        logger.info("Hailo detection skipped (FORCE_CPU_VISION=1)")
+        _use_hailo = False
+        return False
+
+    # Check for hailo_platform package
+    try:
+        import hailo_platform  # noqa: F401
+    except ImportError:
+        logger.info("hailo_platform not installed, using CPU backend for vision")
+        _use_hailo = False
+        return False
+
+    # Check for PCIe device
+    try:
+        result = subprocess.run(
+            ["lspci", "-d", "1e60:"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if "1e60" in result.stdout:
+            logger.info("Hailo-10H detected, using Hailo backend for vision")
+            _use_hailo = True
+            return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # lspci not available (macOS) or timed out
+        pass
+
+    # Fallback: check for /dev/hailo0
+    if os.path.exists("/dev/hailo0"):
+        logger.info("Hailo device found at /dev/hailo0, using Hailo backend")
+        _use_hailo = True
+        return True
+
+    logger.info("Hailo not detected, using CPU backend for vision")
+    _use_hailo = False
+    return False
+
+
 async def _cleanup_idle_models() -> None:
     """Background task that periodically unloads idle models."""
     logger.info(
@@ -197,22 +255,44 @@ async def load_language(
 
 
 async def load_detection_model(model_id: str = "yolov8n"):
-    """Load a YOLO detection model."""
-    cache_key = f"vision:detect:{model_id}"
+    """Load a YOLO detection model.
+
+    Auto-selects backend:
+    - Hailo-10H: loads .hef model on the AI accelerator
+    - CPU fallback: loads .pt model via ultralytics/PyTorch
+    """
+    backend = "hailo" if _detect_hailo() else "cpu"
+    cache_key = f"vision:detect:{backend}:{model_id}"
+
     if cache_key not in _models:
         async with _model_load_lock:
             if cache_key not in _models:
-                from models.yolo_model import YOLOModel
                 from pathlib import Path as _Path
-                device = get_device()
+
                 safe_id = _Path(model_id).name
                 if safe_id != model_id:
                     raise ValueError(f"Invalid model_id: {model_id}")
-                custom_path = VISION_MODELS_DIR / safe_id / "current.pt"
-                mid = str(custom_path) if custom_path.exists() else model_id
-                model = YOLOModel(model_id=mid, device=device)
+
+                if backend == "hailo":
+                    from models.hailo_model import HailoYOLOModel
+
+                    hef_dir = os.getenv("HAILO_HEF_DIR", "/models")
+                    model = HailoYOLOModel(
+                        model_id=model_id,
+                        confidence_threshold=0.5,
+                        hef_dir=hef_dir,
+                    )
+                else:
+                    from models.yolo_model import YOLOModel
+
+                    device = get_device()
+                    custom_path = VISION_MODELS_DIR / safe_id / "current.pt"
+                    mid = str(custom_path) if custom_path.exists() else model_id
+                    model = YOLOModel(model_id=mid, device=device)
+
                 await model.load()
                 _models[cache_key] = model
+
     return _models[cache_key]
 
 

@@ -22,11 +22,17 @@ from .vision_base import (
 )
 from .yolo_model import YOLOModel
 
+try:
+    from .hailo_model import HailoYOLOModel
+except ImportError:
+    HailoYOLOModel = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "BaseModel",
     "LanguageModel",
     "GGUFLanguageModel",
     "YOLOModel",
+    "HailoYOLOModel",
     "CLIPModel",
     "VisionModel",
     "DetectionModel",
