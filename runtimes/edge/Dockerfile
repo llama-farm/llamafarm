@@ -1,14 +1,19 @@
-ARG BASE_IMAGE=python:3.12-slim-bookworm
-FROM ${BASE_IMAGE} AS base
+FROM ubuntu:24.04 AS base
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install minimal system dependencies
+# Install Python 3.12 and minimal system dependencies
+# Ubuntu 24.04 ships GLIBC 2.39 (required by pre-built llama.cpp ARM64 binaries)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
     build-essential \
     cmake \
     git \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -28,8 +33,8 @@ COPY runtimes/edge/pyproject.toml ./
 # Install local deps first, then edge runtime deps.
 # --no-sources skips [tool.uv.sources] which has relative paths for the monorepo
 # layout that don't apply inside the container.
-RUN uv pip install --system -e /deps/common -e /deps/llamafarm-llama && \
-    uv pip install --system --no-sources -e .
+RUN uv pip install --system --break-system-packages -e /deps/common -e /deps/llamafarm-llama && \
+    uv pip install --system --break-system-packages --no-sources -e .
 
 # Copy edge runtime application code
 COPY runtimes/edge/ .
