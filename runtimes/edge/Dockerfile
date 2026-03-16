@@ -17,20 +17,22 @@ WORKDIR /app
 # Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files first for layer caching
-COPY pyproject.toml ./
+# Copy local dependency sources first (for layer caching)
+# Build from repo root: docker build -t edge-runtime -f runtimes/edge/Dockerfile .
+COPY common /deps/common
+COPY packages/llamafarm-llama /deps/llamafarm-llama
 
-# Copy local dependency sources (llamafarm-common, llamafarm-llama)
-COPY ../../common /deps/common
-COPY ../../packages/llamafarm-llama /deps/llamafarm-llama
+# Copy edge runtime pyproject.toml (for dependency resolution)
+COPY runtimes/edge/pyproject.toml ./
 
-# Install dependencies
-RUN uv pip install --system -e . \
-    --override "llamafarm-common @ file:///deps/common" \
-    --override "llamafarm-llama @ file:///deps/llamafarm-llama"
+# Install local deps first, then edge runtime deps.
+# --no-sources skips [tool.uv.sources] which has relative paths for the monorepo
+# layout that don't apply inside the container.
+RUN uv pip install --system -e /deps/common -e /deps/llamafarm-llama && \
+    uv pip install --system --no-sources -e .
 
-# Copy application code
-COPY . .
+# Copy edge runtime application code
+COPY runtimes/edge/ .
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash edge && \
