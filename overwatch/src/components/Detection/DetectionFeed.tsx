@@ -21,9 +21,10 @@ interface DetectionFeedProps {
   onAlertDismiss: (alertId: string) => void
   onOpenStream?: () => void
   layout?: 'mobile' | 'desktop'
+  hideStream?: boolean
 }
 
-export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, onToggleCollapsed, onDetectionClick, onAlertAction, onAlertDismiss, onOpenStream, layout = 'mobile' }: DetectionFeedProps) {
+export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, onToggleCollapsed, onDetectionClick, onAlertAction, onAlertDismiss, onOpenStream, layout = 'mobile', hideStream = false }: DetectionFeedProps) {
   const [streamCollapsed, setStreamCollapsed] = useState(false)
 
   const feedItems: FeedItem[] = [
@@ -167,7 +168,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
         </div>
 
         {/* Stream preview */}
-        {isStreaming && selectedDrone && (
+        {!hideStream && isStreaming && selectedDrone && (
           <div className="border-t border-surface-border shrink-0">
             <button
               onClick={() => setStreamCollapsed(c => !c)}
@@ -235,7 +236,7 @@ export function DetectionFeed({ detections, alerts, selectedDrone, collapsed, on
           </div>
 
           {/* Stream preview */}
-          {isStreaming && selectedDrone && (
+          {!hideStream && isStreaming && selectedDrone && (
             <div className="border-t border-surface-border shrink-0">
               <button
                 onClick={() => setStreamCollapsed(c => !c)}

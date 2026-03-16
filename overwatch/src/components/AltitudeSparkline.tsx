@@ -24,12 +24,15 @@ export function AltitudeSparkline({ altitude, maxPoints = 40 }: AltitudeSparklin
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const w = canvas.width
-    const h = canvas.height
+    // Fixed logical size — DPR handled once
+    const w = 120
+    const h = 32
     const dpr = window.devicePixelRatio || 1
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    ctx.scale(dpr, dpr)
+    if (canvas.width !== w * dpr) {
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+      ctx.scale(dpr, dpr)
+    }
     canvas.style.width = `${w}px`
     canvas.style.height = `${h}px`
 

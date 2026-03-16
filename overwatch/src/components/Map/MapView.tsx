@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Rectangle, useMapEvents, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Rectangle, Tooltip, useMapEvents, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import type { Drone, Detection, SearchArea, DronePosition } from '../../types'
 import { getDetectionColor, getDroneColor } from '../../types'
@@ -90,11 +90,18 @@ interface MapControllerProps {
 
 function MapController({ center }: MapControllerProps) {
   const map = useMap()
+  const lastCenter = useRef<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
-    if (center) {
-      map.setView([center.lat, center.lng], map.getZoom(), { animate: true })
+    if (!center) return
+    // Only re-center if drone moved significantly (> ~50m) to prevent map flashing
+    if (lastCenter.current) {
+      const latDiff = Math.abs(center.lat - lastCenter.current.lat)
+      const lngDiff = Math.abs(center.lng - lastCenter.current.lng)
+      if (latDiff < 0.001 && lngDiff < 0.001) return
     }
+    lastCenter.current = { lat: center.lat, lng: center.lng }
+    map.setView([center.lat, center.lng], map.getZoom(), { animate: true, duration: 0.5 })
   }, [center, map])
 
   return null
@@ -108,6 +115,7 @@ interface MapViewProps {
   isDrawingArea: boolean
   onDrawComplete: (bounds: { northEast: DronePosition; southWest: DronePosition }) => void
   onDetectionClick: (detectionId: string) => void
+  onRemoveZone?: (id: string) => void
 }
 
 export function MapView({
@@ -117,7 +125,8 @@ export function MapView({
   selectedDroneId,
   isDrawingArea,
   onDrawComplete,
-  onDetectionClick
+  onDetectionClick,
+  onRemoveZone
 }: MapViewProps) {
   const mapRef = useRef<L.Map>(null)
   const selectedDrone = drones.find(d => d.id === selectedDroneId)
@@ -176,8 +185,8 @@ export function MapView({
         {/* Draw tool */}
         <DrawTool isDrawing={isDrawingArea} onDrawComplete={onDrawComplete} />
 
-        {/* Search areas */}
-        {searchAreas.map(area => (
+        {/* Search areas with zone numbers */}
+        {searchAreas.map((area, idx) => (
           <Rectangle
             key={area.id}
             bounds={[
@@ -190,7 +199,27 @@ export function MapView({
               fillColor: '#16703a',
               fillOpacity: 0.1
             }}
-          />
+            eventHandlers={{
+              contextmenu: (e) => {
+                e.originalEvent.preventDefault()
+                onRemoveZone?.(area.id)
+              }
+            }}
+          >
+            <Tooltip permanent direction="center" className="zone-label">
+              <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#16703a', fontFamily: 'monospace', background: 'rgba(0,0,0,0.6)', padding: '1px 5px', borderRadius: '3px', border: '1px solid #16703a44' }}>
+                Z{idx + 1}
+                {onRemoveZone && (
+                  <span
+                    style={{ marginLeft: '6px', cursor: 'pointer', color: '#ef4444', fontSize: '10px' }}
+                    onClick={(e) => { e.stopPropagation(); onRemoveZone(area.id) }}
+                  >
+                    ✕
+                  </span>
+                )}
+              </span>
+            </Tooltip>
+          </Rectangle>
         ))}
 
         {/* Drone markers */}

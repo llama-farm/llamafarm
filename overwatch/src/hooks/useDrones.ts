@@ -117,6 +117,7 @@ export function useDrones() {
     drones,
     detections,
     searchAreas,
+    removeSearchArea: (id: string) => setSearchAreas(prev => prev.filter(a => a.id !== id)),
     alerts: activeAlerts,
     killConfirmation,
     updateDrone,

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import type { ViewMode, DronePosition, SearchArea, Alert } from './types'
 import { useDrones } from './hooks/useDrones'
 import { useSimulation } from './hooks/useSimulation'
@@ -18,6 +19,107 @@ import { VoiceLog } from './components/Voice/VoiceLog'
 import { CommsLostBanner } from './components/CommsLostBanner'
 import { AltitudeSparkline } from './components/AltitudeSparkline'
 import { VolumeControl } from './components/VolumeControl'
+
+// Desktop center panel with Telemetry/Map tabs (like Ace Drone's Spatial/Telemetry/Map)
+function DesktopCenterTabs({ selectedDrone, drones, detections, searchAreas, selectedDroneId, isDrawingArea, onDrawComplete, onDetectionClick }: {
+  selectedDrone: any, drones: any[], detections: any[], searchAreas: any[], selectedDroneId: string | null,
+  isDrawingArea: boolean, onDrawComplete: any, onDetectionClick: any
+}) {
+  const [tab, setTab] = useState<'telemetry' | 'map'>('telemetry')
+  const isActive = selectedDrone?.status === 'flying' || selectedDrone?.status === 'returning'
+
+  const tabCls = (t: string) => `px-4 py-1.5 text-[11px] uppercase tracking-widest transition-colors ${
+    tab === t ? 'text-text-primary border-b-2 border-accent' : 'text-text-dim hover:text-text-secondary border-b-2 border-transparent'
+  }`
+
+  return (
+    <div className="flex-1 flex flex-col min-w-[300px] bg-surface-base">
+      {/* Tab bar */}
+      <div className="flex items-center border-b border-surface-border bg-surface-raised/40 px-2">
+        <button className={tabCls('telemetry')} onClick={() => setTab('telemetry')}>Telemetry</button>
+        <button className={tabCls('map')} onClick={() => setTab('map')}>Map</button>
+        {selectedDrone && (
+          <div className="ml-auto flex items-center gap-3 text-[10px] font-mono text-text-dim pr-2">
+            <span>Alt: {isActive ? `${Math.round(selectedDrone.altitude)}m` : '---'}</span>
+            <span>Bat: {Math.round(selectedDrone.battery)}%</span>
+          </div>
+        )}
+      </div>
+
+      {/* Tab content */}
+      {tab === 'telemetry' && selectedDrone && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Big readouts */}
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: 'ALTITUDE', value: isActive ? `${Math.round(selectedDrone.altitude)}` : '---', unit: 'm', color: 'text-accent' },
+              { label: 'SPEED', value: isActive ? `${selectedDrone.speed.toFixed(1)}` : '---', unit: 'm/s', color: 'text-text-primary' },
+              { label: 'HEADING', value: isActive ? `${String(selectedDrone.heading).padStart(3, '0')}` : '---', unit: '°', color: 'text-text-primary' },
+              { label: 'BATTERY', value: `${Math.round(selectedDrone.battery)}`, unit: '%', color: selectedDrone.battery < 20 ? 'text-status-critical' : selectedDrone.battery < 40 ? 'text-status-warning' : 'text-status-good' },
+            ].map(t => (
+              <div key={t.label} className="bg-surface-raised/60 border border-surface-border rounded-lg px-3 py-3 text-center">
+                <div className="text-[9px] text-text-dim uppercase tracking-widest mb-1">{t.label}</div>
+                <div className={`font-mono text-2xl font-bold ${t.color} leading-none`}>
+                  {t.value}<span className="text-xs text-text-dim ml-0.5">{t.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Battery bar */}
+          <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-4 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] text-text-dim uppercase tracking-widest">Battery</span>
+              <span className={`text-xs font-mono ${selectedDrone.battery < 20 ? 'text-status-critical' : 'text-text-dim'}`}>{Math.round(selectedDrone.battery)}%</span>
+            </div>
+            <div className="w-full h-2 bg-surface-overlay rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${
+                selectedDrone.battery < 20 ? 'bg-status-critical' : selectedDrone.battery < 40 ? 'bg-status-warning' : 'bg-status-good'
+              }`} style={{ width: `${selectedDrone.battery}%` }} />
+            </div>
+          </div>
+
+          {/* Elevation graph */}
+          {isActive && (
+            <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-4 py-3">
+              <div className="text-[9px] text-text-dim uppercase tracking-widest mb-2">Elevation Over Time</div>
+              <AltitudeSparkline altitude={selectedDrone.altitude} />
+            </div>
+          )}
+
+          {/* Position info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-4 py-3">
+              <div className="text-[9px] text-text-dim uppercase tracking-widest mb-1">Position</div>
+              <div className="font-mono text-xs text-text-secondary">
+                {selectedDrone.position.lat.toFixed(6)}, {selectedDrone.position.lng.toFixed(6)}
+              </div>
+            </div>
+            <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-4 py-3">
+              <div className="text-[9px] text-text-dim uppercase tracking-widest mb-1">Status</div>
+              <div className="font-mono text-xs text-text-secondary uppercase">{selectedDrone.status} · {selectedDrone.armState}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'map' && (
+        <div className="flex-1 relative overflow-hidden">
+          <MapView
+            drones={drones}
+            detections={detections}
+            searchAreas={searchAreas}
+            selectedDroneId={selectedDroneId}
+            isDrawingArea={isDrawingArea}
+            onDrawComplete={onDrawComplete}
+            onDetectionClick={onDetectionClick}
+                onRemoveZone={undefined}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function App() {
   // View state — map is default, no fleet view
@@ -50,7 +152,8 @@ export default function App() {
     dismissAlert,
     requestKillConfirmation,
     cancelKillConfirmation,
-    addBatteryAlert
+    addBatteryAlert,
+    removeSearchArea
   } = useDrones()
 
   // Voice command handler — used by both voice recognition and text input
@@ -61,7 +164,28 @@ export default function App() {
 
     // --- Launch / Search ---
     if (cmd.includes('launch') || cmd.includes('go') || cmd.includes('send') || cmd.includes('survey') || cmd.includes('scan') || cmd.includes('search') || cmd.includes('fly') || cmd.includes('patrol')) {
-      voice.speak('Copy. Standing by for search area. Draw on map or specify grid.', 'drone')
+      // Check for "zone N" or "area N" in command
+      const zoneMatch = cmd.match(/(?:zone|area)\s*(\d+)/i)
+      if (zoneMatch && selectedDroneId) {
+        const zoneIdx = parseInt(zoneMatch[1]) - 1
+        if (zoneIdx >= 0 && zoneIdx < searchAreas.length) {
+          const area = searchAreas[zoneIdx]
+          setPendingLaunch({ droneId: selectedDroneId, searchAreaId: area.id })
+          voice.speak(`Copy. Launching to zone ${zoneIdx + 1}.`, 'drone')
+        } else {
+          voice.speak(`Copy. Zone ${zoneIdx + 1} not found. ${searchAreas.length} zones defined.`, 'drone')
+        }
+      } else if (searchAreas.length === 0) {
+        // Auto-enable draw mode if no zones exist
+        setIsDrawingArea(true)
+        voice.speak('Copy. Draw search area on map.', 'drone')
+      } else if (searchAreas.length === 1 && selectedDroneId) {
+        // Only one zone — launch to it automatically
+        setPendingLaunch({ droneId: selectedDroneId, searchAreaId: searchAreas[0].id })
+        voice.speak('Copy. Launching to zone 1.', 'drone')
+      } else {
+        voice.speak(`Copy. ${searchAreas.length} zones defined. Specify zone number.`, 'drone')
+      }
 
     // --- Kill / Stop ---
     } else if (cmd.includes('kill') || cmd.includes('stop all')) {
@@ -228,11 +352,15 @@ export default function App() {
   const voice = useVoice({ onCommand: handleVoiceCommand })
 
   // Announce new detections
+  // Only announce high-confidence person/vehicle detections via voice — rest goes to feed only
   useEffect(() => {
     if (detections.length > 0) {
       const latest = detections[detections.length - 1]
       if (Date.now() - latest.timestamp.getTime() < 2000) {
-        voice.announceDetection(latest.type, latest.confidence, latest.mgrs, latest.id)
+        // Only voice-announce person or vehicle with confidence > 80%
+        if ((latest.type === 'person' || latest.type === 'vehicle') && latest.confidence > 0.8) {
+          voice.announceDetection(latest.type, latest.confidence, latest.mgrs, latest.id)
+        }
       }
     }
   }, [detections.length])
@@ -371,11 +499,233 @@ export default function App() {
 
       {/* ===== MAIN CONTENT ===== */}
       {/* Mobile: single column (existing behavior) */}
-      {/* Desktop (lg+): side-by-side — map left ~60%, right panel ~40% */}
+      {/* Desktop (lg+): 3-column GCS layout — left instruments, center map, right feed+chat */}
       <main className="flex-1 relative overflow-hidden flex flex-col lg:flex-row">
 
-        {/* ---- LEFT: Map area (full on mobile, 60% on desktop) ---- */}
-        <div className="flex-1 relative overflow-hidden lg:min-w-0">
+        {/* ---- DESKTOP LAYOUT: Resizable panels ---- */}
+        {/* Columns: Telemetry | Map+Stream (stacked) | Detections */}
+        {/* Bottom: Chat (tall) */}
+        <div className="hidden lg:flex flex-col flex-1 min-h-0">
+          <PanelGroup direction="vertical">
+            {/* Top: 3-column area */}
+            <Panel defaultSize={70} minSize={40}>
+              <PanelGroup direction="horizontal">
+
+                {/* LEFT: Telemetry — its own column */}
+                <Panel defaultSize={30} minSize={18}>
+                  <div className="h-full flex flex-col bg-surface-base overflow-y-auto border-r border-surface-border">
+                    {/* Header */}
+                    <div className="px-3 py-2 border-b border-surface-border bg-surface-raised/40 flex items-center justify-between shrink-0">
+                      <span className="text-[10px] text-text-dim uppercase tracking-[3px]">Telemetry</span>
+                      {selectedDrone && (
+                        <span className={`text-[10px] font-mono ${
+                          selectedDrone.status === 'flying' ? 'text-status-good' : 'text-text-dim'
+                        }`}>
+                          {selectedDrone.status === 'flying' ? 'ACTIVE' :
+                           selectedDrone.status === 'armed' ? 'STANDBY' :
+                           selectedDrone.status === 'returning' ? 'RTL' : 'IDLE'}
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedDrone && (
+                      <div className="p-3 space-y-3 flex-1">
+                        {/* Pairing */}
+                        <div className="flex items-center gap-2 text-[10px]">
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            selectedDrone.status === 'flying' ? 'bg-status-good animate-pulse' :
+                            selectedDrone.status === 'armed' ? 'bg-arm-armed' : 'bg-arm-disarmed'
+                          }`} />
+                          <span className="font-mono font-bold text-xs">{selectedDrone.name}</span>
+                          <span className="text-status-good font-mono">PAIRED</span>
+                          <span className="text-status-good font-mono">MESH</span>
+                        </div>
+
+                        {/* Big readouts */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: 'ALT', value: (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? `${Math.round(selectedDrone.altitude)}` : '---', unit: 'm', color: 'text-accent' },
+                            { label: 'SPD', value: (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? `${selectedDrone.speed.toFixed(1)}` : '---', unit: 'm/s', color: 'text-text-primary' },
+                            { label: 'HDG', value: (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? `${String(selectedDrone.heading).padStart(3, '0')}` : '---', unit: '°', color: 'text-text-primary' },
+                            { label: 'BAT', value: `${Math.round(selectedDrone.battery)}`, unit: '%', color: selectedDrone.battery < 20 ? 'text-status-critical' : selectedDrone.battery < 40 ? 'text-status-warning' : 'text-status-good' },
+                          ].map(t => (
+                            <div key={t.label} className="bg-surface-raised/60 border border-surface-border rounded-lg px-2 py-2 text-center">
+                              <div className="text-[8px] text-text-dim uppercase tracking-widest">{t.label}</div>
+                              <div className={`font-mono text-xl font-bold ${t.color} leading-tight`}>
+                                {t.value}<span className="text-[10px] text-text-dim ml-0.5">{t.unit}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Battery bar */}
+                        <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-3 py-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[8px] text-text-dim uppercase tracking-widest">Battery</span>
+                            <span className={`text-[10px] font-mono ${selectedDrone.battery < 20 ? 'text-status-critical' : 'text-text-dim'}`}>{Math.round(selectedDrone.battery)}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-surface-overlay rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${
+                              selectedDrone.battery < 20 ? 'bg-status-critical' : selectedDrone.battery < 40 ? 'bg-status-warning' : 'bg-status-good'
+                            }`} style={{ width: `${selectedDrone.battery}%` }} />
+                          </div>
+                        </div>
+
+                        {/* Elevation graph — show empty state when idle */}
+                        <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-3 py-2">
+                          <div className="text-[8px] text-text-dim uppercase tracking-widest mb-1">Elevation</div>
+                          {(selectedDrone.status === 'flying' || selectedDrone.status === 'returning') ? (
+                            <AltitudeSparkline altitude={selectedDrone.altitude} />
+                          ) : (
+                            <div className="h-[32px] flex items-center justify-center">
+                              <div className="w-full h-[1px] bg-surface-border relative">
+                                <span className="absolute left-0 top-1 text-[8px] text-text-dim/30 font-mono">0m</span>
+                                <span className="absolute right-0 top-1 text-[8px] text-text-dim/30 font-mono">ALT</span>
+                              </div>
+                            </div>
+                          )
+                          }
+                        </div>
+
+                        {/* Position */}
+                        <div className="bg-surface-raised/60 border border-surface-border rounded-lg px-3 py-2">
+                          <div className="text-[8px] text-text-dim uppercase tracking-widest mb-1">Position</div>
+                          <div className="font-mono text-[11px] text-text-secondary">
+                            {selectedDrone.position.lat.toFixed(6)}, {selectedDrone.position.lng.toFixed(6)}
+                          </div>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleVoiceCommand(selectedDrone.armState === 'armed' ? 'disarm' : 'arm')}
+                            disabled={selectedDrone.status === 'flying' || selectedDrone.status === 'returning'}
+                            className={`flex-1 py-2 rounded text-[10px] font-bold tracking-wider transition-colors ${
+                              selectedDrone.armState === 'armed'
+                                ? 'bg-arm-armed/20 text-arm-armed border border-arm-armed/30'
+                                : 'bg-surface-overlay text-text-secondary border border-surface-border'
+                            } ${selectedDrone.status === 'flying' || selectedDrone.status === 'returning' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {selectedDrone.armState === 'armed' ? 'ARMED' : 'ARM'}
+                          </button>
+                          <button
+                            onClick={() => setIsDrawingArea(!isDrawingArea)}
+                            disabled={selectedDrone.status !== 'ready' && selectedDrone.status !== 'armed'}
+                            className={`flex-1 py-2 rounded text-[10px] font-medium tracking-wider transition-colors ${
+                              isDrawingArea ? 'bg-accent/20 text-accent border border-accent/30'
+                              : 'bg-surface-overlay text-text-secondary border border-surface-border'
+                            } ${selectedDrone.status !== 'ready' && selectedDrone.status !== 'armed' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            {isDrawingArea ? 'Cancel' : 'Draw Area'}
+                          </button>
+                          <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} />
+                        </div>
+
+                        {/* KILL button — desktop only, in telemetry panel */}
+                        {(selectedDrone.status === 'flying' || selectedDrone.status === 'returning') && (
+                          <button
+                            onClick={handleKillButton}
+                            className="w-full py-1.5 rounded bg-red-900/60 hover:bg-red-800/80 active:scale-[0.98] text-red-400 font-bold text-[10px] tracking-widest transition-all border border-red-800/40"
+                          >
+                            KILL
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Panel>
+
+                <PanelResizeHandle className="w-1 bg-surface-border hover:bg-accent/30 transition-colors cursor-col-resize" />
+
+                {/* CENTER: Map + Stream stacked */}
+                <Panel defaultSize={45} minSize={25}>
+                  <PanelGroup direction="vertical">
+                    {/* Map — top portion */}
+                    <Panel defaultSize={60} minSize={20}>
+                      <div className="h-full relative overflow-hidden">
+                        <MapView
+                          drones={drones}
+                          detections={detections}
+                          searchAreas={searchAreas}
+                          selectedDroneId={selectedDroneId}
+                          isDrawingArea={isDrawingArea}
+                          onDrawComplete={handleDrawComplete}
+                          onDetectionClick={handleDetectionClick}
+                onRemoveZone={removeSearchArea}
+                        />
+                      </div>
+                    </Panel>
+
+                    <PanelResizeHandle className="h-1 bg-surface-border hover:bg-accent/30 transition-colors cursor-row-resize" />
+
+                    {/* Stream — bottom portion, matches mobile style */}
+                    <Panel defaultSize={40} minSize={15}>
+                      <div className="h-full relative bg-black flex items-center justify-center overflow-hidden">
+                        {/* LIVE tag */}
+                        <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5">
+                          <div className="flex items-center gap-1 bg-red-600/80 px-1.5 py-0.5 rounded text-[9px] font-bold text-white">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            LIVE
+                          </div>
+                          {selectedDrone && (
+                            <span className="text-[9px] font-mono text-white/60">{selectedDrone.name}</span>
+                          )}
+                        </div>
+                        {/* Drone status overlay */}
+                        {selectedDrone && (
+                          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[9px] font-mono">
+                            <span className={`px-1.5 py-0.5 rounded ${
+                              selectedDrone.status === 'flying' ? 'bg-status-good/20 text-status-good' :
+                              selectedDrone.status === 'armed' ? 'bg-arm-armed/20 text-arm-armed' :
+                              'bg-white/10 text-white/40'
+                            }`}>
+                              {selectedDrone.status === 'flying' ? 'FLYING' :
+                               selectedDrone.status === 'armed' ? 'ARMED' :
+                               selectedDrone.status === 'returning' ? 'RTL' : 'IDLE'}
+                            </span>
+                          </div>
+                        )}
+                        {/* Placeholder content */}
+                        <div className="text-center">
+                          <div className="text-text-dim/20 text-[10px]">No video source connected</div>
+                          <div className="text-text-dim/15 text-[9px] mt-0.5">Connect drone camera or sim feed</div>
+                        </div>
+                      </div>
+                    </Panel>
+                  </PanelGroup>
+                </Panel>
+
+                <PanelResizeHandle className="w-1 bg-surface-border hover:bg-accent/30 transition-colors cursor-col-resize" />
+
+                {/* RIGHT: Detections */}
+                <Panel defaultSize={25} minSize={15}>
+                  <div className="h-full flex flex-col border-l border-surface-border bg-surface-raised/50 overflow-hidden">
+                    <DetectionFeed {...feedProps} layout="desktop" hideStream />
+                  </div>
+                </Panel>
+              </PanelGroup>
+            </Panel>
+
+            <PanelResizeHandle className="h-1 bg-surface-border hover:bg-accent/30 transition-colors cursor-row-resize" />
+
+            {/* BOTTOM: Chat — resizable, defaults tall */}
+            <Panel defaultSize={30} minSize={12}>
+              <div className="h-full flex flex-col border-t border-surface-border bg-surface-bar">
+                <VoiceLog
+                  entries={voice.entries}
+                  isListening={voice.isListening}
+                  onToggleMic={voice.toggleListening}
+                  onTextCommand={handleVoiceCommand}
+                  layout="desktop"
+                />
+              </div>
+            </Panel>
+          </PanelGroup>
+        </div>
+
+        {/* ---- MOBILE LAYOUT: existing single-column (unchanged) ---- */}
+        <div className="flex-1 relative overflow-hidden lg:hidden flex flex-col">
+          <div className="flex-1 relative overflow-hidden">
           {/* Map view (default) */}
           {viewMode === 'map' && (
             <>
@@ -387,22 +737,17 @@ export default function App() {
                 isDrawingArea={isDrawingArea}
                 onDrawComplete={handleDrawComplete}
                 onDetectionClick={handleDetectionClick}
+                onRemoveZone={removeSearchArea}
               />
               {selectedDrone && (
                 <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
               )}
-              {/* Altitude sparkline — desktop only, on map overlay */}
-              {selectedDrone && (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') && (
-                <div className="hidden lg:block absolute z-[1000] bottom-2 right-2">
-                  <AltitudeSparkline altitude={selectedDrone.altitude} />
-                </div>
-              )}
             </>
           )}
 
-          {/* Voice log view — mobile only (on desktop, chat is in right panel) */}
+          {/* Voice log view — mobile */}
           {viewMode === 'voice' && (
-            <div className="lg:hidden absolute inset-0">
+            <div className="absolute inset-0">
               <VoiceLog
                 entries={voice.entries}
                 isListening={voice.isListening}
@@ -413,35 +758,10 @@ export default function App() {
             </div>
           )}
 
-          {/* On desktop in voice mode, still show the map */}
-          {viewMode === 'voice' && (
-            <div className="hidden lg:block absolute inset-0">
-              <MapView
-                drones={drones}
-                detections={detections}
-                searchAreas={searchAreas}
-                selectedDroneId={selectedDroneId}
-                isDrawingArea={isDrawingArea}
-                onDrawComplete={handleDrawComplete}
-                onDetectionClick={handleDetectionClick}
-              />
-              {selectedDrone && (
-                <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
-              )}
-              {selectedDrone && (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') && (
-                <div className="hidden lg:block absolute z-[1000] bottom-2 right-2">
-                  <AltitudeSparkline altitude={selectedDrone.altitude} />
-                </div>
-              )}
-            </div>
-          )}
+          {/* Detection feed — mobile */}
+          <DetectionFeed {...feedProps} layout="mobile" />
 
-          {/* Detection feed — MOBILE only (absolute overlay) */}
-          <div className="lg:hidden">
-            <DetectionFeed {...feedProps} layout="mobile" />
-          </div>
-
-          {/* Draw button (map view, drone selected and ready/armed) */}
+          {/* Draw button — mobile */}
           {viewMode === 'map' && selectedDroneId && (
             <DrawButton
               isDrawing={isDrawingArea}
@@ -449,48 +769,28 @@ export default function App() {
               onClick={() => setIsDrawingArea(!isDrawingArea)}
             />
           )}
-        </div>
-
-        {/* ---- RIGHT PANEL: Desktop only — detection feed + chat ---- */}
-        <div className="hidden lg:flex flex-col w-[40%] max-w-[480px] min-w-[340px] border-l border-surface-border bg-surface-raised/50">
-          {/* Detection Feed — top portion */}
-          <div className="h-[45%] min-h-[200px] overflow-hidden border-b border-surface-border flex flex-col">
-            <DetectionFeed {...feedProps} layout="desktop" />
-          </div>
-
-          {/* Chat / Ace area — bottom portion (generous space) */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <VoiceLog
-              entries={voice.entries}
-              isListening={voice.isListening}
-              onToggleMic={voice.toggleListening}
-              onTextCommand={handleVoiceCommand}
-              layout="desktop"
-            />
-          </div>
-
-          {/* Volume control — desktop */}
-          <div className="px-3 py-2 border-t border-surface-border bg-surface-bar">
-            <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} />
           </div>
         </div>
       </main>
 
-      {/* Voice bar — MOBILE only (on desktop, chat is in right panel) */}
+      {/* Voice bar — MOBILE only */}
       <div className="lg:hidden">
         {viewMode !== 'voice' && (
-          <VoiceBar
-            isListening={voice.isListening}
-            lastMessage={voice.lastMessage}
-            onToggleMic={voice.toggleListening}
-            onTextCommand={handleVoiceCommand}
-          />
+          <div className="relative">
+            <VoiceBar
+              isListening={voice.isListening}
+              lastMessage={voice.lastMessage}
+              onToggleMic={voice.toggleListening}
+              onTextCommand={handleVoiceCommand}
+            />
+            <div className="absolute top-1/2 -translate-y-1/2 right-14 z-[1200]">
+              <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} />
+            </div>
+          </div>
         )}
-        {/* Volume control — mobile, inside voice bar area */}
-        <div className="px-3 py-1.5 bg-surface-bar border-t border-surface-border">
-          <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} compact />
-        </div>
       </div>
+
+      {/* Floating KILL button removed — kill is in telemetry panel (desktop) and TelemetryHUD (mobile) */}
 
       {/* Detection detail modal */}
       {selectedDetection && viewMode === 'map' && (

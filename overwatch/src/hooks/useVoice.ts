@@ -114,11 +114,14 @@ export function useVoice({ onCommand }: UseVoiceOptions = {}) {
   }, [isListening, startListening, stopListening])
 
   const announceDetection = useCallback((type: string, confidence: number, mgrs: string, detectionId: string) => {
-    const text = `${type} detected — ${confidence}% — grid ${mgrs}`
-    addEntry('drone', text, detectionId, type as VoiceEntry['type'])
+    // Full detail in text feed
+    const feedText = `${type} detected — ${Math.round(confidence * 100)}% — grid ${mgrs}`
+    addEntry('drone', feedText, detectionId, type as VoiceEntry['type'])
 
+    // Voice: short and clean — just the detection type
     if (synthRef.current && !muted && volume > 0) {
-      const utterance = new SpeechSynthesisUtterance(text)
+      const voiceText = `${type} detected`
+      const utterance = new SpeechSynthesisUtterance(voiceText)
       utterance.rate = 1.1
       utterance.pitch = 0.9
       utterance.volume = volume

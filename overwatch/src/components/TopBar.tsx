@@ -112,12 +112,12 @@ export function TopBar({ connectionStatus, armState = 'disarmed', viewMode = 'ma
         </button>
       </div>
 
-      {/* Right: View tabs — w-56 on mobile (matches feed), auto on desktop */}
-      <div className="flex items-stretch w-56 lg:w-auto shrink-0 self-stretch border-l border-surface-border">
-        <button onClick={() => onSetView?.('map')} className={`flex-1 lg:px-4 ${tabClass('map')}`}>
+      {/* Right: View tabs — MOBILE ONLY (desktop shows everything, no tabs needed) */}
+      <div className="flex items-stretch w-56 shrink-0 self-stretch border-l border-surface-border lg:hidden">
+        <button onClick={() => onSetView?.('map')} className={`flex-1 ${tabClass('map')}`}>
           Map
         </button>
-        <button onClick={() => onSetView?.('voice')} className={`flex-1 lg:px-4 ${tabClass('voice')}`}>
+        <button onClick={() => onSetView?.('voice')} className={`flex-1 ${tabClass('voice')}`}>
           Chat
         </button>
       </div>

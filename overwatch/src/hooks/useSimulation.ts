@@ -72,6 +72,7 @@ export function useSimulation({
     if (existingBatteryTimeout) clearTimeout(existingBatteryTimeout)
 
     // Movement interval - move towards next waypoint
+    // Update at 1Hz (1000ms) — 200ms causes too many re-renders
     const moveInterval = setInterval(() => {
       const targetDrone = drones.find(d => d.id === droneId)
       if (!targetDrone || targetDrone.status !== 'flying') {
@@ -81,7 +82,7 @@ export function useSimulation({
       }
 
       const target = waypoints[waypointIndex]
-      const speed = 0.0003 // Faster for demo
+      const speed = 0.0015 // Adjusted for 1Hz tick rate
 
       // Calculate direction
       const latDiff = target.lat - currentPosition.lat
@@ -109,11 +110,11 @@ export function useSimulation({
         })
       }
 
-      // Battery drain - faster for demo (0.15% per 200ms)
-      const newBattery = Math.max(0, targetDrone.battery - 0.15)
+      // Battery drain - 0.1% per 1000ms (~16 min flight time)
+      const newBattery = Math.max(0, targetDrone.battery - 0.1)
       updateDrone(droneId, { battery: newBattery })
 
-    }, 200)
+    }, 1000)
 
     flightTimersRef.current.set(droneId, moveInterval)
 
@@ -177,7 +178,7 @@ export function useSimulation({
         return
       }
 
-      const speed = 0.0004 // Faster return speed
+      const speed = 0.002 // Adjusted for 1Hz tick rate
       const latDiff = target.lat - currentPosition.lat
       const lngDiff = target.lng - currentPosition.lng
       const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff)
@@ -208,7 +209,7 @@ export function useSimulation({
           speed: 10.0 + Math.random() * 1.0
         })
       }
-    }, 200)
+    }, 1000)
 
     flightTimersRef.current.set(droneId, returnInterval)
   }, [drones, updateDrone])
