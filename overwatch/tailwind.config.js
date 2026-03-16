@@ -59,6 +59,7 @@ export default {
         'pulse-detection': 'pulse-detection 1.5s ease-in-out infinite',
         'slide-in': 'slide-in 0.3s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
+        'glow-armed': 'glow-armed 2s ease-in-out infinite',
       },
       keyframes: {
         'pulse-detection': {
@@ -72,6 +73,10 @@ export default {
         'fade-in': {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
+        },
+        'glow-armed': {
+          '0%, 100%': { boxShadow: '0 0 4px rgba(196, 130, 10, 0.3)' },
+          '50%': { boxShadow: '0 0 12px rgba(196, 130, 10, 0.6)' },
         }
       }
     },

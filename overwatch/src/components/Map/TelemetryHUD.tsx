@@ -25,7 +25,7 @@ export function TelemetryHUD({ drone, onKill, canKill }: TelemetryHUDProps) {
 
   return (
     <div className="absolute z-[1000] pointer-events-none" style={{ bottom: '8px', left: '12px' }}>
-      <div className="bg-black/75 backdrop-blur-sm border border-surface-border rounded-lg px-2.5 py-2 font-mono text-[11px] text-white min-w-[120px]">
+      <div className={`bg-black/75 backdrop-blur-sm border border-surface-border rounded-lg px-2.5 py-2 font-mono text-[11px] text-white min-w-[120px] transition-shadow duration-500 ${drone.armState === 'armed' ? 'animate-glow-armed' : ''}`}>
         {/* Drone name + status — single line */}
         <div className="flex items-center gap-1.5 mb-1">
           <div className={`w-1.5 h-1.5 rounded-full ${statusColor}`} />

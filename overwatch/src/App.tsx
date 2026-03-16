@@ -5,9 +5,7 @@ import { useSimulation } from './hooks/useSimulation'
 import { useVoice } from './hooks/useVoice'
 import { useMGRS } from './hooks/useMGRS'
 import { TopBar } from './components/TopBar'
-import { FleetStrip } from './components/Fleet/FleetStrip'
 import { MapView } from './components/Map/MapView'
-import { FeedView } from './components/Feed/FeedView'
 import { DetectionDetail } from './components/Detection/DetectionDetail'
 import { ConfirmSlider } from './components/Controls/ConfirmSlider'
 import { LaunchConfirm } from './components/Controls/LaunchConfirm'
@@ -18,6 +16,8 @@ import { DrawButton } from './components/Controls/DrawButton'
 import { VoiceBar } from './components/Voice/VoiceBar'
 import { VoiceLog } from './components/Voice/VoiceLog'
 import { CommsLostBanner } from './components/CommsLostBanner'
+import { AltitudeSparkline } from './components/AltitudeSparkline'
+import { VolumeControl } from './components/VolumeControl'
 
 export default function App() {
   // View state — map is default, no fleet view
@@ -94,7 +94,6 @@ export default function App() {
 
     // --- Battery query (specific drone) ---
     } else if (cmd.includes('battery')) {
-      // Check if they asked about a specific drone by number
       const droneMatch = cmd.match(/(?:drone|bird)\s*(\d+)/i)
       if (droneMatch) {
         const drone = drones.find(d => d.name.toLowerCase().includes(droneMatch[1]))
@@ -104,7 +103,6 @@ export default function App() {
           voice.speak('Copy. Drone not found.', 'drone')
         }
       } else {
-        // All drones battery
         const report = drones.map(d => `${d.name} ${d.battery}%`).join(', ')
         voice.speak(`Roger. ${report}.`, 'drone')
       }
@@ -161,7 +159,7 @@ export default function App() {
         voice.speak('Copy. No active flight to return.', 'drone')
       }
 
-    // --- Watch / Track (persistent surveillance) ---
+    // --- Watch / Track ---
     } else if (cmd.includes('watch') || cmd.includes('track') || cmd.includes('monitor') || cmd.includes('observe') || cmd.includes('eyes on')) {
       voice.speak('Copy. Setting persistent watch on target area. Will alert on movement.', 'drone')
 
@@ -233,7 +231,6 @@ export default function App() {
   useEffect(() => {
     if (detections.length > 0) {
       const latest = detections[detections.length - 1]
-      // Only announce if it just appeared (within last 2 seconds)
       if (Date.now() - latest.timestamp.getTime() < 2000) {
         voice.announceDetection(latest.type, latest.confidence, latest.mgrs, latest.id)
       }
@@ -265,7 +262,6 @@ export default function App() {
   // Handle launch — arms and launches
   const handleConfirmLaunch = useCallback(() => {
     if (!pendingLaunch) return
-    // Arm first, then launch
     updateDrone(pendingLaunch.droneId, { armState: 'armed' })
     launchDrone(pendingLaunch.droneId, pendingLaunch.searchAreaId)
     voice.speak('Armed. Launching search pattern.', 'drone')
@@ -299,7 +295,6 @@ export default function App() {
     if (killConfirmation) {
       stopDrone(killConfirmation.droneId)
       setStoppedDroneId(killConfirmation.droneId)
-      // Auto-disarm on stop
       updateDrone(killConfirmation.droneId, { armState: 'disarmed' })
       voice.speak(`${killConfirmation.droneName} stopped. Disarmed. Hovering.`, 'drone')
     }
@@ -332,6 +327,19 @@ export default function App() {
 
   const canKillSelected = selectedDrone?.status === 'flying' || selectedDrone?.status === 'returning'
 
+  // Shared detection feed props
+  const feedProps = {
+    detections,
+    alerts,
+    selectedDrone,
+    collapsed: feedCollapsed,
+    onToggleCollapsed: () => setFeedCollapsed(c => !c),
+    onDetectionClick: handleDetectionClick,
+    onAlertAction: handleAlertAction,
+    onAlertDismiss: dismissAlert,
+    onOpenStream: () => {},
+  }
+
   return (
     <div className="h-screen flex flex-col bg-surface-base overflow-hidden">
       {/* Top bar */}
@@ -361,71 +369,128 @@ export default function App() {
         onDismissRestored={() => setCommsRestored(false)}
       />
 
-      {/* Main content */}
-      <main className="flex-1 relative overflow-hidden">
-        {/* Map view (default) */}
-        {viewMode === 'map' && (
-          <>
-            <MapView
-              drones={drones}
-              detections={detections}
-              searchAreas={searchAreas}
-              selectedDroneId={selectedDroneId}
-              isDrawingArea={isDrawingArea}
-              onDrawComplete={handleDrawComplete}
-              onDetectionClick={handleDetectionClick}
-            />
-            {selectedDrone && (
-              <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
-            )}
-          </>
-        )}
+      {/* ===== MAIN CONTENT ===== */}
+      {/* Mobile: single column (existing behavior) */}
+      {/* Desktop (lg+): side-by-side — map left ~60%, right panel ~40% */}
+      <main className="flex-1 relative overflow-hidden flex flex-col lg:flex-row">
 
-        {/* Voice log view */}
-        {viewMode === 'voice' && (
-          <VoiceLog
-            entries={voice.entries}
+        {/* ---- LEFT: Map area (full on mobile, 60% on desktop) ---- */}
+        <div className="flex-1 relative overflow-hidden lg:min-w-0">
+          {/* Map view (default) */}
+          {viewMode === 'map' && (
+            <>
+              <MapView
+                drones={drones}
+                detections={detections}
+                searchAreas={searchAreas}
+                selectedDroneId={selectedDroneId}
+                isDrawingArea={isDrawingArea}
+                onDrawComplete={handleDrawComplete}
+                onDetectionClick={handleDetectionClick}
+              />
+              {selectedDrone && (
+                <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
+              )}
+              {/* Altitude sparkline — desktop only, on map overlay */}
+              {selectedDrone && (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') && (
+                <div className="hidden lg:block absolute z-[1000] bottom-2 right-2">
+                  <AltitudeSparkline altitude={selectedDrone.altitude} />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Voice log view — mobile only (on desktop, chat is in right panel) */}
+          {viewMode === 'voice' && (
+            <div className="lg:hidden absolute inset-0">
+              <VoiceLog
+                entries={voice.entries}
+                isListening={voice.isListening}
+                feedCollapsed={feedCollapsed}
+                onToggleMic={voice.toggleListening}
+                onTextCommand={handleVoiceCommand}
+              />
+            </div>
+          )}
+
+          {/* On desktop in voice mode, still show the map */}
+          {viewMode === 'voice' && (
+            <div className="hidden lg:block absolute inset-0">
+              <MapView
+                drones={drones}
+                detections={detections}
+                searchAreas={searchAreas}
+                selectedDroneId={selectedDroneId}
+                isDrawingArea={isDrawingArea}
+                onDrawComplete={handleDrawComplete}
+                onDetectionClick={handleDetectionClick}
+              />
+              {selectedDrone && (
+                <TelemetryHUD drone={selectedDrone} onKill={handleKillButton} canKill={canKillSelected} />
+              )}
+              {selectedDrone && (selectedDrone.status === 'flying' || selectedDrone.status === 'returning') && (
+                <div className="hidden lg:block absolute z-[1000] bottom-2 right-2">
+                  <AltitudeSparkline altitude={selectedDrone.altitude} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Detection feed — MOBILE only (absolute overlay) */}
+          <div className="lg:hidden">
+            <DetectionFeed {...feedProps} layout="mobile" />
+          </div>
+
+          {/* Draw button (map view, drone selected and ready/armed) */}
+          {viewMode === 'map' && selectedDroneId && (
+            <DrawButton
+              isDrawing={isDrawingArea}
+              disabled={selectedDrone?.status !== 'ready' && selectedDrone?.status !== 'armed'}
+              onClick={() => setIsDrawingArea(!isDrawingArea)}
+            />
+          )}
+        </div>
+
+        {/* ---- RIGHT PANEL: Desktop only — detection feed + chat ---- */}
+        <div className="hidden lg:flex flex-col w-[40%] max-w-[480px] min-w-[340px] border-l border-surface-border bg-surface-raised/50">
+          {/* Detection Feed — top portion */}
+          <div className="h-[45%] min-h-[200px] overflow-hidden border-b border-surface-border flex flex-col">
+            <DetectionFeed {...feedProps} layout="desktop" />
+          </div>
+
+          {/* Chat / Ace area — bottom portion (generous space) */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <VoiceLog
+              entries={voice.entries}
+              isListening={voice.isListening}
+              onToggleMic={voice.toggleListening}
+              onTextCommand={handleVoiceCommand}
+              layout="desktop"
+            />
+          </div>
+
+          {/* Volume control — desktop */}
+          <div className="px-3 py-2 border-t border-surface-border bg-surface-bar">
+            <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} />
+          </div>
+        </div>
+      </main>
+
+      {/* Voice bar — MOBILE only (on desktop, chat is in right panel) */}
+      <div className="lg:hidden">
+        {viewMode !== 'voice' && (
+          <VoiceBar
             isListening={voice.isListening}
-            feedCollapsed={feedCollapsed}
+            lastMessage={voice.lastMessage}
             onToggleMic={voice.toggleListening}
             onTextCommand={handleVoiceCommand}
           />
         )}
-
-        {/* Detection feed — visible in both map and voice views */}
-        <DetectionFeed
-          detections={detections}
-          alerts={alerts}
-          selectedDrone={selectedDrone}
-          collapsed={feedCollapsed}
-          onToggleCollapsed={() => setFeedCollapsed(c => !c)}
-          onDetectionClick={handleDetectionClick}
-          onAlertAction={handleAlertAction}
-          onAlertDismiss={dismissAlert}
-          onOpenStream={() => {}}
-        />
-      </main>
-
-      {/* Draw button (map view, drone selected and ready/armed) */}
-      {viewMode === 'map' && selectedDroneId && (
-        <DrawButton
-          isDrawing={isDrawingArea}
-          disabled={selectedDrone?.status !== 'ready' && selectedDrone?.status !== 'armed'}
-          onClick={() => setIsDrawingArea(!isDrawingArea)}
-        />
-      )}
-
-      {/* KILL button now lives inside TelemetryHUD */}
-
-      {/* Voice bar (always visible except voice log view) */}
-      {viewMode !== 'voice' && (
-        <VoiceBar
-          isListening={voice.isListening}
-          lastMessage={voice.lastMessage}
-          onToggleMic={voice.toggleListening}
-          onTextCommand={handleVoiceCommand}
-        />
-      )}
+        {/* Volume control — mobile, inside voice bar area */}
+        <div className="px-3 py-1.5 bg-surface-bar border-t border-surface-border">
+          <VolumeControl volume={voice.volume} onVolumeChange={voice.setVolume} muted={voice.muted} onToggleMute={voice.toggleMute} compact />
+        </div>
+      </div>
 
       {/* Detection detail modal */}
       {selectedDetection && viewMode === 'map' && (
@@ -438,7 +503,7 @@ export default function App() {
         />
       )}
 
-      {/* Launch confirmation (arms + launches) */}
+      {/* Launch confirmation */}
       {pendingLaunch && selectedDrone && (
         <LaunchConfirm
           droneName={selectedDrone.name}
