@@ -53,7 +53,6 @@ from routers.vision import (
     stop_session_cleanup,
 )
 from utils.device import get_device_info, get_optimal_device
-from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir

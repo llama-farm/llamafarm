@@ -1,6 +1,5 @@
 """Re-export from llamafarm_common — single source of truth."""
-from llamafarm_common.device import *  # noqa: F401,F403
-from llamafarm_common.device import (  # explicit for type checkers
+from llamafarm_common.device import (
     get_device_info,
     get_gguf_gpu_layers,
     get_optimal_device,
