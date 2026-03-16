@@ -1,0 +1,31 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "edge-runtime",
+  "projectType": "application",
+  "sourceRoot": "runtimes/edge",
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run python server.py",
+        "cwd": "runtimes/edge"
+      }
+    },
+    "sync": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "uv python install 3.12",
+          "uv sync"
+        ],
+        "cwd": "runtimes/edge",
+        "parallel": false
+      }
+    }
+  },
+  "tags": [
+    "runtime",
+    "python",
+    "edge"
+  ]
+}
