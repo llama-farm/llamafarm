@@ -142,24 +142,30 @@ func (m *PythonEnvManager) getEnv() []string {
 	// Start with the current environment
 	env := os.Environ()
 
-	// Filter out Python-related environment variables that could interfere
-	// with UV's managed Python environment
+	// Filter out environment variables that could interfere with UV's managed
+	// Python environment or cause incorrect package resolution.
+	// UV index vars are stripped here so that only services that explicitly
+	// declare them in their Env map (e.g. universal-runtime) will have them.
+	// This prevents the PyTorch CPU index from leaking into server/rag, where
+	// it can cause install failures (e.g. markupsafe with only cp314 wheels).
 	filteredEnv := make([]string, 0, len(env))
 	pythonEnvVars := map[string]bool{
-		"VIRTUAL_ENV":       true,
-		"PYTHONHOME":        true,
-		"PYTHONPATH":        true,
-		"PYTHONSTARTUP":     true,
-		"PYTHONEXECUTABLE":  true,
-		"PYTHONUSERBASE":    true,
-		"CONDA_DEFAULT_ENV": true,
-		"CONDA_PREFIX":      true,
+		"VIRTUAL_ENV":        true,
+		"PYTHONHOME":         true,
+		"PYTHONPATH":         true,
+		"PYTHONSTARTUP":      true,
+		"PYTHONEXECUTABLE":   true,
+		"PYTHONUSERBASE":     true,
+		"CONDA_DEFAULT_ENV":  true,
+		"CONDA_PREFIX":       true,
 		"CONDA_PYTHON_EXE":  true,
-		"PYENV_VERSION":     true,
-		"PYENV_VIRTUAL_ENV": true,
-		"PIPENV_ACTIVE":     true,
-		"POETRY_ACTIVE":     true,
-		"PDM_PYTHON":        true,
+		"PYENV_VERSION":      true,
+		"PYENV_VIRTUAL_ENV":  true,
+		"PIPENV_ACTIVE":      true,
+		"POETRY_ACTIVE":      true,
+		"PDM_PYTHON":         true,
+		"UV_EXTRA_INDEX_URL": true,
+		"UV_INDEX_STRATEGY":  true,
 	}
 
 	for _, e := range env {
