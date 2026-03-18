@@ -151,7 +151,7 @@ def _detect_hailo() -> bool:
             ["lspci", "-d", "1e60:"],
             capture_output=True, text=True, timeout=5,
         )
-        if "1e60" in result.stdout:
+        if result.stdout.strip():
             logger.info("Hailo-10H detected, using Hailo backend for vision")
             _use_hailo = True
             return True
