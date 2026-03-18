@@ -321,7 +321,7 @@ class HailoYOLOModel(DetectionModel):
             bindings = self._configured.create_bindings()
             bindings.input().set_buffer(input_data)
             output_buffer = np.empty(
-                self._configured.output().shape, dtype=np.float32
+                self._infer_model.output().shape, dtype=np.float32
             )
             bindings.output().set_buffer(output_buffer)
             self._configured.run([bindings], timeout_ms=5000)
