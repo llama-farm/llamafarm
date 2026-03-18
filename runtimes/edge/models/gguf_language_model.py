@@ -80,8 +80,8 @@ def _is_unified_memory_gpu() -> bool:
                 if "tegra" in f.read().lower():
                     logger.info("NVIDIA Tegra kernel detected (sync inference enabled)")
                     return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Unified memory GPU detection failed: {e}")
 
     # Apple Silicon and other platforms use async inference (ThreadPoolExecutor)
     # which was the original behavior before Jetson optimizations
@@ -940,10 +940,6 @@ class GGUFLanguageModel(BaseModel):
         Raises:
             AssertionError: If model not loaded
         """
-        import time
-
-        _timing_start = time.perf_counter()
-
         assert self.llama is not None, "Model not loaded. Call load() first."
 
         max_tokens = max_tokens or 512

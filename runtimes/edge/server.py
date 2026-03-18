@@ -214,6 +214,10 @@ async def load_language(
     preferred_quantization: str | None = None,
 ):
     """Load a causal language model (GGUF or transformers format)."""
+    # Reject model IDs with path traversal sequences
+    if ".." in model_id or model_id.startswith("/"):
+        raise ValueError(f"Invalid model_id: {model_id}")
+
     quant_key = preferred_quantization or "default"
     cache_key = (
         f"language:{model_id}:ctx{n_ctx or 'auto'}:gpu{n_gpu_layers or 'auto'}:"

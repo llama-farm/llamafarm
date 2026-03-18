@@ -87,6 +87,10 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
     This is an internal function that performs the actual file reading.
     Use get_gguf_metadata_cached() for cached access.
     """
+    # Reject paths with traversal sequences
+    if ".." in gguf_path:
+        raise ValueError(f"Invalid GGUF path: {gguf_path}")
+
     if not os.path.exists(gguf_path):
         raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
 

@@ -150,7 +150,7 @@ class BaseModel(ABC):
                 try:
                     self.pipe.enable_model_cpu_offload()
                     logger.info("Enabled model CPU offload")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Could not enable model CPU offload: {e}")
         except Exception as e:
             logger.warning(f"Could not apply optimizations: {e}")
