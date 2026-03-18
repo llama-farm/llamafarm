@@ -324,7 +324,7 @@ class HailoYOLOModel(DetectionModel):
                 self._infer_model.output().shape, dtype=np.float32
             )
             bindings.output().set_buffer(output_buffer)
-            self._configured.run([bindings])
+            self._configured.run([bindings], 5000)
             return output_buffer
 
         output = await asyncio.to_thread(_infer)
