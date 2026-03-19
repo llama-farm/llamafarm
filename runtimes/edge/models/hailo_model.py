@@ -104,11 +104,12 @@ def _parse_nms_output(
 ) -> list[DetectionBox]:
     """Parse NMS-decoded output from a Hailo .hef YOLO model.
 
-    Hailo Model Zoo YOLO .hef files with built-in NMS produce output in the
-    format [num_detections, 6] where each row is:
-        [y1, x1, y2, x2, confidence, class_id]
+    Hailo Model Zoo YOLO .hef files with built-in NMS produce a per-class
+    output tensor of shape (num_classes, max_detections, 5) where each
+    detection row is [y_min, x_min, y_max, x_max, score].  The class ID
+    is implicit from the first dimension index, NOT a column in the data.
 
-    Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
+    Coordinates are normalized (0.0-1.0) relative to the letterboxed input.
 
     Args:
         output: Raw float32 output array from Hailo inference.
@@ -125,59 +126,29 @@ def _parse_nms_output(
     """
     boxes: list[DetectionBox] = []
 
-    # Handle various output shapes from Hailo NMS
-    if output.ndim == 1:
-        # Flat array — no detections or single detection
-        if output.size < 6:
-            return boxes
-        output = output.reshape(-1, 6)
-    elif output.ndim == 3:
-        # (batch, num_detections, 6) — take first batch
-        output = output[0]
+    logger.debug(f"Hailo NMS output shape: {output.shape}, ndim: {output.ndim}")
 
-    if output.ndim != 2 or output.shape[1] < 6:
-        logger.warning(f"Unexpected Hailo output shape: {output.shape}")
+    # Hailo NMS output is per-class: (num_classes, max_det, 5)
+    # Each detection is [y_min, x_min, y_max, x_max, score]
+    if output.ndim == 3 and output.shape[2] == 5:
+        num_classes = output.shape[0]
+        logger.debug(
+            f"Hailo NMS: {num_classes} classes, "
+            f"{output.shape[1]} max detections per class"
+        )
+    else:
+        logger.warning(
+            f"Unexpected Hailo NMS output shape: {output.shape}. "
+            f"Expected (num_classes, max_det, 5)."
+        )
         return boxes
 
     pad_x, pad_y = pad
     input_h, input_w = input_size
 
-    for det in output:
-        conf = float(det[4])
-        if conf < confidence_threshold:
-            continue
-
-        cls_id = int(det[5])
+    for cls_id in range(num_classes):
         if class_filter is not None and cls_id not in class_filter:
             continue
-
-        # Log raw detection values to determine actual coordinate order
-        logger.debug(
-            f"Hailo raw det: [{det[0]:.4f}, {det[1]:.4f}, {det[2]:.4f}, {det[3]:.4f}, "
-            f"conf={det[4]:.4f}, cls={int(det[5])}] "
-            f"input_size=({input_h},{input_w}) pad=({pad_x},{pad_y}) scale={scale:.4f} "
-            f"orig=({image_width}x{image_height})"
-        )
-
-        # Hailo NMS output is [y1, x1, y2, x2, conf, class_id]
-        # Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
-        # Convert to pixel space, remove letterbox padding, then rescale to original.
-        y1_norm, x1_norm, y2_norm, x2_norm = det[0], det[1], det[2], det[3]
-
-        x1_px = x1_norm * input_w
-        y1_px = y1_norm * input_h
-        x2_px = x2_norm * input_w
-        y2_px = y2_norm * input_h
-
-        x1 = max(0.0, (x1_px - pad_x) / scale)
-        y1 = max(0.0, (y1_px - pad_y) / scale)
-        x2 = min(float(image_width), (x2_px - pad_x) / scale)
-        y2 = min(float(image_height), (y2_px - pad_y) / scale)
-
-        logger.debug(
-            f"Hailo mapped: px=({x1_px:.1f},{y1_px:.1f},{x2_px:.1f},{y2_px:.1f}) "
-            f"-> orig=({x1:.1f},{y1:.1f},{x2:.1f},{y2:.1f})"
-        )
 
         class_name = (
             COCO_CLASS_NAMES[cls_id]
@@ -185,14 +156,43 @@ def _parse_nms_output(
             else f"class_{cls_id}"
         )
 
-        boxes.append(
-            DetectionBox(
-                x1=x1, y1=y1, x2=x2, y2=y2,
-                class_name=class_name,
-                class_id=cls_id,
-                confidence=conf,
+        for det in output[cls_id]:
+            score = float(det[4])
+            if score < confidence_threshold:
+                continue
+
+            y1_norm, x1_norm, y2_norm, x2_norm = det[0], det[1], det[2], det[3]
+
+            logger.debug(
+                f"Hailo det: class={class_name}({cls_id}) score={score:.4f} "
+                f"norm=[{y1_norm:.4f}, {x1_norm:.4f}, {y2_norm:.4f}, {x2_norm:.4f}]"
             )
-        )
+
+            # Convert normalized coords to pixel space in letterboxed image
+            x1_px = x1_norm * input_w
+            y1_px = y1_norm * input_h
+            x2_px = x2_norm * input_w
+            y2_px = y2_norm * input_h
+
+            # Remove letterbox padding and rescale to original image
+            x1 = max(0.0, (x1_px - pad_x) / scale)
+            y1 = max(0.0, (y1_px - pad_y) / scale)
+            x2 = min(float(image_width), (x2_px - pad_x) / scale)
+            y2 = min(float(image_height), (y2_px - pad_y) / scale)
+
+            logger.debug(
+                f"Hailo mapped: px=({x1_px:.1f},{y1_px:.1f},{x2_px:.1f},{y2_px:.1f}) "
+                f"-> orig=({x1:.1f},{y1:.1f},{x2:.1f},{y2:.1f})"
+            )
+
+            boxes.append(
+                DetectionBox(
+                    x1=x1, y1=y1, x2=x2, y2=y2,
+                    class_name=class_name,
+                    class_id=cls_id,
+                    confidence=score,
+                )
+            )
 
     return boxes
 
@@ -283,6 +283,11 @@ class HailoYOLOModel(DetectionModel):
             else:
                 input_shape = (640, 640)  # Default YOLO input size
                 logger.warning(f"Unexpected input shape {shape}, defaulting to 640x640")
+
+            output_shape = infer_model.output().shape
+            logger.info(
+                f"Hailo model shapes — input: {shape}, output: {output_shape}"
+            )
 
             return vdevice, infer_model, configured, input_shape
 
