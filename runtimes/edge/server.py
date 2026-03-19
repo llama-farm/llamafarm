@@ -215,7 +215,7 @@ async def load_language(
 ):
     """Load a causal language model (GGUF or transformers format)."""
     # Reject model IDs with path traversal sequences
-    if ".." in model_id or model_id.startswith("/"):
+    if ".." in model_id or model_id.startswith(("/", "\\")) or "\\" in model_id or (len(model_id) > 1 and model_id[1] == ":"):
         raise ValueError(f"Invalid model_id: {model_id}")
 
     quant_key = preferred_quantization or "default"

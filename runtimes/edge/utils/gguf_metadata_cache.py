@@ -87,8 +87,9 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
     This is an internal function that performs the actual file reading.
     Use get_gguf_metadata_cached() for cached access.
     """
-    # Reject paths with traversal sequences
-    if ".." in gguf_path:
+    # Reject paths with traversal sequences (check path segments, not raw string)
+    from pathlib import PurePosixPath, PureWindowsPath
+    if ".." in PurePosixPath(gguf_path).parts or ".." in PureWindowsPath(gguf_path).parts:
         raise ValueError(f"Invalid GGUF path: {gguf_path}")
 
     if not os.path.exists(gguf_path):

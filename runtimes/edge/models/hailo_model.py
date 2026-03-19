@@ -139,7 +139,7 @@ def _parse_nms_output(
     # COCO models use 80 classes; try common max_det values.
     num_classes = 0
     max_det = 0
-    for nc in (80, 1):
+    for nc in (80,):
         if total % nc != 0:
             continue
         stride = total // nc
