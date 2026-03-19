@@ -56,6 +56,7 @@ from utils.device import get_device_info, get_optimal_device
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
+from services.zenoh_ipc import ZenohIPC
 
 # Suppress spurious warnings
 warnings.filterwarnings(
@@ -100,6 +101,7 @@ _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
 _cleanup_task: asyncio.Task | None = None
+_zenoh_ipc: ZenohIPC | None = None
 
 # Data directories
 _LF_DATA_DIR = get_data_dir()
@@ -314,6 +316,26 @@ async def load_classification_model(model_id: str = "clip-vit-base"):
 
 
 # ============================================================================
+# Zenoh IPC Inference Bridge
+# ============================================================================
+
+
+async def _zenoh_inference(request: dict) -> str:
+    """Bridge between Zenoh request JSON and the model inference path."""
+    model_id = request.get("model", "")
+    messages = request.get("messages", [])
+    max_tokens = request.get("max_tokens", 256)
+    temperature = request.get("temperature", 0.7)
+
+    model = await load_language(model_id)
+    return await model.generate(
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+
+
+# ============================================================================
 # Lifecycle
 # ============================================================================
 
@@ -321,7 +343,7 @@ async def load_classification_model(model_id: str = "clip-vit-base"):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
-    global _cleanup_task
+    global _cleanup_task, _zenoh_ipc
 
     logger.info("Starting LlamaFarm Edge Runtime")
 
@@ -341,10 +363,18 @@ async def lifespan(app: FastAPI):
 
     start_session_cleanup()
 
+    # Start Zenoh IPC interface (non-blocking — falls back to HTTP-only on failure)
+    _zenoh_ipc = ZenohIPC(inference_fn=_zenoh_inference)
+    await _zenoh_ipc.start()
+
     yield
 
     # Shutdown
     logger.info("Shutting down Edge Runtime")
+
+    if _zenoh_ipc is not None:
+        await _zenoh_ipc.stop()
+
     await stop_kv_cache_gc()
     await stop_session_cleanup()
 

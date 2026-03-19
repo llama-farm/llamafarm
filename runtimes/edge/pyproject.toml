@@ -33,6 +33,8 @@ dependencies = [
   "numpy>=1.24.0",
   # HTTP client (for streaming cascade)
   "httpx>=0.24.0",
+  # IPC bus (Zenoh pub/sub over Unix socket)
+  "eclipse-zenoh>=1.0.0",
 ]
 
 [project.optional-dependencies]
