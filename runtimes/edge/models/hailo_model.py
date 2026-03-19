@@ -104,12 +104,16 @@ def _parse_nms_output(
 ) -> list[DetectionBox]:
     """Parse NMS-decoded output from a Hailo .hef YOLO model.
 
-    Hailo Model Zoo YOLO .hef files with built-in NMS produce a per-class
-    output tensor of shape (num_classes, max_detections, 5) where each
-    detection row is [y_min, x_min, y_max, x_max, score].  The class ID
-    is implicit from the first dimension index, NOT a column in the data.
+    Hailo Model Zoo YOLO .hef files with built-in NMS produce a flat
+    per-class buffer.  For 80 COCO classes with 100 max detections the
+    raw shape is ``(40080,)`` = 80 × (1 + 100 × 5).
 
-    Coordinates are normalized (0.0-1.0) relative to the letterboxed input.
+    Per-class layout (stride = 1 + max_det × 5):
+        [count, y1, x1, y2, x2, score, y1, x1, y2, x2, score, …]
+
+    ``count`` is the number of valid detections for that class.
+    Each detection is 5 floats: ``[y_min, x_min, y_max, x_max, score]``.
+    Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
 
     Args:
         output: Raw float32 output array from Hailo inference.
@@ -125,23 +129,38 @@ def _parse_nms_output(
         List of DetectionBox instances in original image coordinates.
     """
     boxes: list[DetectionBox] = []
+    flat = output.flatten()
+    total = flat.size
 
-    logger.debug(f"Hailo NMS output shape: {output.shape}, ndim: {output.ndim}")
+    logger.debug(f"Hailo NMS output shape: {output.shape}, flat size: {total}")
 
-    # Hailo NMS output is per-class: (num_classes, max_det, 5)
-    # Each detection is [y_min, x_min, y_max, x_max, score]
-    if output.ndim == 3 and output.shape[2] == 5:
-        num_classes = output.shape[0]
-        logger.debug(
-            f"Hailo NMS: {num_classes} classes, "
-            f"{output.shape[1]} max detections per class"
-        )
-    else:
+    # Determine num_classes and max_det from buffer size.
+    # Buffer = num_classes × (1 + max_det × 5).
+    # COCO models use 80 classes; try common max_det values.
+    num_classes = 0
+    max_det = 0
+    for nc in (80, 1):
+        if total % nc != 0:
+            continue
+        stride = total // nc
+        # stride = 1 + max_det * 5  →  (stride - 1) must be divisible by 5
+        if (stride - 1) % 5 == 0:
+            num_classes = nc
+            max_det = (stride - 1) // 5
+            break
+
+    if num_classes == 0:
         logger.warning(
-            f"Unexpected Hailo NMS output shape: {output.shape}. "
-            f"Expected (num_classes, max_det, 5)."
+            f"Cannot parse Hailo NMS output: flat size {total} does not match "
+            f"expected num_classes × (1 + max_det × 5) layout."
         )
         return boxes
+
+    stride = 1 + max_det * 5
+    logger.debug(
+        f"Hailo NMS: {num_classes} classes, {max_det} max detections per class, "
+        f"stride {stride}"
+    )
 
     pad_x, pad_y = pad
     input_h, input_w = input_size
@@ -156,12 +175,22 @@ def _parse_nms_output(
             else f"class_{cls_id}"
         )
 
-        for det in output[cls_id]:
-            score = float(det[4])
+        offset = cls_id * stride
+        n_det = int(flat[offset])
+        if n_det <= 0:
+            continue
+        n_det = min(n_det, max_det)  # safety clamp
+
+        for i in range(n_det):
+            base = offset + 1 + i * 5
+            y1_norm = float(flat[base])
+            x1_norm = float(flat[base + 1])
+            y2_norm = float(flat[base + 2])
+            x2_norm = float(flat[base + 3])
+            score = float(flat[base + 4])
+
             if score < confidence_threshold:
                 continue
-
-            y1_norm, x1_norm, y2_norm, x2_norm = det[0], det[1], det[2], det[3]
 
             logger.debug(
                 f"Hailo det: class={class_name}({cls_id}) score={score:.4f} "
