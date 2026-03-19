@@ -100,6 +100,7 @@ def _parse_nms_output(
     image_height: int,
     confidence_threshold: float,
     class_filter: set[int] | None = None,
+    input_size: tuple[int, int] = (640, 640),
 ) -> list[DetectionBox]:
     """Parse NMS-decoded output from a Hailo .hef YOLO model.
 
@@ -107,7 +108,7 @@ def _parse_nms_output(
     format [num_detections, 6] where each row is:
         [y1, x1, y2, x2, confidence, class_id]
 
-    Coordinates are normalized to the letterboxed input dimensions.
+    Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
 
     Args:
         output: Raw float32 output array from Hailo inference.
@@ -117,6 +118,7 @@ def _parse_nms_output(
         image_height: Original image height (for coordinate rescaling).
         confidence_threshold: Minimum confidence to keep.
         class_filter: Optional set of class IDs to keep.
+        input_size: (height, width) of the model input in pixels.
 
     Returns:
         List of DetectionBox instances in original image coordinates.
@@ -138,6 +140,7 @@ def _parse_nms_output(
         return boxes
 
     pad_x, pad_y = pad
+    input_h, input_w = input_size
 
     for det in output:
         conf = float(det[4])
@@ -149,13 +152,19 @@ def _parse_nms_output(
             continue
 
         # Hailo NMS output is [y1, x1, y2, x2, conf, class_id]
-        # Coordinates are in letterboxed input space — rescale to original
-        y1_lb, x1_lb, y2_lb, x2_lb = det[0], det[1], det[2], det[3]
+        # Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
+        # Convert to pixel space, remove letterbox padding, then rescale to original.
+        y1_norm, x1_norm, y2_norm, x2_norm = det[0], det[1], det[2], det[3]
 
-        x1 = max(0.0, (x1_lb - pad_x) / scale)
-        y1 = max(0.0, (y1_lb - pad_y) / scale)
-        x2 = min(float(image_width), (x2_lb - pad_x) / scale)
-        y2 = min(float(image_height), (y2_lb - pad_y) / scale)
+        x1_px = x1_norm * input_w
+        y1_px = y1_norm * input_h
+        x2_px = x2_norm * input_w
+        y2_px = y2_norm * input_h
+
+        x1 = max(0.0, (x1_px - pad_x) / scale)
+        y1 = max(0.0, (y1_px - pad_y) / scale)
+        x2 = min(float(image_width), (x2_px - pad_x) / scale)
+        y2 = min(float(image_height), (y2_px - pad_y) / scale)
 
         class_name = (
             COCO_CLASS_NAMES[cls_id]
@@ -332,7 +341,8 @@ class HailoYOLOModel(DetectionModel):
 
         # Parse NMS output into detection boxes
         boxes = _parse_nms_output(
-            output, scale, pad, width, height, conf, class_filter
+            output, scale, pad, width, height, conf, class_filter,
+            input_size=(input_h, input_w),
         )
 
         return DetectionResult(
