@@ -151,6 +151,14 @@ def _parse_nms_output(
         if class_filter is not None and cls_id not in class_filter:
             continue
 
+        # Log raw detection values to determine actual coordinate order
+        logger.debug(
+            f"Hailo raw det: [{det[0]:.4f}, {det[1]:.4f}, {det[2]:.4f}, {det[3]:.4f}, "
+            f"conf={det[4]:.4f}, cls={int(det[5])}] "
+            f"input_size=({input_h},{input_w}) pad=({pad_x},{pad_y}) scale={scale:.4f} "
+            f"orig=({image_width}x{image_height})"
+        )
+
         # Hailo NMS output is [y1, x1, y2, x2, conf, class_id]
         # Coordinates are normalized (0.0–1.0) relative to the letterboxed input.
         # Convert to pixel space, remove letterbox padding, then rescale to original.
@@ -165,6 +173,11 @@ def _parse_nms_output(
         y1 = max(0.0, (y1_px - pad_y) / scale)
         x2 = min(float(image_width), (x2_px - pad_x) / scale)
         y2 = min(float(image_height), (y2_px - pad_y) / scale)
+
+        logger.debug(
+            f"Hailo mapped: px=({x1_px:.1f},{y1_px:.1f},{x2_px:.1f},{y2_px:.1f}) "
+            f"-> orig=({x1:.1f},{y1:.1f},{x2:.1f},{y2:.1f})"
+        )
 
         class_name = (
             COCO_CLASS_NAMES[cls_id]
