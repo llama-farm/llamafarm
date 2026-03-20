@@ -71,7 +71,7 @@ class ZenohIPC:
             )
             config.insert_json5("scouting/multicast/enabled", "false")
 
-            self._session = await zenoh.open(config)
+            self._session = zenoh.open(config)
             logger.info("Zenoh session open (endpoint=%s)", ZENOH_ENDPOINT)
         except Exception:
             logger.warning(
