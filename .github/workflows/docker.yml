@@ -23,7 +23,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime]
         include:
           - service: designer
             context: ./designer
@@ -41,6 +41,10 @@ jobs:
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
             description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
+          - service: edge-runtime
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
 
     steps:
       - name: Checkout repository
@@ -127,7 +131,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime]
         include:
           - service: designer
             context: ./designer
@@ -145,6 +149,10 @@ jobs:
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
             description: "LlamaFarm Universal Runtime - model serving for GGUF and Transformers"
+          - service: edge-runtime
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
 
     steps:
       - name: Checkout repository
@@ -214,7 +222,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, edge-runtime]
 
     steps:
       - name: Checkout repository
@@ -368,7 +376,7 @@ jobs:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Tag the loaded images with the expected format for docker-compose
-          SERVICES=(designer server rag runtime)
+          SERVICES=(designer server rag runtime edge-runtime)
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
@@ -465,6 +473,7 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=50 designer
           docker compose -f docker-compose.yml logs --tail=50 rag
           docker compose -f docker-compose.yml logs --tail=50 runtime
+          docker compose -f docker-compose.yml logs --tail=50 edge-runtime
 
       - name: Show logs on failure
         if: failure()
@@ -479,7 +488,7 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=200 || true
           echo ""
           echo "=== Individual service logs ==="
-          for service in server designer rag runtime; do
+          for service in server designer rag runtime edge-runtime; do
             echo "--- Logs for $service ---"
             docker compose -f docker-compose.yml logs --tail=100 "$service" || true
             echo ""
@@ -504,7 +513,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
