@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 _torch: torch_type | None = None
 _torch_available: bool | None = None
 
+# Cached device detection result
+_optimal_device: str | None = None
+
 
 def _get_torch() -> torch_type | None:
     """Lazy-load torch module. Returns None if not installed."""
@@ -51,6 +54,8 @@ def get_optimal_device() -> str:
     """
     Detect the optimal device for the current platform.
 
+    Results are cached so detection (and its log messages) only runs once.
+
     Returns:
         str: Device name ("cuda", "mps", or "cpu")
 
@@ -58,6 +63,16 @@ def get_optimal_device() -> str:
         If PyTorch is not installed, always returns "cpu".
         This allows GGUF models to still use GPU via llama.cpp's own detection.
     """
+    global _optimal_device
+    if _optimal_device is not None:
+        return _optimal_device
+
+    _optimal_device = _detect_device()
+    return _optimal_device
+
+
+def _detect_device() -> str:
+    """Run device detection once (called by get_optimal_device)."""
     import os
 
     # Allow forcing CPU via environment variable
