@@ -44,6 +44,8 @@ class ZenohIPC:
         """
         self._inference_fn = inference_fn
         self._session = None
+        self._subscriber = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._tasks: list[asyncio.Task] = []
 
     async def start(self) -> bool:
@@ -81,7 +83,11 @@ class ZenohIPC:
             )
             return False
 
-        self._tasks.append(asyncio.create_task(self._subscribe_requests()))
+        self._loop = asyncio.get_event_loop()
+        self._subscriber = self._session.declare_subscriber(
+            TOPIC_REQUEST, self._on_request
+        )
+        logger.info("Subscribed to %s", TOPIC_REQUEST)
         self._tasks.append(asyncio.create_task(self._heartbeat_loop()))
         return True
 
@@ -96,35 +102,34 @@ class ZenohIPC:
                 pass
         self._tasks.clear()
 
+        if self._subscriber is not None:
+            try:
+                self._subscriber.undeclare()
+            except Exception:
+                logger.warning("Error undeclaring Zenoh subscriber", exc_info=True)
+            self._subscriber = None
+
         if self._session is not None:
             try:
-                await self._session.close()
+                self._session.close()
             except Exception:
                 logger.warning("Error closing Zenoh session", exc_info=True)
             self._session = None
             logger.info("Zenoh session closed")
 
     # ------------------------------------------------------------------
-    # Request subscriber
+    # Request handler
     # ------------------------------------------------------------------
 
-    async def _subscribe_requests(self):
-        """Subscribe to local/llm/request and dispatch inference."""
-        subscriber = await self._session.declare_subscriber(TOPIC_REQUEST)
-        logger.info("Subscribed to %s", TOPIC_REQUEST)
-
+    def _on_request(self, sample):
+        """Callback invoked by Zenoh subscriber on each request."""
         try:
-            async for sample in subscriber:
-                try:
-                    payload = json.loads(bytes(sample.payload))
-                    await self._handle_request(payload)
-                except Exception:
-                    logger.error(
-                        "Error handling Zenoh request", exc_info=True
-                    )
-        except asyncio.CancelledError:
-            await subscriber.undeclare()
-            raise
+            payload = json.loads(bytes(sample.payload))
+            asyncio.run_coroutine_threadsafe(
+                self._handle_request(payload), self._loop
+            )
+        except Exception:
+            logger.error("Error dispatching Zenoh request", exc_info=True)
 
     async def _handle_request(self, request: dict):
         """Process a single inference request and publish the response."""
@@ -155,7 +160,7 @@ class ZenohIPC:
             }
             logger.error("Inference failed for request %s: %s", request_id, exc)
 
-        await self._session.put(
+        self._session.put(
             TOPIC_RESPONSE, json.dumps(response).encode()
         )
 
@@ -177,7 +182,7 @@ class ZenohIPC:
                     "status": "ready",
                     "timestamp_ms": int(time.time() * 1000),
                 }
-                await self._session.put(
+                self._session.put(
                     TOPIC_STATUS, json.dumps(status).encode()
                 )
                 await asyncio.sleep(STATUS_INTERVAL_S)
