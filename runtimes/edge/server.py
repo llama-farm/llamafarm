@@ -37,6 +37,7 @@ from models import (
     LanguageModel,
 )
 from routers.chat_completions import router as chat_completions_router
+from routers.completions import router as completions_router
 from routers.chat_completions.service import ChatCompletionsService
 from routers.health import (
     router as health_router,
@@ -417,6 +418,7 @@ app.add_middleware(
 # Only the routers the drone needs
 app.include_router(health_router)
 app.include_router(chat_completions_router)
+app.include_router(completions_router)
 app.include_router(vision_router)
 
 
