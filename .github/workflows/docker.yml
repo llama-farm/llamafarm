@@ -232,7 +232,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, edge-runtime, edge-runtime-lite]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
 
     steps:
       - name: Checkout repository
