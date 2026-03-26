@@ -1,10 +1,13 @@
-FROM ubuntu:24.04 AS base
+# ============================================================
+# Builder stage — install build tools and compile dependencies
+# ============================================================
+FROM ubuntu:24.04 AS builder
 
-# Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python 3.12 and minimal system dependencies
-# Ubuntu 24.04 ships GLIBC 2.39 (required by pre-built llama.cpp ARM64 binaries)
+# Build-time option: set to "false" to skip vision deps (ultralytics/YOLO)
+ARG ENABLE_VISION=true
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -13,35 +16,68 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a self-contained venv we can COPY to the runtime stage
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy local dependency sources
+COPY common /deps/common
+COPY packages/llamafarm-llama /deps/llamafarm-llama
+
+# Copy edge runtime pyproject.toml for dependency resolution
+COPY runtimes/edge/pyproject.toml ./
+
+# Install CPU-only PyTorch first (saves ~2GB on AMD64 vs CUDA default).
+# ARM64 PyPI wheels are already CPU-only, so this is a no-op there.
+RUN uv pip install --no-cache \
+    torch torchvision \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Install local deps as non-editable (no need to copy /deps/ to runtime)
+RUN uv pip install --no-cache /deps/common /deps/llamafarm-llama
+
+# Install edge runtime deps (vision conditional)
+RUN if [ "$ENABLE_VISION" = "true" ]; then \
+      uv pip install --no-cache --no-sources ".[vision]" && \
+      uv pip install --no-cache pi-heif; \
+    else \
+      uv pip install --no-cache --no-sources "."; \
+    fi
+
+# Copy application code
+COPY runtimes/edge/ .
+
+# ============================================================
+# Runtime stage — minimal image with only what's needed to run
+# ============================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime-only system libraries (no build-essential, cmake, git, python3-dev)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-venv \
     libgl1 \
     libglib2.0-0 \
     libxcb1 \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Copy the pre-built venv from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
 WORKDIR /app
-
-# Install uv for fast dependency management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# Copy local dependency sources first (for layer caching)
-# Build from repo root: docker build -t edge-runtime -f runtimes/edge/Dockerfile .
-COPY common /deps/common
-COPY packages/llamafarm-llama /deps/llamafarm-llama
-
-# Copy edge runtime pyproject.toml (for dependency resolution)
-COPY runtimes/edge/pyproject.toml ./
-
-# Install local deps first, then edge runtime deps.
-# --no-sources skips [tool.uv.sources] which has relative paths for the monorepo
-# layout that don't apply inside the container.
-RUN uv pip install --system --break-system-packages -e /deps/common -e /deps/llamafarm-llama && \
-    uv pip install --system --break-system-packages --no-sources -e ".[vision]" && \
-    uv pip install --system --break-system-packages pi-heif
-
-# Copy edge runtime application code
-COPY runtimes/edge/ .
+COPY --from=builder /app/ ./
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash edge && \
