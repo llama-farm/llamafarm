@@ -23,7 +23,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime, edge-runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
         include:
           - service: designer
             context: ./designer
@@ -45,6 +45,10 @@ jobs:
             context: ./
             dockerfile: ./runtimes/edge/Dockerfile
             description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
+          - service: edge-runtime-lite
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime (Lite) - Language-only runtime without vision deps"
 
     steps:
       - name: Checkout repository
@@ -113,6 +117,7 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
             PYTORCH_VARIANT=${{ matrix.service == 'runtime' && github.event_name == 'pull_request' && 'cpu' || '' }}
+            ENABLE_VISION=${{ matrix.service == 'edge-runtime-lite' && 'false' || '' }}
 
       - name: Upload AMD64 image artifact (PR only)
         if: github.event_name == 'pull_request'
@@ -131,7 +136,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime, edge-runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
         include:
           - service: designer
             context: ./designer
@@ -153,6 +158,10 @@ jobs:
             context: ./
             dockerfile: ./runtimes/edge/Dockerfile
             description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
+          - service: edge-runtime-lite
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime (Lite) - Language-only runtime without vision deps"
 
     steps:
       - name: Checkout repository
@@ -203,6 +212,7 @@ jobs:
           outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-arm64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+            ENABLE_VISION=${{ matrix.service == 'edge-runtime-lite' && 'false' || '' }}
 
       - name: Upload ARM64 image artifact (PR only)
         if: github.event_name == 'pull_request'
@@ -222,7 +232,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, edge-runtime]
+        service: [designer, server, rag, edge-runtime, edge-runtime-lite]
 
     steps:
       - name: Checkout repository
@@ -376,7 +386,7 @@ jobs:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Tag the loaded images with the expected format for docker-compose
-          SERVICES=(designer server rag runtime edge-runtime)
+          SERVICES=(designer server rag runtime edge-runtime edge-runtime-lite)
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
@@ -474,6 +484,7 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=50 rag
           docker compose -f docker-compose.yml logs --tail=50 runtime
           docker compose -f docker-compose.yml logs --tail=50 edge-runtime
+          docker compose -f docker-compose.yml logs --tail=50 edge-runtime-lite
 
       - name: Show logs on failure
         if: failure()
@@ -488,7 +499,7 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=200 || true
           echo ""
           echo "=== Individual service logs ==="
-          for service in server designer rag runtime edge-runtime; do
+          for service in server designer rag runtime edge-runtime edge-runtime-lite; do
             echo "--- Logs for $service ---"
             docker compose -f docker-compose.yml logs --tail=100 "$service" || true
             echo ""
@@ -513,7 +524,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime, edge-runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
