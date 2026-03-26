@@ -517,10 +517,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          # Use branch name as tag (matches create-manifest metadata)
+          TAG="${GITHUB_REF_NAME}"
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:latest
+          image-ref: ${{ steps.tag.outputs.image }}
           format: "sarif"
           output: "trivy-results-${{ matrix.service }}.sarif"
 
