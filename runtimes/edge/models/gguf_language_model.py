@@ -467,13 +467,23 @@ class GGUFLanguageModel(BaseModel):
                     "Install it with: pip install llamafarm-llama"
                 ) from e
 
+            # Verify resolved path stays within the HuggingFace cache directory
+            from huggingface_hub.constants import HF_HUB_CACHE
+
+            resolved = os.path.realpath(gguf_path)
+            hf_cache_resolved = os.path.realpath(HF_HUB_CACHE)
+            if not resolved.startswith(hf_cache_resolved + os.sep):
+                raise ValueError(
+                    f"GGUF path outside HuggingFace cache: {gguf_path}"
+                )
+
             # Verify file exists and is readable before attempting to load
-            if not os.path.exists(gguf_path):
+            if not os.path.exists(resolved):
                 raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
-            if not os.access(gguf_path, os.R_OK):
+            if not os.access(resolved, os.R_OK):
                 raise PermissionError(f"GGUF file not readable: {gguf_path}")
 
-            file_size_mb = os.path.getsize(gguf_path) / (1024 * 1024)
+            file_size_mb = os.path.getsize(resolved) / (1024 * 1024)
             logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
 
             try:

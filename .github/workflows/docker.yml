@@ -380,7 +380,7 @@ jobs:
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
-            AMD64_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "$SERVICE" | grep "amd64" | head -1 | tr -d ' ')
+            AMD64_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "/${SERVICE}:" | grep "amd64" | head -1 | tr -d ' ')
 
             if [ -n "$AMD64_IMAGE" ]; then
               # Tag for docker-compose (use AMD64 for testing)

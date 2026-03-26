@@ -115,7 +115,10 @@ def handle_endpoint_errors(
             except Exception as e:
                 # Log and wrap unexpected errors
                 logger.error(f"Error in {endpoint_name}: {e}", exc_info=True)
-                raise HTTPException(status_code=500, detail=str(e)) from e
+                raise HTTPException(
+                    status_code=500,
+                    detail="An internal server error occurred.",
+                ) from e
 
         return wrapper
 

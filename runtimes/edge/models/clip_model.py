@@ -69,15 +69,18 @@ class CLIPModel(ClassificationModel):
         self._loaded = False
         await super().unload()
 
-    async def _encode_classes(self, class_names: list[str]) -> None:
-        """Pre-compute text embeddings for class names."""
+    async def _encode_classes(self, class_names: list[str]) -> tuple:
+        """Pre-compute text embeddings for class names.
+
+        Returns (class_names, embeddings) so callers can use them without
+        sharing mutable instance state across concurrent requests.
+        """
         import torch
         class_key = tuple(class_names)
-        # Cache check: skip re-encoding if same classes
-        if class_key == self._cached_class_key:
-            return
-        
-        self.class_names = class_names
+        # Cache check: skip re-encoding if same classes and embeddings exist
+        if class_key == self._cached_class_key and self._class_embeddings is not None:
+            return class_names, self._class_embeddings
+
         prompts = [self.prompt_template.format(n) for n in class_names]
 
         def _encode():
@@ -87,8 +90,11 @@ class CLIPModel(ClassificationModel):
                 feats = self.clip_model.get_text_features(**inputs)
                 return feats / feats.norm(dim=-1, keepdim=True)
 
-        self._class_embeddings = await asyncio.to_thread(_encode)
+        embeddings = await asyncio.to_thread(_encode)
+        # Update shared cache for future requests with the same classes
+        self._class_embeddings = embeddings
         self._cached_class_key = class_key
+        return class_names, embeddings
 
     async def classify(self, image: bytes | np.ndarray,
                        classes: list[str] | None = None,
@@ -97,12 +103,17 @@ class CLIPModel(ClassificationModel):
             await self.load()
         import torch
 
+        # Resolve class names and embeddings for this request.
+        # Use local variables to avoid races from concurrent calls.
         if classes is not None:
             if not classes:
                 raise ValueError("Empty classes list provided.")
             async with self._class_lock:
-                await self._encode_classes(classes)
-        elif not self.class_names or self._class_embeddings is None:
+                req_class_names, req_embeddings = await self._encode_classes(classes)
+        elif self._class_embeddings is not None and self._cached_class_key is not None:
+            req_class_names = list(self._cached_class_key)
+            req_embeddings = self._class_embeddings
+        else:
             raise ValueError("No classes provided.")
 
         start = time.perf_counter()
@@ -113,7 +124,7 @@ class CLIPModel(ClassificationModel):
             with torch.no_grad():
                 feats = self.clip_model.get_image_features(**inputs)
                 feats = feats / feats.norm(dim=-1, keepdim=True)
-                sim = (feats @ self._class_embeddings.T).squeeze()
+                sim = (feats @ req_embeddings.T).squeeze()
                 if sim.ndim == 0:
                     sim = sim.unsqueeze(0)
                 return sim.softmax(dim=-1).cpu().numpy()
@@ -121,7 +132,7 @@ class CLIPModel(ClassificationModel):
         probs = await asyncio.to_thread(_infer)
         inference_time = (time.perf_counter() - start) * 1000
 
-        effective_k = min(top_k, len(self.class_names))
+        effective_k = min(top_k, len(req_class_names))
         top_idx = np.argsort(probs)[::-1][:effective_k]
         best = int(top_idx[0])
 
@@ -129,9 +140,9 @@ class CLIPModel(ClassificationModel):
             confidence=float(probs[best]),
             inference_time_ms=inference_time,
             model_name=self.model_id,
-            class_name=self.class_names[best],
+            class_name=req_class_names[best],
             class_id=best,
-            all_scores={self.class_names[i]: float(probs[i]) for i in top_idx},
+            all_scores={req_class_names[i]: float(probs[i]) for i in top_idx},
         )
 
     async def embed_images(self, images: list[bytes | np.ndarray]) -> EmbeddingResult:

@@ -41,10 +41,19 @@ except ImportError:
 try:
     from utils.thinking import inject_thinking_control, parse_thinking_response
 except ImportError:
+    from dataclasses import dataclass as _dataclass
+
+    @_dataclass
+    class _FallbackThinkingResponse:
+        thinking: str | None
+        content: str
+        thinking_complete: bool
+
     def inject_thinking_control(messages, enable_thinking=False):  # type: ignore[misc]
         return messages
+
     def parse_thinking_response(text):  # type: ignore[misc]
-        return text, None
+        return _FallbackThinkingResponse(thinking=None, content=text, thinking_complete=True)
 
 try:
     from utils.tool_calling import (
@@ -58,13 +67,27 @@ try:
     )
 except ImportError:
     # No-op stubs — edge doesn't support tool calling
-    def detect_probable_tool_call(*a, **kw): return False  # type: ignore[misc]
-    def detect_tool_call_in_content(*a, **kw): return None  # type: ignore[misc]
-    def extract_arguments_progress(*a, **kw): return ""  # type: ignore[misc]
-    def extract_tool_name_from_partial(*a, **kw): return None  # type: ignore[misc]
-    def is_tool_call_complete(*a, **kw): return False  # type: ignore[misc]
-    def parse_tool_choice(*a, **kw): return None  # type: ignore[misc]
-    def strip_tool_call_from_content(*a, **kw): return a[0] if a else ""  # type: ignore[misc]
+
+    def detect_probable_tool_call(*a, **kw):  # type: ignore[misc]
+        return False
+
+    def detect_tool_call_in_content(*a, **kw):  # type: ignore[misc]
+        return None
+
+    def extract_arguments_progress(*a, **kw):  # type: ignore[misc]
+        return ""
+
+    def extract_tool_name_from_partial(*a, **kw):  # type: ignore[misc]
+        return None
+
+    def is_tool_call_complete(*a, **kw):  # type: ignore[misc]
+        return False
+
+    def parse_tool_choice(*a, **kw):  # type: ignore[misc]
+        return ("none", None)
+
+    def strip_tool_call_from_content(*a, **kw):  # type: ignore[misc]
+        return a[0] if a else ""
 
 from .types import (
     ChatCompletionRequest,
@@ -395,8 +418,9 @@ class ChatCompletionsService:
                         )
 
                     # Apply history compression to reduce token usage
-                    compressor = HistoryCompressor(model.token_counter)
-                    prepared_messages = compressor.compress(prepared_messages)
+                    if HistoryCompressor is not None:
+                        compressor = HistoryCompressor(model.token_counter)
+                        prepared_messages = compressor.compress(prepared_messages)
 
                     # If tools are injected into the prompt path, validate against the same
                     # message shape to avoid undercounting prompt tokens.

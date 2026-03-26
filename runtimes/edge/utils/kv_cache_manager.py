@@ -680,7 +680,8 @@ async def _gc_loop(manager: KVCacheManager, interval: float = 60.0) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            manager.gc()
+            async with manager._lock:
+                manager.gc()
         except Exception as e:
             logger.error(f"KV cache GC error: {e}")
 

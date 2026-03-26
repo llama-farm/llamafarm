@@ -61,7 +61,7 @@ def _get_llamafarm_release_version() -> str:
         logger.info(f"Using LlamaFarm release version from env: {env_version}")
         return env_version
 
-    # 2. Query GitHub API for latest release
+    # 2. Query GitHub API for latest release with ARM64 binary
     try:
         import json
 
@@ -72,9 +72,13 @@ def _get_llamafarm_release_version() -> str:
         with urlopen(req, timeout=10) as response:
             data = json.loads(response.read())
             tag = data.get("tag_name")
-            if tag:
+            assets = data.get("assets", [])
+            asset_names = [a.get("name", "") for a in assets]
+            if tag and any("arm64" in name for name in asset_names):
                 logger.info(f"Using latest LlamaFarm release: {tag}")
                 return tag
+            elif tag:
+                logger.debug(f"Latest release {tag} has no ARM64 asset, skipping")
     except Exception as e:
         logger.debug(f"Could not query GitHub for latest release: {e}")
 

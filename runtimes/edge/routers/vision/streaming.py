@@ -210,7 +210,7 @@ async def process_frame(request: StreamFrameRequest) -> StreamFrameResponse:
             # Remote model — HTTP POST
             url = model_ref[7:]  # strip "remote:"
             result = await _call_remote(url, image_bytes, session)
-            if result:
+            if result and result.confidence >= session.cascade.confidence_threshold:
                 if i > 0:
                     session.escalations += 1
                 return _build_response(result, model_ref, i > 0, session)

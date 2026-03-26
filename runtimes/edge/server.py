@@ -70,7 +70,7 @@ warnings.filterwarnings(
 log_file = os.getenv("LOG_FILE", "")
 log_level = os.getenv("LOG_LEVEL", "INFO")
 json_logs = os.getenv("LOG_JSON_FORMAT", "false").lower() in ("true", "1", "yes")
-setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
+setup_logging(json_logs=json_logs, log_level=log_level)
 
 logger = UniversalRuntimeLogger("edge-runtime")
 
@@ -276,7 +276,12 @@ async def load_detection_model(model_id: str = "yolov8n"):
                 from pathlib import Path as _Path
 
                 safe_id = _Path(model_id).name
-                if safe_id != model_id:
+                if safe_id != model_id or safe_id in (".", ".."):
+                    raise ValueError(f"Invalid model_id: {model_id}")
+                # Verify resolved path stays within VISION_MODELS_DIR
+                vision_root = VISION_MODELS_DIR.resolve()
+                resolved = (VISION_MODELS_DIR / safe_id).resolve()
+                if not str(resolved).startswith(str(vision_root) + os.sep):
                     raise ValueError(f"Invalid model_id: {model_id}")
 
                 if backend == "hailo":
@@ -292,7 +297,7 @@ async def load_detection_model(model_id: str = "yolov8n"):
                     from models.yolo_model import YOLOModel
 
                     device = get_device()
-                    custom_path = VISION_MODELS_DIR / safe_id / "current.pt"
+                    custom_path = resolved / "current.pt"
                     mid = str(custom_path) if custom_path.exists() else model_id
                     model = YOLOModel(model_id=mid, device=device)
 
@@ -304,6 +309,13 @@ async def load_detection_model(model_id: str = "yolov8n"):
 
 async def load_classification_model(model_id: str = "clip-vit-base"):
     """Load a CLIP classification model."""
+    # Validate model_id: must be a known variant or a valid HuggingFace repo ID
+    # (org/model format). Reject path-like IDs that could reach the filesystem.
+    from models.clip_model import CLIP_VARIANTS
+    if model_id not in CLIP_VARIANTS:
+        if "/" not in model_id or model_id.startswith(("/", "\\", ".")) or ".." in model_id:
+            raise ValueError(f"Invalid classification model_id: {model_id}")
+
     cache_key = f"vision:classify:{model_id}"
     if cache_key not in _models:
         async with _model_load_lock:

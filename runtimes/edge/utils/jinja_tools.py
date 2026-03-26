@@ -15,7 +15,7 @@ import logging
 from typing import Any
 
 from jinja2 import TemplateError, Undefined
-from jinja2.sandbox import SandboxedEnvironment
+from jinja2.sandbox import ImmutableSandboxedEnvironment, SandboxedEnvironment
 from jinja2.utils import Namespace
 
 from utils.gguf_metadata_cache import get_gguf_metadata_cached
@@ -125,7 +125,7 @@ def create_jinja_environment() -> SandboxedEnvironment:
     Returns:
         Configured Jinja2 SandboxedEnvironment.
     """
-    env = SandboxedEnvironment(
+    env = ImmutableSandboxedEnvironment(
         # Use undefined that returns False for boolean checks
         undefined=RaiseExceptionUndefined,
         # Keep trailing newlines

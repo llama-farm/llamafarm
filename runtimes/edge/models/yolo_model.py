@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -52,12 +53,17 @@ class YOLOModel(DetectionModel):
 
         if self.model_id in YOLO_VARIANTS:
             self._model_path = YOLO_VARIANTS[self.model_id]
-        elif Path(self.model_id).exists():
+        elif not Path(self.model_id).is_absolute() and ".." not in Path(self.model_id).parts:
             # Validate path — must resolve within home/.llamafarm or cwd
             resolved = Path(self.model_id).resolve()
             allowed_roots = [Path.home() / ".llamafarm", Path.cwd()]
-            if not any(str(resolved).startswith(str(r.resolve())) for r in allowed_roots):
+            if not any(
+                str(resolved).startswith(str(r.resolve()) + os.sep)
+                for r in allowed_roots
+            ):
                 raise ValueError(f"Model path outside allowed directories: {self.model_id}")
+            if not resolved.exists():
+                raise FileNotFoundError(f"Model file not found: {self.model_id}")
             self._model_path = str(resolved)
         else:
             # Basename only for dynamic model IDs (no path components)

@@ -10,7 +10,7 @@ import time
 import uuid
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ async def completions(request: CompletionRequest):
         n_gpu_layers=request.n_gpu_layers,
     )
 
-    max_tokens = request.max_tokens or 512
+    max_tokens = request.max_tokens if request.max_tokens is not None else 512
     stop = request.stop if isinstance(request.stop, list) else ([request.stop] if request.stop else [])
 
     logger.info(f"[completions] model={request.model} prompt_len={len(request.prompt)} max_tokens={max_tokens}")
@@ -60,8 +60,8 @@ async def completions(request: CompletionRequest):
     result = await model._generate_from_prompt(
         prompt=request.prompt,
         max_tokens=max_tokens,
-        temperature=request.temperature or 1.0,
-        top_p=request.top_p or 1.0,
+        temperature=request.temperature if request.temperature is not None else 1.0,
+        top_p=request.top_p if request.top_p is not None else 1.0,
         stop=stop,
         thinking_budget=None,
     )

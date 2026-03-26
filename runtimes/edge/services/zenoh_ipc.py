@@ -47,6 +47,7 @@ class ZenohIPC:
         self._subscriber = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._tasks: list[asyncio.Task] = []
+        self._pending_futures: list[asyncio.Future] = []
 
     async def start(self) -> bool:
         """Open Zenoh session and start subscriber + heartbeat tasks.
@@ -102,6 +103,11 @@ class ZenohIPC:
                 pass
         self._tasks.clear()
 
+        # Cancel in-flight request handlers before closing the session
+        for future in list(self._pending_futures):
+            future.cancel()
+        self._pending_futures.clear()
+
         if self._subscriber is not None:
             try:
                 self._subscriber.undeclare()
@@ -125,9 +131,11 @@ class ZenohIPC:
         """Callback invoked by Zenoh subscriber on each request."""
         try:
             payload = json.loads(bytes(sample.payload))
-            asyncio.run_coroutine_threadsafe(
+            future = asyncio.run_coroutine_threadsafe(
                 self._handle_request(payload), self._loop
             )
+            self._pending_futures.append(future)
+            future.add_done_callback(lambda f: self._pending_futures.remove(f))
         except Exception:
             logger.error("Error dispatching Zenoh request", exc_info=True)
 
@@ -154,7 +162,7 @@ class ZenohIPC:
                 "request_id": request_id,
                 "model": model,
                 "content": "",
-                "error": str(exc),
+                "error": "inference failed",
                 "inference_time_ms": inference_ms,
                 "timestamp_ms": int(time.time() * 1000),
             }
