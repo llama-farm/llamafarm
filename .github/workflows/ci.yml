@@ -165,13 +165,12 @@ jobs:
           echo "✓ Datamodel generation complete"
 
       - name: Verify datamodel was generated
+        working-directory: config
         run: |
           echo "Checking for datamodel.py..."
-          ls -lh config/datamodel.py || echo "❌ datamodel.py not found!"
+          ls -lh datamodel.py || { echo "❌ datamodel.py not found!"; exit 1; }
           echo "Attempting import test..."
-          cd config && python -c "from datamodel import LlamaFarmConfig; print('✓ Direct import successful')" || echo "❌ Direct import failed!"
-          echo "Attempting module import test..."
-          python -c "from config.datamodel import LlamaFarmConfig; print('✓ Module import successful')" || echo "❌ Module import failed!"
+          uv run python -c "from datamodel import LlamaFarmConfig; print('✓ Import successful')"
 
       - name: Check if component has tests
         id: check-tests
