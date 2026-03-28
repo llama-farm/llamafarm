@@ -224,9 +224,11 @@ jobs:
         continue-on-error: false
 
       - name: Set up Ollama
-        uses: pydantic/ollama-action@v3
-        with:
-          model: nomic-embed-text
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 3
+          ollama pull nomic-embed-text
 
       - name: Run tests
         if: steps.check-tests.outputs.has_tests == 'true'
