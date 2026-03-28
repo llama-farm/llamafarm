@@ -38,7 +38,7 @@ Get started instantly — no command line required:
 | **Tool Calling (MCP)** | Connect models to external tools via Model Context Protocol |
 | **OCR & Document Extraction** | Extract text and structured data from images and PDFs |
 | **Named Entity Recognition** | Find people, organizations, and locations |
-| **Multi-Model Runtime** | Switch between Ollama, OpenAI, vLLM, or local GGUF models |
+| **Multi-Model Runtime** | Switch between Ollama, OpenAI, MiniMax, vLLM, or local GGUF models |
 
 **Video demo (90 seconds):** https://youtu.be/W7MHGyN0MdQ
 
@@ -164,6 +164,22 @@ runtime:
       base_url: https://api.openai.com/v1
       api_key: ${OPENAI_API_KEY}
 ```
+
+### MiniMax
+
+Use MiniMax cloud models (M2.7 with 204K context) via the built-in `minimax` provider:
+
+```yaml
+runtime:
+  models:
+    default:
+      provider: minimax
+      model: MiniMax-M2.7
+      api_key: ${MINIMAX_API_KEY}
+```
+
+Available models: `MiniMax-M2.7` (latest), `MiniMax-M2.7-highspeed` (faster).
+Temperature is automatically clamped to MiniMax's accepted range.
 
 ---
 
