@@ -112,28 +112,35 @@ class TestMiniMaxProvider:
     def test_temperature_clamping_zero(self, model_config):
         """Test that temperature=0 is clamped to 0.01."""
         model_config.model_api_parameters = {"temperature": 0}
-        p = MiniMaxProvider(model_config=model_config)
-        p._clamp_temperature()
-        assert model_config.model_api_parameters["temperature"] == 0.01
+        cfg_copy = model_config.model_copy()
+        MiniMaxProvider._clamp_temperature(cfg_copy)
+        assert cfg_copy.model_api_parameters["temperature"] == 0.01
 
     def test_temperature_clamping_high(self, model_config):
         """Test that temperature>1.0 is clamped to 1.0."""
         model_config.model_api_parameters = {"temperature": 1.5}
-        p = MiniMaxProvider(model_config=model_config)
-        p._clamp_temperature()
-        assert model_config.model_api_parameters["temperature"] == 1.0
+        cfg_copy = model_config.model_copy()
+        MiniMaxProvider._clamp_temperature(cfg_copy)
+        assert cfg_copy.model_api_parameters["temperature"] == 1.0
 
     def test_temperature_valid_range(self, model_config):
         """Test that valid temperature is not modified."""
         model_config.model_api_parameters = {"temperature": 0.7}
-        p = MiniMaxProvider(model_config=model_config)
-        p._clamp_temperature()
-        assert model_config.model_api_parameters["temperature"] == 0.7
+        cfg_copy = model_config.model_copy()
+        MiniMaxProvider._clamp_temperature(cfg_copy)
+        assert cfg_copy.model_api_parameters["temperature"] == 0.7
 
     def test_temperature_clamping_no_params(self, model_config):
         """Test that clamping is a no-op when no parameters set."""
-        p = MiniMaxProvider(model_config=model_config)
-        p._clamp_temperature()  # Should not raise
+        MiniMaxProvider._clamp_temperature(model_config)  # Should not raise
+
+    def test_temperature_clamping_does_not_mutate_original(self, model_config):
+        """Test that clamping on a copy does not affect the original config."""
+        model_config.model_api_parameters = {"temperature": 0}
+        cfg_copy = model_config.model_copy()
+        MiniMaxProvider._clamp_temperature(cfg_copy)
+        assert model_config.model_api_parameters["temperature"] == 0
+        assert cfg_copy.model_api_parameters["temperature"] == 0.01
 
     @patch("services.runtime_service.providers.minimax_provider.requests.get")
     def test_health_check_healthy(self, mock_get, provider):

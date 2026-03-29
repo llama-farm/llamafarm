@@ -39,12 +39,13 @@ class MiniMaxProvider(RuntimeProvider):
             or os.environ.get(MINIMAX_API_KEY_ENV, "")
         )
 
-    def _clamp_temperature(self) -> None:
+    @staticmethod
+    def _clamp_temperature(config) -> None:
         """Clamp temperature to MiniMax's accepted range (0.0, 1.0].
 
         MiniMax rejects temperature=0 and values >1.0.
         """
-        params = self._model_config.model_api_parameters
+        params = config.model_api_parameters
         if params and hasattr(params, "__contains__") and "temperature" in params:
             temp = params["temperature"]
             if isinstance(temp, (int, float)):
@@ -58,7 +59,7 @@ class MiniMaxProvider(RuntimeProvider):
         if not cfg_copy.api_key:
             cfg_copy.api_key = self._api_key
 
-        self._clamp_temperature()
+        self._clamp_temperature(cfg_copy)
 
         client = LFAgentClientOpenAI(
             model_config=cfg_copy,
