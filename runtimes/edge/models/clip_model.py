@@ -94,6 +94,7 @@ class CLIPModel(ClassificationModel):
         # Update shared cache for future requests with the same classes
         self._class_embeddings = embeddings
         self._cached_class_key = class_key
+        self.class_names = class_names
         return class_names, embeddings
 
     async def classify(self, image: bytes | np.ndarray,
