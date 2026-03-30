@@ -53,7 +53,7 @@ class YOLOModel(DetectionModel):
 
         if self.model_id in YOLO_VARIANTS:
             self._model_path = YOLO_VARIANTS[self.model_id]
-        elif not Path(self.model_id).is_absolute() and ".." not in Path(self.model_id).parts:
+        elif ".." not in Path(self.model_id).parts:
             # Validate path — must resolve within home/.llamafarm or cwd
             resolved = Path(self.model_id).resolve()
             allowed_roots = [Path.home() / ".llamafarm", Path.cwd()]
