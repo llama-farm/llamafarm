@@ -57,6 +57,7 @@ class ModelCache(Generic[T]):
         # Track access times ourselves for TTL-on-read behavior
         self._timer = time.monotonic
         self._access: dict[str, float] = {}
+        self._pinned: set[str] = {}
 
     @property
     def ttl(self) -> float:
@@ -129,10 +130,27 @@ class ModelCache(Generic[T]):
         """Return view of cache items."""
         return self._cache.items()
 
+    def pin(self, key: str) -> None:
+        """Pin a key so it is never evicted by pop_expired().
+
+        Pinning a key that doesn't exist in the cache is a no-op.
+        """
+        if key in self._cache:
+            self._pinned.add(key)
+
+    def unpin(self, key: str) -> None:
+        """Remove a key from the pinned set, allowing normal eviction."""
+        self._pinned.discard(key)
+
+    def is_pinned(self, key: str) -> bool:
+        """Check if a key is pinned."""
+        return key in self._pinned
+
     def clear(self) -> None:
         """Clear all items from cache."""
         self._cache.clear()
         self._access.clear()
+        self._pinned.clear()
 
     def get_idle_time(self, key: str) -> float | None:
         """Get seconds since last access for a key.
@@ -162,12 +180,17 @@ class ModelCache(Generic[T]):
     def get_expired_keys(self) -> list[str]:
         """Get list of keys that have exceeded their TTL.
 
+        Pinned keys are never considered expired.
+
         Returns:
             List of expired cache keys
         """
         now = self._timer()
         cutoff = now - self._ttl
-        return [k for k, t in self._access.items() if t < cutoff]
+        return [
+            k for k, t in self._access.items()
+            if t < cutoff and k not in self._pinned
+        ]
 
     def pop_expired(self) -> list[tuple[str, T]]:
         """Remove and return all expired items.

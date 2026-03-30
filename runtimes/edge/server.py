@@ -18,6 +18,7 @@ Environment Variables:
 - LF_RUNTIME_PORT: Server port (default: 11540)
 - LF_RUNTIME_HOST: Server host (default: 0.0.0.0)
 - HAILO_HEF_DIR: Directory containing .hef model files (default: /models)
+- PRELOAD_MODELS: Comma-separated model IDs to load and pin at startup (default: unset)
 - FORCE_CPU_VISION: Set to "1" to skip Hailo detection and use CPU (default: unset)
 """
 
@@ -369,6 +370,22 @@ async def lifespan(app: FastAPI):
     # Start Zenoh IPC interface (non-blocking — falls back to HTTP-only on failure)
     _zenoh_ipc = ZenohIPC(inference_fn=_zenoh_inference)
     await _zenoh_ipc.start()
+
+    # Preload and pin models if configured
+    preload_csv = os.getenv("PRELOAD_MODELS", "").strip()
+    if preload_csv:
+        for model_id in preload_csv.split(","):
+            model_id = model_id.strip()
+            if not model_id:
+                continue
+            try:
+                await load_language(model_id)
+                # Construct the same cache key load_language() uses
+                cache_key = f"language:{model_id}:ctxauto:gpuauto:quantdefault"
+                _models.pin(cache_key)
+                logger.info(f"Preloaded and pinned model: {model_id} ({cache_key})")
+            except Exception as e:
+                logger.warning(f"Failed to preload model '{model_id}': {e}")
 
     yield
 
