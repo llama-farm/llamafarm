@@ -313,7 +313,7 @@ async def load_classification_model(model_id: str = "clip-vit-base"):
     # (org/model format). Reject path-like IDs that could reach the filesystem.
     from models.clip_model import CLIP_VARIANTS
     if model_id not in CLIP_VARIANTS:
-        if "/" not in model_id or model_id.startswith(("/", "\\", ".")) or ".." in model_id:
+        if "/" not in model_id or model_id.startswith(("/", "\\", ".")) or ".." in model_id or "\\" in model_id or ":" in model_id:
             raise ValueError(f"Invalid classification model_id: {model_id}")
 
     cache_key = f"vision:classify:{model_id}"
