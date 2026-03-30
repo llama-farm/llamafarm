@@ -100,7 +100,7 @@ class ZenohIPC:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected: tasks were explicitly cancelled above
         self._tasks.clear()
 
         # Cancel in-flight request handlers before closing the session
