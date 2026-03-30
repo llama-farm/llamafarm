@@ -135,7 +135,13 @@ class ZenohIPC:
                 self._handle_request(payload), self._loop
             )
             self._pending_futures.append(future)
-            future.add_done_callback(lambda f: self._pending_futures.remove(f))
+            def _remove_future(f):
+                try:
+                    self._pending_futures.remove(f)
+                except ValueError:
+                    pass  # Already cleared by stop()
+
+            future.add_done_callback(_remove_future)
         except Exception:
             logger.error("Error dispatching Zenoh request", exc_info=True)
 
