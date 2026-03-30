@@ -22,6 +22,7 @@ Environment Variables:
 """
 
 import asyncio
+import functools
 import os
 import subprocess
 import warnings
@@ -122,22 +123,15 @@ def get_device():
 # Hardware Detection
 # ============================================================================
 
-_use_hailo: bool | None = None
-
-
+@functools.lru_cache(maxsize=1)
 def _detect_hailo() -> bool:
     """Detect if Hailo-10H PCIe device is present.
 
     Checks for PCI device ID 1e60:45c4 (Hailo-10H) via lspci,
     and verifies hailo_platform is importable.
     """
-    global _use_hailo
-    if _use_hailo is not None:
-        return _use_hailo
-
     if os.getenv("FORCE_CPU_VISION", "").lower() in ("1", "true", "yes"):
         logger.info("Hailo detection skipped (FORCE_CPU_VISION=1)")
-        _use_hailo = False
         return False
 
     # Check for hailo_platform package
@@ -145,7 +139,6 @@ def _detect_hailo() -> bool:
         import hailo_platform  # noqa: F401
     except ImportError:
         logger.info("hailo_platform not installed, using CPU backend for vision")
-        _use_hailo = False
         return False
 
     # Check for PCIe device
@@ -156,7 +149,6 @@ def _detect_hailo() -> bool:
         )
         if result.stdout.strip():
             logger.info("Hailo-10H detected, using Hailo backend for vision")
-            _use_hailo = True
             return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         # lspci not available (macOS) or timed out
@@ -165,11 +157,9 @@ def _detect_hailo() -> bool:
     # Fallback: check for /dev/hailo0
     if os.path.exists("/dev/hailo0"):
         logger.info("Hailo device found at /dev/hailo0, using Hailo backend")
-        _use_hailo = True
         return True
 
     logger.info("Hailo not detected, using CPU backend for vision")
-    _use_hailo = False
     return False
 
 
