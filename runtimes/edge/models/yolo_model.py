@@ -44,7 +44,8 @@ class YOLOModel(DetectionModel):
             import pi_heif
             pi_heif.register_heif_opener()
         except ImportError:
-            pass
+            # Optional — continue without HEIF image support
+            logger.debug("pi_heif not available, HEIF support disabled")
         from ultralytics import YOLO
 
         self.device = self._resolve_device(self.device)
