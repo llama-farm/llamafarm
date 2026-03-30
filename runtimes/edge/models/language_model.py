@@ -72,7 +72,8 @@ class LanguageModel(BaseModel):
                 if isinstance(result, str):
                     return result
             except Exception:
-                pass
+                # Fall through to simple concatenation if template fails
+                logger.debug("Chat template application failed, using fallback", exc_info=True)
 
         # Fallback to simple concatenation
         prompt_parts = []
