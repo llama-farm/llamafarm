@@ -246,7 +246,8 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                     elif isinstance(token_bytes, str):
                         metadata.bos_token = token_bytes
                 except (IndexError, UnicodeDecodeError):
-                    pass
+                    # Non-critical: leave bos_token as None if decode fails
+                    logger.debug("Failed to decode BOS token (id=%s, tokens=%d)", bos_id, len(tokens_data))
 
             if eos_id is not None and eos_id < len(tokens_data):
                 try:
@@ -258,7 +259,8 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                     elif isinstance(token_bytes, str):
                         metadata.eos_token = token_bytes
                 except (IndexError, UnicodeDecodeError):
-                    pass
+                    # Non-critical: leave eos_token as None if decode fails
+                    logger.debug("Failed to decode EOS token (id=%s, tokens=%d)", eos_id, len(tokens_data))
 
         logger.debug(
             f"GGUF metadata extracted: n_ctx={metadata.n_ctx_train}, "
