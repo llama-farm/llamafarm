@@ -70,7 +70,7 @@ warnings.filterwarnings(
 log_file = os.getenv("LOG_FILE", "")
 log_level = os.getenv("LOG_LEVEL", "INFO")
 json_logs = os.getenv("LOG_JSON_FORMAT", "false").lower() in ("true", "1", "yes")
-setup_logging(json_logs=json_logs, log_level=log_level)
+setup_logging(json_logs=json_logs, log_level=log_level, log_file=log_file)
 
 logger = UniversalRuntimeLogger("edge-runtime")
 
