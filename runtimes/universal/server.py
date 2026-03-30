@@ -77,9 +77,13 @@ from routers.classifier import (
 try:
     from routers.explain import router as explain_router
     from routers.explain import set_explain_state, set_model_getter
+
     _HAS_EXPLAIN = True
 except ImportError:
     _HAS_EXPLAIN = False
+import sys
+from pathlib import Path
+
 from routers.files import router as files_router
 from routers.health import (
     router as health_router,
@@ -91,6 +95,8 @@ from routers.health import (
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
 from routers.polars import router as polars_router
+from routers.preload import router as preload_router
+from routers.preload import set_preload_function
 from routers.vision import (
     router as vision_router,
 )
@@ -103,22 +109,33 @@ from routers.vision import (
     set_file_image_getter,
     set_model_export_loader,
     set_ocr_loader,
+    set_sample_data_dir,
     set_streaming_detection_loader,
     set_tracking_models_dir,
     set_vision_models_dir,
-    set_sample_data_dir,
     start_session_cleanup,
     start_tracking_cleanup,
     stop_session_cleanup,
     stop_tracking_cleanup,
+)
+from state import set_models_cache as state_set_models_cache
+from utils.concurrent_loader import (
+    ConcurrentModelLoader,
 )
 from utils.device import get_device_info, get_optimal_device
 from utils.feature_encoder import FeatureEncoder
 from utils.file_handler import get_file_images
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
+from utils.resource_detect import (
+    get_concurrency_override,
+    get_resource_info,
+    log_resource_summary,
+)
 from utils.safe_home import get_data_dir
 from vision_training.trainer import set_trainer_model_loader
+
+repo_root = Path(__file__).resolve().parents[2]
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -316,6 +333,24 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("CatBoost addon unavailable (catboost not installed)")
 
+    try:
+        # Register the preload function FIRST, before executing it.
+        # If the initial preload throws (e.g., config error, OOM), the endpoint
+        # MUST remain available so clients can retry later via API.
+        set_preload_function(preload_models_from_config)
+        preload_results = await preload_models_from_config()
+        summary = preload_results.get("summary", {})
+        if summary.get("loaded", 0) > 0:
+            logger.info(
+                f"Preloaded {summary['loaded']} models in "
+                f"{summary['total_time_seconds']:.2f}s"
+            )
+        if summary.get("failed", 0) > 0:
+            logger.warning(f"{summary['failed']} models failed to preload")
+    except Exception as e:
+        logger.error(f"Error during model preload: {e}", exc_info=True)
+        # Don't fail startup - models will load on-demand
+
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
     logger.info("Model cleanup background task started")
@@ -326,6 +361,7 @@ async def lifespan(app: FastAPI):
         start_kv_cache_gc,
         stop_kv_cache_gc,
     )
+
     global _kv_cache_manager
     _kv_cache_manager = KVCacheManager()
     set_cache_manager(_kv_cache_manager)
@@ -422,6 +458,7 @@ app.include_router(health_router)
 app.include_router(nlp_router)
 app.include_router(polars_router)
 app.include_router(vision_router)
+app.include_router(preload_router)
 
 # Conditional addon routers
 if _HAS_TIMESERIES:
@@ -434,8 +471,8 @@ if _HAS_CATBOOST:
     app.include_router(catboost_router)
 
 
-
 # ── Model management endpoints ──────────────────────────────────────────────
+
 
 @app.post("/v1/models/unload", tags=["models"])
 async def unload_all_models():
@@ -490,6 +527,14 @@ CLEANUP_CHECK_INTERVAL = int(os.getenv("CLEANUP_CHECK_INTERVAL", "30"))
 # Global model caches using TTL-based caching (via cachetools)
 # Models are automatically tracked for idle time and cleaned up by background task
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
+
+
+state_set_models_cache(_models)
+
+# Also set for health router (legacy)
+set_models_cache(_models)
+
+
 _classifiers: ModelCache["ClassifierModel"] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _model_load_lock = asyncio.Lock()
 _current_device = None
@@ -498,6 +543,82 @@ _current_device = None
 _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
 _kv_cache_manager = None
+
+
+_pinned_cache_keys: set[str] = set()
+
+# Flag to ensure we only try to load the pin registry once per worker process.
+_pin_registry_loaded: bool = False
+
+
+def _populate_pin_registry_from_config() -> None:
+    """Read llamafarm.yaml and register cache keys for models with pin: true.
+
+    This is called lazily the first time load_language() is invoked in a worker
+    process, before any model is loaded. This ensures that even a freshly-spawned
+    uvicorn worker that hasn't run the startup preload yet will automatically pin
+    models that are configured with pin: true when they are loaded by any caller
+    (including /chat/completions).
+
+    Stores fully-parameterized cache keys (not bare model IDs) so only the exact
+    configured variant is pinned — other runtime variants of the same model_id
+    that arrive via /chat/completions with different params are NOT affected.
+    """
+    global _pin_registry_loaded
+    if _pin_registry_loaded:
+        return
+
+    try:
+        repo_root = str(Path(__file__).resolve().parents[2])
+        path_inserted = False
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+            path_inserted = True
+        try:
+            from config.helpers.loader import load_config
+
+            config = load_config()
+        finally:
+            if path_inserted and repo_root in sys.path:
+                sys.path.remove(repo_root)
+
+        if hasattr(config, "runtime") and hasattr(config.runtime, "models"):
+            for model_cfg in config.runtime.models:
+                provider = getattr(model_cfg, "provider", None)
+                pin = getattr(model_cfg, "pin", False)
+                model_id = getattr(model_cfg, "model", None)
+                if provider == "universal" and pin and model_id:
+                    # Build cache key using the same extra_body params the
+                    # preload would use, so we only pin the configured variant.
+                    extra_body = {}
+                    if hasattr(model_cfg, "extra_body") and model_cfg.extra_body:
+                        raw = model_cfg.extra_body
+                        if hasattr(raw, "model_dump"):
+                            extra_body = raw.model_dump()
+                        elif isinstance(raw, dict):
+                            extra_body = raw
+                    cache_key = _make_language_cache_key(
+                        model_id,
+                        extra_body.get("n_ctx"),
+                        extra_body.get("n_batch"),
+                        extra_body.get("n_gpu_layers"),
+                        extra_body.get("n_threads"),
+                        extra_body.get("flash_attn"),
+                        extra_body.get("use_mmap"),
+                        extra_body.get("use_mlock"),
+                        extra_body.get("cache_type_k"),
+                        extra_body.get("cache_type_v"),
+                        extra_body.get("preferred_quantization"),
+                    )
+                    _pinned_cache_keys.add(cache_key)
+                    logger.debug(
+                        f"Pin registry (lazy): registered '{model_cfg.name}' key={cache_key}"
+                    )
+
+        _pin_registry_loaded = True
+    except Exception as e:
+        logger.debug(f"Pin registry lazy load skipped: {e}")
+
 
 # Data directories
 _LF_DATA_DIR = get_data_dir()
@@ -643,8 +764,11 @@ async def load_language(
     cache_type_k: str | None = None,
     cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
+    pin: bool = False,
 ):
     """Load a causal language model (GGUF or transformers format)."""
+
+    _populate_pin_registry_from_config()
     cache_key = _make_language_cache_key(
         model_id,
         n_ctx,
@@ -699,6 +823,12 @@ async def load_language(
                 await model.load()
                 _models[cache_key] = model
 
+    effective_pin = pin or (cache_key in _pinned_cache_keys)
+
+    if effective_pin and not _models.is_pinned(cache_key):
+        _models.pin(cache_key)
+        logger.info(f"Pinned model: {cache_key}")
+
     # Return model (get() refreshes TTL automatically)
     return _models.get(cache_key)
 
@@ -729,6 +859,7 @@ async def load_encoder(
     preferred_quantization: str | None = None,
     max_length: int | None = None,
     use_flash_attention: bool = True,
+    pin: bool = False,
 ):
     """Load an encoder model for embeddings, classification, reranking, or NER."""
     model_format = detect_model_format(model_id)
@@ -764,6 +895,10 @@ async def load_encoder(
 
                 await model.load()
                 _models[cache_key] = model
+
+                if pin:
+                    _models.pin(cache_key)
+                    logger.info(f"Pinned encoder model: {cache_key}")
 
     return _models.get(cache_key)
 
@@ -852,9 +987,11 @@ async def load_detection_model(model_id: str = "yolov8n"):
         async with _model_load_lock:
             if cache_key not in _models:
                 from models.yolo_model import YOLOModel
+
                 device = get_device()
                 # Check for custom model in vision models dir
                 from pathlib import Path as _Path
+
                 safe_id = _Path(model_id).name
                 if safe_id != model_id:
                     raise ValueError(f"Invalid model_id: {model_id}")
@@ -873,11 +1010,380 @@ async def load_classification_model(model_id: str = "clip-vit-base"):
         async with _model_load_lock:
             if cache_key not in _models:
                 from models.clip_model import CLIPModel
+
                 device = get_device()
                 model = CLIPModel(model_id=model_id, device=device)
                 await model.load()
                 _models[cache_key] = model
     return _models[cache_key]
+
+
+async def preload_models_from_config(config_path: str | None = None) -> dict:
+    """Preload models marked with preload: true in llamafarm.yaml.
+
+    This function:
+    1. Detects system resources (CPU/RAM/VRAM)
+    2. Calculates optimal concurrency
+    3. Reads the LlamaFarm config
+    4. Filters models with preload: true
+    5. Loads them concurrently using ConcurrentModelLoader
+    6. Pins models with pin: true
+    7. Returns detailed per-model status
+    Args:
+        config_path: Optional path to llamafarm.yaml. If None, searches current directory.
+
+    Returns:
+        Dictionary with results:
+        {
+            "results": {
+                "model-name": {
+                    "status": "loaded|failed|already_loaded|skipped",
+                    "pinned": bool,
+                    "load_time_seconds": float,
+                    "error_message": str (if failed),
+                }
+            },
+            "summary": {
+                "loaded": int,
+                "failed": int,
+                "already_loaded": int,
+                "skipped": int,
+                "total_time_seconds": float,
+                "concurrency_used": int,
+            },
+            "resources": {
+                "device": str,
+                "cpu_count": int,
+                "available_ram_gb": float,
+                "available_vram_gb": float,
+            }
+        }
+    """
+
+    repo_root = str(Path(__file__).resolve().parents[2])
+    path_inserted = False
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+        path_inserted = True
+
+    try:
+        from config.helpers.loader import load_config
+    except ImportError:
+        logger.warning("Config loader not available, cannot preload models")
+        return {
+            "results": {},
+            "summary": {
+                "loaded": 0,
+                "failed": 0,
+                "already_loaded": 0,
+                "skipped": 0,
+                "message": "Config loader not available",
+                "total_time_seconds": 0.0,
+            },
+        }
+    finally:
+        if path_inserted:
+            sys.path.remove(repo_root)
+
+    device = get_device()
+    resource_info = get_resource_info(device)
+    log_resource_summary(resource_info)
+
+    # Determine concurrency (allow env override)
+    concurrency = get_concurrency_override()
+    if concurrency is None:
+        concurrency = resource_info.optimal_concurrency
+    else:
+        # Cap user override at max safe concurrency
+        if concurrency > resource_info.max_concurrency:
+            logger.warning(
+                f"Concurrency override {concurrency} exceeds safe maximum "
+                f"{resource_info.max_concurrency}, using maximum instead"
+            )
+            concurrency = resource_info.max_concurrency
+
+    try:
+        if config_path:
+            config = load_config(config_path=Path(config_path))
+        else:
+            config = load_config()
+    except Exception as e:
+        logger.error(f"Failed to load config: {e}")
+        return {
+            "results": {},
+            "summary": {
+                "loaded": 0,
+                "failed": 0,
+                "already_loaded": 0,
+                "skipped": 0,
+                "message": f"Config load failed: {e}",
+                "total_time_seconds": 0.0,
+            },
+        }
+
+    # extract models with preload: true
+    models_to_load: list[tuple[str, str, bool, dict]] = []
+
+    if hasattr(config, "runtime") and hasattr(config.runtime, "models"):
+        for model_cfg in config.runtime.models:
+            # only preload universal provider models with preload: true
+            provider = getattr(model_cfg, "provider", None)
+            preload = getattr(model_cfg, "preload", False)
+
+            if provider != "universal" or not preload:
+                continue
+
+            model_name = getattr(model_cfg, "name", "unknown")
+            model_id = getattr(model_cfg, "model", None)
+            pin = getattr(model_cfg, "pin", False)
+
+            if not model_id:
+                logger.warning(
+                    f"Model '{model_name}' has preload: true but no model ID"
+                )
+                continue
+
+            # Extract extra_body params for GGUF models
+            extra_body = {}
+            if hasattr(model_cfg, "extra_body") and model_cfg.extra_body:
+                extra_body = model_cfg.extra_body
+                # Convert Pydantic model to dict if needed
+                if hasattr(extra_body, "model_dump"):
+                    extra_body = extra_body.model_dump()
+                elif not isinstance(extra_body, dict):
+                    extra_body = {}
+
+            if pin:
+                cache_key = _make_language_cache_key(
+                    model_id,
+                    extra_body.get("n_ctx"),
+                    extra_body.get("n_batch"),
+                    extra_body.get("n_gpu_layers"),
+                    extra_body.get("n_threads"),
+                    extra_body.get("flash_attn"),
+                    extra_body.get("use_mmap"),
+                    extra_body.get("use_mlock"),
+                    extra_body.get("cache_type_k"),
+                    extra_body.get("cache_type_v"),
+                    extra_body.get("preferred_quantization"),
+                )
+                _pinned_cache_keys.add(cache_key)
+                logger.debug(
+                    f"Registered model '{model_name}' key={cache_key} in pin registry"
+                )
+
+            models_to_load.append((model_name, model_id, pin, extra_body))
+
+    if not models_to_load:
+        logger.info("No models configured for preload")
+        return {
+            "results": {},
+            "summary": {
+                "loaded": 0,
+                "failed": 0,
+                "already_loaded": 0,
+                "skipped": 0,
+                "message": "No models configured for preload",
+                "total_time_seconds": 0.0,
+                "concurrency_used": 0,
+            },
+            "resources": {
+                "device": resource_info.device,
+                "cpu_count": resource_info.cpu_count,
+                "available_ram_gb": resource_info.available_ram_gb,
+                "available_vram_gb": resource_info.available_vram_gb,
+            },
+        }
+
+    logger.info(
+        f"Preloading {len(models_to_load)} models with concurrency={concurrency}"
+    )
+
+    # create concurrent loader
+    loader = ConcurrentModelLoader(concurrency=concurrency)
+
+    async def load_model_wrapper(model_path: str, pin: bool, extra_body: dict) -> None:
+        """Wrapper that calls appropriate load function based on model format."""
+
+        # Detect model format to determine if it's a language or encoder model
+        # For now, assume language models (CausalLM)
+        # TODO for later: add encoder model detection and loading
+
+        # Extract GGUF-specific parameters from extra_body
+        n_ctx = extra_body.get("n_ctx")
+        n_batch = extra_body.get("n_batch")
+        n_gpu_layers = extra_body.get("n_gpu_layers")
+        n_threads = extra_body.get("n_threads")
+        flash_attn = extra_body.get("flash_attn")
+        use_mmap = extra_body.get("use_mmap")
+        use_mlock = extra_body.get("use_mlock")
+        cache_type_k = extra_body.get("cache_type_k")
+        cache_type_v = extra_body.get("cache_type_v")
+        preferred_quantization = extra_body.get("preferred_quantization")
+
+        await load_language(
+            model_id=model_path,
+            n_ctx=n_ctx,
+            n_batch=n_batch,
+            n_gpu_layers=n_gpu_layers,
+            n_threads=n_threads,
+            flash_attn=flash_attn,
+            use_mmap=use_mmap,
+            use_mlock=use_mlock,
+            cache_type_k=cache_type_k,
+            cache_type_v=cache_type_v,
+            preferred_quantization=preferred_quantization,
+            pin=pin,
+        )
+
+    # Check if model is already loaded
+    def is_model_loaded(model_path: str, extra_body: dict | None = None) -> bool:
+        """Check if model is already in cache with exact parameters."""
+        eb = extra_body or {}
+        # Generate specific cache key to check
+        cache_key = _make_language_cache_key(
+            model_path,
+            eb.get("n_ctx"),
+            eb.get("n_batch"),
+            eb.get("n_gpu_layers"),
+            eb.get("n_threads"),
+            eb.get("flash_attn"),
+            eb.get("use_mmap"),
+            eb.get("use_mlock"),
+            eb.get("cache_type_k"),
+            eb.get("cache_type_v"),
+            eb.get("preferred_quantization"),
+        )
+        return cache_key in _models
+
+    # Prepare models for batch loading
+    # Format: [(name, path, pin), ...]
+
+    # Create per-model load functions with extra_body
+    # We need to curry the extra_body into each load call
+    async def create_load_fn(model_path: str, pin: bool, extra_body: dict):
+        """Create a load function for a specific model."""
+        return await load_model_wrapper(model_path, pin, extra_body)
+
+    # Since load_many expects a single load_fn, we need to handle this differently
+    # Let's load models one by one but with concurrent execution
+
+    tasks = []
+    for name, path, pin, extra_body in models_to_load:
+
+        async def load_task(n=name, p=path, pn=pin, eb=extra_body):
+            # Resolve the specific cache key for this model variant once
+            cache_key = _make_language_cache_key(
+                p,
+                eb.get("n_ctx"),
+                eb.get("n_batch"),
+                eb.get("n_gpu_layers"),
+                eb.get("n_threads"),
+                eb.get("flash_attn"),
+                eb.get("use_mmap"),
+                eb.get("use_mlock"),
+                eb.get("cache_type_k"),
+                eb.get("cache_type_v"),
+                eb.get("preferred_quantization"),
+            )
+
+            result = await loader.load_one(
+                model_name=n,
+                model_path=p,
+                pin=pn,
+                load_fn=lambda mp, pn: load_model_wrapper(mp, pn, eb),
+                # Use a specific check for this model variant's parameters
+                is_loaded_fn=lambda mp: is_model_loaded(mp, eb),
+            )
+
+            from utils.concurrent_loader import LoadStatus
+
+            # Ensure model is pinned if it was already in cache but not pinned
+            if (
+                pn
+                and result.status == LoadStatus.ALREADY_LOADED
+                and cache_key in _models
+                and not _models.is_pinned(cache_key)
+            ):
+                _models.pin(cache_key)
+                logger.info(f"Applied pin to already-loaded model '{n}' ({cache_key})")
+            return result
+
+        tasks.append(load_task())
+
+    # Execute all tasks concurrently
+    import time
+
+    start_time = time.perf_counter()
+    results_list = await asyncio.gather(*tasks, return_exceptions=True)
+    total_time = time.perf_counter() - start_time
+
+    # Process results
+    results = {}
+    loaded_count = 0
+    failed_count = 0
+    already_loaded_count = 0
+    skipped_count = 0
+
+    for i, result in enumerate(results_list):
+        model_name = models_to_load[i][0]
+
+        if isinstance(result, Exception):
+            logger.error(f"Unexpected exception loading '{model_name}': {result}")
+            results[model_name] = {
+                "status": "failed",
+                "pinned": False,
+                "error_message": str(result),
+            }
+            failed_count += 1
+        else:
+            # Convert ModelLoadResult to dict
+            result_dict = {
+                "status": result.status.value,
+                "pinned": result.pinned,
+            }
+
+            if result.load_time_seconds is not None:
+                result_dict["load_time_seconds"] = result.load_time_seconds
+
+            if result.error_message:
+                result_dict["error_message"] = result.error_message
+
+            results[model_name] = result_dict
+
+            if result.status.value == "loaded":
+                loaded_count += 1
+            elif result.status.value == "failed":
+                failed_count += 1
+            elif result.status.value == "already_loaded":
+                already_loaded_count += 1
+            elif result.status.value == "skipped":
+                skipped_count += 1
+
+    logger.info(
+        f"Preload complete: {loaded_count} loaded, {failed_count} failed, "
+        f"{already_loaded_count} already loaded, {skipped_count} skipped "
+        f"in {total_time:.2f}s"
+    )
+
+    return {
+        "results": results,
+        "summary": {
+            "loaded": loaded_count,
+            "failed": failed_count,
+            "already_loaded": already_loaded_count,
+            "skipped": skipped_count,
+            "total_time_seconds": round(total_time, 2),
+            "concurrency_used": concurrency,
+        },
+        "resources": {
+            "device": resource_info.device,
+            "cpu_count": resource_info.cpu_count,
+            "available_ram_gb": round(resource_info.available_ram_gb, 1),
+            "available_vram_gb": round(resource_info.available_vram_gb, 1),
+            "gpu_name": resource_info.gpu_name,
+        },
+    }
 
 
 # ============================================================================
@@ -1001,7 +1507,9 @@ if _HAS_TIMESERIES:
         if cache_key not in _timeseries:
             async with _model_load_lock:
                 if cache_key not in _timeseries:
-                    logger.info(f"Loading timeseries model: {model_id} (backend: {backend})")
+                    logger.info(
+                        f"Loading timeseries model: {model_id} (backend: {backend})"
+                    )
                     device = get_device()
 
                     model = TimeseriesModel(
@@ -1047,7 +1555,9 @@ if _HAS_ADTK:
         if cache_key not in _adtk:
             async with _model_load_lock:
                 if cache_key not in _adtk:
-                    logger.info(f"Loading ADTK model: {model_id} (detector: {detector})")
+                    logger.info(
+                        f"Loading ADTK model: {model_id} (detector: {detector})"
+                    )
                     device = get_device()
 
                     model = ADTKModel(
@@ -1094,7 +1604,9 @@ if _HAS_DRIFT:
         if cache_key not in _drift:
             async with _model_load_lock:
                 if cache_key not in _drift:
-                    logger.info(f"Loading Drift Detection model: {model_id} (detector: {detector})")
+                    logger.info(
+                        f"Loading Drift Detection model: {model_id} (detector: {detector})"
+                    )
                     device = get_device()
 
                     model = DriftModel(

@@ -54,6 +54,9 @@ CLASSIFIER_MODELS_DIR = _LF_DATA_DIR / "models" / "classifier"
 _models: ModelCache[BaseModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 _classifiers: ModelCache[ClassifierModel] = ModelCache(ttl=MODEL_UNLOAD_TIMEOUT)
 
+# Cache reference for router access (set by server.py)
+_models_cache_ref = None
+
 # Lock for thread-safe model loading
 _model_load_lock = asyncio.Lock()
 
@@ -65,6 +68,44 @@ _encoders: dict[str, FeatureEncoder] = {}
 
 # Background cleanup task reference
 _cleanup_task: asyncio.Task | None = None
+
+
+# ============================================================================
+# Model Cache Access Functions
+# ============================================================================
+
+
+def set_models_cache(cache: ModelCache[BaseModel]) -> None:
+    """Set the models cache reference for routers.
+
+    Called by server.py after creating _models cache.
+    This allows routers to access the cache without circular imports.
+
+    Args:
+        cache: The ModelCache instance from server.py
+    """
+    global _models_cache_ref
+    _models_cache_ref = cache
+    logger.debug("Models cache reference set for routers")
+
+
+def get_models_cache() -> ModelCache[BaseModel]:
+    """Get the models cache for routers.
+
+    Returns the cache instance that was registered by server.py.
+
+    Returns:
+        The ModelCache instance containing loaded models
+
+    Raises:
+        RuntimeError: If cache has not been initialized by server.py
+    """
+    if _models_cache_ref is None:
+        raise RuntimeError(
+            "Models cache not initialized. "
+            "This should be set by server.py during startup via set_models_cache()."
+        )
+    return _models_cache_ref
 
 
 # ============================================================================
@@ -86,13 +127,8 @@ def get_device() -> str:
 
 
 # ============================================================================
-# Model Cache Access
+# Additional Cache Access (for other parts of the system)
 # ============================================================================
-
-
-def get_models_cache() -> ModelCache[BaseModel]:
-    """Get the models cache."""
-    return _models
 
 
 def get_classifiers_cache() -> ModelCache[ClassifierModel]:

@@ -26,10 +26,11 @@ from api.errors import ProjectNotFoundError, ReservedNamespaceError
 from services.project_service import ProjectService
 
 
-def test_create_project_reserved_namespace_raises_error():
+@pytest.mark.asyncio
+async def test_create_project_reserved_namespace_raises_error():
     """Ensure creating a project in a reserved namespace is rejected."""
     with pytest.raises(ReservedNamespaceError, match="Namespace llamafarm is reserved"):
-        ProjectService.create_project("llamafarm", "any_project")
+        await ProjectService.create_project("llamafarm", "any_project")
 
 
 class TestProjectDeletion:

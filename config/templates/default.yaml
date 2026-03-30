@@ -17,6 +17,9 @@ runtime:
       default: true
       prompt_format: unstructured
       prompts: [default]
+      # Model preloading configuration
+      # preload: true    # Load at startup to eliminate cold start
+      # pin: true        # Never evict from cache
 
 # =============================================================================
 # PROMPTS CONFIGURATION
