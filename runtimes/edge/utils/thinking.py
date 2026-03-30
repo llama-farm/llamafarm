@@ -5,8 +5,11 @@ Provides support for models like Qwen3 that use <think>...</think> tags
 for chain-of-thought reasoning.
 """
 
+import logging
 import re
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -235,7 +238,8 @@ class ThinkingBudgetProcessor:
                     self.thinking_ended = True
                     self.in_thinking = False
             except Exception:
-                pass
+                # Per-token hook — suppress to avoid breaking generation
+                logger.debug("Think-tag detection failed in logits processor", exc_info=True)
 
         # Count tokens only while in thinking mode
         if self.in_thinking and not self.thinking_ended:
