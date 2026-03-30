@@ -228,6 +228,7 @@ jobs:
           OLLAMA_VERSION: v0.19.0
           OLLAMA_INSTALL_SHA256: 25f64b810b947145095956533e1bdf56eacea2673c55a7e586be4515fc882c9f
         run: |
+          sudo apt-get install -y --no-install-recommends zstd
           curl -fsSL "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/install.sh" -o install-ollama.sh
           echo "${OLLAMA_INSTALL_SHA256}  install-ollama.sh" | sha256sum -c -
           sh install-ollama.sh
