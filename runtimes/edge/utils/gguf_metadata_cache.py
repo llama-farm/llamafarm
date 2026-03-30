@@ -162,8 +162,8 @@ def _read_gguf_metadata(gguf_path: str) -> GGUFMetadata:
                         logger.debug(
                             f"Found context size in field '{key}': {n_ctx_train}"
                         )
-                except (IndexError, ValueError, TypeError):
-                    pass
+                except (IndexError, ValueError, TypeError) as e:
+                    logger.debug("Could not parse context size from field %s: %s", key, e)
 
             # Architecture params for KV cache estimation
             # Keys are prefixed by architecture (e.g., qwen3.block_count),
