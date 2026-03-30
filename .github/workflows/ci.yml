@@ -225,11 +225,12 @@ jobs:
 
       - name: Set up Ollama
         env:
-          OLLAMA_VERSION: v0.19.0
+          # Pin install script to v0.19.0 release with checksum verification
+          OLLAMA_INSTALL_URL: https://github.com/ollama/ollama/releases/download/v0.19.0/install.sh
           OLLAMA_INSTALL_SHA256: 25f64b810b947145095956533e1bdf56eacea2673c55a7e586be4515fc882c9f
         run: |
           sudo apt-get install -y --no-install-recommends zstd
-          curl -fsSL "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/install.sh" -o install-ollama.sh
+          curl -fsSL "$OLLAMA_INSTALL_URL" -o install-ollama.sh
           echo "${OLLAMA_INSTALL_SHA256}  install-ollama.sh" | sha256sum -c -
           sh install-ollama.sh
           rm install-ollama.sh
