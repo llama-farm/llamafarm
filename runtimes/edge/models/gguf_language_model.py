@@ -217,7 +217,8 @@ class GGUFLanguageModel(BaseModel):
                         # Format: "MemAvailable:   1234567 kB"
                         return int(line.split()[1]) // 1024
         except (FileNotFoundError, PermissionError, OSError):
-            pass
+            # /proc/meminfo unavailable (non-Linux or restricted) — try psutil next
+            logger.debug("Could not read /proc/meminfo, falling back to psutil", exc_info=True)
 
         # Fallback: try psutil if available
         try:
