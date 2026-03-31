@@ -496,12 +496,12 @@ class GGUFLanguageModel(BaseModel):
                 )
 
             # Verify file exists and is readable before attempting to load
-            if not os.path.exists(resolved):
+            if not os.path.exists(abs_path):
                 raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
-            if not os.access(resolved, os.R_OK):
+            if not os.access(abs_path, os.R_OK):
                 raise PermissionError(f"GGUF file not readable: {gguf_path}")
 
-            file_size_mb = os.path.getsize(resolved) / (1024 * 1024)
+            file_size_mb = os.path.getsize(abs_path) / (1024 * 1024)
             logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
 
             try:
