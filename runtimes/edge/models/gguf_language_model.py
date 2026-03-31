@@ -468,14 +468,27 @@ class GGUFLanguageModel(BaseModel):
                     "Install it with: pip install llamafarm-llama"
                 ) from e
 
-            # Verify resolved path stays within the HuggingFace cache directory
-            from huggingface_hub.constants import HF_HUB_CACHE
-
+            # Verify resolved path is in an allowed location:
+            # - HuggingFace cache (downloaded models)
+            # - LlamaFarm data dir (~/.llamafarm/models/)
+            # - GGUF_MODELS_DIR (custom model directory)
             resolved = os.path.realpath(gguf_path)
-            hf_cache_resolved = os.path.realpath(HF_HUB_CACHE)
-            if not resolved.startswith(hf_cache_resolved + os.sep):
+
+            from huggingface_hub.constants import HF_HUB_CACHE
+            from llamafarm_common.safe_home import get_data_dir
+
+            allowed_roots = [os.path.realpath(HF_HUB_CACHE)]
+            allowed_roots.append(os.path.realpath(str(get_data_dir())))
+            gguf_models_dir = os.environ.get("GGUF_MODELS_DIR")
+            if gguf_models_dir:
+                allowed_roots.append(os.path.realpath(gguf_models_dir))
+
+            if not any(
+                resolved.startswith(root + os.sep) or resolved == root
+                for root in allowed_roots
+            ):
                 raise ValueError(
-                    f"GGUF path outside HuggingFace cache: {gguf_path}"
+                    f"GGUF path outside allowed directories: {gguf_path}"
                 )
 
             # Verify file exists and is readable before attempting to load
