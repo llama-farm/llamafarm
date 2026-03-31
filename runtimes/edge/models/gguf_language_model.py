@@ -442,8 +442,10 @@ class GGUFLanguageModel(BaseModel):
             logger.info(f"Using cache_type_v: {cache_type_v}")
 
         # Detect or use explicit mmproj path for multimodal models
+        # Skip auto-detection for local file paths — they aren't HF repo IDs
         mmproj_path = self.requested_mmproj_path
-        if mmproj_path is None and self.auto_detect_mmproj:
+        is_local_file = self.model_id.endswith(".gguf") or os.path.isfile(self.model_id)
+        if mmproj_path is None and self.auto_detect_mmproj and not is_local_file:
             try:
                 from llamafarm_common import get_mmproj_file_path
 
@@ -468,23 +470,25 @@ class GGUFLanguageModel(BaseModel):
                     "Install it with: pip install llamafarm-llama"
                 ) from e
 
-            # Verify resolved path is in an allowed location:
+            # Verify path is in an allowed location:
             # - HuggingFace cache (downloaded models)
-            # - LlamaFarm data dir (~/.llamafarm/models/)
+            # - LlamaFarm data dir (~/.llamafarm/)
             # - GGUF_MODELS_DIR (custom model directory)
-            resolved = os.path.realpath(gguf_path)
+            # Use os.path.abspath (not realpath) so symlinks within allowed
+            # directories aren't rejected when their targets live elsewhere.
+            abs_path = os.path.abspath(gguf_path)
 
             from huggingface_hub.constants import HF_HUB_CACHE
             from llamafarm_common.safe_home import get_data_dir
 
-            allowed_roots = [os.path.realpath(HF_HUB_CACHE)]
-            allowed_roots.append(os.path.realpath(str(get_data_dir())))
+            allowed_roots = [os.path.abspath(HF_HUB_CACHE)]
+            allowed_roots.append(os.path.abspath(str(get_data_dir())))
             gguf_models_dir = os.environ.get("GGUF_MODELS_DIR")
             if gguf_models_dir:
-                allowed_roots.append(os.path.realpath(gguf_models_dir))
+                allowed_roots.append(os.path.abspath(gguf_models_dir))
 
             if not any(
-                resolved.startswith(root + os.sep) or resolved == root
+                abs_path.startswith(root + os.sep) or abs_path == root
                 for root in allowed_roots
             ):
                 raise ValueError(
