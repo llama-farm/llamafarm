@@ -466,10 +466,25 @@ def get_gguf_file_path(
         >>> "Q8_0" in path
         True
     """
-    # If model_id is a local .gguf file path, return it directly
-    if model_id.endswith(".gguf") and os.path.isfile(model_id):
-        logger.info(f"Using local GGUF file: {model_id}")
-        return model_id
+    # Local file resolution — check disk before any HuggingFace calls
+    if model_id.endswith(".gguf"):
+        # 1. Absolute or relative path that exists directly
+        if os.path.isfile(model_id):
+            logger.info(f"Using local GGUF file: {model_id}")
+            return model_id
+        # 2. Standard model directory (~/.llamafarm/models/)
+        from .safe_home import get_data_dir
+        data_models = os.path.join(str(get_data_dir()), "models", model_id)
+        if os.path.isfile(data_models):
+            logger.info(f"Using GGUF file from data dir: {data_models}")
+            return data_models
+        # 3. Custom directory via GGUF_MODELS_DIR env var
+        gguf_dir = os.environ.get("GGUF_MODELS_DIR")
+        if gguf_dir:
+            custom_path = os.path.join(gguf_dir, model_id)
+            if os.path.isfile(custom_path):
+                logger.info(f"Using GGUF file from GGUF_MODELS_DIR: {custom_path}")
+                return custom_path
 
     # Parse model ID to extract base model and quantization suffix if present
     base_model_id, model_quantization = parse_model_with_quantization(model_id)
