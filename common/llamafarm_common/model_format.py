@@ -1,16 +1,19 @@
 """Model format detection utilities.
 
 Detects whether a HuggingFace model repository contains GGUF or transformers format files.
+Also supports detecting format from local file paths (no network required).
 
 Note: Core GGUF utilities (list_gguf_files, select_gguf_file, get_gguf_file_path, etc.)
 are provided by llamafarm_common.model_utils and re-exported here for backward compatibility.
 
 Performance optimizations:
+- Local file paths are detected immediately without any network or cache access
 - Results are cached to avoid repeated API calls within a session
 - Checks local HuggingFace cache before making network requests
 """
 
 import logging
+import os
 
 from huggingface_hub import HfApi, scan_cache_dir
 from huggingface_hub.utils import HFCacheInfo
@@ -111,6 +114,16 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
         >>> detect_model_format("google/gemma-3-1b-it")
         "transformers"
     """
+    # Local file path — detect format from extension, no network needed
+    if model_id.endswith(".gguf"):
+        logger.info(f"Detected GGUF format from file extension: {model_id}")
+        return "gguf"
+    if os.path.isfile(model_id):
+        if model_id.lower().endswith(".gguf"):
+            return "gguf"
+        logger.info(f"Local file exists but not GGUF, assuming transformers: {model_id}")
+        return "transformers"
+
     # Parse model ID to remove quantization suffix if present
     base_model_id, _ = parse_model_with_quantization(model_id)
 

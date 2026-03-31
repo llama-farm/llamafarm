@@ -466,6 +466,11 @@ def get_gguf_file_path(
         >>> "Q8_0" in path
         True
     """
+    # If model_id is a local .gguf file path, return it directly
+    if model_id.endswith(".gguf") and os.path.isfile(model_id):
+        logger.info(f"Using local GGUF file: {model_id}")
+        return model_id
+
     # Parse model ID to extract base model and quantization suffix if present
     base_model_id, model_quantization = parse_model_with_quantization(model_id)
 

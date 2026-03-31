@@ -206,11 +206,18 @@ async def load_language(
     cache_type_k: str | None = None,
     cache_type_v: str | None = None,
     preferred_quantization: str | None = None,
+    trusted: bool = False,
 ):
-    """Load a causal language model (GGUF or transformers format)."""
-    # Reject model IDs with path traversal sequences
-    if ".." in model_id or model_id.startswith(("/", "\\")) or "\\" in model_id or (len(model_id) > 1 and model_id[1] == ":"):
-        raise ValueError(f"Invalid model_id: {model_id}")
+    """Load a causal language model (GGUF or transformers format).
+
+    Args:
+        trusted: Skip path traversal validation. Only set True for server-side
+                 config (e.g. PRELOAD_MODELS env var), never for HTTP input.
+    """
+    # Reject path traversal from untrusted input (HTTP requests)
+    if not trusted:
+        if ".." in model_id or model_id.startswith(("/", "\\")) or "\\" in model_id or (len(model_id) > 1 and model_id[1] == ":"):
+            raise ValueError(f"Invalid model_id: {model_id}")
 
     quant_key = preferred_quantization or "default"
     cache_key = (
@@ -379,7 +386,7 @@ async def lifespan(app: FastAPI):
             if not model_id:
                 continue
             try:
-                await load_language(model_id)
+                await load_language(model_id, trusted=True)
                 # Construct the same cache key load_language() uses
                 cache_key = f"language:{model_id}:ctxauto:gpuauto:quantdefault"
                 _models.pin(cache_key)
