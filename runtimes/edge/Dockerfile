@@ -100,6 +100,7 @@ ENV LF_RUNTIME_PORT=11540 \
     LOG_LEVEL=INFO \
     MODEL_UNLOAD_TIMEOUT=300 \
     PRELOAD_MODELS="" \
+    PRELOAD_N_CTX="" \
     YOLO_AUTOINSTALL=false
 
 # Run the edge runtime
