@@ -114,15 +114,21 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
         >>> detect_model_format("google/gemma-3-1b-it")
         "transformers"
     """
-    # Local file path — detect format from extension, no network needed
-    if model_id.endswith(".gguf"):
-        logger.info(f"Detected GGUF format from file extension: {model_id}")
-        return "gguf"
+    # Local file path — detect format from extension, no network needed.
+    # Only short-circuit when we can confirm the file exists on disk or
+    # when the caller has already resolved it to a known .gguf path via
+    # get_gguf_file_path() (which validates existence before returning).
     if os.path.isfile(model_id):
         if model_id.lower().endswith(".gguf"):
+            logger.info(f"Detected GGUF format from local file: {model_id}")
             return "gguf"
         logger.info(f"Local file exists but not GGUF, assuming transformers: {model_id}")
         return "transformers"
+    if model_id.endswith(".gguf"):
+        # Looks like a .gguf filename/path but doesn't exist at this exact path.
+        # Still treat as GGUF — get_gguf_file_path() will search model directories.
+        logger.info(f"Detected GGUF format from file extension: {model_id}")
+        return "gguf"
 
     # Parse model ID to remove quantization suffix if present
     base_model_id, _ = parse_model_with_quantization(model_id)

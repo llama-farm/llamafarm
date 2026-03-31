@@ -383,7 +383,15 @@ async def lifespan(app: FastAPI):
     preload_csv = os.getenv("PRELOAD_MODELS", "").strip()
     if preload_csv:
         preload_n_ctx_str = os.getenv("PRELOAD_N_CTX", "").strip()
-        preload_n_ctx = int(preload_n_ctx_str) if preload_n_ctx_str else None
+        preload_n_ctx = None
+        if preload_n_ctx_str:
+            try:
+                preload_n_ctx = int(preload_n_ctx_str)
+            except ValueError:
+                logger.warning(
+                    f"Invalid PRELOAD_N_CTX value '{preload_n_ctx_str}', "
+                    f"using auto-detected context size"
+                )
         for model_id in preload_csv.split(","):
             model_id = model_id.strip()
             if not model_id:

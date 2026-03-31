@@ -474,34 +474,42 @@ class GGUFLanguageModel(BaseModel):
             # - HuggingFace cache (downloaded models)
             # - LlamaFarm data dir (~/.llamafarm/)
             # - GGUF_MODELS_DIR (custom model directory)
-            # Use os.path.abspath (not realpath) so symlinks within allowed
-            # directories aren't rejected when their targets live elsewhere.
+            # Check both the logical path (abspath, for symlinks in allowed dirs)
+            # and the resolved path (realpath, for actual file location).
+            # Either matching is sufficient — a symlink inside ~/.llamafarm/models/
+            # pointing elsewhere is a valid ops-managed setup.
             abs_path = os.path.abspath(gguf_path)
+            resolved = os.path.realpath(gguf_path)
 
             from huggingface_hub.constants import HF_HUB_CACHE
             from llamafarm_common.safe_home import get_data_dir
 
-            allowed_roots = [os.path.abspath(HF_HUB_CACHE)]
-            allowed_roots.append(os.path.abspath(str(get_data_dir())))
+            allowed_roots = [
+                os.path.realpath(HF_HUB_CACHE),
+                os.path.realpath(str(get_data_dir())),
+            ]
             gguf_models_dir = os.environ.get("GGUF_MODELS_DIR")
             if gguf_models_dir:
-                allowed_roots.append(os.path.abspath(gguf_models_dir))
+                allowed_roots.append(os.path.realpath(gguf_models_dir))
 
-            if not any(
-                abs_path.startswith(root + os.sep) or abs_path == root
-                for root in allowed_roots
-            ):
+            def _in_allowed(path: str) -> bool:
+                return any(
+                    path.startswith(root + os.sep) or path == root
+                    for root in allowed_roots
+                )
+
+            if not (_in_allowed(abs_path) or _in_allowed(resolved)):
                 raise ValueError(
                     f"GGUF path outside allowed directories: {gguf_path}"
                 )
 
             # Verify file exists and is readable before attempting to load
-            if not os.path.exists(abs_path):
+            if not os.path.exists(gguf_path):
                 raise FileNotFoundError(f"GGUF file not found: {gguf_path}")
-            if not os.access(abs_path, os.R_OK):
+            if not os.access(gguf_path, os.R_OK):
                 raise PermissionError(f"GGUF file not readable: {gguf_path}")
 
-            file_size_mb = os.path.getsize(abs_path) / (1024 * 1024)
+            file_size_mb = os.path.getsize(gguf_path) / (1024 * 1024)
             logger.info(f"Loading GGUF file ({file_size_mb:.1f} MB): {gguf_path}")
 
             try:

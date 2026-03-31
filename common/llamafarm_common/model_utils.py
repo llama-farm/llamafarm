@@ -468,23 +468,29 @@ def get_gguf_file_path(
     """
     # Local file resolution — check disk before any HuggingFace calls
     if model_id.endswith(".gguf"):
+        # Sanitize bare filenames to prevent path traversal via model_id
+        basename = os.path.basename(model_id)
+
         # 1. Absolute or relative path that exists directly
         if os.path.isfile(model_id):
-            logger.info(f"Using local GGUF file: {model_id}")
-            return model_id
+            resolved = os.path.realpath(model_id)
+            logger.info(f"Using local GGUF file: {resolved}")
+            return resolved
         # 2. Standard model directory (~/.llamafarm/models/)
         from .safe_home import get_data_dir
-        data_models = os.path.join(str(get_data_dir()), "models", model_id)
+        data_models = os.path.join(str(get_data_dir()), "models", basename)
         if os.path.isfile(data_models):
-            logger.info(f"Using GGUF file from data dir: {data_models}")
-            return data_models
+            resolved = os.path.realpath(data_models)
+            logger.info(f"Using GGUF file from data dir: {resolved}")
+            return resolved
         # 3. Custom directory via GGUF_MODELS_DIR env var
         gguf_dir = os.environ.get("GGUF_MODELS_DIR")
         if gguf_dir:
-            custom_path = os.path.join(gguf_dir, model_id)
+            custom_path = os.path.join(gguf_dir, basename)
             if os.path.isfile(custom_path):
-                logger.info(f"Using GGUF file from GGUF_MODELS_DIR: {custom_path}")
-                return custom_path
+                resolved = os.path.realpath(custom_path)
+                logger.info(f"Using GGUF file from GGUF_MODELS_DIR: {resolved}")
+                return resolved
 
     # Parse model ID to extract base model and quantization suffix if present
     base_model_id, model_quantization = parse_model_with_quantization(model_id)
