@@ -57,7 +57,7 @@ class ModelCache(Generic[T]):
         # Track access times ourselves for TTL-on-read behavior
         self._timer = time.monotonic
         self._access: dict[str, float] = {}
-        self._pinned: set[str] = {}
+        self._pinned: set[str] = set()
 
     @property
     def ttl(self) -> float:
