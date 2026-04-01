@@ -43,7 +43,7 @@ def _sanitize_model_id(model_id: str) -> str:
         or (len(model_id) > 1 and model_id[1] == ":")
     ):
         raise HTTPException(400, f"Invalid model_id: {model_id}")
-    if not re.match(r"^[a-zA-Z0-9_.\-]+(:[a-zA-Z0-9_.\-]+)?(/[a-zA-Z0-9_.\-]+)?$", model_id):
+    if not re.match(r"^[a-zA-Z0-9_.\-]+(/[a-zA-Z0-9_.\-]+)?(:[a-zA-Z0-9_.\-]+)?$", model_id):
         raise HTTPException(400, f"Invalid model_id format: {model_id}")
     return model_id
 

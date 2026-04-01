@@ -466,9 +466,11 @@ def get_gguf_file_path(
         >>> "Q8_0" in path
         True
     """
-    # For HuggingFace-style IDs (non-local filenames), enforce model ID validation
+    # For HuggingFace-style IDs (non-local filenames), enforce model ID validation.
+    # Parse quantization suffix first so "org/repo:Q8_0" validates correctly.
     if not model_id.endswith(".gguf"):
-        model_id = _validate_model_id(model_id)
+        base_id, _ = parse_model_with_quantization(model_id)
+        _validate_model_id(base_id)
 
     # Local file resolution — check safe directories before any HuggingFace calls.
     # Uses os.path.basename to strip any directory components from user input,
