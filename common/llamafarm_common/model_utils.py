@@ -479,22 +479,24 @@ def get_gguf_file_path(
         # 1. Standard model directory (~/.llamafarm/models/)
         from .safe_home import get_data_dir
         models_root = os.path.abspath(os.path.join(str(get_data_dir()), "models"))
-        data_models = os.path.join(models_root, basename)
-        if os.path.isfile(data_models):
-            resolved = os.path.realpath(data_models)
-            if os.path.commonpath([models_root, resolved]) == models_root:
-                logger.info(f"Using GGUF file from data dir: {resolved}")
-                return resolved
+        candidate = os.path.realpath(os.path.join(models_root, basename))
+        if (
+            os.path.commonpath([models_root, candidate]) == models_root
+            and os.path.isfile(candidate)
+        ):
+            logger.info(f"Using GGUF file from data dir: {candidate}")
+            return candidate
         # 2. Custom directory via GGUF_MODELS_DIR env var
         gguf_dir = os.environ.get("GGUF_MODELS_DIR")
         if gguf_dir:
             gguf_root = os.path.abspath(gguf_dir)
-            custom_path = os.path.join(gguf_root, basename)
-            if os.path.isfile(custom_path):
-                resolved = os.path.realpath(custom_path)
-                if os.path.commonpath([gguf_root, resolved]) == gguf_root:
-                    logger.info(f"Using GGUF file from GGUF_MODELS_DIR: {resolved}")
-                    return resolved
+            candidate = os.path.realpath(os.path.join(gguf_root, basename))
+            if (
+                os.path.commonpath([gguf_root, candidate]) == gguf_root
+                and os.path.isfile(candidate)
+            ):
+                logger.info(f"Using GGUF file from GGUF_MODELS_DIR: {candidate}")
+                return candidate
 
     # Parse model ID to extract base model and quantization suffix if present
     base_model_id, model_quantization = parse_model_with_quantization(model_id)
