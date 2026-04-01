@@ -13,7 +13,6 @@ Performance optimizations:
 """
 
 import logging
-import os
 
 from huggingface_hub import HfApi, scan_cache_dir
 from huggingface_hub.utils import HFCacheInfo
@@ -101,8 +100,8 @@ def detect_model_format(
     Args:
         model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-0.6B-GGUF" or "unsloth/Qwen3-0.6B-GGUF:Q4_K_M")
         token: Optional HuggingFace authentication token for gated models
-        trusted: If True, allow local filesystem checks (os.path.isfile).
-            Only set True for server-side config, never for HTTP input.
+        trusted: Reserved for future use. Kept for API compatibility with
+            callers that pass it through from load_language().
 
     Returns:
         "gguf" if model contains .gguf files, "transformers" otherwise
@@ -118,21 +117,9 @@ def detect_model_format(
         >>> detect_model_format("google/gemma-3-1b-it")
         "transformers"
     """
-    # Local file path — detect format from extension, no network needed.
-    # Only short-circuit when we can confirm the file exists on disk or
-    # when the caller has already resolved it to a known .gguf path via
-    # get_gguf_file_path() (which validates existence before returning).
-    # Gated behind trusted to prevent untrusted HTTP input from probing
-    # the filesystem via os.path.isfile(). Defense-in-depth: reject path
-    # traversal even for trusted callers.
-    if trusted and ".." not in model_id:
-        resolved = os.path.realpath(model_id)
-        if os.path.isfile(resolved):
-            if resolved.lower().endswith(".gguf"):
-                logger.info(f"Detected GGUF format from local file: {resolved}")
-                return "gguf"
-            logger.info(f"Local file exists but not GGUF, assuming transformers: {resolved}")
-            return "transformers"
+    # Detect GGUF format from file extension alone — no filesystem access needed.
+    # This covers both local paths (e.g., /models/foo.gguf) and bare filenames
+    # (e.g., foo.gguf) without probing the filesystem with user-influenced paths.
     if model_id.endswith(".gguf"):
         # Looks like a .gguf filename/path but doesn't exist at this exact path.
         # Still treat as GGUF — get_gguf_file_path() will search model directories.
