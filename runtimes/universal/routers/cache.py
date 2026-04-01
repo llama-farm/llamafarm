@@ -1,6 +1,7 @@
 """KV Cache API — prepare, list, evict, stats, and GC endpoints."""
 
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -31,6 +32,20 @@ def _get_manager():
     if _cache_manager is None:
         raise HTTPException(500, "KV cache manager not initialized")
     return _cache_manager
+
+
+def _sanitize_model_id(model_id: str) -> str:
+    """Validate model ID from HTTP input. Allows HF-style IDs and bare GGUF filenames."""
+    if (
+        ".." in model_id
+        or model_id.startswith(("/", "\\"))
+        or "\\" in model_id
+        or (len(model_id) > 1 and model_id[1] == ":")
+    ):
+        raise HTTPException(400, f"Invalid model_id: {model_id}")
+    if not re.match(r"^[a-zA-Z0-9_.\-]+(:[a-zA-Z0-9_.\-]+)?(/[a-zA-Z0-9_.\-]+)?$", model_id):
+        raise HTTPException(400, f"Invalid model_id format: {model_id}")
+    return model_id
 
 
 # ── Request/Response models ─────────────────────────────────────────────────
@@ -106,6 +121,7 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
     Set warm=false for lightweight segment-only indexing (no model load).
     """
     manager = _get_manager()
+    sanitized_model = _sanitize_model_id(request.model)
 
     # Input validation
     if len(request.messages) > MAX_PREPARE_MESSAGES:
@@ -155,7 +171,7 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
             raise HTTPException(500, "Language model loader not configured")
         try:
             from utils.model_format import parse_model_with_quantization
-            model_id, quant = parse_model_with_quantization(request.model)
+            model_id, quant = parse_model_with_quantization(sanitized_model)
             model_wrapper = await _load_language_fn(model_id, preferred_quantization=quant)
             # Get the inner Llama instance (not the GGUFLanguageModel wrapper)
             model = getattr(model_wrapper, 'llama', model_wrapper)
@@ -164,7 +180,7 @@ async def prepare_cache(request: CachePrepareRequest) -> CachePrepareResponse:
             # Fall back to segment-only
 
     entry = await manager.prepare(
-        model_id=request.model,
+        model_id=sanitized_model,
         messages=request.messages,
         tools=request.tools,
         pinned=request.pinned,
@@ -189,9 +205,10 @@ async def validate_cache(request: CacheValidateRequest) -> CacheValidateResponse
     Useful for checking if a cache would hit before sending a full request.
     """
     manager = _get_manager()
+    sanitized_model = _sanitize_model_id(request.model)
     result = manager.validate_and_match(
         cache_key=request.cache_key,
-        model_id=request.model,
+        model_id=sanitized_model,
         messages=request.messages,
         tools=request.tools,
     )
