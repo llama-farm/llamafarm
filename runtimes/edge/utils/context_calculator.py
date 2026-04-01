@@ -2,9 +2,10 @@
 
 Determines optimal context window size based on:
 1. User configuration (highest priority)
-2. Available memory and model size
-3. Model family defaults from config file
-4. Fallback defaults
+2. Pattern match from model_context_defaults.yaml
+3. Model's training context (n_ctx_train from GGUF metadata)
+4. Available memory and model size
+5. Fallback defaults
 """
 
 import fnmatch
@@ -322,8 +323,8 @@ def get_default_context_size(
 
     Priority order (highest to lowest):
     1. config_n_ctx (from llamafarm.yaml via API) - user's explicit choice
-    2. Model's n_ctx_train (training context) - what the model was designed for
-    3. Pattern match from model_context_defaults.yaml - known model defaults
+    2. Pattern match from model_context_defaults.yaml - operator deployment defaults
+    3. Model's n_ctx_train (training context) - what the model was designed for
     4. Computed max from memory constraints - hardware limitation
     5. Fallback default (2048) - safe conservative value
 
@@ -408,22 +409,8 @@ def get_default_context_size(
                 final_n_ctx = config_n_ctx
                 logger.info(f"Using configured context size: {final_n_ctx}")
 
-        elif n_ctx_train is not None:
-            # Priority 2: Use model's training context, but respect memory limit
-            if n_ctx_train > max_context_from_memory:
-                warning_msg = (
-                    f"Model training context {n_ctx_train} exceeds computed maximum "
-                    f"{max_context_from_memory} based on available memory. "
-                    f"Using {max_context_from_memory} to prevent OOM."
-                )
-                warnings.append(warning_msg)
-                final_n_ctx = max_context_from_memory
-            else:
-                final_n_ctx = n_ctx_train
-                logger.info(f"Using model's training context size: {final_n_ctx}")
-
         elif pattern_n_ctx is not None:
-            # Priority 3: Use pattern match, but respect memory limit
+            # Priority 2: Use pattern match from model_context_defaults.yaml
             if pattern_n_ctx > max_context_from_memory:
                 warning_msg = (
                     f"Pattern default context size {pattern_n_ctx} exceeds computed maximum "
@@ -435,6 +422,25 @@ def get_default_context_size(
             else:
                 final_n_ctx = pattern_n_ctx
                 logger.info(f"Using pattern-matched context size: {final_n_ctx}")
+            if n_ctx_train is not None and n_ctx_train != final_n_ctx:
+                logger.info(
+                    f"Pattern default overrides n_ctx_train "
+                    f"({n_ctx_train} → {final_n_ctx}) for model {model_id}"
+                )
+
+        elif n_ctx_train is not None:
+            # Priority 3: Use model's training context, but respect memory limit
+            if n_ctx_train > max_context_from_memory:
+                warning_msg = (
+                    f"Model training context {n_ctx_train} exceeds computed maximum "
+                    f"{max_context_from_memory} based on available memory. "
+                    f"Using {max_context_from_memory} to prevent OOM."
+                )
+                warnings.append(warning_msg)
+                final_n_ctx = max_context_from_memory
+            else:
+                final_n_ctx = n_ctx_train
+                logger.info(f"Using model's training context size: {final_n_ctx}")
 
         else:
             # Priority 4: No other source - use computed max or fallback
