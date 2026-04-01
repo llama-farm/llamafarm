@@ -88,7 +88,9 @@ def _check_local_cache_for_model(model_id: str) -> list[str] | None:
         return None
 
 
-def detect_model_format(model_id: str, token: str | None = None) -> str:
+def detect_model_format(
+    model_id: str, token: str | None = None, trusted: bool = False
+) -> str:
     """
     Detect if a HuggingFace model is GGUF or transformers format.
 
@@ -99,6 +101,8 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     Args:
         model_id: HuggingFace model identifier (e.g., "unsloth/Qwen3-0.6B-GGUF" or "unsloth/Qwen3-0.6B-GGUF:Q4_K_M")
         token: Optional HuggingFace authentication token for gated models
+        trusted: If True, allow local filesystem checks (os.path.isfile).
+            Only set True for server-side config, never for HTTP input.
 
     Returns:
         "gguf" if model contains .gguf files, "transformers" otherwise
@@ -118,7 +122,9 @@ def detect_model_format(model_id: str, token: str | None = None) -> str:
     # Only short-circuit when we can confirm the file exists on disk or
     # when the caller has already resolved it to a known .gguf path via
     # get_gguf_file_path() (which validates existence before returning).
-    if os.path.isfile(model_id):
+    # Gated behind trusted to prevent untrusted HTTP input from probing
+    # the filesystem via os.path.isfile().
+    if trusted and os.path.isfile(model_id):
         if model_id.lower().endswith(".gguf"):
             logger.info(f"Detected GGUF format from local file: {model_id}")
             return "gguf"

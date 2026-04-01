@@ -243,7 +243,7 @@ async def load_language(
             if cache_key not in _models:
                 logger.info(f"Loading causal LM: {model_id}")
                 device = get_device()
-                model_format = detect_model_format(model_id)
+                model_format = detect_model_format(model_id, trusted=trusted)
                 logger.info(f"Detected format: {model_format}")
 
                 model: BaseModel
