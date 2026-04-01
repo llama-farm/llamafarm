@@ -476,6 +476,11 @@ def get_gguf_file_path(
     if model_id.endswith(".gguf"):
         basename = os.path.basename(model_id)
 
+        # Strict filename validation — only safe characters allowed.
+        # Cuts the CodeQL taint chain before any filesystem operations.
+        if not re.match(r"^[a-zA-Z0-9_.\-]+\.gguf$", basename):
+            raise ValueError(f"Invalid GGUF filename: {basename}")
+
         # 1. Standard model directory (~/.llamafarm/models/)
         from .safe_home import get_data_dir
         models_root = os.path.abspath(os.path.join(str(get_data_dir()), "models"))
