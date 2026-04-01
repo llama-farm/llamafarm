@@ -123,13 +123,16 @@ def detect_model_format(
     # when the caller has already resolved it to a known .gguf path via
     # get_gguf_file_path() (which validates existence before returning).
     # Gated behind trusted to prevent untrusted HTTP input from probing
-    # the filesystem via os.path.isfile().
-    if trusted and os.path.isfile(model_id):
-        if model_id.lower().endswith(".gguf"):
-            logger.info(f"Detected GGUF format from local file: {model_id}")
-            return "gguf"
-        logger.info(f"Local file exists but not GGUF, assuming transformers: {model_id}")
-        return "transformers"
+    # the filesystem via os.path.isfile(). Defense-in-depth: reject path
+    # traversal even for trusted callers.
+    if trusted and ".." not in model_id:
+        resolved = os.path.realpath(model_id)
+        if os.path.isfile(resolved):
+            if resolved.lower().endswith(".gguf"):
+                logger.info(f"Detected GGUF format from local file: {resolved}")
+                return "gguf"
+            logger.info(f"Local file exists but not GGUF, assuming transformers: {resolved}")
+            return "transformers"
     if model_id.endswith(".gguf"):
         # Looks like a .gguf filename/path but doesn't exist at this exact path.
         # Still treat as GGUF — get_gguf_file_path() will search model directories.
