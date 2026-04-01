@@ -26,6 +26,7 @@ Environment Variables:
 import asyncio
 import functools
 import os
+import re
 import subprocess
 import warnings
 from contextlib import asynccontextmanager, suppress
@@ -215,10 +216,21 @@ async def load_language(
         trusted: Skip path traversal validation. Only set True for server-side
                  config (e.g. PRELOAD_MODELS env var), never for HTTP input.
     """
-    # Reject path traversal from untrusted input (HTTP requests)
+    # Reject path traversal and invalid IDs from untrusted input (HTTP requests)
     if not trusted:
-        if ".." in model_id or model_id.startswith(("/", "\\")) or "\\" in model_id or (len(model_id) > 1 and model_id[1] == ":"):
+        if (
+            ".." in model_id
+            or model_id.startswith(("/", "\\"))
+            or "\\" in model_id
+            or (len(model_id) > 1 and model_id[1] == ":")
+        ):
             raise ValueError(f"Invalid model_id: {model_id}")
+
+        # Allow only HuggingFace-style IDs (org/repo or repo) and bare GGUF
+        # filenames. Blocks arbitrary relative paths from being used as
+        # filesystem traversal via os.path.isfile() downstream.
+        if not re.match(r"^[a-zA-Z0-9_.\-]+(:[a-zA-Z0-9_.\-]+)?(/[a-zA-Z0-9_.\-]+)?$", model_id):
+            raise ValueError(f"Invalid model_id format: {model_id}")
 
     quant_key = preferred_quantization or "default"
     cache_key = (
