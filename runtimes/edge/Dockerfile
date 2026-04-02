@@ -67,6 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     libgl1 \
     libglib2.0-0 \
+    libgomp1 \
     libxcb1 \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
@@ -99,6 +100,7 @@ ENV LF_RUNTIME_PORT=11540 \
     LF_RUNTIME_HOST=0.0.0.0 \
     LOG_LEVEL=INFO \
     MODEL_UNLOAD_TIMEOUT=300 \
+    GGUF_MODELS_DIR=/models \
     PRELOAD_MODELS="" \
     PRELOAD_N_CTX="" \
     YOLO_AUTOINSTALL=false
