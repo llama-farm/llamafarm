@@ -252,13 +252,19 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"Loading GGUF model: {self.model_id}")
 
-        # Get path to .gguf file in HF cache
-        # This will intelligently select and download only the preferred quantization
-        gguf_path = get_gguf_file_path(
-            self.model_id,
-            self.token,
-            preferred_quantization=self.preferred_quantization,
-        )
+        # If model_id is already an absolute path to a .gguf file (e.g. resolved from
+        # a ft:job_id reference), use it directly without hitting the HF resolver.
+        if self.model_id.endswith(".gguf") and os.path.isabs(self.model_id):
+            gguf_path = self.model_id
+            logger.info(f"Using local GGUF path directly: {gguf_path}")
+        else:
+            # Get path to .gguf file in HF cache
+            # This will intelligently select and download only the preferred quantization
+            gguf_path = get_gguf_file_path(
+                self.model_id,
+                self.token,
+                preferred_quantization=self.preferred_quantization,
+            )
 
         # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
         # The underlying C library can have issues with Windows-style paths
@@ -719,39 +725,59 @@ class GGUFLanguageModel(BaseModel):
                 # Log first 500 chars of template for debugging
                 logger.debug(f"Template preview: {template[:500]}...")
 
-            if not has_tools:
+            # Block only when tools are *requested* but the template can't handle them.
+            # For the no-tools path (tools=None/[]), allow any Jinja2 template to render —
+            # this fixes models like FunctionGemma (gemma3_text) whose complex Jinja2
+            # templates the C-level llama_chat_apply_template cannot process correctly.
+            if tools and not has_tools:
                 logger.debug(
                     "Jinja2 rendering skipped: template does not support native tools "
                     "('tools' variable not found in template)"
                 )
                 return None
 
-            # Use cached special tokens
+            # Use cached special tokens.
+            # BOS/EOS extraction from GGUF can fail for some architectures (e.g. Gemma3
+            # stores tokens as split byte-pair strings). Fall back to the well-known
+            # Gemma-family sentencepiece tokens when the extracted value is empty and the
+            # template looks like a Gemma-style template.
             special_tokens = self._special_tokens or {}
+            bos_token = special_tokens.get("bos_token", "")
+            eos_token = special_tokens.get("eos_token", "")
+            if not bos_token and "<start_of_turn>" in template:
+                bos_token = "<bos>"
+                logger.debug("BOS token was empty; using Gemma-family fallback '<bos>'")
+            if not eos_token and "<start_of_turn>" in template:
+                eos_token = "<eos>"
+                logger.debug("EOS token was empty; using Gemma-family fallback '<eos>'")
 
             # Debug log tools being used in Jinja2 path
             if logger.isEnabledFor(logging.DEBUG):
                 import json
 
-                tool_names = [
-                    t.get("function", {}).get("name", "unknown") for t in tools
-                ]
-                logger.debug(f"Tools provided (Jinja2 path): {tool_names}")
-                logger.debug(f"Full tool definitions:\n{json.dumps(tools, indent=2)}")
+                if tools:
+                    tool_names = [
+                        t.get("function", {}).get("name", "unknown") for t in tools
+                    ]
+                    logger.debug(f"Tools provided (Jinja2 path): {tool_names}")
+                    logger.debug(f"Full tool definitions:\n{json.dumps(tools, indent=2)}")
+                else:
+                    logger.debug("No tools — rendering with Jinja2 template for correct prompt format")
 
-            # Render the template with tools
+            # Render the template (tools may be None for plain completions)
             prompt = render_chat_with_tools(
                 template=template,
                 messages=messages,
                 tools=tools,
                 add_generation_prompt=True,
-                bos_token=special_tokens.get("bos_token", ""),
-                eos_token=special_tokens.get("eos_token", ""),
+                bos_token=bos_token,
+                eos_token=eos_token,
             )
 
+            n_tools = len(tools) if tools else 0
             logger.debug(
-                f"Rendered prompt with Jinja2 native tool support "
-                f"({len(prompt)} chars, {len(tools)} tools)"
+                f"Rendered prompt with Jinja2 template "
+                f"({len(prompt)} chars, {n_tools} tools)"
             )
             return prompt
 
@@ -949,8 +975,18 @@ class GGUFLanguageModel(BaseModel):
         max_tokens = max_tokens or 512
         logger.info(f"[TIMING] generate() start, max_tokens={max_tokens}")
 
-        # Try Jinja2 native tool rendering first (if tools provided)
-        if tools:
+        # Try Jinja2 template rendering first when:
+        #   (a) tools are provided — use native tool rendering, OR
+        #   (b) no tools but the model has a Jinja2 template that supports tools syntax —
+        #       this bypasses the C-level llama_chat_apply_template which cannot handle
+        #       complex Jinja2 templates (e.g. FunctionGemma / gemma3_text architecture).
+        from utils.jinja_tools import supports_native_tools
+
+        _use_jinja2 = bool(tools) or (
+            self._chat_template is not None
+            and supports_native_tools(self._chat_template)
+        )
+        if _use_jinja2:
             jinja2_prompt = self._render_with_jinja2(messages, tools)
             if jinja2_prompt is not None:
                 # Debug log the full prompt being sent to the LLM
@@ -1049,9 +1085,15 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
-        # Keep behavior aligned with generate(): if tools are provided and the model
-        # supports native Jinja2 rendering, use that path (no logprobs in this path yet).
-        if tools:
+        # Keep behavior aligned with generate(): use Jinja2 when tools are provided OR
+        # when the model has a complex Jinja2 template (bypasses broken C-level template).
+        from utils.jinja_tools import supports_native_tools as _supports_native_tools
+
+        _use_jinja2 = bool(tools) or (
+            self._chat_template is not None
+            and _supports_native_tools(self._chat_template)
+        )
+        if _use_jinja2:
             jinja2_prompt = self._render_with_jinja2(messages, tools)
             if jinja2_prompt is not None:
                 content = await self._generate_from_prompt(
@@ -1300,8 +1342,16 @@ class GGUFLanguageModel(BaseModel):
 
         max_tokens = max_tokens or 512
 
-        # Try Jinja2 native tool rendering first (if tools provided)
-        if tools:
+        # Try Jinja2 template rendering (tools path OR complex-template no-tools path).
+        # Same logic as generate(): bypass C-level llama_chat_apply_template for models
+        # with Jinja2 templates that the C-level cannot handle (e.g. FunctionGemma).
+        from utils.jinja_tools import supports_native_tools as _supports_native_tools_s
+
+        _use_jinja2_s = bool(tools) or (
+            self._chat_template is not None
+            and _supports_native_tools_s(self._chat_template)
+        )
+        if _use_jinja2_s:
             jinja2_prompt = self._render_with_jinja2(messages, tools)
             if jinja2_prompt is not None:
                 # Debug log the full prompt being sent to the LLM

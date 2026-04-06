@@ -149,6 +149,16 @@ if _HAS_CATBOOST:
     from routers.catboost import router as catboost_router
     from routers.catboost import set_catboost_state
 
+# Conditional import for fine-tuning addon (requires unsloth or unsloth_mlx)
+_HAS_FINETUNE = (
+    importlib.util.find_spec("unsloth_mlx") is not None or 
+    importlib.util.find_spec("unsloth") is not None
+)
+if _HAS_FINETUNE:
+    from finetune.trainer import FineTuneTrainer
+    from routers.finetune import router as finetune_router
+    from routers.finetune.router import set_trainer
+
 # Suppress spurious "leaked semaphore" warning from CTranslate2 (used by faster-whisper).
 # CTranslate2 creates POSIX semaphores for internal thread pools that aren't explicitly
 # released before interpreter shutdown. The OS kernel cleans these up on process exit —
@@ -290,7 +300,7 @@ _patch_cache_artifact_factory()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle (startup and shutdown)."""
-    global _cleanup_task
+    global _cleanup_task, _finetune_trainer
 
     # Startup
     logger.info("Starting Universal Runtime")
@@ -315,6 +325,18 @@ async def lifespan(app: FastAPI):
         logger.info("CatBoost addon available (catboost installed)")
     else:
         logger.info("CatBoost addon unavailable (catboost not installed)")
+
+    if _HAS_FINETUNE:
+        logger.info("Fine-tuning addon available (unsloth installed)")
+    else:
+        logger.info("Fine-tuning addon unavailable (unsloth not installed)")
+
+    # Start fine-tuning worker if available
+    if _HAS_FINETUNE:
+        _finetune_trainer = FineTuneTrainer()
+        await _finetune_trainer.start()
+        set_trainer(_finetune_trainer)
+        logger.info("Fine-tuning worker started")
 
     # Start model cleanup background task
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
@@ -343,6 +365,12 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Universal Runtime")
+
+    # Stop fine-tuning worker
+    if _HAS_FINETUNE and _finetune_trainer is not None:
+        logger.info("Stopping fine-tuning worker")
+        await _finetune_trainer.stop()
+        logger.info("Fine-tuning worker stopped")
 
     # Stop KV cache GC task
     await stop_kv_cache_gc()
@@ -432,6 +460,8 @@ if _HAS_DRIFT:
     app.include_router(drift_router)
 if _HAS_CATBOOST:
     app.include_router(catboost_router)
+if _HAS_FINETUNE:
+    app.include_router(finetune_router)
 
 
 
@@ -497,6 +527,7 @@ _current_device = None
 # Feature encoder cache for anomaly detection with mixed data types
 _encoders: dict[str, FeatureEncoder] = {}
 _cleanup_task: asyncio.Task | None = None
+_finetune_trainer: "FineTuneTrainer | None" = None
 _kv_cache_manager = None
 
 # Data directories
@@ -598,6 +629,44 @@ def get_device():
 # ============================================================================
 
 
+def _resolve_finetune_model_id(model_id: str) -> str:
+    """Resolve a fine-tune job reference to an absolute GGUF path.
+
+    Supports two prefix conventions:
+      - ``ft:{job_id}``  (preferred)
+      - ``job:{job_id}``
+
+    Looks up ``~/.llamafarm/models/llm/{job_id}/gguf/`` and returns the best
+    GGUF file (q8_0 first, then any other .gguf).  Returns *model_id* unchanged
+    when the prefix is not recognised or the directory does not exist.
+    """
+    import glob
+    from pathlib import Path
+
+    for prefix in ("ft:", "job:"):
+        if model_id.startswith(prefix):
+            job_id = model_id[len(prefix):]
+            gguf_dir = Path.home() / ".llamafarm" / "models" / "llm" / job_id / "gguf"
+            if not gguf_dir.is_dir():
+                logger.warning(
+                    f"Fine-tune job directory not found: {gguf_dir} "
+                    f"(model_id={model_id!r})"
+                )
+                return model_id
+            # Prefer q8_0, then q4_k_m, then anything
+            for pattern in ("*q8_0*.gguf", "*q4_k_m*.gguf", "*.gguf"):
+                matches = sorted(gguf_dir.glob(pattern))
+                if matches:
+                    resolved = str(matches[0])
+                    logger.info(
+                        f"Resolved {model_id!r} → {resolved}"
+                    )
+                    return resolved
+            logger.warning(f"No GGUF files found in {gguf_dir}")
+            return model_id
+    return model_id
+
+
 def _make_language_cache_key(
     model_id: str,
     n_ctx: int | None = None,
@@ -645,6 +714,9 @@ async def load_language(
     preferred_quantization: str | None = None,
 ):
     """Load a causal language model (GGUF or transformers format)."""
+    # Resolve fine-tune job references (ft:job_id / job:job_id) → absolute GGUF path
+    model_id = _resolve_finetune_model_id(model_id)
+
     cache_key = _make_language_cache_key(
         model_id,
         n_ctx,
@@ -672,8 +744,14 @@ async def load_language(
                 )
                 device = get_device()
 
-                # Detect model format (GGUF vs transformers)
-                model_format = detect_model_format(model_id)
+                # Detect model format (GGUF vs transformers).
+                # Absolute paths (resolved from ft:job_id) are always GGUF.
+                import os as _os
+                if model_id.endswith(".gguf") and _os.path.isabs(model_id):
+                    model_format = "gguf"
+                    logger.info(f"Local GGUF path — skipping format detection")
+                else:
+                    model_format = detect_model_format(model_id)
                 logger.info(f"Detected format: {model_format}")
 
                 # Instantiate appropriate model class based on format

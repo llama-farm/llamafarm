@@ -201,10 +201,15 @@ class ChatCompletionsService:
                 if cache_type_v is None and "cache_type_v" in chat_request.extra_body:
                     cache_type_v = chat_request.extra_body.get("cache_type_v")
 
+            # Resolve fine-tune job references (ft:job_id / job:job_id) to an absolute
+            # GGUF path *before* parse_model_with_quantization sees the string.
+            # The colon in "ft:911f2779" would otherwise be misread as a quant suffix.
+            from server import _resolve_finetune_model_id as _resolve_ft
+
+            _raw_model = _resolve_ft(chat_request.model)
+
             # Parse model name to extract quantization if present
-            model_id, gguf_quantization = parse_model_with_quantization(
-                chat_request.model
-            )
+            model_id, gguf_quantization = parse_model_with_quantization(_raw_model)
 
             # Convert messages to dict format early (needed for audio detection)
             messages_dict = [dict(msg) for msg in chat_request.messages]
