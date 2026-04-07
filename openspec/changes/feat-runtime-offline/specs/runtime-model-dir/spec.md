@@ -45,9 +45,21 @@ When resolving a model from the alias directory, the runtime SHALL discover file
 
 ### Requirement: Resolution order is deterministic and documented
 
-The runtime SHALL resolve model files in this order, first match wins: (1) `$LLAMAFARM_MODEL_DIR/<alias>/` if set and populated, (2) HuggingFace cache via existing `get_gguf_file_path` logic, (3) network download via `snapshot_download` (only when NOT in offline mode). This order SHALL be documented alongside the env vars.
+The new alias-based resolver (`resolve_gguf_path`) SHALL resolve model files in this order, first match wins: (1) `$LLAMAFARM_MODEL_DIR/<alias>/` if set and populated, (2) HuggingFace cache via the existing `get_gguf_file_path` logic, (3) network download via `snapshot_download` (only when NOT in offline mode). This order SHALL be documented alongside the env vars.
 
-Absolute filesystem paths in `runtime.models[].model` are deliberately NOT a supported resolution tier. Users who want to reference a hand-placed GGUF file SHALL set `LLAMAFARM_MODEL_DIR` to the parent directory and reference the file by alias. Centralizing on a single well-understood env var avoids taint-analysis concerns with caller-controlled absolute paths flowing into filesystem operations.
+Behavior for callers that do NOT pass an alias is unchanged from the legacy entry point. In particular, existing support for `.gguf`-suffixed model IDs (including those with directory components, which are resolved via basename lookup under `~/.llamafarm/models/` or `$GGUF_MODELS_DIR/` as implemented in the edge runtime on main) SHALL continue to work for all callers that route through `get_gguf_file_path` without an alias.
+
+Absolute filesystem paths are NOT a resolution tier within the new `resolve_gguf_path` four-tier resolver itself — callers that want alias-directory support must use an alias or `$LLAMAFARM_MODEL_DIR`. This narrower restriction avoids the taint-analysis concern with caller-controlled absolute paths flowing into new filesystem operations while preserving all pre-existing behavior of the legacy `get_gguf_file_path` entry point.
+
+#### Scenario: Legacy `.gguf` basename lookup is preserved
+
+- **WHEN** a caller invokes `get_gguf_file_path("/some/dir/model.gguf")` directly (no alias), and `~/.llamafarm/models/model.gguf` or `$GGUF_MODELS_DIR/model.gguf` exists
+- **THEN** the resolver returns the matching safe-directory path, matching the behavior added to main prior to this change
+
+#### Scenario: Edge runtime preserves legacy path for absolute model IDs
+
+- **WHEN** an HTTP request sends an absolute path as the model ID to the edge runtime
+- **THEN** the auto-derived alias is `None` (absolute paths are skipped by the derivation helper), the `GGUFLanguageModel` constructor takes the legacy branch, and `get_gguf_file_path` handles the request using its pre-existing safe-directory lookup
 
 #### Scenario: Model dir shadows HF cache when both populated
 
