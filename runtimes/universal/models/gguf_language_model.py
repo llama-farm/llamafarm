@@ -26,6 +26,12 @@ from utils.gpu_allocator import (
     get_llama_gpu_params,
 )
 from utils.model_format import get_gguf_file_path
+
+# resolve_gguf_path is the four-tier resolver that honors LLAMAFARM_MODEL_DIR
+# and LLAMAFARM_OFFLINE. It's only used when an alias is known; otherwise we
+# fall back to the legacy get_gguf_file_path entry point which still enforces
+# offline mode internally.
+from llamafarm_common import resolve_gguf_path, resolve_mmproj_path
 from utils.token_counter import TokenCounter
 
 from .base import BaseModel
@@ -120,6 +126,7 @@ class GGUFLanguageModel(BaseModel):
         preferred_quantization: str | None = None,
         mmproj_path: str | None = None,
         auto_detect_mmproj: bool = True,
+        alias: str | None = None,
     ):
         """Initialize GGUF language model.
 
@@ -156,8 +163,15 @@ class GGUFLanguageModel(BaseModel):
                          file in the same repository.
             auto_detect_mmproj: If True (default), automatically detect and download mmproj
                                 files for multimodal models like Qwen2.5-Omni.
+            alias: Optional runtime model alias (from `runtime.models[].name` in
+                   llamafarm.yaml). When provided, model resolution uses the
+                   four-tier `resolve_gguf_path` which honors `LLAMAFARM_MODEL_DIR`
+                   for flat-directory on-device layouts. When None, the legacy
+                   `get_gguf_file_path` entry point is used instead — still
+                   subject to offline-mode guards but skipping the alias-dir tier.
         """
         super().__init__(model_id, device, token=token)
+        self.alias = alias  # For LLAMAFARM_MODEL_DIR lookup; None = legacy path
         self.model_type = "language"
         self.supports_streaming = True
         self.llama: Llama | None = None
@@ -252,13 +266,22 @@ class GGUFLanguageModel(BaseModel):
 
         logger.info(f"Loading GGUF model: {self.model_id}")
 
-        # Get path to .gguf file in HF cache
-        # This will intelligently select and download only the preferred quantization
-        gguf_path = get_gguf_file_path(
-            self.model_id,
-            self.token,
-            preferred_quantization=self.preferred_quantization,
-        )
+        # Get path to .gguf file. When an alias is known, use the four-tier
+        # resolver which honors LLAMAFARM_MODEL_DIR. Otherwise fall back to
+        # the legacy entry point (still honors LLAMAFARM_OFFLINE internally).
+        if self.alias:
+            gguf_path = resolve_gguf_path(
+                self.model_id,
+                alias=self.alias,
+                token=self.token,
+                preferred_quantization=self.preferred_quantization,
+            )
+        else:
+            gguf_path = get_gguf_file_path(
+                self.model_id,
+                self.token,
+                preferred_quantization=self.preferred_quantization,
+            )
 
         # On Windows, convert backslashes to forward slashes for llama.cpp compatibility
         # The underlying C library can have issues with Windows-style paths
@@ -440,13 +463,20 @@ class GGUFLanguageModel(BaseModel):
         if cache_type_v is not None:
             logger.info(f"Using cache_type_v: {cache_type_v}")
 
-        # Detect or use explicit mmproj path for multimodal models
+        # Detect or use explicit mmproj path for multimodal models.
+        # When an alias is known, the four-tier resolver checks
+        # LLAMAFARM_MODEL_DIR first; otherwise the legacy entry point is used.
         mmproj_path = self.requested_mmproj_path
         if mmproj_path is None and self.auto_detect_mmproj:
             try:
-                from llamafarm_common import get_mmproj_file_path
+                if self.alias:
+                    mmproj_path = resolve_mmproj_path(
+                        self.model_id, alias=self.alias, token=self.token
+                    )
+                else:
+                    from llamafarm_common import get_mmproj_file_path
 
-                mmproj_path = get_mmproj_file_path(self.model_id, self.token)
+                    mmproj_path = get_mmproj_file_path(self.model_id, self.token)
                 if mmproj_path:
                     logger.info(f"Auto-detected mmproj file: {mmproj_path}")
             except Exception as e:

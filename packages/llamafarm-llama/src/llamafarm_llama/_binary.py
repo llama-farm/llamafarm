@@ -285,8 +285,56 @@ def _has_vulkan() -> bool:
     return False
 
 
+def _is_offline() -> bool:
+    """Return True when strict offline mode is requested via LLAMAFARM_OFFLINE.
+
+    Kept inline (rather than importing from llamafarm_common) to avoid adding
+    a heavy cross-package dependency to llamafarm-llama. The env var semantics
+    must stay in sync with common/llamafarm_common/offline_mode.py.
+    """
+    value = os.environ.get("LLAMAFARM_OFFLINE")
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _raise_offline_binary_error(tried: list[Path]) -> None:
+    """Raise a structured FileNotFoundError for a missing llama.cpp binary.
+
+    Format mirrors `llamafarm_common.offline_mode.raise_offline_binary_error`
+    so operators see consistent messages across runtime components.
+    """
+    system = platform.system().lower()
+    if system == "windows":
+        system = "windows"
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        machine = "amd64"
+    elif machine in ("arm64", "aarch64"):
+        machine = "arm64"
+
+    lines = [
+        f"llama.cpp binary not available in offline mode for {system}/{machine}."
+    ]
+    for p in tried:
+        lines.append(f"  Tried: {p}")
+    lines.append(
+        f"  To fix: run 'lf runtime binary pull --platform {system}/{machine}' on a"
+    )
+    lines.append(
+        "          host with internet, then sync the binary directory to this host."
+    )
+    raise FileNotFoundError("\n".join(lines))
+
+
 def get_lib_path() -> Path:
-    """Get path to libllama, downloading if necessary."""
+    """Get path to libllama, downloading if necessary.
+
+    In strict offline mode (LLAMAFARM_OFFLINE=1), this function never attempts
+    a download. If neither the bundled binary nor the cached download exists,
+    it raises FileNotFoundError with a structured message pointing at
+    `lf runtime binary pull`.
+    """
     # Check for bundled binary (platform wheel)
     bundled = Path(__file__).parent / "lib" / _get_lib_name()
     if bundled.exists():
@@ -299,6 +347,10 @@ def get_lib_path() -> Path:
     if cached.exists():
         logger.debug(f"Using cached binary: {cached}")
         return cached
+
+    # Strict offline mode: never attempt a download.
+    if _is_offline():
+        _raise_offline_binary_error(tried=[bundled, cached])
 
     # Download
     logger.info(f"Downloading llama.cpp {LLAMA_CPP_VERSION}...")
@@ -782,4 +834,5 @@ def get_binary_info() -> dict:
         "lib_name": _get_lib_name(),
         "source": source,
         "cache_dir": str(_get_cache_dir()),
+        "offline": _is_offline(),
     }
