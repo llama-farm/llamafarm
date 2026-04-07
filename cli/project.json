@@ -11,7 +11,7 @@
         "commands": [
           "cd cli && go generate ./cmd/config",
           "cp -f addons/registry/*.yaml cli/cmd/registry/",
-          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/cmd/orchestrator.LlamaCppVersion=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf ."
+          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/internal/llamabinary.Version=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf ."
         ],
         "parallel": false,
         "dependsOn": [

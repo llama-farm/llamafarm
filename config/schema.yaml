@@ -369,6 +369,22 @@ properties:
           description: Whether to upload and ingest dataset documents during deploy
           default: false
 
+  deployment:
+    type: object
+    title: Deployment
+    description: |
+      Project-wide deployment defaults for preparing artifacts for transport to target
+      devices. This section is local-only metadata and is stripped before pushing config
+      to a remote server. Unlike `environments`, these fields are not per-target.
+    properties:
+      model_dir:
+        type: string
+        description: |
+          Default target root used by `lf models path` when computing on-device layout
+          paths for model files. Overridden by the `--target-root` flag. Falls back to
+          `/opt/llamafarm/models` when neither this field nor the flag is set.
+        example: /opt/llamafarm/models
+
   voice:
     type: object
     description: Voice chat configuration for real-time speech interaction via WebSocket

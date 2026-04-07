@@ -190,8 +190,8 @@ func healthCheck(targetURL string) error {
 func upsertProjectConfig(targetURL, namespace, project string, cfg *config.LlamaFarmConfig) error {
 	baseURL := strings.TrimSuffix(targetURL, "/")
 
-	// Strip environments before sending
-	stripped := cfg.StripEnvironments()
+	// Strip local-only metadata sections (environments, deployment) before sending.
+	stripped := cfg.StripEnvironments().StripDeployment()
 
 	configJSON, err := json.Marshal(map[string]interface{}{
 		"config": stripped,
