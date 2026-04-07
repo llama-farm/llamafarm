@@ -43,18 +43,11 @@ When resolving a model from the alias directory, the runtime SHALL discover file
 - **WHEN** an alias directory exists but contains no `.gguf` files
 - **THEN** the runtime treats it as absent and continues to the next resolution tier
 
-### Requirement: Absolute path in model spec bypasses alias directory
-
-When a model's `model` field in `llamafarm.yaml` is an absolute filesystem path (e.g. `/custom/path/model.gguf`) rather than a HuggingFace repo id, that path SHALL take precedence over both `LLAMAFARM_MODEL_DIR` and the HuggingFace cache. This preserves existing behavior for projects that already point at hand-placed files.
-
-#### Scenario: Absolute path wins
-
-- **WHEN** `runtime.models[0].model` is `/data/custom-model.gguf` and `LLAMAFARM_MODEL_DIR=/opt/llamafarm/models` is set
-- **THEN** the runtime loads from `/data/custom-model.gguf` without consulting the alias directory
-
 ### Requirement: Resolution order is deterministic and documented
 
-The runtime SHALL resolve model files in this order, first match wins: (1) absolute path from the model spec, (2) `$LLAMAFARM_MODEL_DIR/<alias>/` if set and populated, (3) HuggingFace cache via existing `get_gguf_file_path` logic, (4) network download via `snapshot_download` (only when NOT in offline mode). This order SHALL be documented alongside the env vars.
+The runtime SHALL resolve model files in this order, first match wins: (1) `$LLAMAFARM_MODEL_DIR/<alias>/` if set and populated, (2) HuggingFace cache via existing `get_gguf_file_path` logic, (3) network download via `snapshot_download` (only when NOT in offline mode). This order SHALL be documented alongside the env vars.
+
+Absolute filesystem paths in `runtime.models[].model` are deliberately NOT a supported resolution tier. Users who want to reference a hand-placed GGUF file SHALL set `LLAMAFARM_MODEL_DIR` to the parent directory and reference the file by alias. Centralizing on a single well-understood env var avoids taint-analysis concerns with caller-controlled absolute paths flowing into filesystem operations.
 
 #### Scenario: Model dir shadows HF cache when both populated
 

@@ -626,23 +626,30 @@ def resolve_gguf_path(
     preferred_quantization: str | None = None,
 ) -> str:
     """
-    Resolve a GGUF weights file for a runtime model using the full four-tier
+    Resolve a GGUF weights file for a runtime model using the three-tier
     precedence order:
 
-      1. Absolute path in ``model_id`` (passes through unchanged)
-      2. ``$LLAMAFARM_MODEL_DIR/<alias>/`` via the alias-directory resolver
-      3. HuggingFace cache via the existing ``get_gguf_file_path`` logic
-      4. Network download (only when NOT in strict offline mode)
+      1. ``$LLAMAFARM_MODEL_DIR/<alias>/`` via the alias-directory resolver
+      2. HuggingFace cache via the existing ``get_gguf_file_path`` logic
+      3. Network download (only when NOT in strict offline mode)
 
-    When strict offline mode is active (``LLAMAFARM_OFFLINE=1``) and tiers 2
-    and 3 both miss, this function raises ``FileNotFoundError`` with a
+    When strict offline mode is active (``LLAMAFARM_OFFLINE=1``) and tiers 1
+    and 2 both miss, this function raises ``FileNotFoundError`` with a
     structured multi-line message naming the alias, the paths that were
     tried, and the ``lf`` CLI command that would make the missing file
     available.
 
+    Note: absolute-path-in-model-spec is deliberately NOT a tier here.
+    Users who want to load a hand-placed GGUF file should set
+    ``LLAMAFARM_MODEL_DIR`` to the parent directory and reference the file
+    by alias. This avoids a CodeQL py/path-injection finding on an
+    unsanitized ``os.path.*`` call with a caller-controlled path, and
+    centralizes the "where do my models live" decision on a single
+    well-understood env var.
+
     Args:
         model_id: HuggingFace model identifier, optionally with ``:quant``
-            suffix, OR an absolute filesystem path.
+            suffix.
         alias: The model's ``runtime.models[].name`` from llamafarm.yaml.
             Used as the subdirectory name under ``LLAMAFARM_MODEL_DIR`` and
             as the user-facing identifier in error messages.
@@ -666,41 +673,19 @@ def resolve_gguf_path(
     # here would allow loading arbitrary .gguf files from the host.
     validate_alias(alias)
 
-    # Tier 1: absolute path passthrough.
-    #
-    # Security: the `model_id` parameter is loaded from the project config
-    # (llamafarm.yaml), not from direct HTTP input, but CodeQL rightly flags
-    # any os.path.* call on a caller-supplied string. We apply layered
-    # sanitization before accepting an absolute path:
-    #   1. Require the path to end in ".gguf" — restricts the file type.
-    #   2. Resolve through symlinks via os.path.realpath so the check below
-    #      reflects the actual on-disk file, not a symlink target.
-    #   3. Require the resolved target to be a regular file (not a device,
-    #      directory, FIFO, etc.).
-    # If any check fails we refuse the path and raise a clear error. This
-    # preserves the documented absolute-path feature for developers who want
-    # to point at a hand-downloaded GGUF file while giving CodeQL the
-    # sanitization pattern it recognizes for py/path-injection.
+    # Reject absolute paths up front with a clear remediation message. The
+    # old behavior flowed absolute paths into os.path.* which triggered a
+    # CodeQL py/path-injection finding; users who want to reference a
+    # hand-placed GGUF should instead set LLAMAFARM_MODEL_DIR to the
+    # parent directory and reference the file by alias.
     if os.path.isabs(model_id):
-        if not model_id.endswith(".gguf"):
-            raise FileNotFoundError(
-                f"Absolute model path must end in .gguf: {model_id}"
-            )
-        resolved_path = os.path.realpath(model_id)
-        if not resolved_path.endswith(".gguf"):
-            raise FileNotFoundError(
-                f"Resolved absolute model path does not end in .gguf: {resolved_path}"
-            )
-        if not os.path.isfile(resolved_path):
-            raise FileNotFoundError(
-                f"Absolute model path is not a regular file: {resolved_path}"
-            )
-        logger.info(
-            f"Using absolute model path for alias {alias!r}: {resolved_path}"
+        raise ValueError(
+            f"Absolute model paths are not supported (got {model_id!r}). "
+            f"Set LLAMAFARM_MODEL_DIR to the parent directory and reference "
+            f"the file by alias (runtime.models[].name) instead."
         )
-        return resolved_path
 
-    # Tier 2: alias-directory lookup via $LLAMAFARM_MODEL_DIR.
+    # Tier 1: alias-directory lookup via $LLAMAFARM_MODEL_DIR.
     # Lazy import to avoid a circular dependency at module-load time.
     from . import model_dir as _model_dir
 
@@ -711,7 +696,7 @@ def resolve_gguf_path(
         )
         return md_result.weights_path
 
-    # Tier 3+4: fall through to the existing HF-cache-first logic.
+    # Tier 2+3: fall through to the existing HF-cache-first logic.
     # get_gguf_file_path already enforces strict offline mode internally when
     # the cache is empty and LLAMAFARM_OFFLINE=1 is set. If offline mode is
     # active and it raises, we catch and re-raise with alias context so the

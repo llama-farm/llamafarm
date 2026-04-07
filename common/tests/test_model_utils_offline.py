@@ -13,7 +13,6 @@ Strategy:
     when we expect zero network activity.
 """
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -197,31 +196,29 @@ class TestResolveGgufPathAliasValidation:
             model_utils.resolve_mmproj_path("org/repo", alias="../evil")
 
 
-class TestResolveGgufPathAbsolutePath:
-    def test_absolute_path_passthrough(self, tmp_path, fake_hf_cache):
+class TestResolveGgufPathNoAbsoluteSupport:
+    """
+    Absolute-path-in-model-spec was deliberately removed from resolve_gguf_path
+    to sidestep a CodeQL py/path-injection finding. Users who want to load a
+    hand-placed GGUF file should set LLAMAFARM_MODEL_DIR to the parent
+    directory and reference the file by alias.
+    """
+
+    def test_absolute_path_raises_value_error_with_remediation(
+        self, tmp_path, fake_hf_cache
+    ):
         path = tmp_path / "custom.gguf"
         _write_gguf(path)
-        result = model_utils.resolve_gguf_path(str(path), alias="custom")
-        # Returned path is realpath() of the input (may or may not equal input
-        # depending on symlinks on the test host; on macOS /tmp often symlinks).
-        assert result == os.path.realpath(str(path))
 
-    def test_absolute_path_rejects_non_gguf_extension(self, tmp_path, fake_hf_cache):
-        path = tmp_path / "custom.bin"
-        path.write_bytes(b"GGUF")
-        with pytest.raises(FileNotFoundError, match="must end in .gguf"):
+        with pytest.raises(ValueError, match="Absolute model paths are not supported"):
             model_utils.resolve_gguf_path(str(path), alias="custom")
 
-    def test_absolute_path_rejects_directory(self, tmp_path, fake_hf_cache):
-        # Name it .gguf but make it a directory.
-        d = tmp_path / "custom.gguf"
-        d.mkdir()
-        with pytest.raises(FileNotFoundError, match="not a regular file"):
-            model_utils.resolve_gguf_path(str(d), alias="custom")
+    def test_absolute_path_error_mentions_model_dir(self, tmp_path, fake_hf_cache):
+        path = tmp_path / "custom.gguf"
+        _write_gguf(path)
 
-    def test_absolute_path_missing_raises(self, fake_hf_cache):
-        with pytest.raises(FileNotFoundError, match="not a regular file"):
-            model_utils.resolve_gguf_path("/nonexistent/model.gguf", alias="x")
+        with pytest.raises(ValueError, match="LLAMAFARM_MODEL_DIR"):
+            model_utils.resolve_gguf_path(str(path), alias="custom")
 
 
 class TestResolveGgufPathModelDir:
