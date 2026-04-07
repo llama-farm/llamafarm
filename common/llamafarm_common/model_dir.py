@@ -155,110 +155,112 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
     )
 
 
+_SAFE_GGUF_FILENAME = re.compile(r"^[a-zA-Z0-9_.\-]+\.gguf$")
+
+
 def _list_gguf_files_in_alias_dir(
     root: str, alias: str
 ) -> tuple[Optional[str], list[str]]:
     """Do all filesystem work for a single alias directory in one place.
 
-    This helper exists to keep every filesystem operation on the
-    alias-directory path inside the same basic block as the sanitizer
-    guards, so CodeQL's ``py/path-injection`` dataflow rule recognizes
-    the containment check as protecting each use.
+    Uses the exact sanitization pattern from main's ``get_gguf_file_path``
+    for ``GGUF_MODELS_DIR`` lookups, which CodeQL's ``py/path-injection``
+    rule already recognizes and does not flag:
 
-    Sanitization chain (applied in order):
+        root = os.path.abspath(get_root_from_env())
+        candidate = os.path.realpath(os.path.join(root, safe_name))
+        if (os.path.commonpath([root, candidate]) == root
+                and os.path.isfile(candidate)):
+            return candidate
 
-    1. Regex allowlist on ``alias`` — mirrors ``validate_alias`` inline
-       so the static analyzer sees the guard rather than a cross-module
-       call.
-    2. Normalize the base path with ``os.path.normpath(os.path.abspath)``.
-    3. Compute the alias directory via ``normpath(join(base, alias))``.
-    4. ``startswith`` containment guard: the normalized path must equal
-       the base or start with ``base + os.sep``. This matches the
-       pattern shown in CodeQL's py/path-injection docs.
-    5. Each per-file use re-applies a basename regex check + a fresh
-       ``os.path.join(safe_dir, safe_name)`` inline inside the guarded
-       block.
+    The key differences from the previous attempts are:
+
+    * ``os.path.realpath`` (not just ``normpath``) — follows symlinks
+      so the check below reflects the real on-disk path.
+    * ``os.path.commonpath(...) == root`` (not ``startswith``) —
+      CodeQL's recognized sanitizer.
+    * Each filesystem operation is in a single compound ``and``
+      expression with the commonpath check, so the sanitizer and the
+      sink are in the same basic block.
 
     Returns a tuple ``(safe_alias_dir, gguf_paths)``. ``safe_alias_dir``
-    is ``None`` on any sanitization failure. ``gguf_paths`` is a list of
-    absolute paths to validated GGUF files (each has matching magic
-    bytes); it may be empty if no files match.
+    is ``None`` on any sanitization failure.
     """
-    # Step 1: validate alias via inline regex so CodeQL sees the guard.
+    # Step 1: validate alias via inline regex so the static analyzer
+    # sees the guard at the point of use. Assign to a fresh variable
+    # after validation to cut the taint chain.
     if not _SAFE_ALIAS_RE.match(alias):
         return None, []
+    safe_alias = alias
 
-    # Step 2: normalize the base path.
-    base_path = os.path.normpath(os.path.abspath(root))
+    # Step 2: resolve the root. The env var is an operator-controlled
+    # deployment setting, but we still treat it as tainted from CodeQL's
+    # perspective. os.path.abspath normalizes and is what main uses.
+    root_abs = os.path.abspath(root)
 
-    # Step 3: compute candidate alias dir, normalize.
-    alias_dir = os.path.normpath(os.path.join(base_path, alias))
+    # Step 3: compute the alias directory via realpath (resolves any
+    # symlinks to their real on-disk location).
+    alias_dir = os.path.realpath(os.path.join(root_abs, safe_alias))
 
-    # Step 4: containment guard. Must equal base or be a child of base.
-    if alias_dir != base_path and not alias_dir.startswith(base_path + os.sep):
-        logger.warning(
-            "alias %r resolves to %r which is outside %r; refusing",
-            alias,
-            alias_dir,
-            base_path,
-        )
-        return None, []
-
-    # Step 5: every filesystem operation below is inside the guarded
-    # block. The `alias_dir == base_path or alias_dir.startswith(...)`
-    # condition above is the sanitizer; CodeQL's dataflow tracks it as
-    # protecting the subsequent uses within this same basic block.
-    if not os.path.isdir(alias_dir):
-        return alias_dir, []
-
-    gguf_paths: list[str] = []
-    try:
-        entry_names = sorted(os.listdir(alias_dir))
-    except OSError:
-        return alias_dir, []
-
-    # Regex for acceptable GGUF filenames. Matches the pattern used by
-    # main's `get_gguf_file_path` for `GGUF_MODELS_DIR` lookups.
-    _SAFE_GGUF_FILENAME = re.compile(r"^[a-zA-Z0-9_.\-]+\.gguf$")
-
-    for entry_name in entry_names:
-        if not entry_name.lower().endswith(".gguf"):
-            continue
-        # Inline basename sanitizer: a fresh regex guard that CodeQL
-        # recognizes as cutting the taint chain for this iteration.
-        if not _SAFE_GGUF_FILENAME.match(entry_name):
-            continue
-        safe_name = entry_name  # reassign post-validation
-        # Compute the per-file candidate path and re-verify containment
-        # inline. Even though alias_dir is already validated, repeating
-        # the startswith check at the point of use gives CodeQL a
-        # visible guard against the subsequent `open(candidate)` call.
-        candidate = os.path.normpath(os.path.join(alias_dir, safe_name))
-        if candidate != alias_dir and not candidate.startswith(alias_dir + os.sep):
-            continue
-        if not (
-            (candidate == alias_dir or candidate.startswith(alias_dir + os.sep))
-            and os.path.isfile(candidate)
-        ):
-            continue
-        # Read magic bytes inline so the open() is in the same block as
-        # the startswith guard above.
-        if not (
-            candidate == alias_dir or candidate.startswith(alias_dir + os.sep)
-        ):
-            continue
-        try:
-            with open(candidate, "rb") as f:
-                head = f.read(4)
-        except OSError:
-            continue
-        if head != _GGUF_MAGIC:
+    # Step 4: commonpath containment + isdir check in a single compound
+    # conditional. This is main's exact pattern; CodeQL recognizes it.
+    if not (
+        os.path.commonpath([root_abs, alias_dir]) == root_abs
+        and os.path.isdir(alias_dir)
+    ):
+        if os.path.commonpath([root_abs, alias_dir]) != root_abs:
             logger.warning(
-                "skipping %s: .gguf extension but missing GGUF magic bytes",
-                candidate,
+                "alias %r resolves to %r which is outside %r; refusing",
+                alias,
+                alias_dir,
+                root_abs,
             )
-            continue
-        gguf_paths.append(candidate)
+        return alias_dir, []
+
+    # Step 5: listdir in a single compound conditional with the same
+    # containment sanitizer. We have to declare entry_names conditionally
+    # so CodeQL sees the os.listdir inside the same basic block as the
+    # sanitizer.
+    gguf_paths: list[str] = []
+    if os.path.commonpath([root_abs, alias_dir]) == root_abs:
+        try:
+            entry_names = sorted(os.listdir(alias_dir))
+        except OSError:
+            return alias_dir, []
+
+        for entry_name in entry_names:
+            # Filename allowlist via regex — cuts the taint chain on
+            # the entry name specifically.
+            if not _SAFE_GGUF_FILENAME.match(entry_name):
+                continue
+            safe_name = entry_name
+
+            # Compute the per-file path and immediately re-check
+            # containment in a single compound conditional with every
+            # filesystem sink. This matches main's pattern.
+            candidate = os.path.realpath(os.path.join(alias_dir, safe_name))
+            if not (
+                os.path.commonpath([root_abs, candidate]) == root_abs
+                and os.path.isfile(candidate)
+            ):
+                continue
+
+            # Read magic bytes. The commonpath check above is in the
+            # same basic block as this open() call, so CodeQL's
+            # sanitizer model covers it.
+            if os.path.commonpath([root_abs, candidate]) == root_abs:
+                try:
+                    with open(candidate, "rb") as f:
+                        head = f.read(4)
+                except OSError:
+                    continue
+                if head != _GGUF_MAGIC:
+                    logger.warning(
+                        "skipping %s: .gguf extension but missing GGUF magic bytes",
+                        candidate,
+                    )
+                    continue
+                gguf_paths.append(candidate)
 
     return alias_dir, gguf_paths
 
