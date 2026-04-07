@@ -103,20 +103,46 @@ def save_config_snapshot(
     config_dict = config.model_dump(mode='json', exclude_none=True)
     config_json = json.dumps(config_dict, indent=2)
 
-    # Atomic write using tempfile + os.replace()
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        delete=False,
-        dir=configs_dir,
-        suffix=".tmp",
-    ) as tmp:
-        tmp.write(config_json)
-        tmp_path = tmp.name
+    # Atomic write using tempfile + os.replace(). This function runs inside
+    # Celery workers, so two tasks can race: both pass the exists() check
+    # above, both write .tmp files, and both try to os.replace onto the same
+    # target. On POSIX os.replace is atomic and overwrites silently, but on
+    # Windows os.replace can fail with PermissionError / WinError 5 if the
+    # destination is open or locked by another worker at the instant of the
+    # rename. Since the destination is content-addressed (same hash → same
+    # bytes), losing the race is semantically success, not failure.
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            delete=False,
+            dir=configs_dir,
+            suffix=".tmp",
+        ) as tmp:
+            tmp.write(config_json)
+            tmp_path = tmp.name
 
-    # Atomic move (POSIX systems)
-    os.replace(tmp_path, config_file)
-
-    return True  # New snapshot saved
+        try:
+            os.replace(tmp_path, config_file)
+            tmp_path = None  # os.replace consumed the tmp file
+            return True  # New snapshot saved
+        except (PermissionError, OSError):
+            # Another worker won the race. Re-check the destination: if
+            # it now exists with the same content-addressed name, we can
+            # safely treat this as a no-op. On any real failure (dest
+            # still missing, I/O error), re-raise.
+            if os.path.exists(config_file):
+                return False  # Already saved by concurrent worker
+            raise
+    finally:
+        # Clean up the tmp file if os.replace didn't consume it. On
+        # Windows we may also fail to delete if another worker has the
+        # handle open; swallow that too since the tmp file is harmless.
+        if tmp_path is not None and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def get_config_by_hash(
