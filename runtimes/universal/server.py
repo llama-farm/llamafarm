@@ -22,8 +22,26 @@ Environment Variables:
 import asyncio
 import importlib.util
 import os
+import sys
 import warnings
 from contextlib import asynccontextmanager, suppress
+
+# Force UTF-8 on stdout/stderr before any logger is configured. On Windows
+# the default console codec is cp1252, and llama.cpp's C→Python log callback
+# (in llamafarm_llama/_bindings.py) routes native log output containing
+# byte-level BPE markers like `Ġ` (U+0120) and `Ċ` (U+010A) through Python
+# logging. Without this reconfigure, writing those characters to stdout
+# crashes with `UnicodeEncodeError: 'charmap' codec can't encode character`,
+# breaking model loading on Windows PyApp binaries.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        # `reconfigure` is Python 3.7+; `errors="replace"` guards against
+        # a stream that doesn't support reconfiguration (e.g. redirected
+        # to a non-TextIOWrapper during tests).
+        pass
 
 # Import the offline_mode bootstrap BEFORE any module that transitively
 # imports huggingface_hub or transformers. The llamafarm_common package's

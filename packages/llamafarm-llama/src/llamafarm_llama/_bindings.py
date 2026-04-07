@@ -774,8 +774,26 @@ def _setup_log_callback(lib):
         # Get Python log level
         py_level = _LLAMA_LOG_LEVELS.get(level, logging.DEBUG)
 
-        # Log through Python logging system
-        llama_logger.log(py_level, message)
+        # Log through Python logging system. llama.cpp emits byte-level BPE
+        # markers (U+0120 'Ġ', U+010A 'Ċ', etc.) during tokenizer / vocab
+        # loading. On Windows with a cp1252 console these characters can't
+        # be encoded by the default StreamHandler and raise
+        # UnicodeEncodeError, which stops model loading entirely. Guard
+        # against that by catching encode errors and re-emitting an
+        # ascii-safe version. The primary fix should be to configure the
+        # runtime's stdout/stderr to UTF-8 at startup, but this defensive
+        # layer ensures a single stray handler can't kill the process.
+        try:
+            llama_logger.log(py_level, message)
+        except UnicodeEncodeError:
+            try:
+                safe_message = message.encode("ascii", errors="replace").decode("ascii")
+                llama_logger.log(py_level, safe_message)
+            except Exception:
+                # Last-resort: drop the message rather than crash the
+                # native log callback, which would be a much worse
+                # failure mode (corrupted llama.cpp state).
+                pass
 
     # Store reference to prevent GC
     _log_callback = log_callback

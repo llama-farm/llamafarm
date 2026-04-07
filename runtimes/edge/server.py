@@ -28,8 +28,21 @@ import functools
 import os
 import re
 import subprocess
+import sys
 import warnings
 from contextlib import asynccontextmanager, suppress
+
+# Force UTF-8 on stdout/stderr before any logger is configured. On Windows
+# the default console codec is cp1252, and llama.cpp's C→Python log callback
+# routes native log output containing byte-level BPE markers (U+0120, U+010A)
+# through Python logging, which would otherwise crash the log handler with
+# UnicodeEncodeError on any non-latin1 character.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 # Import the offline_mode bootstrap BEFORE any module that transitively
 # imports huggingface_hub or transformers. The llamafarm_common package's

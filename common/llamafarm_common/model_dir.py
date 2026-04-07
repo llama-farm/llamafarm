@@ -27,7 +27,6 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 from . import offline_mode
@@ -94,8 +93,7 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
     if root is None:
         return None
 
-    root_path = Path(root)
-    if not root_path.exists():
+    if not os.path.isdir(root):
         # This is different from "alias dir missing" — the root itself is
         # wrong, which is usually a deployment misconfiguration.
         logger.warning(
@@ -118,7 +116,13 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
     # After constructing the candidate path, verify it stays under the
     # resolved root via commonpath containment. Matches the sanitization
     # pattern used by `get_gguf_file_path` for GGUF_MODELS_DIR lookups.
-    root_abs = os.path.abspath(str(root_path))
+    #
+    # We stay with string-based `os.path.*` functions throughout the rest
+    # of this function rather than `pathlib.Path` methods, because CodeQL's
+    # py/path-injection dataflow tracks the former through `commonpath`
+    # sanitization but loses the sanitization context when a tainted string
+    # is wrapped in `Path(...)`.
+    root_abs = os.path.abspath(root)
     alias_dir_str = os.path.realpath(os.path.join(root_abs, safe_alias))
     if os.path.commonpath([root_abs, alias_dir_str]) != root_abs:
         logger.warning(
@@ -127,42 +131,56 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
             root_abs,
         )
         return None
-    alias_dir = Path(alias_dir_str)
 
-    if not alias_dir.exists() or not alias_dir.is_dir():
-        logger.debug("alias dir miss: alias=%s path=%s (not a directory)", alias, alias_dir)
+    if not os.path.isdir(alias_dir_str):
+        logger.debug(
+            "alias dir miss: alias=%s path=%s (not a directory)",
+            alias,
+            alias_dir_str,
+        )
         return None
 
     # Gather all GGUF files in the alias dir, skipping any that fail magic
-    # byte validation.
-    gguf_files: list[Path] = []
-    for entry in sorted(alias_dir.iterdir()):
-        if not entry.is_file():
+    # byte validation. We use os.listdir + os.path.join to avoid wrapping
+    # validated path strings in pathlib.Path, which CodeQL would treat as
+    # a new taint source.
+    gguf_files: list[str] = []
+    for entry_name in sorted(os.listdir(alias_dir_str)):
+        if not entry_name.lower().endswith(".gguf"):
             continue
-        if entry.suffix.lower() != ".gguf":
+        entry_path = os.path.join(alias_dir_str, entry_name)
+        if not os.path.isfile(entry_path):
             continue
-        if not _has_gguf_magic(entry):
+        if not _has_gguf_magic(entry_path):
             logger.warning(
                 "skipping %s: .gguf extension but missing GGUF magic bytes",
-                entry,
+                entry_path,
             )
             continue
-        gguf_files.append(entry)
+        gguf_files.append(entry_path)
 
     if not gguf_files:
-        logger.debug("alias dir has no valid GGUF files: alias=%s path=%s", alias, alias_dir)
+        logger.debug(
+            "alias dir has no valid GGUF files: alias=%s path=%s",
+            alias,
+            alias_dir_str,
+        )
         return None
 
     # Separate weights candidates from mmproj candidates.
-    mmproj_candidates = [p for p in gguf_files if _is_mmproj_file(p.name)]
-    weights_candidates = [p for p in gguf_files if not _is_mmproj_file(p.name)]
+    mmproj_candidates = [
+        p for p in gguf_files if _is_mmproj_file(os.path.basename(p))
+    ]
+    weights_candidates = [
+        p for p in gguf_files if not _is_mmproj_file(os.path.basename(p))
+    ]
 
     if not weights_candidates:
         # Only mmproj present — treat as "no weights", fall through.
         logger.debug(
             "alias dir has only mmproj files, no weights: alias=%s path=%s",
             alias,
-            alias_dir,
+            alias_dir_str,
         )
         return None
 
@@ -178,13 +196,13 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
 
     return ModelDirResult(
         alias=alias,
-        alias_dir=str(alias_dir),
-        weights_path=str(weights),
-        mmproj_path=str(mmproj) if mmproj else None,
+        alias_dir=alias_dir_str,
+        weights_path=weights,
+        mmproj_path=mmproj,
     )
 
 
-def _has_gguf_magic(path: Path) -> bool:
+def _has_gguf_magic(path: str) -> bool:
     """Return True if `path` starts with the GGUF magic bytes."""
     try:
         with open(path, "rb") as f:
@@ -194,45 +212,47 @@ def _has_gguf_magic(path: Path) -> bool:
     return head == _GGUF_MAGIC
 
 
-def _select_weights_by_preference(candidates: list[Path]) -> Path:
+def _select_weights_by_preference(candidates: list[str]) -> str:
     """Pick the best weights file using the quantization preference order.
 
     When two files have the same quantization parse, ties break
-    alphabetically for determinism.
+    alphabetically for determinism. Operates on absolute path strings.
     """
     if len(candidates) == 1:
         return candidates[0]
 
     # Parse quantization for each and bucket.
-    parsed: list[tuple[Path, Optional[str]]] = [
-        (p, parse_quantization_from_filename(p.name)) for p in candidates
+    parsed: list[tuple[str, Optional[str]]] = [
+        (p, parse_quantization_from_filename(os.path.basename(p))) for p in candidates
     ]
 
     # Walk the preference order.
     for pref in GGUF_QUANTIZATION_PREFERENCE_ORDER:
         matches = sorted(
             [p for p, q in parsed if q and q.upper() == pref],
-            key=lambda p: p.name,
+            key=os.path.basename,
         )
         if matches:
             return matches[0]
 
     # None matched the preference order. Fall back to the first sorted candidate.
-    return sorted(candidates, key=lambda p: p.name)[0]
+    return sorted(candidates, key=os.path.basename)[0]
 
 
-def _select_mmproj_by_precision(candidates: list[Path]) -> Path:
+def _select_mmproj_by_precision(candidates: list[str]) -> str:
     """Pick the best mmproj file, preferring f16 > bf16 > f32.
 
-    Mirrors the selection logic in `model_utils._select_mmproj_file` but
-    operates on Path objects.
+    Mirrors the selection logic in `model_utils._select_mmproj_file`.
+    Operates on absolute path strings rather than pathlib.Path so the
+    caller-visible containment guarantees from the resolver are preserved
+    through to CodeQL's dataflow model.
     """
     if len(candidates) == 1:
         return candidates[0]
 
     for precision in ["f16", "bf16", "fp16", "f32", "fp32"]:
-        for p in sorted(candidates, key=lambda p: p.name):
-            f_lower = p.name.lower()
+        for p in sorted(candidates, key=os.path.basename):
+            f_lower = os.path.basename(p).lower()
             if (
                 f"-{precision}." in f_lower
                 or f"_{precision}." in f_lower
@@ -243,4 +263,4 @@ def _select_mmproj_by_precision(candidates: list[Path]) -> Path:
             ):
                 return p
 
-    return sorted(candidates, key=lambda p: p.name)[0]
+    return sorted(candidates, key=os.path.basename)[0]
