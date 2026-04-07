@@ -24,6 +24,8 @@ by the HuggingFace cache path (`GGUF_QUANTIZATION_PREFERENCE_ORDER`).
 from __future__ import annotations
 
 import logging
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -35,6 +37,12 @@ from .model_utils import (
     parse_quantization_from_filename,
     validate_alias,
 )
+
+# Inline alias pattern used for CodeQL-recognized sanitization at the point
+# of use. Mirrors the pattern in `model_utils.validate_alias` but is applied
+# inline (and the result is assigned to a fresh variable) so static analysis
+# tools can follow the taint flow.
+_SAFE_ALIAS_RE = re.compile(r"^[a-zA-Z0-9._][a-zA-Z0-9._\-]*$")
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +104,31 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
         )
         return None
 
-    alias_dir = root_path / alias
+    # Inline alias re-validation + containment check. validate_alias above
+    # already rejected unsafe aliases, but CodeQL's py/path-injection flow
+    # model can't follow sanitization through a cross-module function call.
+    # Repeating the regex check inline and reassigning to a fresh variable
+    # lets the taint tracker mark the value as sanitized from here on.
+    if not _SAFE_ALIAS_RE.match(alias):
+        # Should be unreachable after validate_alias, but keeps the static
+        # analyzer happy and acts as defense-in-depth against future edits.
+        raise ValueError(f"Invalid alias: {alias!r}")
+    safe_alias = alias
+
+    # After constructing the candidate path, verify it stays under the
+    # resolved root via commonpath containment. Matches the sanitization
+    # pattern used by `get_gguf_file_path` for GGUF_MODELS_DIR lookups.
+    root_abs = os.path.abspath(str(root_path))
+    alias_dir_str = os.path.realpath(os.path.join(root_abs, safe_alias))
+    if os.path.commonpath([root_abs, alias_dir_str]) != root_abs:
+        logger.warning(
+            "alias dir %r escapes LLAMAFARM_MODEL_DIR %r; refusing to use",
+            alias_dir_str,
+            root_abs,
+        )
+        return None
+    alias_dir = Path(alias_dir_str)
+
     if not alias_dir.exists() or not alias_dir.is_dir():
         logger.debug("alias dir miss: alias=%s path=%s (not a directory)", alias, alias_dir)
         return None
