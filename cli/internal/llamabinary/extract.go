@@ -8,8 +8,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
+
+// sortStrings is a tiny helper to keep call sites terse.
+func sortStrings(s []string) {
+	sort.Strings(s)
+}
+
+// maxSymlinkDepth caps how many hops we will follow through a symlink chain
+// before giving up. Matches Linux's MAXSYMLINKS. Without this limit a
+// malicious archive with cyclic symlinks (A → B → A) or a very long chain
+// could trigger unbounded recursion and stack overflow.
+const maxSymlinkDepth = 40
 
 // extractZip extracts a single file (matched by base name or exact path) from a
 // zip archive, following any symlink chain and recreating it in the destination.
@@ -28,23 +40,42 @@ func extractZip(archivePath, srcPath, destPath string) error {
 		fileMap[f.Name] = f
 	}
 
+	// Deterministic selection: prefer an exact path / base match; otherwise
+	// pick the lexicographically smallest suffix match. This ensures the
+	// same archive always yields the same extracted file regardless of zip
+	// iteration order.
 	var targetFile *zip.File
 	var targetPath string
+	var suffixCandidates []string
 	for _, f := range r.File {
-		if strings.HasSuffix(f.Name, srcName) || f.Name == srcPath {
+		if f.Name == srcPath || filepath.Base(f.Name) == srcName {
 			targetFile = f
 			targetPath = f.Name
 			break
 		}
+		if strings.HasSuffix(f.Name, srcName) {
+			suffixCandidates = append(suffixCandidates, f.Name)
+		}
 	}
 	if targetFile == nil {
-		return fmt.Errorf("file %s not found in archive", srcPath)
+		if len(suffixCandidates) == 0 {
+			return fmt.Errorf("file %s not found in archive", srcPath)
+		}
+		sortStrings(suffixCandidates)
+		targetPath = suffixCandidates[0]
+		targetFile = fileMap[targetPath]
 	}
-	return extractZipFileWithSymlinks(fileMap, targetFile, targetPath, destDir, srcName)
+	return extractZipFileWithSymlinks(fileMap, targetFile, targetPath, destDir, srcName, 0)
 }
 
 // extractZipFileWithSymlinks recursively follows and preserves symlink chains.
-func extractZipFileWithSymlinks(fileMap map[string]*zip.File, f *zip.File, fPath, destDir, finalName string) error {
+// The depth parameter is bounded by maxSymlinkDepth to prevent unbounded
+// recursion when an archive contains cyclic or pathologically long symlink
+// chains.
+func extractZipFileWithSymlinks(fileMap map[string]*zip.File, f *zip.File, fPath, destDir, finalName string, depth int) error {
+	if depth >= maxSymlinkDepth {
+		return fmt.Errorf("symlink chain exceeded max depth (%d): possible cycle at %s", maxSymlinkDepth, fPath)
+	}
 	if !safeBaseName(finalName) {
 		return fmt.Errorf("invalid filename: %s", finalName)
 	}
@@ -83,7 +114,7 @@ func extractZipFileWithSymlinks(fileMap map[string]*zip.File, f *zip.File, fPath
 		}
 
 		targetBase := filepath.Base(target)
-		if err := extractZipFileWithSymlinks(fileMap, next, resolved, destDir, targetBase); err != nil {
+		if err := extractZipFileWithSymlinks(fileMap, next, resolved, destDir, targetBase, depth+1); err != nil {
 			return err
 		}
 
@@ -134,22 +165,45 @@ func extractTarGz(archivePath, srcPath, destPath string) error {
 		return err
 	}
 
+	// Pick the target entry deterministically. Map iteration order in Go is
+	// randomized, so when multiple entries have the same basename suffix the
+	// previous "first match" approach could return different entries across
+	// runs. Instead, collect all matches, prefer exact path / base matches,
+	// and sort to make ties deterministic.
 	var targetEntry *tar.Header
 	var targetName string
-	for name, h := range entries {
-		if strings.HasSuffix(name, srcName) {
-			targetEntry = h
+	candidates := make([]string, 0)
+	for name := range entries {
+		if name == srcName || filepath.Base(name) == srcName || strings.HasSuffix(name, "/"+srcName) {
+			candidates = append(candidates, name)
+		}
+	}
+	if len(candidates) == 0 {
+		return fmt.Errorf("file %s not found in archive", srcPath)
+	}
+	// Deterministic ordering + exact-path preference.
+	for _, name := range candidates {
+		if name == srcName || filepath.Base(name) == srcName {
+			targetEntry = entries[name]
 			targetName = name
 			break
 		}
 	}
 	if targetEntry == nil {
-		return fmt.Errorf("file %s not found in archive", srcPath)
+		// Sort remaining candidates to break ties deterministically.
+		sortedCandidates := append([]string(nil), candidates...)
+		sortStrings(sortedCandidates)
+		targetName = sortedCandidates[0]
+		targetEntry = entries[targetName]
 	}
 
-	// Follow the symlink chain.
+	// Follow the symlink chain, capped at maxSymlinkDepth to prevent
+	// infinite loops on cyclic or pathologically deep symlink chains.
 	resolvedName := targetName
-	for targetEntry.Typeflag == tar.TypeSymlink {
+	for depth := 0; targetEntry.Typeflag == tar.TypeSymlink; depth++ {
+		if depth >= maxSymlinkDepth {
+			return fmt.Errorf("symlink chain exceeded max depth (%d): possible cycle at %s", maxSymlinkDepth, resolvedName)
+		}
 		symlinkDir := filepath.Dir(resolvedName)
 		target := filepath.Join(symlinkDir, targetEntry.Linkname)
 		target = strings.ReplaceAll(filepath.Clean(target), "\\", "/")
@@ -229,11 +283,15 @@ func extractTarGzFile(archivePath, fileName, destPath string) error {
 		if name != fileName {
 			continue
 		}
-		base := filepath.Base(h.Name)
-		if !safeBaseName(base) {
-			continue
+		// The destination filename comes from the caller-supplied destPath,
+		// not the archive entry, but we still validate it against destDir to
+		// ensure the write cannot escape. This uses the same layered Zip
+		// Slip sanitization (explicit ".." rejection + absolute-path prefix
+		// check) that CodeQL recognizes for go/zipslip.
+		target, ok := safeDestPath(destDir, filepath.Base(destPath))
+		if !ok {
+			return fmt.Errorf("refused to extract %s: path traversal", h.Name)
 		}
-		target := filepath.Join(destDir, filepath.Base(destPath))
 		out, err := os.Create(target)
 		if err != nil {
 			return fmt.Errorf("create %s: %w", target, err)
@@ -279,10 +337,13 @@ func extractTarGzDependencies(archivePath, destDir, mainLib, targetOS string) er
 		if h.Typeflag == tar.TypeDir {
 			continue
 		}
-		name := filepath.Base(h.Name)
-		if !safeBaseName(name) {
+		// Apply the full safeDestPath Zip Slip sanitization (explicit ".."
+		// rejection + absolute-path containment) before any filesystem op.
+		destPath, ok := safeDestPath(destDir, h.Name)
+		if !ok {
 			continue
 		}
+		name := filepath.Base(destPath)
 		nameLower := strings.ToLower(name)
 		if !matchesDepPattern(nameLower, patterns) {
 			continue
@@ -296,7 +357,6 @@ func extractTarGzDependencies(archivePath, destDir, mainLib, targetOS string) er
 		if h.Size < 100 {
 			continue
 		}
-		destPath := filepath.Join(destDir, name)
 		if _, err := os.Stat(destPath); err == nil {
 			continue
 		}
@@ -334,10 +394,13 @@ func extractZipDependencies(archivePath, destDir, mainLib, targetOS string) erro
 		if f.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
-		name := filepath.Base(f.Name)
-		if !safeBaseName(name) {
+		// Apply the full safeDestPath Zip Slip sanitization (explicit ".."
+		// rejection + absolute-path containment) before any filesystem op.
+		destPath, ok := safeDestPath(destDir, f.Name)
+		if !ok {
 			continue
 		}
+		name := filepath.Base(destPath)
 		nameLower := strings.ToLower(name)
 		if !matchesDepPattern(nameLower, patterns) {
 			continue
@@ -351,7 +414,6 @@ func extractZipDependencies(archivePath, destDir, mainLib, targetOS string) erro
 		if f.UncompressedSize64 < 100 {
 			continue
 		}
-		destPath := filepath.Join(destDir, name)
 		if _, err := os.Stat(destPath); err == nil {
 			continue
 		}
@@ -484,4 +546,46 @@ func safeBaseName(name string) bool {
 		return false
 	}
 	return true
+}
+
+// safeDestPath validates that an archive entry's name can be safely joined with
+// destDir without escaping it (Zip Slip protection). It returns the validated
+// absolute destination path on success.
+//
+// The function applies four layered checks:
+//  1. Explicit rejection of entries whose path contains ".." anywhere. This is
+//     the CWE-22 sanitization pattern recognized by CodeQL's go/zipslip rule.
+//  2. Reduction to a pure base filename (no directory components), rejecting
+//     names that would traverse via safeBaseName.
+//  3. filepath.Join with destDir, followed by filepath.Abs normalization.
+//  4. A strings.HasPrefix containment check ensuring the resolved absolute
+//     path lives under destDir.
+//
+// Returns ("", false) if any check fails; the caller should skip the entry.
+func safeDestPath(destDir, entryName string) (string, bool) {
+	// CodeQL-recognized sanitization: reject any ".." component explicitly
+	// before using the entry name in a filesystem operation.
+	if strings.Contains(entryName, "..") {
+		return "", false
+	}
+	base := filepath.Base(entryName)
+	if !safeBaseName(base) {
+		return "", false
+	}
+	absDestDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return "", false
+	}
+	joined := filepath.Join(absDestDir, base)
+	absJoined, err := filepath.Abs(joined)
+	if err != nil {
+		return "", false
+	}
+	// Ensure the resolved path stays within destDir. The trailing separator
+	// check prevents "/tmp/destdir-evil" from matching "/tmp/destdir".
+	sep := string(filepath.Separator)
+	if absJoined != absDestDir && !strings.HasPrefix(absJoined, absDestDir+sep) {
+		return "", false
+	}
+	return absJoined, true
 }

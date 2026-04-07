@@ -133,15 +133,94 @@ class TestGetGgufFilePathOffline:
 # ---------------------------------------------------------------------------
 
 
+class TestValidateAlias:
+    def test_accepts_plain_alphanumeric(self):
+        assert model_utils.validate_alias("qwen3") == "qwen3"
+
+    def test_accepts_dashes_and_periods(self):
+        assert model_utils.validate_alias("qwen3-1.7b") == "qwen3-1.7b"
+
+    def test_accepts_underscores(self):
+        assert model_utils.validate_alias("my_model_v2") == "my_model_v2"
+
+    def test_accepts_leading_period(self):
+        # Allowed because [a-zA-Z0-9._] is the valid first-char class.
+        assert model_utils.validate_alias(".hidden") == ".hidden"
+
+    def test_rejects_empty(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            model_utils.validate_alias("")
+
+    def test_rejects_dotdot(self):
+        with pytest.raises(ValueError, match="path traversal"):
+            model_utils.validate_alias("..")
+
+    def test_rejects_embedded_dotdot(self):
+        with pytest.raises(ValueError, match="path traversal"):
+            model_utils.validate_alias("a/../b")
+
+    def test_rejects_forward_slash(self):
+        with pytest.raises(ValueError, match="path traversal|path separator"):
+            model_utils.validate_alias("org/repo")
+
+    def test_rejects_backslash(self):
+        with pytest.raises(ValueError, match="path traversal|path separator"):
+            model_utils.validate_alias("bad\\alias")
+
+    def test_rejects_absolute_path(self):
+        with pytest.raises(ValueError, match="absolute path|path separator"):
+            model_utils.validate_alias("/etc/passwd")
+
+    def test_rejects_leading_hyphen(self):
+        # Hyphen-leading would be confusing with CLI args; our pattern
+        # requires the first char to be alphanumeric, period, or underscore.
+        with pytest.raises(ValueError):
+            model_utils.validate_alias("-bad")
+
+    def test_rejects_whitespace(self):
+        with pytest.raises(ValueError):
+            model_utils.validate_alias("has space")
+
+    def test_rejects_special_chars(self):
+        for bad in ["alias;rm", "alias|cat", "alias$var", "alias`cmd`"]:
+            with pytest.raises(ValueError):
+                model_utils.validate_alias(bad)
+
+
+class TestResolveGgufPathAliasValidation:
+    def test_resolve_gguf_path_rejects_bad_alias(self, fake_hf_cache):
+        with pytest.raises(ValueError, match="path traversal"):
+            model_utils.resolve_gguf_path("org/repo", alias="../evil")
+
+    def test_resolve_mmproj_path_rejects_bad_alias(self, fake_hf_cache):
+        with pytest.raises(ValueError, match="path traversal"):
+            model_utils.resolve_mmproj_path("org/repo", alias="../evil")
+
+
 class TestResolveGgufPathAbsolutePath:
     def test_absolute_path_passthrough(self, tmp_path, fake_hf_cache):
         path = tmp_path / "custom.gguf"
         _write_gguf(path)
         result = model_utils.resolve_gguf_path(str(path), alias="custom")
-        assert result == str(path)
+        # Returned path is realpath() of the input (may or may not equal input
+        # depending on symlinks on the test host; on macOS /tmp often symlinks).
+        assert result == os.path.realpath(str(path))
+
+    def test_absolute_path_rejects_non_gguf_extension(self, tmp_path, fake_hf_cache):
+        path = tmp_path / "custom.bin"
+        path.write_bytes(b"GGUF")
+        with pytest.raises(FileNotFoundError, match="must end in .gguf"):
+            model_utils.resolve_gguf_path(str(path), alias="custom")
+
+    def test_absolute_path_rejects_directory(self, tmp_path, fake_hf_cache):
+        # Name it .gguf but make it a directory.
+        d = tmp_path / "custom.gguf"
+        d.mkdir()
+        with pytest.raises(FileNotFoundError, match="not a regular file"):
+            model_utils.resolve_gguf_path(str(d), alias="custom")
 
     def test_absolute_path_missing_raises(self, fake_hf_cache):
-        with pytest.raises(FileNotFoundError, match="Absolute model path"):
+        with pytest.raises(FileNotFoundError, match="not a regular file"):
             model_utils.resolve_gguf_path("/nonexistent/model.gguf", alias="x")
 
 

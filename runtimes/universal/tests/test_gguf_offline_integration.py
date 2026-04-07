@@ -105,26 +105,35 @@ class TestNoAliasFallsBackToGetGgufFilePath:
 
 
 class TestStartupLogLine:
-    def test_offline_log_format(self, monkeypatch, capsys):
+    def test_offline_log_format(self, monkeypatch, caplog):
         """Verify the startup log line contains the expected tokens.
 
-        The universal runtime has `structlog` installed, so `log_startup_mode`
-        uses structlog's renderer which writes to stdout via the configured
-        handlers. We use `capsys` (rather than `caplog`) so the assertion
-        works regardless of which logging backend is active.
+        On CI, structlog is importable but not configured, so its default
+        output goes through stdlib logging — which caplog captures. On a
+        locally running universal runtime, structlog HAS been configured
+        with a console renderer that writes to stdout, which is a different
+        sink that caplog does not see.
+
+        To make the test deterministic regardless of environment, we
+        monkeypatch `_find_structlog_logger` to always return None, forcing
+        the stdlib logging fallback path. That path always writes through
+        the named logger, which caplog reliably catches.
         """
+        import logging
+
         from llamafarm_common import offline_mode
 
         monkeypatch.setenv("LLAMAFARM_OFFLINE", "1")
         monkeypatch.setenv("LLAMAFARM_MODEL_DIR", "/opt/llamafarm/models")
+        monkeypatch.setattr(offline_mode, "_find_structlog_logger", lambda: None)
         offline_mode.reset_for_tests()
 
-        offline_mode.log_startup_mode()
-        captured = capsys.readouterr()
-        combined = captured.out + captured.err
+        with caplog.at_level(logging.INFO, logger=offline_mode.logger.name):
+            offline_mode.log_startup_mode()
 
-        assert "mode=offline" in combined
-        assert "model_dir=/opt/llamafarm/models" in combined
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("mode=offline" in m for m in messages), f"got: {messages}"
+        assert any("model_dir=/opt/llamafarm/models" in m for m in messages), f"got: {messages}"
 
 
 class TestGGUFLanguageModelAcceptsAlias:
@@ -149,3 +158,28 @@ class TestGGUFLanguageModelAcceptsAlias:
             device="cpu",
         )
         assert model.alias is None
+
+    def test_constructor_rejects_traversal_alias(self):
+        """A malicious alias must be rejected at construction time, not at load time."""
+        import pytest
+
+        from models.gguf_language_model import GGUFLanguageModel
+
+        with pytest.raises(ValueError, match="path traversal"):
+            GGUFLanguageModel(
+                model_id="org/Fake-GGUF:Q4_K_M",
+                device="cpu",
+                alias="../etc/passwd",
+            )
+
+    def test_constructor_rejects_slash_alias(self):
+        import pytest
+
+        from models.gguf_language_model import GGUFLanguageModel
+
+        with pytest.raises(ValueError, match="path separator|path traversal"):
+            GGUFLanguageModel(
+                model_id="org/Fake-GGUF:Q4_K_M",
+                device="cpu",
+                alias="org/repo",
+            )

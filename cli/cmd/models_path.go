@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -15,6 +16,36 @@ import (
 	"github.com/llamafarm/cli/internal/modelformat"
 	"github.com/spf13/cobra"
 )
+
+// aliasPattern matches the subset of characters we accept in a model alias
+// when it will be used as a filesystem subdirectory name under the target
+// root. The pattern mirrors the Python `validate_alias` helper so tooling on
+// both sides of the pipeline rejects the same inputs.
+var aliasPattern = regexp.MustCompile(`^[a-zA-Z0-9._][a-zA-Z0-9._\-]*$`)
+
+// validateAlias returns an error if the alias cannot be safely joined into
+// the target path. The checks mirror the Python validator and satisfy static
+// analysis tools that flag unsanitized identifiers used in path expressions.
+func validateAlias(alias string) error {
+	if alias == "" {
+		return fmt.Errorf("invalid alias: must be a non-empty string")
+	}
+	// Explicit ".." rejection — the pattern recognized by CodeQL's
+	// go/zipslip family as a traversal sanitizer.
+	if strings.Contains(alias, "..") {
+		return fmt.Errorf("invalid alias %q: path traversal not allowed", alias)
+	}
+	if strings.ContainsAny(alias, `/\`) {
+		return fmt.Errorf("invalid alias %q: path separator not allowed", alias)
+	}
+	if filepath.IsAbs(alias) {
+		return fmt.Errorf("invalid alias %q: absolute path not allowed", alias)
+	}
+	if !aliasPattern.MatchString(alias) {
+		return fmt.Errorf("invalid alias %q: must match %s", alias, aliasPattern.String())
+	}
+	return nil
+}
 
 // Output shape for `lf models path --format json`. Matches the schema called
 // out in the spec so that downstream tooling can rely on stable field names.
@@ -204,6 +235,15 @@ func parseModelSpec(spec string) (repoID, quant string) {
 // transport-plan entry. Returns an error if the model is not cached OR if the
 // model is a non-GGUF kind (V1 scope).
 func buildModelEntry(m config.LlamaFarmConfigRuntimeModelsElem, targetRoot, roleFilter string, includeSHA bool) (modelsPathOutModel, error) {
+	// Validate the alias before it gets joined into target paths. The name
+	// comes from runtime.models[].name in llamafarm.yaml — which is not
+	// direct HTTP input, but we still reject path traversal attempts
+	// (e.g. `../etc`) so the emitted `target` paths cannot escape
+	// targetRoot. This also catches mistyped names with embedded slashes.
+	if err := validateAlias(m.Name); err != nil {
+		return modelsPathOutModel{}, err
+	}
+
 	repoID, quant := parseModelSpec(m.Model)
 
 	entry := modelsPathOutModel{
@@ -222,7 +262,10 @@ func buildModelEntry(m config.LlamaFarmConfigRuntimeModelsElem, targetRoot, role
 		)
 	}
 
-	// Look up main weights.
+	// Look up main weights. Only ErrNotCached maps to the "run lf models pull"
+	// remediation message — any other error (malformed repo id, filesystem
+	// I/O failure, etc.) is a genuine problem that should surface with its
+	// original context rather than be masked behind the cache-miss message.
 	weights, err := hfcache.LocateGGUF(repoID, quant)
 	if err != nil {
 		if errors.Is(err, hfcache.ErrNotCached) {
@@ -338,9 +381,17 @@ func ensureModelsCached(selected []config.LlamaFarmConfigRuntimeModelsElem) erro
 			continue
 		}
 		repoID, quant := parseModelSpec(m.Model)
-		if _, err := hfcache.LocateGGUF(repoID, quant); err != nil {
-			missing = append(missing, m)
+		// Only treat ErrNotCached as "needs pull". Other errors (invalid
+		// repo id, filesystem I/O) should surface so the user sees a
+		// meaningful diagnostic instead of a misleading pull attempt.
+		_, err := hfcache.LocateGGUF(repoID, quant)
+		if err == nil {
+			continue
 		}
+		if !errors.Is(err, hfcache.ErrNotCached) {
+			return fmt.Errorf("locate %s: %w", m.Name, err)
+		}
+		missing = append(missing, m)
 	}
 	if len(missing) == 0 {
 		return nil

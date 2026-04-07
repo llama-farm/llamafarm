@@ -55,6 +55,54 @@ def _validate_model_id(model_id: str) -> str:
     return model_id
 
 
+# Aliases are used to construct filesystem subdirectory names under
+# `$LLAMAFARM_MODEL_DIR/<alias>/`. They come from project config
+# (`runtime.models[].name`) which is not direct HTTP input, but because
+# an alias is turned into a filesystem path we still sanitize it to
+# prevent path traversal — both for defense in depth and to satisfy
+# static analysis tools (CodeQL, cubic, qodo) that rightly flag any
+# unsanitized identifier used in a path expression.
+_ALIAS_PATTERN = re.compile(r"^[a-zA-Z0-9._][a-zA-Z0-9._\-]*$")
+
+
+def validate_alias(alias: str) -> str:
+    """
+    Validate a model alias for safe use as a filesystem subdirectory name.
+
+    Aliases must:
+      - Not be empty
+      - Not contain path separators (``/``, ``\\``)
+      - Not contain ``..``
+      - Not be an absolute path
+      - Start with alphanumeric, period, or underscore
+      - Contain only alphanumerics, periods, underscores, and hyphens
+
+    Args:
+        alias: The model alias from ``runtime.models[].name``.
+
+    Returns:
+        The validated alias string, unchanged.
+
+    Raises:
+        ValueError: If the alias fails validation.
+    """
+    if not isinstance(alias, str) or alias == "":
+        raise ValueError("Invalid alias: must be a non-empty string")
+    # Explicit ".." rejection — the pattern recognized by CodeQL's
+    # py/path-injection as a traversal sanitizer.
+    if ".." in alias:
+        raise ValueError(f"Invalid alias: path traversal not allowed: {alias!r}")
+    if "/" in alias or "\\" in alias:
+        raise ValueError(f"Invalid alias: path separator not allowed: {alias!r}")
+    if os.path.isabs(alias):
+        raise ValueError(f"Invalid alias: absolute path not allowed: {alias!r}")
+    if not _ALIAS_PATTERN.match(alias):
+        raise ValueError(
+            f"Invalid alias: must match {_ALIAS_PATTERN.pattern!r}: {alias!r}"
+        )
+    return alias
+
+
 def _get_cached_gguf_files(model_id: str) -> list[str]:
     """
     Check local HuggingFace cache for GGUF files.
@@ -606,18 +654,51 @@ def resolve_gguf_path(
         Absolute filesystem path to the selected GGUF weights file.
 
     Raises:
+        ValueError: If `alias` contains path traversal characters or is
+            otherwise unsafe for use as a filesystem subdirectory name.
         FileNotFoundError: when no matching file can be found in any tier
             and offline mode (or a network failure) prevents fallback to a
             network download.
     """
+    # Validate the alias before any path manipulation. The alias comes from
+    # project config (runtime.models[].name) and gets turned into a
+    # filesystem subdirectory under LLAMAFARM_MODEL_DIR — path traversal
+    # here would allow loading arbitrary .gguf files from the host.
+    validate_alias(alias)
+
     # Tier 1: absolute path passthrough.
+    #
+    # Security: the `model_id` parameter is loaded from the project config
+    # (llamafarm.yaml), not from direct HTTP input, but CodeQL rightly flags
+    # any os.path.* call on a caller-supplied string. We apply layered
+    # sanitization before accepting an absolute path:
+    #   1. Require the path to end in ".gguf" — restricts the file type.
+    #   2. Resolve through symlinks via os.path.realpath so the check below
+    #      reflects the actual on-disk file, not a symlink target.
+    #   3. Require the resolved target to be a regular file (not a device,
+    #      directory, FIFO, etc.).
+    # If any check fails we refuse the path and raise a clear error. This
+    # preserves the documented absolute-path feature for developers who want
+    # to point at a hand-downloaded GGUF file while giving CodeQL the
+    # sanitization pattern it recognizes for py/path-injection.
     if os.path.isabs(model_id):
-        if not os.path.exists(model_id):
+        if not model_id.endswith(".gguf"):
             raise FileNotFoundError(
-                f"Absolute model path does not exist: {model_id}"
+                f"Absolute model path must end in .gguf: {model_id}"
             )
-        logger.info(f"Using absolute model path for alias {alias!r}: {model_id}")
-        return model_id
+        resolved_path = os.path.realpath(model_id)
+        if not resolved_path.endswith(".gguf"):
+            raise FileNotFoundError(
+                f"Resolved absolute model path does not end in .gguf: {resolved_path}"
+            )
+        if not os.path.isfile(resolved_path):
+            raise FileNotFoundError(
+                f"Absolute model path is not a regular file: {resolved_path}"
+            )
+        logger.info(
+            f"Using absolute model path for alias {alias!r}: {resolved_path}"
+        )
+        return resolved_path
 
     # Tier 2: alias-directory lookup via $LLAMAFARM_MODEL_DIR.
     # Lazy import to avoid a circular dependency at module-load time.
@@ -684,7 +765,14 @@ def resolve_mmproj_path(
 
     Tier 1 (absolute path) is not applicable — mmproj is always derived
     from either the alias directory or the HF cache.
+
+    Raises:
+        ValueError: If `alias` contains path traversal characters.
     """
+    # Same alias validation as resolve_gguf_path — prevents path traversal
+    # through LLAMAFARM_MODEL_DIR.
+    validate_alias(alias)
+
     # Tier 2: alias-directory lookup.
     from . import model_dir as _model_dir
 

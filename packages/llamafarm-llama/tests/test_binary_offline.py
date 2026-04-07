@@ -10,6 +10,7 @@ These tests verify that:
   - Online-mode behavior is preserved when the env var is absent.
 """
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -129,10 +130,13 @@ class TestGetLibPathOffline:
         cached_path.write_bytes(b"stub")
 
         # Make bundled appear absent but let the real cache path resolve.
+        # Use os.sep so the check works on Windows (backslash) as well as
+        # POSIX (forward slash).
         original_exists = Path.exists
+        bundled_marker = os.sep + "lib" + os.sep + lib_name
 
         def fake_exists(self):
-            if "/lib/" + lib_name in str(self):
+            if bundled_marker in str(self):
                 return False  # bundled absent
             return original_exists(self)
 

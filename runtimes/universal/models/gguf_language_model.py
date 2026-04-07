@@ -30,8 +30,9 @@ from utils.model_format import get_gguf_file_path
 # resolve_gguf_path is the four-tier resolver that honors LLAMAFARM_MODEL_DIR
 # and LLAMAFARM_OFFLINE. It's only used when an alias is known; otherwise we
 # fall back to the legacy get_gguf_file_path entry point which still enforces
-# offline mode internally.
-from llamafarm_common import resolve_gguf_path, resolve_mmproj_path
+# offline mode internally. validate_alias sanitizes the alias before it's used
+# as a filesystem subdirectory name.
+from llamafarm_common import resolve_gguf_path, resolve_mmproj_path, validate_alias
 from utils.token_counter import TokenCounter
 
 from .base import BaseModel
@@ -171,6 +172,12 @@ class GGUFLanguageModel(BaseModel):
                    subject to offline-mode guards but skipping the alias-dir tier.
         """
         super().__init__(model_id, device, token=token)
+        # Validate the alias before we store it — it will be used to
+        # construct filesystem paths under LLAMAFARM_MODEL_DIR later, so
+        # a traversal-bearing alias must be rejected at construction time
+        # rather than at load time.
+        if alias is not None:
+            validate_alias(alias)
         self.alias = alias  # For LLAMAFARM_MODEL_DIR lookup; None = legacy path
         self.model_type = "language"
         self.supports_streaming = True

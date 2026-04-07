@@ -25,6 +25,7 @@ from .model_utils import (
     resolve_mmproj_path,
     select_gguf_file,
     select_gguf_file_with_logging,
+    validate_alias,
 )
 
 __all__ = [
@@ -39,4 +40,5 @@ __all__ = [
     "resolve_mmproj_path",
     "select_gguf_file",
     "select_gguf_file_with_logging",
+    "validate_alias",
 ]

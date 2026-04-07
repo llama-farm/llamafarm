@@ -25,13 +25,13 @@ import os
 import warnings
 from contextlib import asynccontextmanager, suppress
 
-# Import llamafarm_common BEFORE any module that transitively imports
-# huggingface_hub or transformers. The package's __init__ first imports
-# `offline_mode`, which reads LLAMAFARM_OFFLINE and sets HF_HUB_OFFLINE and
-# TRANSFORMERS_OFFLINE accordingly. If this import happened later, the
-# offline env vars would be read by huggingface_hub before we had a chance
-# to set them.
-import llamafarm_common  # noqa: F401
+# Import the offline_mode bootstrap BEFORE any module that transitively
+# imports huggingface_hub or transformers. The llamafarm_common package's
+# __init__ imports offline_mode first, which reads LLAMAFARM_OFFLINE and
+# sets HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE accordingly. If this import
+# happened later, the offline env vars would be read by huggingface_hub
+# before we had a chance to set them.
+from llamafarm_common import offline_mode as _offline_mode_bootstrap  # noqa: F401
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -305,8 +305,7 @@ async def lifespan(app: FastAPI):
 
     # Emit the single-line offline-mode status so operators can verify
     # LLAMAFARM_OFFLINE / LLAMAFARM_MODEL_DIR are being honored.
-    from llamafarm_common import offline_mode as _offline_mode
-    _offline_mode.log_startup_mode()
+    _offline_mode_bootstrap.log_startup_mode()
 
     # Log addon availability
     if _HAS_TIMESERIES:

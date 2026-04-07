@@ -24,7 +24,6 @@ by the HuggingFace cache path (`GGUF_QUANTIZATION_PREFERENCE_ORDER`).
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -34,6 +33,7 @@ from .model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
     _is_mmproj_file,
     parse_quantization_from_filename,
+    validate_alias,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,17 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
     A nonexistent `LLAMAFARM_MODEL_DIR` root (vs. a missing alias subdir)
     produces a warning log line and returns None, so operators can distinguish
     a typo from "not populated yet" via the startup logs.
+
+    Raises:
+        ValueError: If `alias` contains path traversal characters (``..``,
+            ``/``, ``\\``) or is otherwise unsafe for use as a filesystem
+            subdirectory name.
     """
+    # Validate before any filesystem operation to prevent path traversal
+    # (e.g., alias="../../etc/passwd") from escaping LLAMAFARM_MODEL_DIR.
+    # Raises ValueError with a clear message on malformed aliases.
+    validate_alias(alias)
+
     root = offline_mode.model_dir()
     if root is None:
         return None

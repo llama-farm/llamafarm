@@ -297,9 +297,11 @@ func TestExport_PreservesSymlinks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "libllama.so"), []byte("stub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Create a symlink from libllama.so.0 → libllama.so.
+	// Create a symlink from libllama.so.0 → libllama.so. Windows without
+	// developer-mode or admin privileges can't create symlinks, so we skip
+	// rather than fail the whole test on that platform.
 	if err := os.Symlink("libllama.so", filepath.Join(dir, "libllama.so.0")); err != nil {
-		t.Fatal(err)
+		t.Skipf("symlink creation not supported in this environment: %v", err)
 	}
 
 	exportDir := filepath.Join(tmp, "export")
