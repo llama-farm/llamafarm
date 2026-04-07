@@ -1,0 +1,156 @@
+"""
+Base model class for all HuggingFace models (transformers & diffusers).
+"""
+
+from __future__ import annotations
+
+import logging
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import torch
+    from transformers import PreTrainedTokenizerBase
+
+logger = logging.getLogger(__name__)
+
+
+class BaseModel(ABC):
+    """Base class for all model types (transformers, diffusers, etc.)."""
+
+    def __init__(self, model_id: str, device: str, token: str | None = None):
+        self.model_id = model_id
+        self.device = device
+        self.token = token  # HuggingFace authentication token
+        self.model: Any | None = None
+        self.tokenizer: PreTrainedTokenizerBase | None = None
+        self.processor: Any | None = None  # For vision/audio models
+        self.feature_extractor: Any | None = None  # For audio models
+        self.pipe: Any | None = None  # For diffusion models
+        self.model_type = "unknown"
+        self.supports_streaming = False
+
+    @abstractmethod
+    async def load(self) -> None:
+        """Load the model and associated components."""
+        pass
+
+    async def unload(self) -> None:
+        """Unload the model and free resources.
+
+        Default implementation for transformers models. Subclasses should override
+        if they need custom cleanup (e.g., GGUF models with llama-cpp).
+        """
+        logger.info(f"Unloading model: {self.model_id}")
+
+        # Move model to CPU to free GPU memory
+        if self.model is not None and hasattr(self.model, "to"):
+            try:
+                self.model = self.model.to("cpu")
+            except Exception as e:
+                logger.warning(f"Could not move model to CPU: {e}")
+
+        # Clear references
+        self.model = None
+        self.tokenizer = None
+        self.processor = None
+        self.feature_extractor = None
+        self.pipe = None
+
+        # Clear GPU cache if torch is available
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("Cleared CUDA cache")
+
+            if hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
+                try:
+                    torch.mps.empty_cache()
+                    logger.debug("Cleared MPS cache")
+                except Exception:
+                    # MPS cache clearing can fail on some macOS versions; not critical
+                    pass
+        except ImportError:
+            # torch not installed (GGUF-only deployment)
+            pass
+
+        logger.info(f"Model unloaded: {self.model_id}")
+
+    def get_model_info(self) -> dict[str, Any]:
+        """Get information about the loaded model."""
+        return {
+            "model_id": self.model_id,
+            "model_type": self.model_type,
+            "device": self.device,
+            "supports_streaming": self.supports_streaming,
+        }
+
+    def get_dtype(self, force_float32: bool = False):
+        """Get optimal torch dtype for the device.
+
+        Args:
+            force_float32: Force float32 for models with MPS compatibility issues
+        """
+        import torch
+
+        if force_float32:
+            return torch.float32
+        if self.device == "cuda" or self.device == "mps":
+            return torch.float16
+        else:
+            return torch.float32
+
+    def to_device(self, tensor: torch.Tensor, dtype: torch.dtype | None = None):
+        """Move tensor to device with correct dtype.
+
+        This helper ensures tensors are moved to device with matching dtype
+        to avoid MPS mixed precision issues.
+
+        Args:
+            tensor: Tensor to move
+            dtype: Optional dtype override. If None, only moves to device without
+                   changing dtype for integer tensors, or uses get_dtype() for floats.
+        """
+        import torch
+
+        # Don't change dtype for integer tensors (e.g., input_ids, attention_mask)
+        if tensor.dtype in (
+            torch.int32,
+            torch.int64,
+            torch.long,
+            torch.int,
+            torch.bool,
+        ):
+            return tensor.to(device=self.device)
+
+        if dtype is None:
+            dtype = self.get_dtype()
+        return tensor.to(device=self.device, dtype=dtype)
+
+    def apply_optimizations(self):
+        """Apply platform-specific optimizations."""
+        if self.pipe is None:
+            return
+
+        try:
+            if self.device == "mps":
+                # MPS optimizations
+                self.pipe.enable_attention_slicing()
+                logger.info("Enabled attention slicing for MPS")
+            elif self.device == "cuda":
+                # CUDA optimizations
+                try:
+                    self.pipe.enable_xformers_memory_efficient_attention()
+                    logger.info("Enabled xformers memory efficient attention")
+                except Exception:
+                    logger.warning("xformers not available, skipping")
+
+                try:
+                    self.pipe.enable_model_cpu_offload()
+                    logger.info("Enabled model CPU offload")
+                except Exception as e:
+                    logger.warning(f"Could not enable model CPU offload: {e}")
+        except Exception as e:
+            logger.warning(f"Could not apply optimizations: {e}")

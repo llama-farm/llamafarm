@@ -23,7 +23,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
         include:
           - service: designer
             context: ./designer
@@ -41,6 +41,14 @@ jobs:
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
             description: "LlamaFarm Universal Runtime - Universal Runtime for all models"
+          - service: edge-runtime
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
+          - service: edge-runtime-lite
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime (Lite) - Language-only runtime without vision deps"
 
     steps:
       - name: Checkout repository
@@ -109,6 +117,7 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
             PYTORCH_VARIANT=${{ matrix.service == 'runtime' && github.event_name == 'pull_request' && 'cpu' || '' }}
+            ENABLE_VISION=${{ matrix.service == 'edge-runtime-lite' && 'false' || '' }}
 
       - name: Upload AMD64 image artifact (PR only)
         if: github.event_name == 'pull_request'
@@ -127,7 +136,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
         include:
           - service: designer
             context: ./designer
@@ -145,6 +154,14 @@ jobs:
             context: ./
             dockerfile: ./runtimes/universal/Dockerfile
             description: "LlamaFarm Universal Runtime - model serving for GGUF and Transformers"
+          - service: edge-runtime
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime - Lightweight runtime for edge/drone deployment"
+          - service: edge-runtime-lite
+            context: ./
+            dockerfile: ./runtimes/edge/Dockerfile
+            description: "LlamaFarm Edge Runtime (Lite) - Language-only runtime without vision deps"
 
     steps:
       - name: Checkout repository
@@ -195,6 +212,7 @@ jobs:
           outputs: ${{ github.event_name == 'pull_request' && format('type=docker,dest={0}/{1}-arm64.tar', runner.temp, matrix.service) || '' }}
           build-args: |
             GIT_SHA=${{ github.sha }}
+            ENABLE_VISION=${{ matrix.service == 'edge-runtime-lite' && 'false' || '' }}
 
       - name: Upload ARM64 image artifact (PR only)
         if: github.event_name == 'pull_request'
@@ -214,7 +232,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [designer, server, rag]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
 
     steps:
       - name: Checkout repository
@@ -368,11 +386,11 @@ jobs:
           IMAGE_TAG: pr-${{ github.event.number }}
         run: |
           # Tag the loaded images with the expected format for docker-compose
-          SERVICES=(designer server rag runtime)
+          SERVICES=(designer server rag runtime edge-runtime edge-runtime-lite)
 
           for SERVICE in "${SERVICES[@]}"; do
             # Find the loaded images for this service
-            AMD64_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "$SERVICE" | grep "amd64" | head -1 | tr -d ' ')
+            AMD64_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "/${SERVICE}:" | grep "amd64" | head -1 | tr -d ' ')
 
             if [ -n "$AMD64_IMAGE" ]; then
               # Tag for docker-compose (use AMD64 for testing)
@@ -465,6 +483,8 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=50 designer
           docker compose -f docker-compose.yml logs --tail=50 rag
           docker compose -f docker-compose.yml logs --tail=50 runtime
+          docker compose -f docker-compose.yml logs --tail=50 edge-runtime
+          docker compose -f docker-compose.yml logs --tail=50 edge-runtime-lite
 
       - name: Show logs on failure
         if: failure()
@@ -479,7 +499,7 @@ jobs:
           docker compose -f docker-compose.yml logs --tail=200 || true
           echo ""
           echo "=== Individual service logs ==="
-          for service in server designer rag runtime; do
+          for service in server designer rag runtime edge-runtime edge-runtime-lite; do
             echo "--- Logs for $service ---"
             docker compose -f docker-compose.yml logs --tail=100 "$service" || true
             echo ""
@@ -504,14 +524,22 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [designer, server, rag, runtime]
+        service: [designer, server, rag, runtime, edge-runtime, edge-runtime-lite]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          # Use branch name as tag (matches create-manifest metadata)
+          TAG="${GITHUB_REF_NAME}"
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}:latest
+          image-ref: ${{ steps.tag.outputs.image }}
           format: "sarif"
           output: "trivy-results-${{ matrix.service }}.sarif"
 

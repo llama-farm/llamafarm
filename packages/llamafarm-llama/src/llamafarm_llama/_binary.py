@@ -42,15 +42,50 @@ LLAMA_CPP_REPO = "ggml-org/llama.cpp"
 
 
 def _get_llamafarm_release_version() -> str:
-    """Get LlamaFarm release version for ARM64 binary downloads."""
+    """Get LlamaFarm release version for ARM64 binary downloads.
+
+    The ARM64 llama.cpp binary is published as part of the main LlamaFarm
+    monorepo release (e.g., v0.0.28), NOT the llamafarm-llama package version.
+    These versions are decoupled.
+
+    Priority:
+    1. LLAMAFARM_RELEASE_VERSION env var (explicit override)
+    2. GitHub API query for latest release with the ARM64 binary
+    3. Hardcoded fallback
+    """
+    # 1. Env var override
+    env_version = os.environ.get("LLAMAFARM_RELEASE_VERSION")
+    if env_version:
+        if not env_version.startswith("v"):
+            env_version = f"v{env_version}"
+        logger.info(f"Using LlamaFarm release version from env: {env_version}")
+        return env_version
+
+    # 2. Query GitHub API for latest release with ARM64 binary
     try:
-        version = metadata.version("llamafarm-llama")
-        if version and not version.startswith("0.0.0"):
-            return f"v{version}"
-    except metadata.PackageNotFoundError:
-        pass
-    # Fallback for dev installs
-    return "v0.0.1"
+        import json
+
+        req = Request(
+            "https://api.github.com/repos/llama-farm/llamafarm/releases/latest",
+            headers={"User-Agent": "llamafarm-llama", "Accept": "application/vnd.github.v3+json"},
+        )
+        with urlopen(req, timeout=10) as response:
+            data = json.loads(response.read())
+            tag = data.get("tag_name")
+            assets = data.get("assets", [])
+            asset_names = [a.get("name", "") for a in assets]
+            if tag and any("arm64" in name for name in asset_names):
+                logger.info(f"Using latest LlamaFarm release: {tag}")
+                return tag
+            elif tag:
+                logger.debug(f"Latest release {tag} has no ARM64 asset, skipping")
+    except Exception as e:
+        logger.debug(f"Could not query GitHub for latest release: {e}")
+
+    # 3. Hardcoded fallback (last known good release with ARM64 binary)
+    fallback = "v0.0.28"
+    logger.info(f"Using fallback LlamaFarm release version: {fallback}")
+    return fallback
 
 # Binary URLs from llama.cpp GitHub releases
 # Format: https://github.com/ggml-org/llama.cpp/releases/download/{version}/{artifact}
@@ -70,7 +105,7 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
     },
     # Linux ARM64 (LlamaFarm provided - not available from upstream)
     ("linux", "arm64", "cpu"): {
-        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.tar.gz",
+        "artifact": "https://github.com/llama-farm/llamafarm/releases/download/{llamafarm_version}/llama-{version}-bin-linux-arm64.zip",
         "lib": "libllama.so",
         "sha256": None,
     },

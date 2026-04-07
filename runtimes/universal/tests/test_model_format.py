@@ -8,8 +8,8 @@ import pytest
 class TestDetectModelFormat:
     """Test model format detection (runtime-specific)."""
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_detect_model_format_gguf(self, mock_hf_api_class, mock_check_local_cache):
         """Test detecting GGUF format."""
         from utils.model_format import clear_format_cache, detect_model_format
@@ -35,8 +35,8 @@ class TestDetectModelFormat:
         # Verify
         assert result == "gguf"
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_detect_model_format_transformers(
         self, mock_hf_api_class, mock_check_local_cache
     ):
@@ -64,8 +64,8 @@ class TestDetectModelFormat:
         # Verify
         assert result == "transformers"
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_detect_model_format_strips_quantization_suffix(
         self, mock_hf_api_class, mock_check_local_cache
     ):
@@ -100,8 +100,8 @@ class TestDetectModelFormat:
         # Verify correct format was detected
         assert result == "gguf"
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_caching_with_quantization_suffix(
         self, mock_hf_api_class, mock_check_local_cache
     ):
@@ -139,8 +139,8 @@ class TestDetectModelFormat:
         assert result3 == "gguf"
         assert mock_api.list_repo_files.call_count == 1  # Still 1, cache was used
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_detect_model_format_uses_local_cache(
         self, mock_hf_api_class, mock_check_local_cache
     ):
@@ -175,8 +175,8 @@ class TestDetectModelFormat:
         # Verify HF API was NOT called (used local cache instead)
         mock_api.list_repo_files.assert_not_called()
 
-    @patch("utils.model_format._check_local_cache_for_model")
-    @patch("utils.model_format.HfApi")
+    @patch("llamafarm_common.model_format._check_local_cache_for_model")
+    @patch("llamafarm_common.model_format.HfApi")
     def test_detect_model_format_local_cache_transformers(
         self, mock_hf_api_class, mock_check_local_cache
     ):

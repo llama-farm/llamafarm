@@ -14,13 +14,9 @@ _cached_pid_file_path: str = ""
 
 def get_pid_dir() -> Path:
     """Get the directory for PID files."""
-    try:
-        _home = Path.home()
-    except RuntimeError:
-        _fb = os.environ.get("USERPROFILE") or os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
-        _home = Path(_fb) if _fb else Path.cwd()
-    lf_data_dir = os.getenv("LF_DATA_DIR", _home / ".llamafarm")
-    pid_dir = Path(lf_data_dir) / "pids"
+    from .safe_home import get_data_dir
+
+    pid_dir = get_data_dir() / "pids"
     pid_dir.mkdir(parents=True, exist_ok=True)
     return pid_dir
 

@@ -53,7 +53,7 @@ transitively because edge imports `llamafarm_common`.
 - [x] 5.4 Emit the startup log line via `offline_mode.log_startup_mode()` in the FastAPI lifespan
 - [x] 5.5 Chat template extraction is unchanged — `get_chat_template_from_gguf` reads from the GGUF file's embedded metadata regardless of where the file lives
 - [x] 5.6 Integration tests in `runtimes/universal/tests/test_gguf_offline_integration.py` (6 tests): alias routes through resolver with model_dir hit, alias+offline+complete miss raises with correct error, no-alias uses legacy path, startup log format, constructor accepts alias kwarg, alias defaults to None
-- [ ] 5.7 **Edge runtime follow-up (deferred to feat-runtime-edge-standalone rebase)**: when that branch lands on main, apply the same `alias` kwarg + `resolve_gguf_path` call to `runtimes/edge/models/gguf_language_model.py`. The shared offline guards already work transitively, so strict offline mode is functional on edge even without this explicit wiring.
+- [x] 5.7 Edge runtime wiring (completed on merge from main after feat-runtime-edge-standalone landed as #799): `runtimes/edge/models/gguf_language_model.py` now accepts an `alias` kwarg and routes through `resolve_gguf_path` / `resolve_mmproj_path` when provided; `runtimes/edge/server.py` imports `llamafarm_common.offline_mode` early for env propagation and emits `log_startup_mode()` in the lifespan. Smoke-verified: constructor accepts good aliases, rejects traversal aliases at construction time.
 
 ## 6. Universal Runtime Env-Var Propagation
 

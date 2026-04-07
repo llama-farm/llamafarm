@@ -165,13 +165,12 @@ jobs:
           echo "✓ Datamodel generation complete"
 
       - name: Verify datamodel was generated
+        working-directory: config
         run: |
           echo "Checking for datamodel.py..."
-          ls -lh config/datamodel.py || echo "❌ datamodel.py not found!"
+          ls -lh datamodel.py || { echo "❌ datamodel.py not found!"; exit 1; }
           echo "Attempting import test..."
-          cd config && python -c "from datamodel import LlamaFarmConfig; print('✓ Direct import successful')" || echo "❌ Direct import failed!"
-          echo "Attempting module import test..."
-          python -c "from config.datamodel import LlamaFarmConfig; print('✓ Module import successful')" || echo "❌ Module import failed!"
+          uv run python -c "from datamodel import LlamaFarmConfig; print('✓ Import successful')"
 
       - name: Check if component has tests
         id: check-tests
@@ -225,9 +224,19 @@ jobs:
         continue-on-error: false
 
       - name: Set up Ollama
-        uses: pydantic/ollama-action@v3
-        with:
-          model: nomic-embed-text
+        env:
+          # Pin install script to v0.19.0 release with checksum verification
+          OLLAMA_INSTALL_URL: https://github.com/ollama/ollama/releases/download/v0.19.0/install.sh
+          OLLAMA_INSTALL_SHA256: 25f64b810b947145095956533e1bdf56eacea2673c55a7e586be4515fc882c9f
+        run: |
+          sudo apt-get install -y --no-install-recommends zstd
+          curl -fsSL "$OLLAMA_INSTALL_URL" -o install-ollama.sh
+          echo "${OLLAMA_INSTALL_SHA256}  install-ollama.sh" | sha256sum -c -
+          sh install-ollama.sh
+          rm install-ollama.sh
+          ollama serve &
+          sleep 3
+          ollama pull nomic-embed-text
 
       - name: Run tests
         if: steps.check-tests.outputs.has_tests == 'true'

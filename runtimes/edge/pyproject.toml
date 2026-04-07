@@ -1,0 +1,90 @@
+[project]
+name = "edge-runtime"
+version = "0.1.0"
+description = "Minimal on-device inference API for Raspberry Pi, Jetson, and edge hardware"
+requires-python = ">=3.10,<3.15"
+dependencies = [
+  # Web framework
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "pydantic>=2.0.0",
+  "python-multipart>=0.0.22",
+  # OpenAI-compatible types
+  "openai>=1.0.0",
+  # Logging
+  "structlog>=24.0.0",
+  # Model format detection and GGUF utilities
+  "huggingface-hub>=0.20.0",
+  "llamafarm-common",
+  "llamafarm-llama",
+  # GGUF metadata reading
+  "gguf>=0.17.1",
+  # Model caching
+  "cachetools>=6.0.0",
+  # Chat template rendering
+  "jinja2>=3.0.0",
+  # Context calculator dependencies
+  "psutil>=5.9.0",
+  "pyyaml>=6.0",
+  "protobuf>=6.33.5,<7",
+  "sentencepiece>=0.2.1",
+  # Image processing (for vision)
+  "pillow>=10.0.0",
+  "numpy>=1.24.0",
+  # HTTP client (for streaming cascade)
+  "httpx>=0.24.0",
+  # IPC bus (Zenoh pub/sub over Unix socket)
+  "eclipse-zenoh>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Vision models (YOLO + CLIP) — install when edge device has a camera
+vision = [
+  "ultralytics>=8.4.14",
+  "transformers>=4.35.0",
+  "lapx>=0.5.0",
+]
+# Transformers language models (non-GGUF)
+transformers = [
+  "transformers>=4.35.0",
+  "accelerate>=0.25.0",
+  "torch>=2.6.0",
+]
+# GPU acceleration
+gpu = ["torch>=2.6.0"]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.14.3",
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "httpx>=0.24.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["models", "utils", "core", "routers", "services"]
+py-modules = ["server"]
+
+[tool.uv]
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+index-url = "https://pypi.org/simple"
+
+override-dependencies = [
+  "pillow>=10.0.0",
+  "numpy>=1.24.0,<2.4",
+]
+
+[tool.uv.sources]
+llamafarm-common = { path = "../../common", editable = true }
+llamafarm-llama = { path = "../../packages/llamafarm-llama", editable = true }
+
+[tool.ruff]
+extend = "../../ruff.toml"
