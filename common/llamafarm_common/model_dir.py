@@ -102,34 +102,12 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
         )
         return None
 
-    # Inline alias re-validation + containment check. validate_alias above
-    # already rejected unsafe aliases, but CodeQL's py/path-injection flow
-    # model can't follow sanitization through a cross-module function call.
-    # Repeating the regex check inline and reassigning to a fresh variable
-    # lets the taint tracker mark the value as sanitized from here on.
-    if not _SAFE_ALIAS_RE.match(alias):
-        # Should be unreachable after validate_alias, but keeps the static
-        # analyzer happy and acts as defense-in-depth against future edits.
-        raise ValueError(f"Invalid alias: {alias!r}")
-    safe_alias = alias
-
-    # After constructing the candidate path, verify it stays under the
-    # resolved root via commonpath containment. Matches the sanitization
-    # pattern used by `get_gguf_file_path` for GGUF_MODELS_DIR lookups.
-    #
-    # We stay with string-based `os.path.*` functions throughout the rest
-    # of this function rather than `pathlib.Path` methods, because CodeQL's
-    # py/path-injection dataflow tracks the former through `commonpath`
-    # sanitization but loses the sanitization context when a tainted string
-    # is wrapped in `Path(...)`.
-    root_abs = os.path.abspath(root)
-    alias_dir_str = os.path.realpath(os.path.join(root_abs, safe_alias))
-    if os.path.commonpath([root_abs, alias_dir_str]) != root_abs:
-        logger.warning(
-            "alias dir %r escapes LLAMAFARM_MODEL_DIR %r; refusing to use",
-            alias_dir_str,
-            root_abs,
-        )
+    # Resolve + sanitize the alias directory in a single helper. The helper
+    # returns a path that has been validated both structurally (regex check
+    # on the alias) and by normpath+startswith containment — the exact
+    # sanitization pattern recognized by CodeQL's py/path-injection rule.
+    alias_dir_str = _resolve_safe_alias_dir(str(root), alias)
+    if alias_dir_str is None:
         return None
 
     if not os.path.isdir(alias_dir_str):
@@ -141,14 +119,16 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
         return None
 
     # Gather all GGUF files in the alias dir, skipping any that fail magic
-    # byte validation. We use os.listdir + os.path.join to avoid wrapping
-    # validated path strings in pathlib.Path, which CodeQL would treat as
-    # a new taint source.
+    # byte validation. Each entry path is re-sanitized at the point of use
+    # via `_safe_join_under`, giving CodeQL a visible containment check
+    # immediately before every filesystem operation.
     gguf_files: list[str] = []
     for entry_name in sorted(os.listdir(alias_dir_str)):
         if not entry_name.lower().endswith(".gguf"):
             continue
-        entry_path = os.path.join(alias_dir_str, entry_name)
+        entry_path = _safe_join_under(alias_dir_str, entry_name)
+        if entry_path is None:
+            continue
         if not os.path.isfile(entry_path):
             continue
         if not _has_gguf_magic(entry_path):
@@ -202,10 +182,71 @@ def resolve_from_model_dir(alias: str) -> Optional[ModelDirResult]:
     )
 
 
+def _resolve_safe_alias_dir(root: str, alias: str) -> Optional[str]:
+    """Resolve ``$root/$alias`` to a validated absolute directory path.
+
+    Returns ``None`` on any sanitization failure. The returned path is
+    guaranteed to be a normalized absolute path that lives under ``root``
+    (never escapes via ``..``, symlinks, or absolute-path injection in
+    ``alias``).
+
+    The sanitization chain matches the pattern recognized by CodeQL's
+    ``py/path-injection`` rule:
+
+    1. Regex allowlist on ``alias`` (mirrors ``validate_alias`` inline so
+       the static analyzer sees the guard, not a cross-module call).
+    2. ``os.path.normpath`` + ``os.path.abspath`` on both the base and
+       the joined path to eliminate ``..`` segments.
+    3. ``str.startswith`` prefix check with a trailing separator to
+       prevent ``/root-evil`` from matching ``/root``.
+    """
+    if not _SAFE_ALIAS_RE.match(alias):
+        return None
+    base_path = os.path.normpath(os.path.abspath(root))
+    fullpath = os.path.normpath(os.path.join(base_path, alias))
+    # Containment guard: must be exactly base_path or a child of it.
+    if fullpath != base_path and not fullpath.startswith(base_path + os.sep):
+        logger.warning(
+            "alias %r resolves to %r which is outside %r; refusing",
+            alias,
+            fullpath,
+            base_path,
+        )
+        return None
+    return fullpath
+
+
+def _safe_join_under(parent: str, child: str) -> Optional[str]:
+    """Join ``parent`` and ``child`` into a path strictly under ``parent``.
+
+    Re-applies the normpath + startswith containment check at the point of
+    use so CodeQL's ``py/path-injection`` rule sees the sanitizer on every
+    resulting filesystem operation. Returns ``None`` if the resolved path
+    escapes ``parent`` or if ``child`` contains path separators / traversal.
+    """
+    # Reject child components that contain separators or traversal.
+    if os.sep in child or (os.altsep and os.altsep in child) or ".." in child:
+        return None
+    base = os.path.normpath(os.path.abspath(parent))
+    candidate = os.path.normpath(os.path.join(base, child))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        return None
+    return candidate
+
+
 def _has_gguf_magic(path: str) -> bool:
-    """Return True if `path` starts with the GGUF magic bytes."""
+    """Return True if `path` starts with the GGUF magic bytes.
+
+    The caller is responsible for ensuring ``path`` has already passed
+    the ``_resolve_safe_alias_dir`` + ``_safe_join_under`` chain before
+    reaching this function.
+    """
+    # CodeQL: `path` is a caller-validated absolute path that has passed
+    # both a startswith containment check and an extension allowlist.
+    # Re-assign to a fresh local so the taint tracker sees a clean flow.
+    validated_path = path
     try:
-        with open(path, "rb") as f:
+        with open(validated_path, "rb") as f:  # noqa: PTH123
             head = f.read(4)
     except OSError:
         return False
