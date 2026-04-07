@@ -253,6 +253,18 @@ async def load_language(
                 model_format = detect_model_format(model_id, trusted=trusted)
                 logger.info(f"Detected format: {model_format}")
 
+                # Derive an alias for LLAMAFARM_MODEL_DIR lookup. If the
+                # model_id can't be turned into a safe alias (absolute
+                # path, unusual chars), `alias` stays None and the
+                # constructor falls back to legacy HF-cache resolution.
+                from utils.alias import derive_alias_from_model_id
+                alias = derive_alias_from_model_id(model_id)
+                if alias:
+                    logger.debug(
+                        f"Derived alias {alias!r} from model_id {model_id!r} "
+                        f"for LLAMAFARM_MODEL_DIR lookup"
+                    )
+
                 model: BaseModel
                 if model_format == "gguf":
                     model = GGUFLanguageModel(
@@ -263,6 +275,7 @@ async def load_language(
                         use_mlock=use_mlock, cache_type_k=cache_type_k,
                         cache_type_v=cache_type_v,
                         preferred_quantization=preferred_quantization,
+                        alias=alias,
                     )
                 else:
                     model = LanguageModel(model_id, device)

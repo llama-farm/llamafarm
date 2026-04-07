@@ -44,25 +44,46 @@ work identically. When multiple weights-candidate files exist in the same
 alias directory, the quantization preference order `Q4_K_M > Q4_K > Q5_K_M >
 Q5_K > Q8_0 > ...` is applied.
 
+### How the alias is determined per runtime
+
+**Edge runtime** — the alias is auto-derived from the incoming `model` field
+of the API request by stripping the `org/` prefix and `:quant` suffix. All of
+these request values map to the same alias directory `Qwen3-0.6B-GGUF`:
+
+| Request `model` | Derived alias |
+|---|---|
+| `Qwen/Qwen3-0.6B-GGUF:Q4_K_M` | `Qwen3-0.6B-GGUF` |
+| `Qwen/Qwen3-0.6B-GGUF:Q8_0` | `Qwen3-0.6B-GGUF` |
+| `Qwen/Qwen3-0.6B-GGUF` | `Qwen3-0.6B-GGUF` |
+| `Qwen3-0.6B-GGUF` | `Qwen3-0.6B-GGUF` |
+
+This means API clients don't have to change anything — an operator places
+`/opt/llamafarm/models/Qwen3-0.6B-GGUF/model.Q4_K_M.gguf` on the Pi, and
+every request form above finds it. The trade-off: `foo/my-model` and
+`bar/my-model` collide on the same alias directory. If you need to
+disambiguate, send distinct base names in your request model_ids.
+
+**Universal runtime** — if you're using the universal runtime's GGUF models,
+pass `alias=<name>` explicitly when constructing `GGUFLanguageModel`, or
+leave it unset to keep the legacy HF-cache-first behavior. Auto-derivation
+is edge-specific for now.
+
 ## Resolution order
 
 For each model alias, the runtime resolves its weights file in this order,
 first match wins:
 
 ```
-  1. Absolute path in `runtime.models[].model` (e.g. /data/custom.gguf)
+  1. $LLAMAFARM_MODEL_DIR/<alias>/  (format-sniffed)
           │
           ▼
-  2. $LLAMAFARM_MODEL_DIR/<alias>/  (format-sniffed)
+  2. HuggingFace cache             (existing behavior)
           │
           ▼
-  3. HuggingFace cache             (existing behavior)
-          │
-          ▼
-  4. Network download              (skipped when LLAMAFARM_OFFLINE=1)
+  3. Network download              (skipped when LLAMAFARM_OFFLINE=1)
 ```
 
-In strict offline mode, step 4 is removed. If no tier matches, the runtime
+In strict offline mode, step 3 is removed. If no tier matches, the runtime
 raises `FileNotFoundError` with a multi-line message naming the alias, the
 paths that were tried, and the `lf` command that would make the file
 available.
