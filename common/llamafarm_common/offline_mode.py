@@ -101,11 +101,6 @@ def propagate_hf_env() -> None:
             os.environ[var] = "1"
 
 
-# Internal flag used by `log_startup_mode` to keep the log message idempotent
-# across multiple calls in the same process.
-_startup_logged: bool = False
-
-
 def log_startup_mode() -> None:
     """Emit a single info-level log line describing the resolved mode.
 
@@ -113,11 +108,13 @@ def log_startup_mode() -> None:
     per process. Uses `structlog` if it is already imported into the process
     (we do NOT force an import to avoid pulling a heavy dep into `common`);
     otherwise falls back to stdlib `logging`.
+
+    Idempotency is tracked via a function attribute rather than a module
+    global so static analysis tools can follow the assignment.
     """
-    global _startup_logged
-    if _startup_logged:
+    if getattr(log_startup_mode, "_done", False):
         return
-    _startup_logged = True
+    log_startup_mode._done = True  # type: ignore[attr-defined]
 
     mode = "offline" if is_offline() else "online"
     md = model_dir()
@@ -158,8 +155,7 @@ def _find_structlog_logger():
 
 def reset_for_tests() -> None:
     """Reset the idempotent startup-log flag. Tests only."""
-    global _startup_logged
-    _startup_logged = False
+    log_startup_mode._done = False  # type: ignore[attr-defined]
 
 
 def raise_offline_error(

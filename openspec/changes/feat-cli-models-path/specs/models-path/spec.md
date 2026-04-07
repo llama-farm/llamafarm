@@ -2,7 +2,7 @@
 
 ### Requirement: `lf models path` emits a transport plan
 
-The CLI SHALL provide a `lf models path` command that reads `llamafarm.yaml`, locates each configured model's files in the local HuggingFace cache, and emits a machine-readable transport plan mapping source paths on the current host to target paths on a deployment device. The command SHALL NOT download, copy, or modify any files.
+The CLI SHALL provide a `lf models path` command that reads `llamafarm.yaml`, locates each configured model's files in the local HuggingFace cache, and emits a machine-readable transport plan mapping source paths on the current host to target paths on a deployment device. The command SHALL NOT download, copy, or modify any model files, HuggingFace cache contents, or on-device target files. It MAY maintain internal bookkeeping files (e.g. sha256 sidecar files in a CLI-owned cache directory) as an implementation detail; those are not considered "user-visible modifications".
 
 #### Scenario: JSON output contains source, target, size, and sha256 for each file
 
@@ -38,9 +38,23 @@ The `source` field emitted by `lf models path` SHALL be the HuggingFace cache sn
 - **WHEN** HuggingFace cache garbage collection repacks blob storage but leaves snapshot symlinks intact
 - **THEN** the `source` path from a previously emitted plan SHALL still resolve to a valid file
 
+### Requirement: `lf models path` validates aliases before building target paths
+
+Before constructing any `target` path, the command SHALL validate each model's alias (the `name` field from `runtime.models[]`) to ensure it cannot escape `target_root` via path traversal. Aliases containing `..`, path separators (`/`, `\`), or absolute-path prefixes SHALL be rejected with a clear error. Aliases SHALL match the pattern `^[a-zA-Z0-9._][a-zA-Z0-9._\-]*$`, mirroring the runtime-side `validate_alias` contract in `llamafarm_common.model_utils`.
+
+#### Scenario: Traversal alias rejected
+
+- **WHEN** the user runs `lf models path` against a project whose `runtime.models[0].name` is `../etc/passwd`
+- **THEN** the command exits non-zero with an "invalid alias" error before computing any target paths
+
+#### Scenario: Slash-bearing alias rejected
+
+- **WHEN** a model name contains `/` or `\`
+- **THEN** the command exits non-zero with an "invalid alias" error
+
 ### Requirement: `lf models path` target paths use a resolved target root
 
-The `target` field for each file SHALL be computed as `<target_root>/<alias>/<canonical-filename>`, where `target_root` is resolved in this precedence order: `--target-root` flag, `deployment.model_dir` from `llamafarm.yaml`, hardcoded fallback `/opt/llamafarm/models`.
+The `target` field for each file SHALL be computed as `<target_root>/<alias>/<canonical-filename>`, where `target_root` is resolved in this precedence order: `--target-root` flag, `deployment.model_dir` from `llamafarm.yaml`, hardcoded fallback `/opt/llamafarm/models`. The `alias` component MUST already have passed the validation defined in the previous requirement.
 
 #### Scenario: `--target-root` flag overrides config
 
