@@ -221,4 +221,4 @@ class TestSourceBuild:
         # Since testing the exact URL construction inside download_binary requires mocking
         # metadata.version or similar, let's verify the manifest entry itself which is the source of truth
         assert expected_url_pattern in manifest["artifact"]
-        assert manifest["lib"] == "bin/libllama.so"
+        assert manifest["lib"] == "libllama.so"

@@ -213,12 +213,12 @@ LLAMA_CDEF = """
 
     // Model loading
     struct llama_model_params llama_model_default_params(void);
-    struct llama_model * llama_load_model_from_file(const char * path_model, struct llama_model_params params);
-    void llama_free_model(struct llama_model * model);
+    struct llama_model * llama_model_load_from_file(const char * path_model, struct llama_model_params params);
+    void llama_model_free(struct llama_model * model);
 
     // Context
     struct llama_context_params llama_context_default_params(void);
-    struct llama_context * llama_new_context_with_model(struct llama_model * model, struct llama_context_params params);
+    struct llama_context * llama_init_from_model(struct llama_model * model, struct llama_context_params params);
     void llama_free(struct llama_context * ctx);
 
     // Model info (new API - llama.cpp b7376+)
@@ -819,7 +819,7 @@ def _load_ggml_backends():
 
     CRITICAL: Backend loading must happen in the SAME library context as model loading.
     This means we MUST call ggml_backend_load_all() via CFFI (from libllama) since that's
-    the same library that will call llama_load_model_from_file().
+    the same library that will call llama_model_load_from_file().
 
     If we call via ctypes from a separately-loaded libggml.so, the backend registrations
     happen in a different static data context and aren't visible to libllama.

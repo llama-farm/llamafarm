@@ -124,7 +124,7 @@ func TestDownload_NoPrebuilt(t *testing.T) {
 
 	// A combination that SpecFor does not support.
 	target := Target{OS: "darwin", Arch: "arm64", Accelerator: "cuda"}
-	_, err := Download(context.Background(), target, "b7694")
+	_, err := Download(context.Background(), target, "b8708")
 	if err == nil {
 		t.Error("expected error for unsupported combo")
 	}

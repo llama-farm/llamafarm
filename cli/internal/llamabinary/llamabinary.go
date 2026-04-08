@@ -27,7 +27,7 @@ import (
 
 // Version is the pinned llama.cpp release version, overridable at build time via
 // -ldflags "-X github.com/llamafarm/cli/internal/llamabinary.Version=bXXXX".
-var Version = "b7694"
+var Version = "b8708"
 
 // Target identifies a platform + accelerator combination for a llama.cpp binary.
 type Target struct {

@@ -23,7 +23,7 @@ Directory: `rag/`
 
 **Universal Runtime**
 Description: Local ML inference server with OpenAI-compatible API. Supports text generation, embeddings, OCR, anomaly detection, and classification across HuggingFace and GGUF models.
-Tech Stack: Python 3.11+, transformers, torch, llama-cpp-python
+Tech Stack: Python 3.11+, transformers, torch, llamafarm-llama (LlamaFarm's own llama.cpp bindings)
 Directory: `runtimes/universal/`
 
 **Designer**

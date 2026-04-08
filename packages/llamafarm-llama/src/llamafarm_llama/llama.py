@@ -174,7 +174,7 @@ class Llama:
             logger.info(f"Loading model: {model_path}")
 
         model_path_bytes = model_path.encode("utf-8")
-        self._model = self._lib.llama_load_model_from_file(
+        self._model = self._lib.llama_model_load_from_file(
             model_path_bytes, model_params
         )
 
@@ -238,10 +238,10 @@ class Llama:
             _seed = random.randint(0, 2**32 - 1)  # noqa: F841 - seed generation for future use
 
         # Create context
-        self._ctx = self._lib.llama_new_context_with_model(self._model, ctx_params)
+        self._ctx = self._lib.llama_init_from_model(self._model, ctx_params)
 
         if self._ctx == ffi.NULL:
-            self._lib.llama_free_model(self._model)
+            self._lib.llama_model_free(self._model)
             raise RuntimeError("Failed to create llama context")
 
         # Store config
@@ -887,7 +887,7 @@ class Llama:
             self._ctx = ffi.NULL  # Mark as freed to prevent double-free
 
         if hasattr(self, "_model") and self._model is not None and self._model != ffi.NULL:
-            self._lib.llama_free_model(self._model)
+            self._lib.llama_model_free(self._model)
             self._model = ffi.NULL  # Mark as freed to prevent double-free
 
     def __del__(self):

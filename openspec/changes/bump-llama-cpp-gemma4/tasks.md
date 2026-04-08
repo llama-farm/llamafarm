@@ -1,0 +1,56 @@
+## 1. Resolve target tag
+
+- [x] 1.1 Listed recent llama.cpp tags via `git ls-remote --tags`. Latest tag is `b8708`.
+- [x] 1.2 Verified `d9a12c82` (Gemma 4 EOG fix) is on master but not yet in any tag — `b8708` was cut ~4.5h before `d9a12c82` landed. Per user direction ("let's go with the latest"), proceed with `b8708` and capture the missing EOG fix in the planned follow-up bump.
+- [ ] 1.3 Record the chosen tag (`b8708`) in the PR description with justification: "latest upstream tag at time of bump; includes 7 of 8 Gemma 4 commits; trailing EOG token fix (d9a12c82) deferred to follow-up bump as planned"
+
+## 2. Bump version constants
+
+- [x] 2.1 Updated `llama-cpp-version.txt` to `b8708`
+- [x] 2.2 Updated the hardcoded fallback in `packages/llamafarm-llama/src/llamafarm_llama/_binary.py` to `b8708`
+- [x] 2.3 Updated `cli/internal/llamabinary/llamabinary.go` `var Version` to `b8708`
+- [x] 2.4 Updated 16 fixture strings in `llamabinary_test.go` (replace_all) and 1 in `download_test.go`
+- [x] 2.5 Grepped remaining references: only historical comments in `_binary.py` (about CUDA 11 dropping at b7694+) and example fixture strings in `common/tests/test_offline_mode.py` (not tied to the pin); both intentionally left
+
+## 3. Replace deprecated llama.cpp APIs
+
+- [x] 3.1 Renamed cdef `llama_load_model_from_file` → `llama_model_load_from_file` in `_bindings.py` (and a docstring reference)
+- [x] 3.2 Renamed cdef `llama_new_context_with_model` → `llama_init_from_model` in `_bindings.py`
+- [x] 3.3 Renamed cdef `llama_free_model` → `llama_model_free` in `_bindings.py`
+- [x] 3.4 Updated call site at `llama.py:177` to `llama_model_load_from_file`
+- [x] 3.5 Updated call site at `llama.py:241` to `llama_init_from_model`
+- [x] 3.6 Updated 2 call sites for `llama_free_model` in `llama.py` (replace_all)
+- [x] 3.7 Also updated `tests/test_llama.py` mocks (which referenced the old names and would have broken). Final grep confirms no source-code references remain — only openspec change artifacts mention the old names
+
+## 4. Update documentation
+
+- [x] 4.1 Created `.claude/rules/llama_cpp_bindings.md` covering rationale, version pinning, propagation locations, header-diff procedure, smoke-test procedure, ARM64 build dependency, and expected bump cadence during upstream churn
+- [x] 4.2 CLAUDE.md already has umbrella `See .claude/rules/` reference (no per-file links needed). Also fixed a stale tech-stack line in CLAUDE.md that listed the Universal Runtime as using `llama-cpp-python` — corrected to `llamafarm-llama`
+
+## 5. Trigger ARM64 binary build
+
+- [ ] 5.1 Run `gh workflow run build-llama.yml -f llama_version=<chosen-tag>` to manually invoke the workflow
+- [ ] 5.2 Watch the run with `gh run watch` and verify it completes successfully
+- [ ] 5.3 Verify the artifact `llama-<tag>-bin-linux-arm64.zip` is attached to a LlamaFarm GitHub release (or note in the PR if it requires a release tag push first)
+- [ ] 5.4 If the build fails, investigate and fix in this PR before proceeding — do not merge the version bump until the ARM64 artifact exists
+
+## 6. Run tests
+
+- [x] 6.1 Ran `uv run pytest tests/` in `packages/llamafarm-llama` — 54/54 pass on macOS arm64. Also fixed a pre-existing broken test (`test_download_binary_uses_prebuilt_on_linux_arm64`) that was deselected from CI since before b7694 — stale `bin/libllama.so` expectation in the manifest assertion. One-line fix.
+- [x] 6.2 Ran `go test ./internal/llamabinary/...` in `cli/` — pass
+- [ ] 6.3 Confirm cross-platform CI (Linux, macOS, Windows) passes after pushing — wait for the full matrix, do not declare done at "pushed"
+
+## 7. Smoke-test inference
+
+- [ ] 7.1 Download a small Gemma 4 GGUF model (smallest variant that exercises the tokenizer and EOG fixes is sufficient)
+- [ ] 7.2 Start the universal runtime locally and load the Gemma 4 model
+- [ ] 7.3 Issue a chat completion or text generation request and verify the output is coherent (not garbage tokens, not a tokenizer error, not a crash)
+- [ ] 7.4 Repeat 7.1–7.3 with a non-Gemma model already known to work (e.g. a small Llama 3 or Qwen GGUF) as a regression check
+- [ ] 7.5 Document the exact model variants tested in the PR description
+
+## 8. Verify and ship
+
+- [ ] 8.1 Run `openspec validate bump-llama-cpp-gemma4` and resolve any issues
+- [ ] 8.2 Open the PR with a description that includes: chosen tag, justification, models smoke-tested, ARM64 build run URL, and the "follow-up bumps expected" note from the design doc
+- [ ] 8.3 After merge, verify CI on `main` is green (per `.claude/rules/pr_workflow.md` — do not stop at "pushed")
+- [ ] 8.4 Schedule (or note in a tracking issue) the next bump for ~1–2 weeks out, as a Gemma 4 stabilization sweep

@@ -14,9 +14,9 @@ class TestLlamaInit:
 
         mock_lib = MagicMock()
         mock_lib.llama_model_default_params.return_value = MagicMock()
-        mock_lib.llama_load_model_from_file.return_value = 1  # Non-null model pointer
+        mock_lib.llama_model_load_from_file.return_value = 1  # Non-null model pointer
         mock_lib.llama_context_default_params.return_value = MagicMock()
-        mock_lib.llama_new_context_with_model.return_value = 1  # Non-null context pointer
+        mock_lib.llama_init_from_model.return_value = 1  # Non-null context pointer
         mock_lib.llama_n_vocab.return_value = 32000
         mock_lib.llama_n_ctx.return_value = 2048
         mock_lib.llama_model_meta_val_str.return_value = 0
@@ -30,9 +30,9 @@ class TestLlamaInit:
             # Create instance - path should be converted internally
             _llama = Llama(model_path="C:\\models\\test.gguf")  # noqa: F841
 
-            # Verify that llama_load_model_from_file was called
+            # Verify that llama_model_load_from_file was called
             # (path conversion happens inside the Llama class)
-            assert mock_lib.llama_load_model_from_file.called
+            assert mock_lib.llama_model_load_from_file.called
         finally:
             sys.platform = original_platform
 
