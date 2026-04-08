@@ -478,6 +478,17 @@ jobs:
       # ============================================================
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Prevent intermittent Windows post-job failures caused by actions/checkout@v4's
+          # cleanup running `git submodule foreach --recursive "sh -c '...'"` to unset the
+          # auth extraheader. LlamaFarm has no submodules, so this command is a no-op, but
+          # on Windows runners the spawned Git Bash subshell occasionally hangs and is
+          # killed as an orphan process, marking the step as failed even though all tests
+          # passed. Setting persist-credentials=false avoids writing the extraheader in the
+          # first place, so the post-step has nothing to clean up. The E2E tests don't push
+          # anything back to the repo, so no downstream step needs the persisted token.
+          # See PR #809 for the full diagnosis.
+          persist-credentials: false
 
       # ============================================================
       # Download Pre-built CLI Binary
