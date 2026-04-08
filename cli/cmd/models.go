@@ -9,6 +9,7 @@ import (
 	"github.com/llamafarm/cli/cmd/orchestrator"
 
 	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/internal/hfcache"
 	"github.com/spf13/cobra"
 )
 
@@ -93,7 +94,46 @@ Examples:
 	},
 }
 
+// modelsCachedCmd lists every HuggingFace model present in the local cache.
+// Distinct from `lf models list`, which lists models *configured* in a
+// LlamaFarm project. This command reads the cache directly and does not
+// require the LlamaFarm server to be running.
+var modelsCachedCmd = &cobra.Command{
+	Use:   "cached",
+	Short: "List HuggingFace models cached on this machine",
+	Long: `List every HuggingFace model present in the local Hub cache.
+
+This is the on-disk view: it shows every repo that has been downloaded via
+'lf models pull', 'huggingface-cli download', or any other tool that writes
+the standard HF cache layout. It does not list models configured in a
+LlamaFarm project — for that, use 'lf models list'.
+
+This command reads the cache directly and does not boot the LlamaFarm server.
+
+Examples:
+  # Show every cached model
+  lf models cached`,
+	Run: func(cmd *cobra.Command, args []string) {
+		repos, err := hfcache.ScanCache()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error scanning cache: %v\n", err)
+			os.Exit(1)
+		}
+		if len(repos) == 0 {
+			fmt.Println("No cached models found.")
+			return
+		}
+		fmt.Printf("Cached HuggingFace models (%d):\n\n", len(repos))
+		for _, r := range repos {
+			fmt.Printf("  • %s\n", r.RepoID)
+			fmt.Printf("    Size: %s | Files: %d\n", utils.FormatBytes(r.SizeOnDisk), r.FileCount)
+			fmt.Printf("    Path: %s\n\n", r.RepoPath)
+		}
+	},
+}
+
 func init() {
 	modelsCmd.AddCommand(modelsListCmd)
+	modelsCmd.AddCommand(modelsCachedCmd)
 	rootCmd.AddCommand(modelsCmd)
 }

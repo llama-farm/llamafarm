@@ -291,3 +291,135 @@ func TestSHA256_InvalidatesOnChange(t *testing.T) {
 		t.Error("expected sha256 to change after file mutation")
 	}
 }
+
+// layoutRealisticRepo creates a repo with a real blob in `blobs/` and a
+// snapshot symlink pointing at it, mirroring how huggingface_hub lays things
+// out. Returns the absolute repo dir.
+func layoutRealisticRepo(t *testing.T, cacheRoot, repoID, commit, filename string, blobBody []byte) string {
+	t.Helper()
+	repoDir := filepath.Join(cacheRoot, "models--"+strings.ReplaceAll(repoID, "/", "--"))
+	blobsDir := filepath.Join(repoDir, "blobs")
+	snapDir := filepath.Join(repoDir, "snapshots", commit)
+	if err := os.MkdirAll(blobsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(snapDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	blobPath := filepath.Join(blobsDir, "deadbeef-"+filename)
+	if err := os.WriteFile(blobPath, blobBody, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Relative symlink so it survives cache moves, matching HF's convention.
+	rel, err := filepath.Rel(snapDir, blobPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(rel, filepath.Join(snapDir, filename)); err != nil {
+		t.Fatal(err)
+	}
+	return repoDir
+}
+
+func TestLookupRepo_NotCached(t *testing.T) {
+	setupFakeCache(t)
+	_, err := LookupRepo("nobody/nope")
+	if !errors.Is(err, ErrNotCached) {
+		t.Errorf("got %v, want ErrNotCached", err)
+	}
+}
+
+func TestLookupRepo_ReturnsRepoInfo(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	body := []byte("GGUFweights-1234567890")
+	repoDir := layoutRealisticRepo(t, cacheRoot, "unsloth/Qwen3-1.7B-GGUF", "commit123", "qwen3-1.7b.Q4_K_M.gguf", body)
+
+	info, err := LookupRepo("unsloth/Qwen3-1.7B-GGUF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.RepoID != "unsloth/Qwen3-1.7B-GGUF" {
+		t.Errorf("repo id: got %q", info.RepoID)
+	}
+	if info.RepoPath != repoDir {
+		t.Errorf("repo path: got %q want %q", info.RepoPath, repoDir)
+	}
+	if info.SizeOnDisk != int64(len(body)) {
+		t.Errorf("size: got %d want %d", info.SizeOnDisk, len(body))
+	}
+	if info.FileCount != 1 {
+		t.Errorf("file count: got %d want 1", info.FileCount)
+	}
+}
+
+func TestLookupRepo_EmptyRepoDirIsNotCached(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	// A repo dir exists but has no real files (e.g. partial init).
+	emptyRepo := filepath.Join(cacheRoot, "models--ghost--repo", "snapshots", "abc")
+	if err := os.MkdirAll(emptyRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LookupRepo("ghost/repo")
+	if !errors.Is(err, ErrNotCached) {
+		t.Errorf("got %v, want ErrNotCached for empty repo dir", err)
+	}
+}
+
+func TestLookupRepo_RejectsTraversalRepoID(t *testing.T) {
+	setupFakeCache(t)
+	_, err := LookupRepo("../etc/passwd")
+	if !errors.Is(err, ErrInvalidRepoID) {
+		t.Errorf("got %v, want ErrInvalidRepoID", err)
+	}
+}
+
+func TestScanCache_EmptyCacheRootReturnsNil(t *testing.T) {
+	t.Setenv("HF_HUB_CACHE", filepath.Join(t.TempDir(), "does-not-exist"))
+	t.Setenv("HF_HOME", "")
+	repos, err := ScanCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 0 {
+		t.Errorf("expected empty slice, got %d entries", len(repos))
+	}
+}
+
+func TestScanCache_ReturnsAllModelRepos(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	layoutRealisticRepo(t, cacheRoot, "alpha/one", "c1", "f.gguf", []byte("GGUFhello"))
+	layoutRealisticRepo(t, cacheRoot, "beta/two", "c2", "g.gguf", []byte("GGUFworld!"))
+	// A non-model directory that scan should ignore.
+	if err := os.MkdirAll(filepath.Join(cacheRoot, "datasets--something"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := ScanCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 2 {
+		t.Fatalf("got %d repos, want 2: %+v", len(repos), repos)
+	}
+	if repos[0].RepoID != "alpha/one" || repos[1].RepoID != "beta/two" {
+		t.Errorf("repos sorted incorrectly: %+v", repos)
+	}
+	if repos[0].SizeOnDisk == 0 || repos[1].SizeOnDisk == 0 {
+		t.Error("expected non-zero sizes")
+	}
+}
+
+func TestScanCache_SkipsRepoWithNoRealFiles(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	// Create a "models--" dir with no snapshots/blobs at all.
+	if err := os.MkdirAll(filepath.Join(cacheRoot, "models--ghost--gone"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repos, err := ScanCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 0 {
+		t.Errorf("expected empty, got %d", len(repos))
+	}
+}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -399,7 +400,7 @@ func ensureModelsCached(selected []config.LlamaFarmConfigRuntimeModelsElem) erro
 	fmt.Fprintf(os.Stderr, "Pulling %d missing model(s)...\n", len(missing))
 	for _, m := range missing {
 		fmt.Fprintf(os.Stderr, "  → %s (%s)\n", m.Name, m.Model)
-		if err := pullModel(serverURL, m.Model); err != nil {
+		if err := pullModelNative(context.Background(), m.Model); err != nil {
 			return fmt.Errorf("pull %s: %w", m.Name, err)
 		}
 	}

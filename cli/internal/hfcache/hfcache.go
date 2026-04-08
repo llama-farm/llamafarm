@@ -270,6 +270,162 @@ func LocateMmproj(repoID string) (SnapshotFile, error) {
 	return candidates[0], nil
 }
 
+// RepoInfo describes a cached HuggingFace repo at a high level.
+type RepoInfo struct {
+	// RepoID is the canonical "org/name" identifier.
+	RepoID string
+	// RepoPath is the absolute path of the repo directory inside the cache
+	// (`<cache>/models--<org>--<name>`).
+	RepoPath string
+	// SizeOnDisk is the sum of unique blob sizes referenced by all snapshots
+	// of this repo. Mirrors `huggingface_hub.scan_cache_dir`'s definition:
+	// shared blobs are counted once.
+	SizeOnDisk int64
+	// FileCount is the number of distinct files (by basename) found across
+	// all snapshots.
+	FileCount int
+}
+
+// LookupRepo returns information about a cached repo, or ErrNotCached when the
+// repo is not present. Used by `lf models status` and similar read-only checks
+// that need to know "is this model on disk?" without booting the server.
+func LookupRepo(repoID string) (*RepoInfo, error) {
+	root, err := CacheRoot()
+	if err != nil {
+		return nil, err
+	}
+	repoDir, err := repoCacheDir(root, repoID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(repoDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: %s", ErrNotCached, repoID)
+		}
+		return nil, err
+	}
+
+	size, files, err := repoSizeAndFiles(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	if files == 0 {
+		// Repo dir exists but has no real files (e.g. partial init / broken
+		// symlinks). Treat as not-cached so callers don't get a misleading
+		// "yes, present" answer for an unusable cache entry.
+		return nil, fmt.Errorf("%w: %s", ErrNotCached, repoID)
+	}
+
+	return &RepoInfo{
+		RepoID:     repoID,
+		RepoPath:   repoDir,
+		SizeOnDisk: size,
+		FileCount:  files,
+	}, nil
+}
+
+// ScanCache walks the entire HuggingFace Hub cache root and returns one
+// RepoInfo per cached model repo. Mirrors `huggingface_hub.scan_cache_dir`'s
+// behavior for the `repo_type == "model"` case. Returns an empty slice (not an
+// error) when the cache root does not exist yet.
+func ScanCache() ([]RepoInfo, error) {
+	root, err := CacheRoot()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var out []RepoInfo
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		// Only model repos. HF also stores `datasets--*` and `spaces--*`.
+		if !strings.HasPrefix(name, "models--") {
+			continue
+		}
+		repoID := strings.ReplaceAll(strings.TrimPrefix(name, "models--"), "--", "/")
+		// Defensive: skip anything that fails our id sanitizer (e.g. weird
+		// directory names a user dropped in by hand).
+		if err := ValidateRepoID(repoID); err != nil {
+			continue
+		}
+		repoDir := filepath.Join(root, name)
+		size, files, err := repoSizeAndFiles(repoDir)
+		if err != nil || files == 0 {
+			continue
+		}
+		out = append(out, RepoInfo{
+			RepoID:     repoID,
+			RepoPath:   repoDir,
+			SizeOnDisk: size,
+			FileCount:  files,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RepoID < out[j].RepoID })
+	return out, nil
+}
+
+// repoSizeAndFiles walks a single repo directory and returns its size on disk
+// (sum of unique blob sizes) and the count of distinct snapshot files.
+//
+// Size is computed from the `blobs/` directory rather than from snapshot
+// symlinks, because multiple snapshot files can point at the same blob and we
+// want to count each blob exactly once — matching `scan_cache_dir`.
+func repoSizeAndFiles(repoDir string) (size int64, fileCount int, err error) {
+	blobsDir := filepath.Join(repoDir, "blobs")
+	if entries, err := os.ReadDir(blobsDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			info, statErr := e.Info()
+			if statErr != nil {
+				continue
+			}
+			size += info.Size()
+		}
+	}
+	// File count: distinct file paths (relative to the snapshot root, so
+	// nested files like `voices/a.bin` and `voices/b.bin` count separately)
+	// across all snapshots. Recurses into subdirectories to match
+	// huggingface_hub.scan_cache_dir, which walks the full snapshot tree.
+	snapshotsDir := filepath.Join(repoDir, "snapshots")
+	seen := make(map[string]struct{})
+	if snapEntries, err := os.ReadDir(snapshotsDir); err == nil {
+		for _, snap := range snapEntries {
+			if !snap.IsDir() {
+				continue
+			}
+			snapDir := filepath.Join(snapshotsDir, snap.Name())
+			_ = filepath.WalkDir(snapDir, func(path string, d os.DirEntry, walkErr error) error {
+				if walkErr != nil || d.IsDir() {
+					return nil //nolint:nilerr // best-effort walk
+				}
+				// Use the path relative to the snapshot dir as the key, so
+				// the same file in different snapshots counts once but
+				// distinct files in subdirs count separately.
+				rel, relErr := filepath.Rel(snapDir, path)
+				if relErr != nil {
+					return nil
+				}
+				if info, statErr := os.Stat(path); statErr == nil && !info.IsDir() && info.Size() > 0 {
+					seen[rel] = struct{}{}
+				}
+				return nil
+			})
+		}
+	}
+	return size, len(seen), nil
+}
+
 // sha256Sidecar describes the on-disk record of a previously-computed sha256.
 type sha256Sidecar struct {
 	Path    string `json:"path"`     // realpath of the source file

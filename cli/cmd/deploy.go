@@ -377,6 +377,29 @@ func deployModelsToServer(targetURL string, models []config.LlamaFarmConfigRunti
 // progressMu serializes terminal progress output across concurrent model downloads.
 var progressMu sync.Mutex
 
+// remoteDownloadEvent mirrors the SSE event shape emitted by the LlamaFarm
+// server's POST /v1/models/download endpoint. Used by `lf deploy` to drive
+// model downloads on a *remote* server (not the local cache). The local
+// `lf models pull` path uses the in-process hfmodel package and does not
+// touch this type.
+type remoteDownloadEvent struct {
+	Event       string   `json:"event"`
+	File        string   `json:"file,omitempty"`
+	Message     string   `json:"message,omitempty"`
+	Downloaded  int64    `json:"downloaded,omitempty"`
+	Total       int64    `json:"total,omitempty"`
+	Percent     float64  `json:"percent,omitempty"`
+	BytesPerSec int64    `json:"bytes_per_sec,omitempty"`
+	ETASeconds  *float64 `json:"eta_seconds,omitempty"`
+	ModelID     string   `json:"model_id,omitempty"`
+	TotalSize   int64    `json:"total_size,omitempty"`
+	IsGGUF      bool     `json:"is_gguf,omitempty"`
+	FileCount   int      `json:"file_count,omitempty"`
+	LocalDir    string   `json:"local_dir,omitempty"`
+	Size        int64    `json:"size,omitempty"`
+	Keepalive   bool     `json:"keepalive,omitempty"`
+}
+
 // pullModelFromRemote triggers a model download on the remote server and streams progress.
 // Returns the status ("downloaded" or "cached") and any error.
 func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
@@ -429,7 +452,7 @@ func pullModelFromRemote(baseURL, modelID, displayName string) (string, error) {
 		}
 
 		data := strings.TrimPrefix(line, "data: ")
-		var event downloadEvent
+		var event remoteDownloadEvent
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
 		}

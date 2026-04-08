@@ -1,48 +1,18 @@
 package cmd
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+	"sync"
 
-	"github.com/llamafarm/cli/cmd/orchestrator"
 	"github.com/llamafarm/cli/cmd/utils"
+	"github.com/llamafarm/cli/internal/hfcache"
+	"github.com/llamafarm/cli/internal/hfmodel"
 	"github.com/spf13/cobra"
 )
-
-// SSE event structures from the server
-type downloadEvent struct {
-	Event string `json:"event"`
-	// Common fields
-	File    string `json:"file,omitempty"`
-	Message string `json:"message,omitempty"`
-	// Progress fields
-	Downloaded  int64    `json:"downloaded,omitempty"`
-	Total       int64    `json:"total,omitempty"`
-	Percent     float64  `json:"percent,omitempty"`
-	BytesPerSec int64    `json:"bytes_per_sec,omitempty"`
-	ETASeconds  *float64 `json:"eta_seconds,omitempty"`
-	// Init fields
-	ModelID      string `json:"model_id,omitempty"`
-	Quantization string `json:"quantization,omitempty"`
-	SelectedFile string `json:"selected_file,omitempty"`
-	TotalSize    int64  `json:"total_size,omitempty"`
-	IsGGUF       bool   `json:"is_gguf,omitempty"`
-	FileCount    int    `json:"file_count,omitempty"`
-	// Done fields
-	LocalDir string `json:"local_dir,omitempty"`
-	// Cached fields
-	Size int64 `json:"size,omitempty"`
-	// Keepalive flag
-	Keepalive bool `json:"keepalive,omitempty"`
-}
 
 var modelsPullCmd = &cobra.Command{
 	Use:   "pull <model-id>",
@@ -50,6 +20,8 @@ var modelsPullCmd = &cobra.Command{
 	Long: `Download a model from HuggingFace to the local cache.
 
 The model-id can include an optional quantization suffix for GGUF models.
+This command talks directly to the HuggingFace Hub and does not require the
+LlamaFarm server to be running.
 
 Examples:
   # Download a GGUF model with specific quantization
@@ -62,15 +34,10 @@ Examples:
   lf models pull meta-llama/Llama-2-7b-hf`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		modelID := args[0]
+		modelName := args[0]
+		fmt.Printf("Downloading model: %s\n", modelName)
 
-		// Ensure server is running
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
-
-		fmt.Printf("Downloading model: %s\n", modelID)
-
-		err := pullModel(serverURL, modelID)
-		if err != nil {
+		if err := pullModelNative(cmd.Context(), modelName); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -82,6 +49,9 @@ var modelsStatusCmd = &cobra.Command{
 	Short: "Check if a model is cached locally",
 	Long: `Check if a model exists in the local HuggingFace cache.
 
+This command reads the cache directory directly and does not require the
+LlamaFarm server to be running.
+
 Examples:
   # Check if a model is cached
   lf models status unsloth/gemma-3-1b-it-gguf:Q4_K_M
@@ -92,212 +62,177 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		modelID := args[0]
 
-		// Ensure server is running
-		orchestrator.EnsureServicesOrExit(serverURL, "server")
+		// Strip optional ":quant" suffix — the cache stores models keyed by
+		// repo id, the quant just selects a file within the repo.
+		baseID := modelID
+		if idx := strings.LastIndex(modelID, ":"); idx != -1 {
+			baseID = modelID[:idx]
+		}
 
-		cached, err := checkModelStatus(serverURL, modelID)
+		_, err := hfcache.LookupRepo(baseID)
 		if err != nil {
+			if errors.Is(err, hfcache.ErrNotCached) {
+				fmt.Printf("✗ Model %s is not cached\n", modelID)
+				os.Exit(1)
+			}
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
-		if cached {
-			fmt.Printf("✓ Model %s is cached\n", modelID)
-			os.Exit(0)
-		} else {
-			fmt.Printf("✗ Model %s is not cached\n", modelID)
-			os.Exit(1)
-		}
+		fmt.Printf("✓ Model %s is cached\n", modelID)
 	},
 }
 
-// pullModel downloads a model using the server's SSE endpoint
-func pullModel(serverURL, modelID string) error {
-	url := fmt.Sprintf("%s/v1/models/download", strings.TrimSuffix(serverURL, "/"))
-
-	requestBody, err := json.Marshal(map[string]string{
-		"provider":   "universal",
-		"model_name": modelID,
-	})
+// pullModelNative drives a download via the in-process hfmodel package. The
+// rendering of progress events is preserved (rate, ETA, in-place line redraw)
+// from the previous SSE-based implementation so the user-facing output is
+// identical, but no LlamaFarm server is involved.
+func pullModelNative(ctx context.Context, modelName string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	client, err := hfmodel.NewClient()
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("init hfmodel client: %w", err)
 	}
-
-	// Create request with long timeout for large model downloads
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
+	plan, err := client.GetModelDownloadPlan(ctx, modelName)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-
-	resp, err := utils.GetHTTPClientWithTimeout(0).Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+	r := newProgressRenderer()
+	if err := client.DownloadModel(ctx, plan, r.callback); err != nil {
+		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
-	}
-
-	// Parse SSE stream using buffered reader for better streaming
-	reader := bufio.NewReader(resp.Body)
-	var lastProgress float64
-	var currentFile string
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("error reading response: %w", err)
-		}
-
-		utils.LogDebug(fmt.Sprintf("SSE line: %s", line))
-
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		var event downloadEvent
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-
-		// Skip keepalive events for display purposes
-		if event.Keepalive {
-			continue
-		}
-
-		switch event.Event {
-		case "init":
-			// Display initial model info
-			if event.TotalSize > 0 {
-				sizeStr := utils.FormatBytes(event.TotalSize)
-				if event.IsGGUF && event.SelectedFile != "" {
-					fmt.Printf("  Model: %s\n", event.ModelID)
-					fmt.Printf("  File: %s (%s)\n", event.SelectedFile, sizeStr)
-				} else {
-					fmt.Printf("  Model: %s (%s, %d files)\n", event.ModelID, sizeStr, event.FileCount)
-				}
-			} else {
-				fmt.Printf("  Model: %s (%d files)\n", event.ModelID, event.FileCount)
-			}
-			os.Stdout.Sync()
-
-		case "start":
-			currentFile = event.File
-			lastProgress = 0
-			if event.Total > 1024*1024 { // Only show size if > 1MB
-				sizeStr := utils.FormatBytes(event.Total)
-				fmt.Printf("  Downloading %s (%s)...\n", currentFile, sizeStr)
-			} else if currentFile != "" {
-				fmt.Printf("  Downloading %s...\n", currentFile)
-			}
-			os.Stdout.Sync()
-
-		case "progress":
-			// Use the percent directly from the event
-			progress := event.Percent
-			if event.Total > 1024*1024 { // Only show for files > 1MB
-				// Build progress line with rate and ETA
-				rateStr := ""
-				etaStr := ""
-				if event.BytesPerSec > 0 {
-					rateStr = fmt.Sprintf(" @ %s", utils.FormatTransferRate(event.BytesPerSec))
-				}
-				// Only show ETA if more than 1 second remaining
-				if event.ETASeconds != nil && *event.ETASeconds > 1 {
-					etaStr = fmt.Sprintf(", ETA: %s", utils.FormatDuration(*event.ETASeconds))
-				}
-				// Use fixed-width output to ensure clean line overwrites
-				line := fmt.Sprintf("  Progress: %.1f%%%s%s", progress, rateStr, etaStr)
-				// Pad to 60 chars to overwrite any previous longer content
-				fmt.Printf("\r%-60s", line)
-				os.Stdout.Sync()
-				lastProgress = progress
-			}
-
-		case "cached":
-			fmt.Printf("  ✓ %s (cached)\n", event.File)
-			os.Stdout.Sync()
-
-		case "end":
-			// Only show completion if we showed progress
-			if lastProgress > 0 {
-				fmt.Printf("\r  Progress: 100%%\n")
-			}
-			lastProgress = 0
-
-		case "done":
-			fmt.Printf("✓ Download complete\n")
-			return nil
-
-		case "error":
-			return fmt.Errorf("download failed: %s", event.Message)
-		}
-	}
-
-	// If we reach here, the stream ended without a "done" event (e.g., network drop)
-	// The downloadComplete flag is never set to true because we return immediately on "done"
-	return fmt.Errorf("download incomplete: connection closed before completion")
+	fmt.Printf("✓ Download complete\n")
+	return nil
 }
 
-// checkModelStatus checks if a model is in the local cache
-func checkModelStatus(serverURL, modelID string) (bool, error) {
-	url := fmt.Sprintf("%s/v1/models", strings.TrimSuffix(serverURL, "/"))
+// progressRenderer formats hfmodel.ProgressEvent events as a human-readable
+// terminal stream. With multi-file concurrent downloads, per-file in-place
+// progress (`\r`-overwrite) doesn't work because multiple files would clobber
+// each other's lines, so this renderer:
+//
+//   - Prints the init/start/cached/end events as plain lines.
+//   - Aggregates progress events across all in-flight files into a single
+//     bottom-line "[N/M] xxx MB / yyy MB" status that gets redrawn in place.
+//
+// This keeps the terminal output legible even when 4 files are downloading
+// in parallel.
+type progressRenderer struct {
+	mu sync.Mutex
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	totalFiles    int
+	completedFile int
+	totalBytes    int64
+	// inFlight tracks downloaded bytes per still-downloading file.
+	inFlight map[string]int64
+	// completedBytes accumulates as files finish (end/cached events).
+	completedBytes int64
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return false, fmt.Errorf("failed to create request: %w", err)
+	lastStatusShown bool
+}
+
+func newProgressRenderer() *progressRenderer {
+	return &progressRenderer{
+		inFlight: map[string]int64{},
 	}
+}
 
-	resp, err := utils.GetHTTPClient().Do(req)
-	if err != nil {
-		return false, fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
+func (r *progressRenderer) callback(ev hfmodel.ProgressEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("server returned status %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Data []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return false, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// Parse model ID to handle quantization suffix
-	baseModelID := modelID
-	if idx := strings.LastIndex(modelID, ":"); idx != -1 {
-		baseModelID = modelID[:idx]
-	}
-
-	// Check if model is in the cache
-	for _, model := range result.Data {
-		if model.ID == baseModelID || model.ID == modelID {
-			return true, nil
+	switch ev.Event {
+	case "init":
+		r.totalFiles = ev.FileCount
+		r.totalBytes = ev.TotalSize
+		if ev.TotalSize > 0 {
+			sizeStr := utils.FormatBytes(ev.TotalSize)
+			if ev.IsGGUF && ev.SelectedFile != "" {
+				fmt.Printf("  Model: %s\n", ev.ModelID)
+				fmt.Printf("  File: %s (%s)\n", ev.SelectedFile, sizeStr)
+			} else {
+				fmt.Printf("  Model: %s (%s, %d files)\n", ev.ModelID, sizeStr, ev.FileCount)
+			}
+		} else {
+			fmt.Printf("  Model: %s (%d files)\n", ev.ModelID, ev.FileCount)
 		}
-	}
 
-	return false, nil
+	case "start":
+		r.inFlight[ev.File] = ev.Downloaded
+		r.clearStatusLine()
+		if ev.Total > 1024*1024 {
+			fmt.Printf("  ↓ %s (%s)\n", ev.File, utils.FormatBytes(ev.Total))
+		} else if ev.File != "" {
+			fmt.Printf("  ↓ %s\n", ev.File)
+		}
+		r.drawStatusLine()
+
+	case "progress":
+		r.inFlight[ev.File] = ev.Downloaded
+		r.drawStatusLine()
+
+	case "cached":
+		r.completedFile++
+		r.completedBytes += ev.Size
+		r.clearStatusLine()
+		fmt.Printf("  ✓ %s (cached)\n", ev.File)
+		r.drawStatusLine()
+
+	case "end":
+		r.completedFile++
+		r.completedBytes += ev.Total
+		delete(r.inFlight, ev.File)
+		r.drawStatusLine()
+
+	case "done":
+		r.clearStatusLine()
+
+	case "warning":
+		r.clearStatusLine()
+		fmt.Fprintf(os.Stderr, "  ! %s\n", ev.Message)
+		r.drawStatusLine()
+
+	case "error":
+		r.clearStatusLine()
+		fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", ev.File, ev.Message)
+	}
+}
+
+// drawStatusLine writes a single-line aggregated status to stdout. Caller
+// must hold r.mu.
+func (r *progressRenderer) drawStatusLine() {
+	if r.totalFiles == 0 {
+		return
+	}
+	var sumDownloaded int64
+	for _, n := range r.inFlight {
+		sumDownloaded += n
+	}
+	overall := sumDownloaded + r.completedBytes
+	if overall > r.totalBytes && r.totalBytes > 0 {
+		overall = r.totalBytes
+	}
+	pct := 0.0
+	if r.totalBytes > 0 {
+		pct = float64(overall) / float64(r.totalBytes) * 100
+	}
+	line := fmt.Sprintf("  [%d/%d] %s / %s (%.1f%%)",
+		r.completedFile, r.totalFiles,
+		utils.FormatBytes(overall), utils.FormatBytes(r.totalBytes), pct)
+	fmt.Printf("\r%-72s", line)
+	_ = os.Stdout.Sync()
+	r.lastStatusShown = true
+}
+
+// clearStatusLine erases the current status line. Caller must hold r.mu.
+func (r *progressRenderer) clearStatusLine() {
+	if !r.lastStatusShown {
+		return
+	}
+	fmt.Printf("\r%-72s\r", "")
+	r.lastStatusShown = false
 }
 
 func init() {
