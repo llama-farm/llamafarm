@@ -93,16 +93,26 @@ For any deprecated function we call where the replacement has an **identical sig
 
 For deprecations with **non-trivial migration** (signature changes, semantic differences), leave the deprecated call in place and open a follow-up issue. Don't block a version bump on a refactor.
 
-### 5. Trigger the ARM64 build
+### 5. Smoke-test the ARM64 build
 
-Upstream does **not** ship Linux ARM64 binaries. We build them ourselves via `build-llama.yml`. Trigger it manually against the new tag:
+Upstream does **not** ship Linux ARM64 binaries. We build them ourselves via `build-llama.yml`. Trigger it manually against the new tag as a **build smoke test**:
 
 ```
 gh workflow run build-llama.yml -f llama_version=<tag>
 gh run watch
 ```
 
-The artifact must exist as a downloadable release asset **before** the next LlamaFarm release ships. If it doesn't, Linux ARM64 users will fail to download a binary on their next launch. This is a hard pre-merge requirement, not a nice-to-have.
+This validates that llama.cpp at the new tag actually compiles for ARM64 with our cmake flags. If the build fails, the bump is blocked until either upstream is fixed or we patch the workflow.
+
+**Important:** the `Release` step in `build-llama.yml` is gated on `if: startsWith(github.ref, 'refs/tags/')`, so a `workflow_dispatch` run does **not** attach the artifact to any GitHub release — it only uploads to the workflow run as a downloadable artifact. The actual release attachment happens automatically when the next LlamaFarm release tag (`v*`) is pushed: the workflow re-runs against the version pin in `llama-cpp-version.txt` at that tag and attaches the built artifact to the release. This means:
+
+- The pre-merge `workflow_dispatch` run is a **smoke test only**, not a release publication step
+- Linux ARM64 users will not be able to download the new binary until the next LlamaFarm release is cut
+- That's normally fine because the LlamaFarm release tag and the pin bump ship together — users on the new LlamaFarm version automatically get the matching binary
+
+If you ever need to make a binary at a new pin available to existing-release users (e.g. backporting a fix to a release that already shipped), you have two options:
+1. Cut a new LlamaFarm release at the bumped version (cleanest)
+2. Manually upload the workflow artifact to an existing release with `gh release upload <tag> <artifact>` (polluting; only do this for hotfixes)
 
 ### 6. Smoke-test inference
 

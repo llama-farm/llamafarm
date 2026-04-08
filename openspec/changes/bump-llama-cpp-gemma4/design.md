@@ -77,15 +77,23 @@ The original framing of this decision required the chosen tag to include `d9a12c
 
 **Rationale:** The spec is small but real. It covers behavior that exists today, has just never been written down. This change is the natural moment to capture it because we are extending the supported-architecture list anyway.
 
-### Decision 5: Trigger ARM64 build before merge, not after
+### Decision 5: Smoke-test ARM64 build before merge (release attachment is automatic)
 
-**Choice:** Manually invoke `build-llama.yml` via `workflow_dispatch` against the new tag as part of the change implementation, before this PR is allowed to merge.
+**Choice:** Manually invoke `build-llama.yml` via `workflow_dispatch` against the new tag as part of the change implementation, **as a build smoke test only**.
+
+**Important context discovered during implementation:** The `Release` step in `build-llama.yml` is gated on `if: startsWith(github.ref, 'refs/tags/')`. A `workflow_dispatch` run does NOT attach the artifact to any release — only a `v*` tag push does. So the manual run validates that the build works at the new pin; the actual release-asset publication happens automatically when the next LlamaFarm release tag is cut.
+
+This means:
+- Linux ARM64 users will not see the new binary until the next LlamaFarm release ships
+- That's fine in the normal flow because the LlamaFarm release and the pin bump ship together — users on the new version automatically get the matching binary
+- The pre-merge smoke test catches build failures (e.g. upstream introduced an incompatible cmake flag) before they become a release blocker
 
 **Alternatives considered:**
-- *Let the next release tag trigger it.* Rejected because if anything between merge and release breaks the ARM64 build, Linux ARM64 users will fail to download a binary on their next launch. Fixing it post-merge is significantly more painful than fixing it pre-merge.
-- *Make the ARM64 build a hard CI gate.* Rejected because the workflow is `workflow_dispatch` only and runs on a non-PR runner. Adding it to PR CI is a separate, larger change.
+- *Let the next release tag trigger it without a pre-merge smoke test.* Rejected because if the build fails at the new tag, we want to know before merging — fixing it post-merge is more painful, and "ship a release that breaks ARM64" would be embarrassing.
+- *Make the ARM64 build a hard CI gate on the PR.* Rejected because the workflow is `workflow_dispatch` only and runs on a non-PR runner. Adding it to PR CI is a separate, larger change.
+- *Modify `build-llama.yml` to also attach to a release on `workflow_dispatch`.* Rejected because there is no clear release to attach it to before the LlamaFarm version bump that includes the new pin actually ships. The current decoupling is correct.
 
-**Rationale:** The upgrade is not "done" until the ARM64 binary exists at the new tag. Treating that as a manual checklist item in this change is the lowest-friction way to enforce it.
+**Rationale:** The smoke test is the value of the pre-merge run. The release publication is decoupled and handled automatically by the existing tag-push trigger.
 
 ## Risks / Trade-offs
 
@@ -93,7 +101,7 @@ The original framing of this decision required the chosen tag to include `d9a12c
 
 **[Risk] Gemma 4 support is itself buggy in the chosen tag** — We are picking a tag that is hours old. There may be Gemma 4 issues that have not been reported yet. → **Mitigation**: this is acknowledged and accepted as the price of needing Gemma 4 now. Decision 2's "plan for follow-up bumps" is the explicit mitigation. Document any observed Gemma 4 issues in the next bump's design doc.
 
-**[Risk] ARM64 build fails at the new tag** — The Linux ARM64 binary is built from source via `build-llama.yml`, and upstream may have introduced a build dependency or flag we do not handle. → **Mitigation**: Decision 5 (build before merge) catches this. If the build fails, the change is blocked until either upstream is fixed or we patch our workflow.
+**[Risk] ARM64 build fails at the new tag** — The Linux ARM64 binary is built from source via `build-llama.yml`, and upstream may have introduced a build dependency or flag we do not handle. → **Mitigation**: Decision 5 (smoke-test build before merge) catches this. If the build fails, the change is blocked until either upstream is fixed or we patch our workflow. Note: the smoke-test run does NOT publish to a release — see Decision 5.
 
 **[Risk] Cache eviction does not happen** — Users with cached `b7694` binaries should automatically download the new version because the cache key includes the version string. If that assumption is wrong, they will silently keep running the old binary. → **Mitigation**: verify the cache key behavior in `_binary.py` (`_get_cache_dir() / LLAMA_CPP_VERSION / _get_lib_name()`) is correct, and add a scenario to the capability spec asserting it.
 
@@ -112,7 +120,7 @@ The original framing of this decision required the chosen tag to include `d9a12c
 5. Add the `llama-cpp-binary` spec under `openspec/changes/bump-llama-cpp-gemma4/specs/`.
 6. Run `packages/llamafarm-llama` test suite locally on the host platform.
 7. Run `cli/internal/llamabinary` test suite locally.
-8. Manually trigger `build-llama.yml` against the new tag via `gh workflow run` and confirm the ARM64 artifact uploads.
+8. Manually trigger `build-llama.yml` against the new tag via `gh workflow run` as a build smoke test and confirm the ARM64 artifact uploads to the workflow run. (Release attachment happens automatically on the next LlamaFarm `v*` tag push — see Decision 5.)
 9. Smoke-test a Gemma 4 model end-to-end through the universal runtime (load → generate → check output is coherent).
 10. Smoke-test a non-Gemma 4 model end-to-end as a regression check.
 11. Push and let CI run on Linux/macOS/Windows.

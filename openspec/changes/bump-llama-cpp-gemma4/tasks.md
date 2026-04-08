@@ -27,12 +27,12 @@
 - [x] 4.1 Created `.claude/rules/llama_cpp_bindings.md` covering rationale, version pinning, propagation locations, header-diff procedure, smoke-test procedure, ARM64 build dependency, and expected bump cadence during upstream churn
 - [x] 4.2 CLAUDE.md already has umbrella `See .claude/rules/` reference (no per-file links needed). Also fixed a stale tech-stack line in CLAUDE.md that listed the Universal Runtime as using `llama-cpp-python` — corrected to `llamafarm-llama`
 
-## 5. Trigger ARM64 binary build
+## 5. Smoke-test ARM64 binary build (release attachment is automatic on next v* tag)
 
 - [x] 5.1 Triggered `gh workflow run build-llama.yml --ref chore-bump-llama-cpp-b8708-gemma4 -f llama_version=b8708` — run id 24148418292 (https://github.com/llama-farm/llamafarm/actions/runs/24148418292)
-- [ ] 5.2 Watch the run and verify it completes successfully (currently queued)
-- [ ] 5.3 Verify the `llama-b8708-bin-linux-arm64.zip` artifact is attached to a LlamaFarm GitHub release
-- [ ] 5.4 If the build fails, investigate and fix in this PR before merge
+- [x] 5.2 Run completed successfully in ~4 minutes. Artifact `llama-b8708-bin-linux-arm64.zip` (6.4 MB) uploaded to the workflow run as artifact ID 6333000647.
+- [x] 5.3 N/A — `build-llama.yml`'s `Release` step is gated on `if: startsWith(github.ref, 'refs/tags/')`, so a `workflow_dispatch` run does not attach to a release. The artifact will be attached to the next LlamaFarm release (v0.0.30+) automatically when the v* tag is pushed and the workflow re-runs at that tag against the bumped version pin. Documented this behavior in `.claude/rules/llama_cpp_bindings.md`.
+- [x] 5.4 Build succeeded — no investigation needed
 
 ## 6. Run tests
 

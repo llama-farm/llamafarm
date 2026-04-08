@@ -50,19 +50,24 @@ The set of model architectures LlamaFarm supports for inference SHALL be defined
 - **WHEN** the pinned llama.cpp version is bumped AND a user attempts to load a model architecture that was supported by both the old and new versions (e.g. Llama 3, Qwen, Mistral)
 - **THEN** the model loads and runs inference with no behavioral regression compared to the previous pinned version
 
-### Requirement: Linux ARM64 binary is published before release
+### Requirement: Linux ARM64 binary is built and validated before merge
 
-Upstream llama.cpp does not ship pre-built Linux ARM64 binaries. LlamaFarm SHALL publish its own Linux ARM64 binary at every pinned version, via the `build-llama.yml` GitHub Actions workflow, and the binary SHALL exist as a downloadable release artifact before any LlamaFarm release that depends on the new version is published.
+Upstream llama.cpp does not ship pre-built Linux ARM64 binaries. LlamaFarm SHALL build its own Linux ARM64 binary at every pinned version via the `build-llama.yml` GitHub Actions workflow. Before merging any version-bump PR, the workflow SHALL be triggered as a build smoke test to confirm the new pin compiles successfully. The actual release-asset publication is decoupled and happens automatically when the next LlamaFarm release tag is pushed.
 
-#### Scenario: Bumping the pinned version
+#### Scenario: Bumping the pinned version (smoke test)
 
-- **WHEN** `llama-cpp-version.txt` is updated to a new tag `bX`
-- **THEN** the `build-llama.yml` workflow is triggered (manually via `workflow_dispatch` or automatically via tag push) against `bX` and produces a `llama-bX-bin-linux-arm64.zip` artifact attached to a LlamaFarm GitHub release before the next LlamaFarm release ships
+- **WHEN** a PR updates `llama-cpp-version.txt` to a new tag `bX`
+- **THEN** the implementer triggers `build-llama.yml` via `workflow_dispatch` against `bX` and confirms the build succeeds and uploads a `llama-bX-bin-linux-arm64.zip` artifact to the workflow run, before merging the PR
+
+#### Scenario: Cutting a LlamaFarm release with a new pin
+
+- **WHEN** a LlamaFarm release tag (`v*`) is pushed at a commit that contains a bumped `llama-cpp-version.txt`
+- **THEN** `build-llama.yml` re-runs automatically against that tag, builds llama.cpp at the new pin, and the `Release` step (gated on `if: startsWith(github.ref, 'refs/tags/')`) attaches `llama-bX-bin-linux-arm64.zip` to the LlamaFarm release as a downloadable asset
 
 #### Scenario: Linux ARM64 user downloads binary
 
 - **WHEN** a Linux ARM64 user runs LlamaFarm and `llamafarm-llama` needs to download the binary for the pinned version
-- **THEN** `_binary.py` resolves the artifact URL via `_get_llamafarm_release_version`, downloads the LlamaFarm-published ARM64 zip, and extracts `libllama.so` into the version-keyed cache directory
+- **THEN** `_binary.py` resolves the artifact URL via `_get_llamafarm_release_version`, downloads the LlamaFarm-published ARM64 zip from the LlamaFarm release that ships with their LlamaFarm version, and extracts `libllama.so` into the version-keyed cache directory
 
 ### Requirement: Upgrade procedure validates header diff and runtime behavior
 
