@@ -92,6 +92,41 @@ func repoCacheDir(root, repoID string) (string, error) {
 	return filepath.Join(root, "models--"+sanitized), nil
 }
 
+// decodeRepoFolderName converts a `models--<...>` cache directory name back
+// into a repo id. Decoding is intentionally tolerant: the encoding
+// (`repo_id.replace("/", "--")`) is not strictly invertible when an org or
+// repo name legitimately contains `--`, so we use a robust heuristic:
+//
+//   - Strip the `models--` prefix.
+//   - If no `--` remains, the repo has no org component (rare but valid):
+//     return the suffix unchanged.
+//   - Otherwise split on the FIRST `--`. The first segment becomes the org,
+//     everything after is the repo name (preserving any literal `--`).
+//
+// Returns the decoded repo id and a `decoded` flag indicating whether the
+// result is a clean round-trip. When `decoded` is false the caller may
+// choose to fall back to using the raw folder name as the repo id rather
+// than dropping the entry.
+func decodeRepoFolderName(folder string) (repoID string, decoded bool) {
+	suffix := strings.TrimPrefix(folder, "models--")
+	if suffix == folder {
+		// Not a model folder.
+		return "", false
+	}
+	if !strings.Contains(suffix, "--") {
+		// No org component — repo id is the suffix as-is.
+		return suffix, ValidateRepoID(suffix) == nil
+	}
+	// Split on the FIRST `--` so a repo whose name contains literal `--`
+	// (encoded as `----`) round-trips correctly. This is a heuristic — a
+	// repo whose ORG contains `--` cannot be perfectly decoded, but in
+	// practice HF org names use single hyphens, so split-first is right
+	// for the overwhelming majority of cases.
+	idx := strings.Index(suffix, "--")
+	candidate := suffix[:idx] + "/" + suffix[idx+2:]
+	return candidate, ValidateRepoID(candidate) == nil
+}
+
 // ListCachedFiles returns every non-empty file found under the repo's
 // snapshots directory, one entry per filename. If multiple snapshots contain
 // the same filename, the entry from the newest snapshot (lexicographically
@@ -351,11 +386,18 @@ func ScanCache() ([]RepoInfo, error) {
 		if !strings.HasPrefix(name, "models--") {
 			continue
 		}
-		repoID := strings.ReplaceAll(strings.TrimPrefix(name, "models--"), "--", "/")
-		// Defensive: skip anything that fails our id sanitizer (e.g. weird
-		// directory names a user dropped in by hand).
-		if err := ValidateRepoID(repoID); err != nil {
-			continue
+		repoID, decoded := decodeRepoFolderName(name)
+		if !decoded {
+			// Decoding ambiguous (e.g. an org with literal `--` in its
+			// name). Don't drop the entry — surface it with the raw
+			// suffix so `lf models cached` stays complete. Validate the
+			// raw suffix loosely: if it contains path traversal we
+			// really do skip it (defensive).
+			raw := strings.TrimPrefix(name, "models--")
+			if strings.Contains(raw, "..") || raw == "" {
+				continue
+			}
+			repoID = raw
 		}
 		repoDir := filepath.Join(root, name)
 		size, files, err := repoSizeAndFiles(repoDir)
@@ -379,11 +421,23 @@ func ScanCache() ([]RepoInfo, error) {
 // Size is computed from the `blobs/` directory rather than from snapshot
 // symlinks, because multiple snapshot files can point at the same blob and we
 // want to count each blob exactly once — matching `scan_cache_dir`.
+//
+// Skips download-machinery artifacts:
+//   - `<etag>.tmp` — partial download in progress (the CLI's resumable
+//     downloader keeps these around between runs).
+//   - `<etag>.lock` — file-lock sentinel; intentionally never removed
+//     (see hfmodel/lock_unix.go for the reason).
+//
+// Counting these would inflate `SizeOnDisk` and confuse `lf models cached`.
 func repoSizeAndFiles(repoDir string) (size int64, fileCount int, err error) {
 	blobsDir := filepath.Join(repoDir, "blobs")
 	if entries, err := os.ReadDir(blobsDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if strings.HasSuffix(name, ".tmp") || strings.HasSuffix(name, ".lock") {
 				continue
 			}
 			info, statErr := e.Info()

@@ -23,7 +23,10 @@ func withFakeCache(t *testing.T) string {
 	return tmp
 }
 
-// fakeBlobServer serves a fixed body and supports Range requests.
+// fakeBlobServer serves a fixed body and supports Range requests. Strictly
+// requires `If-Range` to use the RFC 7232 quoted form (`"<etag>"`) — any
+// other format is rejected as "etag does not match" and the server falls
+// back to a full 200 transfer, exactly as a real HTTP server would.
 func fakeBlobServer(t *testing.T, body []byte, etag string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"`+etag+`"`)
@@ -37,7 +40,13 @@ func fakeBlobServer(t *testing.T, body []byte, etag string) *httptest.Server {
 		// GET (with optional Range)
 		rng := r.Header.Get("Range")
 		ifRange := r.Header.Get("If-Range")
-		if rng != "" && ifRange != "" && strings.Trim(ifRange, `"`) == etag {
+		// Require the strict RFC quoted form. This is what catches the
+		// "we sent the unquoted blob-name form" bug — without strict
+		// matching here the server would silently accept the wrong
+		// format and resume would only fail in production against real
+		// HF Hub servers.
+		expectedIfRange := `"` + etag + `"`
+		if rng != "" && ifRange == expectedIfRange {
 			// Parse "bytes=N-"
 			var from int64
 			_, err := fmt.Sscanf(rng, "bytes=%d-", &from)
@@ -303,6 +312,26 @@ func TestCreateSnapshotSymlink_FallbackCopy(t *testing.T) {
 	symlinkSupportMu.Lock()
 	delete(symlinkSupportCache, filepath.Dir(dst))
 	symlinkSupportMu.Unlock()
+}
+
+func TestQuoteETagForHeader(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"abc123", `"abc123"`},
+		{"sha256-of-blob", `"sha256-of-blob"`},
+		// Defensive: already-quoted should not be double-quoted.
+		{`"abc123"`, `"abc123"`},
+		{`W/"abc123"`, `W/"abc123"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := quoteETagForHeader(tc.in); got != tc.want {
+				t.Errorf("quoteETagForHeader(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestAcquireLock_LockFileSurvivesRelease(t *testing.T) {

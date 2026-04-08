@@ -322,11 +322,31 @@ func escapeFilename(filename string) string {
 }
 
 // unquoteETag strips surrounding quotes and the optional `W/` weak prefix
-// from an HTTP ETag header.
+// from an HTTP ETag header. Used to derive a filesystem-safe blob name from
+// the server's ETag (HF cache stores blobs as `blobs/<unquoted-etag>`).
 func unquoteETag(etag string) string {
 	etag = strings.TrimPrefix(etag, "W/")
 	etag = strings.Trim(etag, `"`)
 	return etag
+}
+
+// quoteETagForHeader formats a stored (unquoted) etag back into the wire
+// format HTTP headers expect (RFC 7232/7233: `"<value>"`). Used for
+// `If-Range`, `If-Match`, `If-None-Match`, etc.
+//
+// We deliberately store etags unquoted everywhere else in this package
+// because they double as filesystem blob names. This helper is the
+// single place that re-adds the quotes when sending the value back to
+// the server. If the etag already starts with a quote (defensive — should
+// not happen given unquoteETag is the only writer) it is returned unchanged.
+func quoteETagForHeader(etag string) string {
+	if etag == "" {
+		return ""
+	}
+	if strings.HasPrefix(etag, `"`) || strings.HasPrefix(etag, `W/"`) {
+		return etag
+	}
+	return `"` + etag + `"`
 }
 
 // applyHeaders sets the User-Agent and (when present) Authorization headers.

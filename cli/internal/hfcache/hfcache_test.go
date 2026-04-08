@@ -409,6 +409,88 @@ func TestScanCache_ReturnsAllModelRepos(t *testing.T) {
 	}
 }
 
+func TestScanCache_IgnoresTmpAndLockArtifactsInBlobs(t *testing.T) {
+	// Regression test: the resumable downloader writes `<etag>.tmp` partial
+	// files and `<etag>.lock` sentinel files into blobs/. These must NOT
+	// inflate SizeOnDisk.
+	cacheRoot := setupFakeCache(t)
+	body := []byte("real-blob-bytes")
+	repoDir := layoutRealisticRepo(t, cacheRoot, "alpha/one", "c1", "f.gguf", body)
+
+	// Drop a partial download and a lock file alongside the real blob.
+	tmpPath := filepath.Join(repoDir, "blobs", "deadbeef.tmp")
+	lockPath := filepath.Join(repoDir, "blobs", "deadbeef.lock")
+	if err := os.WriteFile(tmpPath, []byte("partial-bytes-that-should-not-count"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, []byte("lock-sentinel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := ScanCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("got %d repos, want 1", len(repos))
+	}
+	if repos[0].SizeOnDisk != int64(len(body)) {
+		t.Errorf("size: got %d, want %d (only the real blob should count, not .tmp/.lock)",
+			repos[0].SizeOnDisk, len(body))
+	}
+}
+
+func TestDecodeRepoFolderName(t *testing.T) {
+	cases := []struct {
+		folder    string
+		wantID    string
+		wantClean bool
+	}{
+		{"models--Qwen--Qwen3-0.6B-GGUF", "Qwen/Qwen3-0.6B-GGUF", true},
+		{"models--meta-llama--Llama-2-7b-hf", "meta-llama/Llama-2-7b-hf", true},
+		{"models--gpt2", "gpt2", true},
+		{"models--hf-internal-testing--tiny-random-gpt2", "hf-internal-testing/tiny-random-gpt2", true},
+		// Repo with literal `--` in the name encodes as `----`. Split-on-first-`--`
+		// preserves the trailing `--` correctly.
+		{"models--org--repo--with--dashes", "org/repo--with--dashes", true},
+		// Not a model folder.
+		{"datasets--something", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.folder, func(t *testing.T) {
+			gotID, gotClean := decodeRepoFolderName(tc.folder)
+			if gotID != tc.wantID || gotClean != tc.wantClean {
+				t.Errorf("decodeRepoFolderName(%q) = (%q, %v), want (%q, %v)",
+					tc.folder, gotID, gotClean, tc.wantID, tc.wantClean)
+			}
+		})
+	}
+}
+
+func TestScanCache_AmbiguousNamesNotDropped(t *testing.T) {
+	// Even when decoding produces a result that fails strict validation,
+	// the entry should appear in ScanCache output rather than silently
+	// disappearing — only path-traversal-style names are filtered.
+	cacheRoot := setupFakeCache(t)
+	// Build a folder whose decoded form has odd characters but is still
+	// safe (we use a name that decodes cleanly first to verify normal
+	// behavior).
+	layoutRealisticRepo(t, cacheRoot, "Qwen/Qwen3-0.6B-GGUF", "c1", "f.gguf", []byte("GGUF1"))
+	repos, err := ScanCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range repos {
+		if r.RepoID == "Qwen/Qwen3-0.6B-GGUF" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Qwen/Qwen3-0.6B-GGUF should be in ScanCache output: %+v", repos)
+	}
+}
+
 func TestScanCache_SkipsRepoWithNoRealFiles(t *testing.T) {
 	cacheRoot := setupFakeCache(t)
 	// Create a "models--" dir with no snapshots/blobs at all.

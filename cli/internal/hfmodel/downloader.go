@@ -194,11 +194,14 @@ func (c *Client) streamBlob(ctx context.Context, plan SingleFilePlan, blobPath s
 
 	// Resume detection: if a .tmp exists and we have an etag, ask for the
 	// remaining bytes via Range with If-Range guarding against etag drift.
+	// If-Range MUST be the wire-format quoted etag — sending the unquoted
+	// blob-filename form makes most servers ignore the guard and return a
+	// full 200 instead of a 206, defeating resume.
 	var resumeFrom int64
 	if info, statErr := os.Stat(tmpPath); statErr == nil && info.Size() > 0 && info.Size() < expectedSize {
 		resumeFrom = info.Size()
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", resumeFrom))
-		req.Header.Set("If-Range", plan.Metadata.ETag)
+		req.Header.Set("If-Range", quoteETagForHeader(plan.Metadata.ETag))
 	}
 
 	// Use a no-timeout client for the body fetch — model files are large
