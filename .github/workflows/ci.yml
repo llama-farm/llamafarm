@@ -136,7 +136,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
-        component: ["config", "rag", "server", "runtimes/universal"]
+        component: ["config", "rag", "server", "runtimes/universal", "runtimes/edge"]
         exclude:
           # Server requires Python 3.12+
           - component: server

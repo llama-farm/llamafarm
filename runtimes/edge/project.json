@@ -11,6 +11,13 @@
         "cwd": "runtimes/edge"
       }
     },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run pytest tests/",
+        "cwd": "runtimes/edge"
+      }
+    },
     "sync": {
       "executor": "nx:run-commands",
       "options": {

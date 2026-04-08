@@ -14,6 +14,7 @@ Topics:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -97,10 +98,9 @@ class ZenohIPC:
         for task in self._tasks:
             task.cancel()
         for task in self._tasks:
-            try:
+            # Expected: tasks were explicitly cancelled above
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass  # Expected: tasks were explicitly cancelled above
         self._tasks.clear()
 
         # Cancel in-flight request handlers before closing the session
@@ -135,11 +135,11 @@ class ZenohIPC:
                 self._handle_request(payload), self._loop
             )
             self._pending_futures.append(future)
+
             def _remove_future(f):
-                try:
+                # Already cleared by stop()
+                with contextlib.suppress(ValueError):
                     self._pending_futures.remove(f)
-                except ValueError:
-                    pass  # Already cleared by stop()
 
             future.add_done_callback(_remove_future)
         except Exception:

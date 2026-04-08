@@ -101,7 +101,12 @@ def setup_logging(json_logs: bool = False, log_level: str = "INFO", log_file: st
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            file_handler = logging.FileHandler(log_file, mode="a")
+            # encoding="utf-8" is required on Windows: the default locale
+            # codec (cp1252) crashes when llama.cpp's tokenizer log callback
+            # emits byte-BPE markers like `Ġ` (U+0120) or `Ċ` (U+010A) through
+            # Python logging. Without it, the FileHandler raises
+            # UnicodeEncodeError mid-model-load and breaks pre-warming.
+            file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
             file_handler.setFormatter(formatter)
             root_logger.addHandler(file_handler)
 

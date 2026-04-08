@@ -79,3 +79,11 @@ if sys.platform == "win32":
 ```
 
 Windows' default `cp1252` console codec crashes on characters like `\u0120` (Ġ) and `\u010a` (Ċ) that llama.cpp's native logger emits during tokenizer loading. This must run **before** any logger is configured.
+
+The same fix is required for **every `logging.FileHandler`** that may receive llama.cpp output. `FileHandler` defaults to the locale codec (cp1252 on Windows) regardless of the `sys.stdout`/`stderr` reconfiguration, so always pass `encoding="utf-8"` explicitly:
+
+```python
+logging.FileHandler(log_file, mode="a", encoding="utf-8")
+```
+
+Without this, model loading crashes mid-pre-warm with `UnicodeEncodeError: 'charmap' codec can't encode character` from inside Python's logging module — the stdout reconfigure does not protect file handlers.

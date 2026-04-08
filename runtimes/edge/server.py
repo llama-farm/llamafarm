@@ -54,10 +54,9 @@ if sys.platform == "win32":
 # sets HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE accordingly. If this import
 # happened later, the offline env vars would be read by huggingface_hub
 # before we had a chance to set them.
-from llamafarm_common import offline_mode as _offline_mode_bootstrap  # noqa: F401
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from llamafarm_common import offline_mode as _offline_mode_bootstrap  # noqa: F401
 
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
@@ -66,27 +65,31 @@ from models import (
     LanguageModel,
 )
 from routers.chat_completions import router as chat_completions_router
-from routers.completions import router as completions_router
 from routers.chat_completions.service import ChatCompletionsService
+from routers.completions import router as completions_router
 from routers.health import (
     router as health_router,
+)
+from routers.health import (
     set_device_info_getter,
     set_models_cache,
 )
 from routers.vision import (
     router as vision_router,
-    set_detection_loader,
+)
+from routers.vision import (
     set_classification_loader,
     set_detect_classify_loaders,
+    set_detection_loader,
     set_streaming_detection_loader,
     start_session_cleanup,
     stop_session_cleanup,
 )
+from services.zenoh_ipc import ZenohIPC
 from utils.device import get_device_info, get_optimal_device
 from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
-from services.zenoh_ipc import ZenohIPC
 
 # Suppress spurious warnings
 warnings.filterwarnings(
@@ -360,9 +363,14 @@ async def load_classification_model(model_id: str = "clip-vit-base"):
     # Validate model_id: must be a known variant or a valid HuggingFace repo ID
     # (org/model format). Reject path-like IDs that could reach the filesystem.
     from models.clip_model import CLIP_VARIANTS
-    if model_id not in CLIP_VARIANTS:
-        if "/" not in model_id or model_id.startswith(("/", "\\", ".")) or ".." in model_id or "\\" in model_id or ":" in model_id:
-            raise ValueError(f"Invalid classification model_id: {model_id}")
+    if model_id not in CLIP_VARIANTS and (
+        "/" not in model_id
+        or model_id.startswith(("/", "\\", "."))
+        or ".." in model_id
+        or "\\" in model_id
+        or ":" in model_id
+    ):
+        raise ValueError(f"Invalid classification model_id: {model_id}")
 
     cache_key = f"vision:classify:{model_id}"
     if cache_key not in _models:
@@ -416,11 +424,13 @@ async def lifespan(app: FastAPI):
 
     # Start KV cache manager
     from utils.kv_cache_manager import (
-        KVCacheManager, start_kv_cache_gc, stop_kv_cache_gc,
+        KVCacheManager,
+        start_kv_cache_gc,
+        stop_kv_cache_gc,
     )
     global _kv_cache_manager
     _kv_cache_manager = KVCacheManager()
-    from routers.cache import set_cache_manager, set_cache_language_loader
+    from routers.cache import set_cache_language_loader, set_cache_manager
     set_cache_manager(_kv_cache_manager)
     set_cache_language_loader(load_language)
     ChatCompletionsService.set_cache_manager(_kv_cache_manager)

@@ -12,7 +12,11 @@ from .detect_classify import set_detect_classify_loaders
 from .detection import router as detection_router
 from .detection import set_detection_loader
 from .streaming import router as streaming_router
-from .streaming import set_streaming_detection_loader, start_session_cleanup, stop_session_cleanup
+from .streaming import (
+    set_streaming_detection_loader,
+    start_session_cleanup,
+    stop_session_cleanup,
+)
 
 # Combined router — edge subset only
 router = APIRouter(tags=["vision"])
