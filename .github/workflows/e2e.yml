@@ -477,9 +477,9 @@ jobs:
       # Setup Phase
       # ============================================================
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          # Prevent intermittent Windows post-job failures caused by actions/checkout@v4's
+          # Prevent intermittent Windows post-job failures caused by actions/checkout@v6's
           # cleanup running `git submodule foreach --recursive "sh -c '...'"` to unset the
           # auth extraheader. LlamaFarm has no submodules, so this command is a no-op, but
           # on Windows runners the spawned Git Bash subshell occasionally hangs and is

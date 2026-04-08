@@ -52,7 +52,7 @@ jobs:
           echo "Found PR branch: $BRANCH"
 
       - name: Checkout PR branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref || steps.get-pr-branch.outputs.branch || github.ref }}
           token: ${{ secrets.GH_RELEASE_TOKEN }}
