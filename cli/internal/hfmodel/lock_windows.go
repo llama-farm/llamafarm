@@ -14,6 +14,10 @@ import (
 // Uses LockFileEx with LOCKFILE_EXCLUSIVE_LOCK, which is the Windows
 // equivalent of flock(LOCK_EX). Compatible with huggingface_hub.filelock,
 // which calls the same Win32 API on Windows.
+//
+// IMPORTANT: the lock file is intentionally NOT removed on release. See the
+// extended comment on the unix sibling — same race applies on Windows
+// (different handle/identity if the file is recreated between waiters).
 func acquireLock(lockPath string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		return nil, fmt.Errorf("create lock dir: %w", err)
@@ -37,7 +41,7 @@ func acquireLock(lockPath string) (func(), error) {
 		var ol2 windows.Overlapped
 		_ = windows.UnlockFileEx(handle, 0, ^uint32(0), ^uint32(0), &ol2)
 		_ = f.Close()
-		_ = os.Remove(lockPath)
+		// Lock file is intentionally NOT unlinked — see function comment.
 	}
 	return release, nil
 }

@@ -305,6 +305,25 @@ func TestCreateSnapshotSymlink_FallbackCopy(t *testing.T) {
 	symlinkSupportMu.Unlock()
 }
 
+func TestAcquireLock_LockFileSurvivesRelease(t *testing.T) {
+	// Regression test for the inode-identity bug: if release() unlinked
+	// the lock file, two waiters could end up flocking different inodes
+	// and both succeed concurrently. The lock file MUST stay on disk
+	// after release.
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "blob.lock")
+
+	rel, err := acquireLock(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel()
+
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Errorf("lock file was removed on release: %v", err)
+	}
+}
+
 func TestAcquireLock_SerializesGoroutines(t *testing.T) {
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, "test.lock")

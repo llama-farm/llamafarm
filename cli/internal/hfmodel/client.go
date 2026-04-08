@@ -27,6 +27,10 @@ type Client struct {
 	endpoint   string
 	userAgent  string
 	token      string // empty means anonymous
+	// tokenExplicit signals that WithToken was passed (including
+	// WithToken("") for forced anonymous). When false, NewClient runs
+	// DiscoverToken to pick up the user's stored credentials.
+	tokenExplicit bool
 }
 
 // ClientOption configures a Client.
@@ -45,10 +49,12 @@ func WithEndpoint(url string) ClientOption {
 func WithUserAgent(ua string) ClientOption { return func(o *Client) { o.userAgent = ua } }
 
 // WithToken explicitly sets a bearer token, overriding token discovery.
-// Pass an empty string to force anonymous requests.
+// Pass an empty string to force anonymous requests (suppresses the default
+// DiscoverToken lookup that would otherwise pick up HF_TOKEN, etc.).
 func WithToken(token string) ClientOption {
 	return func(o *Client) {
 		o.token = token
+		o.tokenExplicit = true
 	}
 }
 
@@ -62,19 +68,14 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		endpoint:   DefaultEndpoint,
 		userAgent:  "llamafarm-cli/hfmodel",
 	}
-	tokenExplicit := false
 	for _, opt := range opts {
-		// Detect explicit token assignment by checking the field after.
-		// Since options are opaque functions, we re-check post-apply below.
 		opt(c)
-		_ = tokenExplicit
 	}
-	// If no token was explicitly set, discover one. We rely on the option
-	// signaling: WithToken("") sets c.token to "" which is the same as the
-	// zero value, so we can't distinguish "explicitly anonymous" from
-	// "default". For now, the default is to discover; callers who want
-	// strict anonymous can pass WithToken("") AND set HF_TOKEN="" in env.
-	if c.token == "" {
+	// Discover a token only when the caller did not pass WithToken
+	// explicitly. WithToken("") is a valid way to force anonymous requests
+	// even when HF_TOKEN is set in the environment — important for tests
+	// and for callers that need to suppress credential leaks.
+	if !c.tokenExplicit {
 		if tok, err := DiscoverToken(); err == nil {
 			c.token = tok
 		}

@@ -212,6 +212,48 @@ func TestClient_OfflineMode_RefusesNetwork(t *testing.T) {
 	}
 }
 
+func TestNewClient_WithTokenEmptyForcesAnonymous(t *testing.T) {
+	// Set a real token in the env so we can verify WithToken("") suppresses
+	// it. Without the explicit-anonymous flag, NewClient would pick this up
+	// via DiscoverToken().
+	withFakeHome(t)
+	t.Setenv("HF_TOKEN", "should-not-be-picked-up")
+
+	c, err := NewClient(WithToken(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.token != "" {
+		t.Errorf("WithToken(\"\") did not suppress discovery: got %q", c.token)
+	}
+}
+
+func TestNewClient_DefaultDiscoversFromEnv(t *testing.T) {
+	withFakeHome(t)
+	t.Setenv("HF_TOKEN", "discovered-token")
+
+	c, err := NewClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.token != "discovered-token" {
+		t.Errorf("default did not discover env token: got %q", c.token)
+	}
+}
+
+func TestNewClient_WithTokenExplicitOverridesEnv(t *testing.T) {
+	withFakeHome(t)
+	t.Setenv("HF_TOKEN", "env-token")
+
+	c, err := NewClient(WithToken("override"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.token != "override" {
+		t.Errorf("explicit token did not win: got %q", c.token)
+	}
+}
+
 func TestIsOffline_TruthyValues(t *testing.T) {
 	cases := []struct {
 		val  string

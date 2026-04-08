@@ -16,7 +16,17 @@ import (
 // the same blob will serialize cleanly.
 //
 // Returns a release function that MUST be called (typically via defer) to
-// drop the lock and remove the lock file.
+// drop the lock.
+//
+// IMPORTANT: the lock file is intentionally NOT removed on release. Removing
+// it would change the inode that future waiters end up flocking, allowing
+// two processes to believe they hold the same logical lock simultaneously
+// (process A creates inode 1 + flocks; A unlinks; B creates inode 2 + flocks
+// successfully because it's a fresh file; meanwhile a third process C may
+// still hold an fd open against inode 1). The Python `filelock` package and
+// huggingface_hub take the same precaution. The cost of leaving stale
+// `.lock` files in the cache is negligible compared to silent blob
+// corruption.
 func acquireLock(lockPath string) (func(), error) {
 	// Make sure the directory exists.
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
@@ -40,11 +50,7 @@ func acquireLock(lockPath string) (func(), error) {
 		// easier to attribute.
 		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
 		_ = f.Close()
-		// Best-effort lock file removal. Another waiter may have re-grabbed
-		// the lock between our unlock and remove — in that case the remove
-		// would race, but that's harmless: filelock holders tolerate the
-		// file disappearing.
-		_ = os.Remove(lockPath)
+		// Lock file is intentionally NOT unlinked — see function comment.
 	}
 	return release, nil
 }
