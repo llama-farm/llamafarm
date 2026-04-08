@@ -44,7 +44,7 @@ func TestSpecFor_LinuxArm64CPUUsesLlamaFarmHost(t *testing.T) {
 	if !strings.Contains(spec.URL, "llama-farm/llamafarm") {
 		t.Errorf("expected llama-farm host, got %s", spec.URL)
 	}
-	if !strings.Contains(spec.URL, "bin-linux-arm64.tar.gz") {
+	if !strings.Contains(spec.URL, "bin-linux-arm64.zip") {
 		t.Errorf("unexpected artifact in URL: %s", spec.URL)
 	}
 }

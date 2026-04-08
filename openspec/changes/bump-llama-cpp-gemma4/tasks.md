@@ -2,7 +2,7 @@
 
 - [x] 1.1 Listed recent llama.cpp tags via `git ls-remote --tags`. Latest tag is `b8708`.
 - [x] 1.2 Verified `d9a12c82` (Gemma 4 EOG fix) is on master but not yet in any tag — `b8708` was cut ~4.5h before `d9a12c82` landed. Per user direction ("let's go with the latest"), proceed with `b8708` and capture the missing EOG fix in the planned follow-up bump.
-- [ ] 1.3 Record the chosen tag (`b8708`) in the PR description with justification: "latest upstream tag at time of bump; includes 7 of 8 Gemma 4 commits; trailing EOG token fix (d9a12c82) deferred to follow-up bump as planned"
+- [x] 1.3 Recorded `b8708` and the d9a12c82-deferred rationale in PR #809 description
 
 ## 2. Bump version constants
 
@@ -29,10 +29,10 @@
 
 ## 5. Trigger ARM64 binary build
 
-- [ ] 5.1 Run `gh workflow run build-llama.yml -f llama_version=<chosen-tag>` to manually invoke the workflow
-- [ ] 5.2 Watch the run with `gh run watch` and verify it completes successfully
-- [ ] 5.3 Verify the artifact `llama-<tag>-bin-linux-arm64.zip` is attached to a LlamaFarm GitHub release (or note in the PR if it requires a release tag push first)
-- [ ] 5.4 If the build fails, investigate and fix in this PR before proceeding — do not merge the version bump until the ARM64 artifact exists
+- [x] 5.1 Triggered `gh workflow run build-llama.yml --ref chore-bump-llama-cpp-b8708-gemma4 -f llama_version=b8708` — run id 24148418292 (https://github.com/llama-farm/llamafarm/actions/runs/24148418292)
+- [ ] 5.2 Watch the run and verify it completes successfully (currently queued)
+- [ ] 5.3 Verify the `llama-b8708-bin-linux-arm64.zip` artifact is attached to a LlamaFarm GitHub release
+- [ ] 5.4 If the build fails, investigate and fix in this PR before merge
 
 ## 6. Run tests
 
@@ -50,7 +50,7 @@
 
 ## 8. Verify and ship
 
-- [ ] 8.1 Run `openspec validate bump-llama-cpp-gemma4` and resolve any issues
-- [ ] 8.2 Open the PR with a description that includes: chosen tag, justification, models smoke-tested, ARM64 build run URL, and the "follow-up bumps expected" note from the design doc
+- [x] 8.1 `openspec validate bump-llama-cpp-gemma4` — passes
+- [x] 8.2 Opened PR #809 https://github.com/llama-farm/llamafarm/pull/809 with chosen tag, justification, ARM64 build run URL, and follow-up bump cadence note. Smoke-test results to be added in a follow-up comment after manual testing.
 - [ ] 8.3 After merge, verify CI on `main` is green (per `.claude/rules/pr_workflow.md` — do not stop at "pushed")
 - [ ] 8.4 Schedule (or note in a tracking issue) the next bump for ~1–2 weeks out, as a Gemma 4 stabilization sweep

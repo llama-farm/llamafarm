@@ -42,7 +42,7 @@ The set of model architectures LlamaFarm supports for inference SHALL be defined
 
 #### Scenario: Loading a Gemma 4 model
 
-- **WHEN** the pinned llama.cpp version includes Gemma 4 support (`b8709` or later, including commit `d9a12c82`) AND a user attempts to load a Gemma 4 GGUF model through the universal runtime
+- **WHEN** the pinned llama.cpp version includes Gemma 4 support (`b8708` or later) AND a user attempts to load a Gemma 4 GGUF model through the universal runtime
 - **THEN** the model loads successfully and produces coherent inference output
 
 #### Scenario: Loading a previously-supported model

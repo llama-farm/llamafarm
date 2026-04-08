@@ -4,7 +4,7 @@ Users need to run Gemma 4 models, and our current llama.cpp pin (b7694, Jan 10) 
 
 ## What Changes
 
-- Bump the pinned llama.cpp version from `b7694` to the latest upstream tag that includes commit `d9a12c82` (the most recent Gemma 4 fix as of 2026-04-08). The exact target tag is resolved at implementation time — must be `b8709+`.
+- Bump the pinned llama.cpp version from `b7694` to `b8708`, the latest upstream tag at the time of implementation. `b8708` includes 7 of the 8 Gemma 4 commits that had landed upstream as of 2026-04-08; the trailing EOG token fix (`d9a12c82`) was cut ~4.5 hours after `b8708` was tagged and is deferred to the planned follow-up bump (see "Coordination notes" below).
 - Replace three deprecated llama.cpp APIs with their renamed equivalents in `packages/llamafarm-llama`:
   - `llama_load_model_from_file` → `llama_model_load_from_file`
   - `llama_new_context_with_model` → `llama_init_from_model`

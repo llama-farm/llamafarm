@@ -194,10 +194,13 @@ func SpecFor(t Target, version string) (Spec, error) {
 		}, nil
 	case t.OS == "linux" && t.Arch == "arm64" && t.Accelerator == "cpu":
 		// LlamaFarm hosts its own Linux ARM64 builds since upstream does not provide them.
+		// build-llama.yml publishes these as .zip (matching the Python downloader manifest in
+		// packages/llamafarm-llama/src/llamafarm_llama/_binary.py); the Go path was previously
+		// pointing at a non-existent .tar.gz URL.
 		lfVersion := llamafarmReleaseVersion()
 		return Spec{
 			URL: fmt.Sprintf(
-				"https://github.com/llama-farm/llamafarm/releases/download/%s/llama-%s-bin-linux-arm64.tar.gz",
+				"https://github.com/llama-farm/llamafarm/releases/download/%s/llama-%s-bin-linux-arm64.zip",
 				lfVersion, version,
 			),
 			LibPath: libName,

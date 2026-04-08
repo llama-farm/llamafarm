@@ -1,6 +1,6 @@
 ## Context
 
-LlamaFarm vendors its own Python bindings to llama.cpp via the `packages/llamafarm-llama` package. The pinned version (`b7694`, tagged 2026-01-10) predates upstream Gemma 4 support, which began landing 2026-04-02 and is still being patched as of 2026-04-08 (most recent: commit `d9a12c82`).
+LlamaFarm vendors its own Python bindings to llama.cpp via the `packages/llamafarm-llama` package. The pinned version (`b7694`, tagged 2026-01-10) predates upstream Gemma 4 support, which began landing 2026-04-02 and is still being patched as of 2026-04-08 (most recent: commit `d9a12c82`, which lands ~4.5 hours after the latest tag `b8708`).
 
 Three constraints shape this work:
 
@@ -14,7 +14,7 @@ The project has no OpenSpec capability covering the llama.cpp binary subsystem t
 
 **Goals:**
 
-- Bump the pinned llama.cpp version to a tag that includes commit `d9a12c82` (Gemma 4 EOG token fix)
+- Bump the pinned llama.cpp version to `b8708`, the latest upstream tag at implementation time. This includes 7 of the 8 Gemma 4 commits that had landed upstream as of 2026-04-08; the trailing EOG token fix (`d9a12c82`) is deferred to the planned follow-up bump.
 - Replace three deprecated llama.cpp APIs with their renamed equivalents (pure rename, no behavior change)
 - Publish a Linux ARM64 binary at the new tag via `build-llama.yml` before merge
 - Document the binding-ownership rationale and upgrade procedure in `.claude/rules/llama_cpp_bindings.md` so this conversation does not happen again on the next bump
@@ -33,7 +33,9 @@ The project has no OpenSpec capability covering the llama.cpp binary subsystem t
 
 ### Decision 1: Take the latest upstream tag, not a soaked one
 
-**Choice:** Pick whatever tag is HEAD at implementation time, provided it includes commit `d9a12c82`. At the time of writing, `b8708` is today's tag but was cut ~4.5 hours before that commit landed, so the floor is `b8709+`.
+**Choice:** `b8708` — the latest upstream tag at implementation time. It contains 7 of the 8 Gemma 4 commits as of 2026-04-08; the trailing EOG token fix (`d9a12c82`) was cut ~4.5 hours after `b8708` and is deferred to the next bump.
+
+The original framing of this decision required the chosen tag to include `d9a12c82`. That floor was relaxed at implementation time because (a) no tag yet contains that commit, (b) the EOG fix is an end-of-generation edge case, not a "Gemma 4 doesn't work" blocker, and (c) Decision 2 plans for follow-up bumps that will pick it up. The principle — "take the latest, not a soaked one" — is unchanged.
 
 **Alternatives considered:**
 - *Take an older "stable" tag.* Rejected because no such tag exists with full Gemma 4 support — the fixes are landing live.
@@ -103,7 +105,7 @@ The project has no OpenSpec capability covering the llama.cpp binary subsystem t
 
 **Pre-merge steps (in order):**
 
-1. Resolve the target tag: confirm the tag is at or after `b8709` and includes commit `d9a12c82`.
+1. Resolve the target tag: latest upstream release. For this change, `b8708`. (The original plan required `b8709+` to include `d9a12c82`; relaxed at implementation time — see Decision 1.)
 2. Update `llama-cpp-version.txt` and the four propagation locations.
 3. Update `_bindings.py` and `llama.py` to use the renamed APIs.
 4. Add `.claude/rules/llama_cpp_bindings.md`.
@@ -124,6 +126,6 @@ The project has no OpenSpec capability covering the llama.cpp binary subsystem t
 
 ## Open Questions
 
-- **Exactly which tag?** Resolved at implementation time. Must be `b8709+` and must include commit `d9a12c82`. The implementer should run `git ls-remote --tags https://github.com/ggml-org/llama.cpp.git` and pick the highest tag whose commit includes `d9a12c82` in its history.
+- **Exactly which tag?** Resolved: `b8708`. The original constraint to include commit `d9a12c82` was relaxed at implementation time (see Decision 1) — no tag yet contains that commit, and the EOG fix is captured in the planned follow-up bump.
 - **Which Gemma 4 model variant for the smoke test?** Implementer's choice — the smallest Gemma 4 model that exercises the tokenizer fixes is sufficient. Document which variant was tested in the PR description.
 - **Should the rules doc reference the next-bump cadence?** Yes — it should explicitly state that during periods of upstream churn around a hot model (like Gemma 4 today), expect to do follow-up bumps every 1–2 weeks until the churn settles. This sets expectations for whoever does bump #2.
