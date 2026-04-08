@@ -42,6 +42,10 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
+        # `reconfigure` is Python 3.7+; ValueError is raised if stdout
+        # has been replaced with a non-TextIOWrapper (e.g. pytest capture).
+        # Falling back to the default codec is the correct behavior in
+        # both cases — there's no safer action we can take here.
         pass
 
 # Import the offline_mode bootstrap BEFORE any module that transitively

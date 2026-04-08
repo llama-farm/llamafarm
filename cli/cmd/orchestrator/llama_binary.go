@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -131,8 +132,19 @@ func EnsureLlamaBinary() (string, error) {
 
 	res, err := llamabinary.Download(context.Background(), target, llamabinary.Version)
 	if err != nil {
-		// Fall back to CPU on the current host if the detected accelerator
-		// has no prebuilt binary (historical behavior of the old code path).
+		// Only fall back to CPU when the failure is specifically "no
+		// prebuilt for this accelerator" (ErrSpecNotAvailable). Other
+		// failures (network, checksum, extraction, disk full) should
+		// propagate — silently downgrading the accelerator for a real
+		// I/O problem would mask the root cause and produce a much
+		// worse user experience.
+		if !errors.Is(err, llamabinary.ErrSpecNotAvailable) {
+			return "", err
+		}
+		utils.LogDebug(fmt.Sprintf(
+			"No prebuilt %s binary for %s; falling back to CPU",
+			target.Accelerator, target.OS+"/"+target.Arch,
+		))
 		target.Accelerator = "cpu"
 		res, err = llamabinary.Download(context.Background(), target, llamabinary.Version)
 		if err != nil {

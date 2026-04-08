@@ -61,28 +61,27 @@ Offline mode and the flat-directory path are set via `LLAMAFARM_OFFLINE` and `LL
 
 ### Decision: Three-tier resolution order
 
-The runtime resolves model files in this order, first match wins:
+`resolve_gguf_path` resolves model files in this order, first match wins:
 
 ```
-  1. absolute path in model spec
-          │
-          ▼ (not absolute)
-  2. $LLAMAFARM_MODEL_DIR/<alias>/
+  1. $LLAMAFARM_MODEL_DIR/<alias>/   (opt-in, format-sniffed)
           │
           ▼ (not set, or alias dir empty/missing)
-  3. HuggingFace cache (existing code path)
+  2. HuggingFace cache               (existing code path)
           │
           ▼ (cache miss, LLAMAFARM_OFFLINE unset)
-  4. Network download (snapshot_download)
+  3. Network download                (snapshot_download)
 ```
 
-When `LLAMAFARM_OFFLINE=1`, step 4 is removed. When the cache is missing AND offline AND the alias dir is missing, the runtime raises immediately with a full error report.
+When `LLAMAFARM_OFFLINE=1`, step 3 is removed. When the cache is missing AND offline AND the alias dir is missing, the runtime raises immediately with a full error report.
 
-**Rationale:** This preserves all existing behavior by default (absolute paths and HF cache both worked before), layers in the new alias-directory tier as an opt-in, and adds one failure mode (step 4 removed) that only affects deployments explicitly opted into offline mode.
+**Absolute paths are not a tier.** This was initially included in the design, but taint-analysis (CodeQL py/path-injection) flagged the caller-controlled absolute-path passthrough, and the feature duplicated what `LLAMAFARM_MODEL_DIR` already provides. Absolute paths in `runtime.models[].model` are still accepted by the legacy `get_gguf_file_path` entry point — which handles `.gguf`-suffixed inputs via a safe-directory basename lookup under `~/.llamafarm/models/` or `$GGUF_MODELS_DIR/` as implemented in the edge runtime on main. That behavior is preserved unchanged; the tier is only absent from the new alias-aware resolver.
+
+**Rationale:** This preserves all existing behavior by default (HF cache works as before, absolute paths still flow through the legacy entry point), layers in the new alias-directory tier as an opt-in, and adds one failure mode (step 3 removed) that only affects deployments explicitly opted into offline mode.
 
 **Alternatives considered:**
 
-- Alias directory as highest priority, overriding absolute paths: rejected because absolute paths in configs are an existing escape hatch and should remain authoritative.
+- Keep absolute paths as tier 1 in the new resolver: rejected because it reintroduces the py/path-injection concern and duplicates the legacy entry point's existing safe-directory basename lookup.
 - HF cache as highest priority, alias dir as fallback: rejected because the whole point of the alias directory is to *replace* the HF cache on devices where the HF cache structure would be awkward to maintain.
 - Single-tier "either env var is set → use only alias dir": rejected because it doesn't let developers test offline mode against a populated HF cache without rebuilding their world.
 
@@ -184,7 +183,7 @@ Model 'qwen3-1.7b' not available in offline mode.
 1. Land the `common/llamafarm_common/offline_mode.py` helper + guards in `model_utils.py` + guards in `_binary.py`. No behavior change for existing deployments because neither env var is set by default.
 2. Land the alias-directory resolver in `common/llamafarm_common` (or a new `common/llamafarm_common/model_dir.py`). Plumb into `runtimes/edge/models/gguf_language_model.py`.
 3. Update the edge runtime's `server.py` to import `offline_mode` early and emit the startup log line.
-4. Add tests covering all four resolution tiers, with mocked network to prove offline mode never makes a request.
+4. Add tests covering all three resolution tiers, with mocked network to prove offline mode never makes a request.
 5. Update the edge runtime Dockerfile documentation (or the new offline-operation doc) with an example showing `LLAMAFARM_OFFLINE=1`, `LLAMAFARM_MODEL_DIR=/models`, and `HF_HUB_OFFLINE=1` env vars plus a bind mount.
 6. Downstream: llamadrone / arc deployment playbook adopts the new env vars and the alias-directory layout. No runtime rollback concerns because the old code paths still work when the vars are unset.
 

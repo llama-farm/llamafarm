@@ -49,7 +49,7 @@ The new alias-based resolver (`resolve_gguf_path`) SHALL resolve model files in 
 
 Behavior for callers that do NOT pass an alias is unchanged from the legacy entry point. In particular, existing support for `.gguf`-suffixed model IDs (including those with directory components, which are resolved via basename lookup under `~/.llamafarm/models/` or `$GGUF_MODELS_DIR/` as implemented in the edge runtime on main) SHALL continue to work for all callers that route through `get_gguf_file_path` without an alias.
 
-Absolute filesystem paths are NOT a resolution tier within the new `resolve_gguf_path` four-tier resolver itself — callers that want alias-directory support must use an alias or `$LLAMAFARM_MODEL_DIR`. This narrower restriction avoids the taint-analysis concern with caller-controlled absolute paths flowing into new filesystem operations while preserving all pre-existing behavior of the legacy `get_gguf_file_path` entry point.
+Absolute filesystem paths are NOT a resolution tier within `resolve_gguf_path` itself — callers that want alias-directory support must use an alias or `$LLAMAFARM_MODEL_DIR`. This narrower restriction avoids the taint-analysis concern with caller-controlled absolute paths flowing into new filesystem operations while preserving all pre-existing behavior of the legacy `get_gguf_file_path` entry point (which continues to accept `.gguf`-suffixed inputs via its safe-directory basename lookup).
 
 #### Scenario: Legacy `.gguf` basename lookup is preserved
 

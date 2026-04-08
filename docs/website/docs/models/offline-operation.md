@@ -88,6 +88,22 @@ raises `FileNotFoundError` with a multi-line message naming the alias, the
 paths that were tried, and the `lf` command that would make the file
 available.
 
+### What about absolute paths in `runtime.models[].model`?
+
+Absolute filesystem paths (e.g. `runtime.models[0].model: /data/custom.gguf`)
+are **not** resolved through the `LLAMAFARM_MODEL_DIR` tier — they flow
+through the legacy `get_gguf_file_path` entry point, which handles
+`.gguf`-suffixed inputs via a safe-directory basename lookup under
+`~/.llamafarm/models/` or `$GGUF_MODELS_DIR/`. This preserves existing
+behavior for projects that reference hand-placed files by absolute path;
+nothing about this handling changes with `LLAMAFARM_MODEL_DIR`.
+
+If you want your hand-placed GGUF to be discovered via the canonical
+`<alias>/` layout, either (a) move it under `$LLAMAFARM_MODEL_DIR/<alias>/`
+and reference it by alias, or (b) move it under `$GGUF_MODELS_DIR/` with
+its basename matching the `runtime.models[].model` value and continue
+referencing by filename.
+
 ## End-to-end workflow with `lf models path`
 
 The companion workflow on the CLI side (from `feat-cli-models-path`):

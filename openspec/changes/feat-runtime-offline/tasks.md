@@ -20,7 +20,7 @@
 
 ## 3. `model_utils.py` Offline Guards and Resolver Integration
 
-- [x] 3.1 Add new public `resolve_gguf_path(model_id, alias, token=None, preferred_quantization=None) -> str` + `resolve_mmproj_path(model_id, alias, token=None) -> str | None` functions implementing the four-tier order
+- [x] 3.1 Add new public `resolve_gguf_path(model_id, alias, token=None, preferred_quantization=None) -> str` + `resolve_mmproj_path(model_id, alias, token=None) -> str | None` functions implementing the three-tier order (LLAMAFARM_MODEL_DIR → HF cache → network; absolute paths deliberately not a tier, see design.md)
 - [x] 3.2 Import `offline_mode` at the top of `model_utils.py` BEFORE `huggingface_hub` is imported so env-var propagation runs in time
 - [x] 3.3 Skip the alias-dir tier when `LLAMAFARM_MODEL_DIR` is unset (handled by `resolve_from_model_dir` returning None)
 - [x] 3.4 Skip the network-download tier in offline mode; raise structured `FileNotFoundError` with alias name, both tried paths, and `lf models pull` remediation
@@ -71,7 +71,7 @@ transitively because edge imports `llamafarm_common`.
 
 ## 8. Documentation
 
-- [x] 8.1 Created `docs/website/docs/models/offline-operation.md` — both env vars, four-tier resolution order, canonical layout, startup verification, end-to-end workflow with `lf models path`
+- [x] 8.1 Created `docs/website/docs/models/offline-operation.md` — both env vars, three-tier resolution order, canonical layout, startup verification, end-to-end workflow with `lf models path`
 - [x] 8.2 Docker compose snippet with bind-mounted `/models`, all offline env vars, and `LD_LIBRARY_PATH` for the llama.cpp binary
 - [x] 8.3 Troubleshooting section covers: missing-model error, missing-binary error, GGUF magic validation warning, nonexistent root path warning, "online mode" mismatch
 - [x] 8.4 Cross-references to `lf models path` and `lf runtime binary pull` in both directions
