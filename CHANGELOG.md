@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.30](https://github.com/llama-farm/llamafarm/compare/v0.0.29...v0.0.30) (2026-04-09)
+
+
+### Features
+
+* **cli:** native lf models commands without server boot ([#810](https://github.com/llama-farm/llamafarm/issues/810)) ([9b4b996](https://github.com/llama-farm/llamafarm/commit/9b4b99689a69e0635566c6eb62350f073b4b5d39))
+
+
+### Miscellaneous Chores
+
+* release 0.0.30 ([8ec27c5](https://github.com/llama-farm/llamafarm/commit/8ec27c540085406592aba4380b35ef9e0aea33a6))
+
 ## [0.0.29](https://github.com/llama-farm/llamafarm/compare/v0.0.28...v0.0.29) (2026-04-08)
 
 
