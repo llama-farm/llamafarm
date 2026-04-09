@@ -508,8 +508,38 @@ func TestListCachedFiles_RecursesIntoSubdirectories(t *testing.T) {
 	if files[0].Filename != "navlink-v2-Q8_0.gguf" {
 		t.Errorf("expected navlink-v2-Q8_0.gguf, got %s", files[0].Filename)
 	}
-	if !strings.Contains(files[0].SnapshotPath, filepath.Join("gguf", "navlink-v2-Q8_0.gguf")) {
+	wantRel := filepath.Join("gguf", "navlink-v2-Q8_0.gguf")
+	if files[0].RelPath != wantRel {
+		t.Errorf("RelPath: got %q, want %q", files[0].RelPath, wantRel)
+	}
+	if !strings.Contains(files[0].SnapshotPath, wantRel) {
 		t.Errorf("snapshot path should include subdirectory: %s", files[0].SnapshotPath)
+	}
+}
+
+func TestListCachedFiles_SameBasenameDifferentSubdirs(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	snapDir := layoutRepo(t, cacheRoot, "org/repo", "abc123")
+	// Two files with the same basename in different subdirectories.
+	writeGGUF(t, filepath.Join(snapDir, "gguf"), "model.gguf", "weights-a")
+	writeGGUF(t, filepath.Join(snapDir, "alt"), "model.gguf", "weights-b-longer")
+
+	files, err := ListCachedFiles("org/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("got %d files, want 2 (same basename in different subdirs should not collide)", len(files))
+	}
+	relPaths := map[string]bool{}
+	for _, f := range files {
+		relPaths[f.RelPath] = true
+		if f.Filename != "model.gguf" {
+			t.Errorf("Filename should be basename: got %q", f.Filename)
+		}
+	}
+	if !relPaths[filepath.Join("alt", "model.gguf")] || !relPaths[filepath.Join("gguf", "model.gguf")] {
+		t.Errorf("expected both subdirs present, got %v", relPaths)
 	}
 }
 

@@ -36,11 +36,16 @@ type SnapshotFile struct {
 	// RepoID is the HuggingFace repository identifier ("org/name").
 	RepoID string
 	// SnapshotPath is the absolute snapshot path:
-	//   <cache>/models--<org>--<name>/snapshots/<commit>/<filename>
+	//   <cache>/models--<org>--<name>/snapshots/<commit>/<relpath>
 	// This path preserves the original filename and is stable across HF cache
 	// garbage-collection of blob files.
 	SnapshotPath string
-	// Filename is the terminal filename (no directory parts).
+	// RelPath is the path relative to the snapshot directory (e.g.
+	// "gguf/model-Q8_0.gguf" or just "model-Q8_0.gguf" for top-level files).
+	// Used as the dedup key across snapshots.
+	RelPath string
+	// Filename is the terminal filename (no directory parts), kept for
+	// quantization parsing and display.
 	Filename string
 	// Size is the file size in bytes, resolved through any symlink chain.
 	Size int64
@@ -169,16 +174,20 @@ func ListCachedFiles(repoID string) ([]SnapshotFile, error) {
 			if walkErr != nil || d.IsDir() {
 				return nil //nolint:nilerr // best-effort walk
 			}
-			name := d.Name()
 			// Resolve through any symlink chain to verify non-empty.
 			info, err := os.Stat(path)
 			if err != nil || info.IsDir() || info.Size() == 0 {
 				return nil
 			}
-			out[name] = SnapshotFile{
+			rel, relErr := filepath.Rel(snapDir, path)
+			if relErr != nil {
+				return nil
+			}
+			out[rel] = SnapshotFile{
 				RepoID:       repoID,
 				SnapshotPath: path,
-				Filename:     name,
+				RelPath:      rel,
+				Filename:     d.Name(),
 				Size:         info.Size(),
 			}
 			return nil
@@ -190,7 +199,7 @@ func ListCachedFiles(repoID string) ([]SnapshotFile, error) {
 		result = append(result, v)
 	}
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Filename < result[j].Filename
+		return result[i].RelPath < result[j].RelPath
 	})
 	return result, nil
 }
