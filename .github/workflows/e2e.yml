@@ -479,15 +479,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          # Prevent intermittent Windows post-job failures caused by actions/checkout@v6's
-          # cleanup running `git submodule foreach --recursive "sh -c '...'"` to unset the
-          # auth extraheader. LlamaFarm has no submodules, so this command is a no-op, but
-          # on Windows runners the spawned Git Bash subshell occasionally hangs and is
-          # killed as an orphan process, marking the step as failed even though all tests
-          # passed. Setting persist-credentials=false avoids writing the extraheader in the
-          # first place, so the post-step has nothing to clean up. The E2E tests don't push
-          # anything back to the repo, so no downstream step needs the persisted token.
-          # See PR #809 for the full diagnosis.
+          # Prevent Windows post-job failures caused by a race between actions/checkout's
+          # post-step and the runner's orphan-process sweep. Post Checkout spawns
+          # `git submodule foreach` (which spawns sh.exe) as its last operation. If the
+          # e2e test leaves orchestrator children (uv / uvicorn / python) alive, the
+          # runner triggers orphan-process cleanup ~100ms after the submodule foreach
+          # starts and kills checkout's own in-flight git/sh processes along with the
+          # orphans, marking Post Checkout as failed. Setting persist-credentials=false
+          # doesn't prevent the submodule foreach calls (there are several unrelated to
+          # the extraheader), but explicitly stopping orchestrator services in the
+          # Cleanup step below removes the orphan sources that trigger the race. We keep
+          # persist-credentials=false as defense in depth and because the E2E tests don't
+          # push anything back to the repo. See PR #812 for the full diagnosis.
           persist-credentials: false
 
       # ============================================================
@@ -1289,6 +1292,19 @@ jobs:
         if: always()
         shell: bash
         run: |
+          echo "Stopping orchestrator services..."
+          # Gracefully stop all LlamaFarm services so their child processes
+          # (uv, uvicorn, python) don't become orphans. Leftover orphans on
+          # Windows cause Post Checkout to fail during post-job cleanup when
+          # the runner's orphan-process sweep races with actions/checkout's
+          # `git submodule foreach` sh.exe subprocess. See PR #812.
+          cli/${{ matrix.binary }} services stop 2>/dev/null || true
+          # On Windows, force-kill any stragglers that didn't exit cleanly.
+          if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$RUNNER_OS" == "Windows" ]]; then
+            taskkill //F //IM uv.exe //T 2>/dev/null || true
+            taskkill //F //IM uvicorn.exe //T 2>/dev/null || true
+            taskkill //F //IM python.exe //T 2>/dev/null || true
+          fi
           echo "Cleaning up test directory..."
           rm -rf "$TEST_DIR"
           echo "✓ Cleanup complete"
