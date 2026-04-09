@@ -491,6 +491,43 @@ func TestScanCache_AmbiguousNamesNotDropped(t *testing.T) {
 	}
 }
 
+func TestListCachedFiles_RecursesIntoSubdirectories(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	snapDir := layoutRepo(t, cacheRoot, "llama-farm/functiongemma", "abc123")
+	// GGUF lives inside a subdirectory, as some repos organize files this way.
+	subDir := filepath.Join(snapDir, "gguf")
+	writeGGUF(t, subDir, "navlink-v2-Q8_0.gguf", "weights")
+
+	files, err := ListCachedFiles("llama-farm/functiongemma")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1", len(files))
+	}
+	if files[0].Filename != "navlink-v2-Q8_0.gguf" {
+		t.Errorf("expected navlink-v2-Q8_0.gguf, got %s", files[0].Filename)
+	}
+	if !strings.Contains(files[0].SnapshotPath, filepath.Join("gguf", "navlink-v2-Q8_0.gguf")) {
+		t.Errorf("snapshot path should include subdirectory: %s", files[0].SnapshotPath)
+	}
+}
+
+func TestLocateGGUF_FindsFileInSubdirectory(t *testing.T) {
+	cacheRoot := setupFakeCache(t)
+	snapDir := layoutRepo(t, cacheRoot, "llama-farm/functiongemma", "abc123")
+	subDir := filepath.Join(snapDir, "gguf")
+	writeGGUF(t, subDir, "navlink-v2-Q8_0.gguf", "weights")
+
+	sf, err := LocateGGUF("llama-farm/functiongemma", "Q8_0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sf.Filename != "navlink-v2-Q8_0.gguf" {
+		t.Errorf("expected navlink-v2-Q8_0.gguf, got %s", sf.Filename)
+	}
+}
+
 func TestScanCache_SkipsRepoWithNoRealFiles(t *testing.T) {
 	cacheRoot := setupFakeCache(t)
 	// Create a "models--" dir with no snapshots/blobs at all.

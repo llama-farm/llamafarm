@@ -165,31 +165,24 @@ func ListCachedFiles(repoID string) ([]SnapshotFile, error) {
 	out := make(map[string]SnapshotFile)
 	for _, snap := range snapshotDirs {
 		snapDir := filepath.Join(snapshotsDir, snap)
-		files, err := os.ReadDir(snapDir)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if f.IsDir() {
-				continue
+		_ = filepath.WalkDir(snapDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil //nolint:nilerr // best-effort walk
 			}
-			name := f.Name()
-			fullPath := filepath.Join(snapDir, name)
+			name := d.Name()
 			// Resolve through any symlink chain to verify non-empty.
-			info, err := os.Stat(fullPath)
-			if err != nil {
-				continue
-			}
-			if info.IsDir() || info.Size() == 0 {
-				continue
+			info, err := os.Stat(path)
+			if err != nil || info.IsDir() || info.Size() == 0 {
+				return nil
 			}
 			out[name] = SnapshotFile{
 				RepoID:       repoID,
-				SnapshotPath: fullPath,
+				SnapshotPath: path,
 				Filename:     name,
 				Size:         info.Size(),
 			}
-		}
+			return nil
+		})
 	}
 
 	result := make([]SnapshotFile, 0, len(out))
