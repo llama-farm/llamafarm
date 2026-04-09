@@ -110,6 +110,7 @@ def main():
             "data": training_data,
             "contamination": 0.05,  # Expect 5% fraud rate
         },
+            timeout=10.0,
     )
     fit_result = response.json()
     print(f"  Trained on {fit_result['samples_fitted']} samples")
@@ -138,6 +139,7 @@ def main():
             "backend": "ecod",
             "data": test_data,
         },
+            timeout=10.0,
     )
     score_result = response.json()
 
@@ -169,6 +171,7 @@ def main():
             "contamination": 0.05,
             "n_estimators": 100,
         },
+            timeout=10.0,
     )
     iforest_fit = response.json()
 
@@ -180,6 +183,7 @@ def main():
             "backend": "isolation_forest",
             "data": test_data,
         },
+            timeout=10.0,
     )
     iforest_result = response.json()
 
@@ -202,6 +206,7 @@ def main():
             "model": "fraud-detector",
             "backend": "ecod",
         },
+            timeout=10.0,
     )
     load_result = response.json()
     print(f"  Loaded: {load_result['filename']}")

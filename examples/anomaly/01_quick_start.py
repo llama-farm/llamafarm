@@ -54,12 +54,14 @@ client = httpx.Client(timeout=30)
 client.post(
     f"{BASE_URL}/v1/ml/anomaly/fit",
     json={"data": train_data, "backend": "ecod", "model": "quickstart"},
+    timeout=10.0,
 )
 
 # Step 2: Score test data (includes anomaly)
 response = client.post(
     f"{BASE_URL}/v1/ml/anomaly/score",
     json={"data": test_data, "backend": "ecod", "model": "quickstart"},
+    timeout=10.0,
 )
 result = response.json()
 

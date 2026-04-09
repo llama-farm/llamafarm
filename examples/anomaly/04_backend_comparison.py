@@ -92,6 +92,7 @@ def test_backend(backend: str, train_data: list, test_data: list) -> dict:
                 "data": train_data,
                 "contamination": 0.1,
             },
+                timeout=10.0,
         )
         fit_time = (time.perf_counter() - start) * 1000
 
@@ -107,6 +108,7 @@ def test_backend(backend: str, train_data: list, test_data: list) -> dict:
                 "backend": backend,
                 "data": test_data,
             },
+                timeout=10.0,
         )
         score_time = (time.perf_counter() - start) * 1000
 
@@ -135,7 +137,7 @@ def main():
 
     # List available backends
     print("Step 1: Listing available backends...")
-    response = client.get(f"{BASE_URL}/v1/ml/anomaly/backends")
+    response = client.get(f"{BASE_URL}/v1/ml/anomaly/backends", timeout=10.0)
     backends_info = response.json()
 
     print(f"\nAvailable backends ({backends_info['total']} total):")
