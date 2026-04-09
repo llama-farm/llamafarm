@@ -7,6 +7,31 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.30</strong> — 2026-04-09</summary>
+<think>
+
+</think>
+
+**Release Highlights: 0.0.30**  
+This release focuses on improving the user experience by adding new command-line tools and streamlining the release process, making it easier than ever to work with LlamaFarm.
+
+### New Features
+
+**Native CLI Commands for LlamaFarm Models**  
+Now, you can interact with LlamaFarm models directly from the command line without needing to start a server. This makes it faster and more convenient to manage and run models, especially for users who prefer the command line interface. You can now launch, stop, and manage models with simple commands, giving you greater control and flexibility.
+
+### Improvements
+
+**Streamlined Release Process**  
+The release process has been made more efficient, ensuring that each version of LlamaFarm is ready to use with minimal setup. This means users can get the latest features and improvements faster, with fewer steps to follow.
+
+We’re excited to share this update and look forward to your feedback as you explore the new capabilities. Let us know how you're using LlamaFarm, and we'll be here to help!
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.30)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.29</strong> — 2026-04-08</summary>
 <think>
 
