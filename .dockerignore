@@ -42,5 +42,8 @@ dist/
 Dockerfile
 .dockerignore
 
+# Tests
+**/tests/
+
 # Node.js
 node_modules/
