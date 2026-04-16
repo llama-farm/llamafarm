@@ -8,7 +8,7 @@ import (
 )
 
 func TestSpecFor_MacOSArm64Metal(t *testing.T) {
-	spec, err := SpecFor(Target{OS: "darwin", Arch: "arm64", Accelerator: "metal"}, "b8708")
+	spec, err := SpecFor(Target{OS: "darwin", Arch: "arm64", Accelerator: "metal"}, "b8816")
 	if err != nil {
 		t.Fatalf("SpecFor: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestSpecFor_LinuxAmd64CPU(t *testing.T) {
 }
 
 func TestSpecFor_LinuxArm64CPUUsesLlamaFarmHost(t *testing.T) {
-	spec, err := SpecFor(Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}, "b8708")
+	spec, err := SpecFor(Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}, "b8816")
 	if err != nil {
 		t.Fatalf("SpecFor: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSpecFor_LinuxArm64CPUUsesLlamaFarmHost(t *testing.T) {
 }
 
 func TestSpecFor_WindowsAmd64CPU(t *testing.T) {
-	spec, err := SpecFor(Target{OS: "windows", Arch: "amd64", Accelerator: "cpu"}, "b8708")
+	spec, err := SpecFor(Target{OS: "windows", Arch: "amd64", Accelerator: "cpu"}, "b8816")
 	if err != nil {
 		t.Fatalf("SpecFor: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestSpecFor_WindowsAmd64CPU(t *testing.T) {
 }
 
 func TestSpecFor_WindowsAmd64Cuda(t *testing.T) {
-	spec, err := SpecFor(Target{OS: "windows", Arch: "amd64", Accelerator: "cuda"}, "b8708")
+	spec, err := SpecFor(Target{OS: "windows", Arch: "amd64", Accelerator: "cuda"}, "b8816")
 	if err != nil {
 		t.Fatalf("SpecFor: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestSpecFor_WindowsAmd64Cuda(t *testing.T) {
 }
 
 func TestSpecFor_InvalidCombo(t *testing.T) {
-	_, err := SpecFor(Target{OS: "darwin", Arch: "arm64", Accelerator: "cuda"}, "b8708")
+	_, err := SpecFor(Target{OS: "darwin", Arch: "arm64", Accelerator: "cuda"}, "b8816")
 	if err == nil {
 		t.Error("expected error for darwin/arm64/cuda")
 	}
@@ -164,11 +164,11 @@ func TestCacheRoot_HonorsEnvOverride(t *testing.T) {
 func TestCacheDir_CrossPlatformIsScoped(t *testing.T) {
 	t.Setenv("LLAMAFARM_CACHE_DIR", "/root")
 	host := CurrentHostTarget()
-	hostDir, err := CacheDir(host, "b8708")
+	hostDir, err := CacheDir(host, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hostDir != filepath.Join("/root", "b8708") {
+	if hostDir != filepath.Join("/root", "b8816") {
 		t.Errorf("host dir not at legacy path: %s", hostDir)
 	}
 
@@ -178,7 +178,7 @@ func TestCacheDir_CrossPlatformIsScoped(t *testing.T) {
 		// Change accelerator if host happens to match.
 		cross.Accelerator = "vulkan"
 	}
-	crossDir, err := CacheDir(cross, "b8708")
+	crossDir, err := CacheDir(cross, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestIsCached_TrueWhenFilePresent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("LLAMAFARM_CACHE_DIR", tmp)
 	target := Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}
-	dir, err := CacheDir(target, "b8708")
+	dir, err := CacheDir(target, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestIsCached_TrueWhenFilePresent(t *testing.T) {
 	if err := os.WriteFile(libFile, []byte("stub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if !IsCached(target, "b8708") {
+	if !IsCached(target, "b8816") {
 		t.Error("expected cached after writing file")
 	}
 }
@@ -222,7 +222,7 @@ func TestIsCached_TrueWhenFilePresent(t *testing.T) {
 func TestLibPath_ReturnsExpectedFile(t *testing.T) {
 	t.Setenv("LLAMAFARM_CACHE_DIR", "/r")
 	target := Target{OS: "darwin", Arch: "arm64", Accelerator: "metal"}
-	p, err := LibPath(target, "b8708")
+	p, err := LibPath(target, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestExport_RequiresCache(t *testing.T) {
 	exportDir := filepath.Join(tmp, "export")
 
 	target := Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}
-	if err := Export(target, "b8708", exportDir); err == nil {
+	if err := Export(target, "b8816", exportDir); err == nil {
 		t.Error("expected error when cache empty")
 	}
 }
@@ -247,7 +247,7 @@ func TestExport_CopiesCachedFilesFlat(t *testing.T) {
 	t.Setenv("LLAMAFARM_CACHE_DIR", filepath.Join(tmp, "cache"))
 
 	target := Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}
-	dir, err := CacheDir(target, "b8708")
+	dir, err := CacheDir(target, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestExport_CopiesCachedFilesFlat(t *testing.T) {
 	}
 
 	exportDir := filepath.Join(tmp, "export")
-	if err := Export(target, "b8708", exportDir); err != nil {
+	if err := Export(target, "b8816", exportDir); err != nil {
 		t.Fatalf("Export: %v", err)
 	}
 
@@ -287,7 +287,7 @@ func TestExport_PreservesSymlinks(t *testing.T) {
 	t.Setenv("LLAMAFARM_CACHE_DIR", filepath.Join(tmp, "cache"))
 
 	target := Target{OS: "linux", Arch: "arm64", Accelerator: "cpu"}
-	dir, err := CacheDir(target, "b8708")
+	dir, err := CacheDir(target, "b8816")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestExport_PreservesSymlinks(t *testing.T) {
 	}
 
 	exportDir := filepath.Join(tmp, "export")
-	if err := Export(target, "b8708", exportDir); err != nil {
+	if err := Export(target, "b8816", exportDir); err != nil {
 		t.Fatalf("Export: %v", err)
 	}
 	linkPath := filepath.Join(exportDir, "libllama.so.0")

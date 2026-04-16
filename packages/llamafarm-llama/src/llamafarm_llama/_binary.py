@@ -35,7 +35,7 @@ def _read_llama_cpp_version() -> str:
         if version_file.exists():
             return version_file.read_text().strip()
     # Fallback to hardcoded version if file not found (e.g., installed package)
-    return "b8708"
+    return "b8816"
 
 LLAMA_CPP_VERSION = _read_llama_cpp_version()
 LLAMA_CPP_REPO = "ggml-org/llama.cpp"
