@@ -16,6 +16,7 @@ import logging
 
 from huggingface_hub import HfApi, scan_cache_dir
 from huggingface_hub.utils import HFCacheInfo
+from .model_dir import resolve_from_model_dir
 from .model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
     get_gguf_file_path,
@@ -153,7 +154,20 @@ def detect_model_format(
             _format_cache[base_model_id] = "transformers"
             return "transformers"
 
-    # Not in local cache - must query API
+    # Check LLAMAFARM_MODEL_DIR before hitting the network
+    try:
+        result = resolve_from_model_dir(base_model_id)
+        if result is not None:
+            logger.info(
+                "Detected GGUF format from LLAMAFARM_MODEL_DIR: %s",
+                result.weights_path,
+            )
+            _format_cache[base_model_id] = "gguf"
+            return "gguf"
+    except ValueError:
+        pass
+
+    # Not in local cache or model dir - must query API
     try:
         api = HfApi()
         all_files = api.list_repo_files(repo_id=base_model_id, token=token)
