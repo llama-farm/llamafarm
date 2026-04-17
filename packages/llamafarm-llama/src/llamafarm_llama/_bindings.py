@@ -228,6 +228,11 @@ LLAMA_CDEF = """
     int32_t llama_model_n_layer(const struct llama_model * model);
     int32_t llama_model_n_head(const struct llama_model * model);
 
+    // Fetch a model's built-in chat template (added in llama.cpp b3828, required
+    // since b7376 since llama_chat_apply_template(NULL, ...) no longer falls back
+    // to the model's template and instead silently applies ChatML).
+    const char * llama_model_chat_template(const struct llama_model * model, const char * name);
+
     // Vocab info (new API - llama.cpp b7376+)
     int32_t llama_vocab_n_tokens(const struct llama_vocab * vocab);
     const char * llama_vocab_get_text(const struct llama_vocab * vocab, llama_token token);

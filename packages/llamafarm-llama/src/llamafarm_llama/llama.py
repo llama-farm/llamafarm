@@ -1118,10 +1118,18 @@ class Llama:
         buf_size = 4096
         buf = ffi.new(f"char[{buf_size}]")
 
-        # llama.cpp b7376+: model param removed, first arg is now template string
-        # Pass NULL to use model's default template
+        # Fetch the model's embedded chat template. Passing NULL as the first
+        # arg to llama_chat_apply_template silently falls back to ChatML in
+        # b7376+, which produces wrong output for every non-ChatML model
+        # (Gemma, Llama 3, Qwen, Mistral-instruct, …). We must pull the
+        # template string explicitly and pass it in.
+        tmpl_ptr = self._lib.llama_model_chat_template(self._model, ffi.NULL)
+        # tmpl_ptr may be NULL for models that don't ship a template; fall
+        # back to ChatML in that case to preserve the prior behavior.
+        tmpl_arg = tmpl_ptr if tmpl_ptr != ffi.NULL else ffi.NULL
+
         n_chars = self._lib.llama_chat_apply_template(
-            ffi.NULL,  # Use model's default template
+            tmpl_arg,
             chat_array,
             n_msg,
             add_generation_prompt,
@@ -1137,7 +1145,7 @@ class Llama:
             buf_size = n_chars + 1
             buf = ffi.new(f"char[{buf_size}]")
             n_chars = self._lib.llama_chat_apply_template(
-                ffi.NULL,
+                tmpl_arg,
                 chat_array,
                 n_msg,
                 add_generation_prompt,
@@ -1424,8 +1432,14 @@ class Llama:
         """
         t_start = time.perf_counter()
 
-        # Tokenize directly (no chat template application)
-        tokens = self.tokenize(prompt, add_special=False, parse_special=True)
+        # Tokenize directly (no chat template application). add_special=True
+        # so the model's BOS is prepended — without it, decoder-only models
+        # (Gemma/Llama/Mistral) degenerate badly on raw prompts. If the caller
+        # already included BOS in the prompt text, llama.cpp's tokenizer
+        # deduplicates it, so this is always safe. parse_special=True so
+        # callers can still inject delimiter tokens (<start_of_turn>, etc.)
+        # inside the prompt when they're hand-formatting a template.
+        tokens = self.tokenize(prompt, add_special=True, parse_special=True)
         t_tokenize = time.perf_counter()
 
         if len(tokens) > self._n_ctx:
