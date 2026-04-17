@@ -1152,6 +1152,8 @@ class Llama:
                 buf,
                 buf_size,
             )
+            if n_chars < 0:
+                raise RuntimeError("Failed to apply chat template on retry")
 
         return ffi.string(buf, n_chars).decode("utf-8")
 

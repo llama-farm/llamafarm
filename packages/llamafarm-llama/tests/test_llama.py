@@ -1,6 +1,6 @@
 """Tests for Llama class."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 
 class TestLlamaInit:
@@ -219,3 +219,49 @@ class TestResponseTypes:
 
         assert "role" in ChatMessage.__annotations__
         assert "content" in ChatMessage.__annotations__
+
+
+class TestChatTemplateUsesModelTemplate:
+    """Regression: _apply_chat_template must fetch and pass the model's template."""
+
+    @patch("llamafarm_llama.llama.ensure_backend")
+    @patch("llamafarm_llama.llama.get_lib")
+    def test_fetches_model_template(self, mock_get_lib, mock_ensure_backend):
+        from llamafarm_llama._bindings import ffi
+        from llamafarm_llama.llama import Llama
+
+        mock_lib = MagicMock()
+        mock_lib.llama_model_default_params.return_value = MagicMock()
+        mock_lib.llama_model_load_from_file.return_value = 1
+        mock_lib.llama_context_default_params.return_value = MagicMock()
+        mock_lib.llama_init_from_model.return_value = 1
+        mock_lib.llama_n_vocab.return_value = 32000
+        mock_lib.llama_n_ctx.return_value = 2048
+        mock_lib.llama_model_meta_val_str.return_value = 0
+        mock_get_lib.return_value = mock_lib
+
+        llama = Llama(model_path="test.gguf")
+
+        sentinel = ffi.new("char[]", b"gemma")
+        mock_lib.llama_model_chat_template.return_value = sentinel
+        mock_lib.llama_chat_apply_template.return_value = 10
+
+        llama._apply_chat_template([{"role": "user", "content": "hi"}])
+
+        mock_lib.llama_model_chat_template.assert_called_once_with(
+            llama._model, ffi.NULL
+        )
+        apply_call = mock_lib.llama_chat_apply_template.call_args
+        assert apply_call[0][0] == sentinel
+
+
+class TestCreateCompletionBOS:
+    """Regression: create_completion must tokenize with add_special=True."""
+
+    def test_tokenize_called_with_add_special_true(self):
+        import inspect
+
+        from llamafarm_llama.llama import Llama
+
+        source = inspect.getsource(Llama.create_completion)
+        assert "add_special=True" in source
