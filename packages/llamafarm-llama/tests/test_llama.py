@@ -1,6 +1,6 @@
 """Tests for Llama class."""
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 
 class TestLlamaInit:
