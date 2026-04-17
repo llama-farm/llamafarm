@@ -1319,8 +1319,15 @@ class Llama:
         # Apply chat template
         prompt = self._apply_chat_template(messages, add_generation_prompt=True)
 
-        # Tokenize
-        tokens = self.tokenize(prompt, add_special=False, parse_special=True)
+        # Tokenize. add_special=True so the model's BOS is prepended for
+        # decoder-only models (Gemma/Llama/Mistral) that degenerate without
+        # it — the parallel bug on the raw-completion path was fixed in
+        # PR #820; this mirror is the chat-path fix. parse_special=True so
+        # that any literal delimiter tokens the template renders
+        # (`<bos>`, `<start_of_turn>`, `<end_of_turn>`) tokenize as their
+        # special IDs. llama.cpp's tokenizer deduplicates BOS if the
+        # template string already begins with one.
+        tokens = self.tokenize(prompt, add_special=True, parse_special=True)
         t_tokenize = time.perf_counter()
 
         if len(tokens) > self._n_ctx:

@@ -267,6 +267,24 @@ class TestCreateCompletionBOS:
         assert "add_special=True" in source
 
 
+class TestCreateChatCompletionBOS:
+    """Regression: create_chat_completion must tokenize with add_special=True.
+
+    PR #820 fixed BOS handling on the raw-completion path but left the chat
+    path tokenizing with add_special=False, which stripped BOS for
+    decoder-only models (Gemma 3, Llama, Mistral) and produced garbage chat
+    output. The chat path must apply the same BOS-always policy."""
+
+    def test_tokenize_called_with_add_special_true(self):
+        import inspect
+
+        from llamafarm_llama.llama import Llama
+
+        source = inspect.getsource(Llama.create_chat_completion)
+        assert "add_special=True" in source
+        assert "add_special=False" not in source
+
+
 
 class TestSamplerChain:
     """Verify the sampler chain matches the requested sampling mode."""
