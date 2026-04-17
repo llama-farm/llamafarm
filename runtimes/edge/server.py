@@ -279,11 +279,13 @@ async def load_language(
                         f"for LLAMAFARM_MODEL_DIR lookup"
                     )
 
-                # Check LLAMAFARM_MODEL_DIR first — avoids HuggingFace
-                # API calls that fail for alias-style model IDs in
-                # offline mode.
+                # For alias-style model IDs (no org/ namespace), check
+                # LLAMAFARM_MODEL_DIR first — avoids HuggingFace API
+                # calls that fail in offline mode.  Namespaced IDs like
+                # "org/model" always go through detect_model_format so a
+                # local alias can't silently override a specific repo.
                 model_format: str | None = None
-                if alias:
+                if alias and "/" not in model_id:
                     from llamafarm_common.model_dir import resolve_from_model_dir
                     if resolve_from_model_dir(alias) is not None:
                         model_format = "gguf"
