@@ -1,7 +1,7 @@
 from typing import Literal
 
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ============================================================================
 # Audio Content Types (for STT transcription)
@@ -114,6 +114,34 @@ class ChatCompletionRequest(BaseModel):
     auto_truncate: bool | None = True
     # Truncation strategy: "sliding_window", "keep_system", "middle_out", "summarize"
     truncation_strategy: str | None = None
+
+    @field_validator("messages")
+    @classmethod
+    def _messages_nonempty(cls, v):
+        if not v:
+            raise ValueError("messages must not be empty")
+        return v
+
+    @field_validator("max_tokens")
+    @classmethod
+    def _max_tokens_positive(cls, v):
+        if v is not None and v < 1:
+            raise ValueError("max_tokens must be >= 1")
+        return v
+
+    @field_validator("temperature")
+    @classmethod
+    def _temperature_in_range(cls, v):
+        if v is not None and not (0.0 <= v <= 2.0):
+            raise ValueError("temperature must be between 0 and 2")
+        return v
+
+    @field_validator("top_p")
+    @classmethod
+    def _top_p_in_range(cls, v):
+        if v is not None and not (0.0 <= v <= 1.0):
+            raise ValueError("top_p must be between 0 and 1")
+        return v
 
 
 class ThinkingContent(BaseModel):

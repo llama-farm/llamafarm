@@ -1422,6 +1422,51 @@ class ChatCompletionsService:
 
         except HTTPException:
             raise
+        except ValueError as e:
+            logger.warning(f"Invalid model_id in chat_completions: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "invalid_model_id", "message": str(e)},
+            ) from e
         except Exception as e:
+            try:
+                from huggingface_hub.utils import (
+                    GatedRepoError,
+                    HfHubHTTPError,
+                    RepositoryNotFoundError,
+                )
+            except ImportError:
+                HfHubHTTPError = RepositoryNotFoundError = GatedRepoError = ()  # type: ignore[assignment,misc]
+
+            if isinstance(e, RepositoryNotFoundError):
+                logger.warning(f"Model repository not found: {e}")
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": "model_not_found",
+                        "message": f"Model not found: {chat_request.model}",
+                    },
+                ) from e
+            if isinstance(e, GatedRepoError):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "model_gated",
+                        "message": f"Access to model is gated: {chat_request.model}",
+                    },
+                ) from e
+            if isinstance(e, HfHubHTTPError):
+                logger.error(f"HF hub error resolving {chat_request.model}: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "model_resolution_failed",
+                        "message": "Upstream model registry unavailable",
+                    },
+                ) from e
+
             logger.error(f"Error in chat_completions: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "internal_error", "message": "Internal server error"},
+            ) from e
