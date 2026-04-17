@@ -48,27 +48,15 @@ jobs:
           path: llama.cpp
 
       - name: Install dependencies
-        # gcc-12 is pinned to work around a GCC 13.3 ARM64 miscompile of one of
-        # ggml-cpu's kernels that produces garbage logits for Gemma 3 on
-        # Cortex-A76. Qwen / Llama architectures are unaffected by the
-        # miscompile — the symptom only surfaces on Gemma 3's iSWA path — so
-        # it went unnoticed until a Gemma 3 fine-tune hit production.
-        # See ggml-org/llama.cpp#22011 for the full reproducer. Re-evaluate the
-        # pin when GCC ≥ 14 is available on ubuntu-24.04-arm.
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake gcc-12 g++-12
+          sudo apt-get install -y build-essential cmake
 
       - name: Configure CMake
-        env:
-          CC: gcc-12
-          CXX: g++-12
         run: |
           cd llama.cpp
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=gcc-12 \
-            -DCMAKE_CXX_COMPILER=g++-12 \
             -DBUILD_SHARED_LIBS=ON \
             -DLLAMA_BUILD_TESTS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF \
