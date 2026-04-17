@@ -270,13 +270,7 @@ async def load_language(
             if cache_key not in _models:
                 logger.info(f"Loading causal LM: {model_id}")
                 device = get_device()
-                model_format = detect_model_format(model_id, trusted=trusted)
-                logger.info(f"Detected format: {model_format}")
 
-                # Derive an alias for LLAMAFARM_MODEL_DIR lookup. If the
-                # model_id can't be turned into a safe alias (absolute
-                # path, unusual chars), `alias` stays None and the
-                # constructor falls back to legacy HF-cache resolution.
                 from utils.alias import derive_alias_from_model_id
                 alias = derive_alias_from_model_id(model_id)
                 if alias:
@@ -284,6 +278,20 @@ async def load_language(
                         f"Derived alias {alias!r} from model_id {model_id!r} "
                         f"for LLAMAFARM_MODEL_DIR lookup"
                     )
+
+                # For alias-style model IDs (no org/ namespace), check
+                # LLAMAFARM_MODEL_DIR first — avoids HuggingFace API
+                # calls that fail in offline mode.  Namespaced IDs like
+                # "org/model" always go through detect_model_format so a
+                # local alias can't silently override a specific repo.
+                model_format: str | None = None
+                if alias and "/" not in model_id:
+                    from llamafarm_common.model_dir import resolve_from_model_dir
+                    if resolve_from_model_dir(alias) is not None:
+                        model_format = "gguf"
+                if model_format is None:
+                    model_format = detect_model_format(model_id, trusted=trusted)
+                logger.info(f"Detected format: {model_format}")
 
                 model: BaseModel
                 if model_format == "gguf":

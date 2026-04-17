@@ -1173,7 +1173,38 @@ class Llama:
         chain_params = self._lib.llama_sampler_chain_default_params()
         chain = self._lib.llama_sampler_chain_init(chain_params)
 
-        # Add samplers to chain
+        # Repetition penalty — applied before any filtering (or before the
+        # greedy pick) so penalized logits flow through top_k/top_p/min_p
+        # when sampling stochastically, and still bias the argmax in greedy
+        # mode. Kept above the temperature<=0 early-return so repeat_penalty
+        # is honored in both modes.
+        if repeat_penalty != 1.0:
+            self._lib.llama_sampler_chain_add(
+                chain,
+                self._lib.llama_sampler_init_penalties(
+                    int(self._lib.llama_vocab_n_tokens(self._vocab)),
+                    self._lib.llama_vocab_eos(self._vocab),
+                    self._lib.llama_vocab_nl(self._vocab),
+                    64,  # penalty_last_n: last N tokens considered
+                    repeat_penalty,
+                    0.0,  # penalty_freq
+                    0.0,  # penalty_present
+                    False,  # penalize_nl
+                    False,  # ignore_eos
+                ),
+            )
+
+        # Greedy (argmax) sampling for temperature <= 0. Skip probabilistic
+        # filters and the dist sampler entirely so callers who pass
+        # temperature=0 get deterministic argmax output.
+        if temperature <= 0:
+            self._lib.llama_sampler_chain_add(
+                chain, self._lib.llama_sampler_init_greedy()
+            )
+            self._sampler = chain
+            return
+
+        # Probabilistic filters
         if top_k > 0:
             self._lib.llama_sampler_chain_add(
                 chain, self._lib.llama_sampler_init_top_k(top_k)
@@ -1189,12 +1220,10 @@ class Llama:
                 chain, self._lib.llama_sampler_init_min_p(min_p, 1)
             )
 
-        if temperature > 0:
-            self._lib.llama_sampler_chain_add(
-                chain, self._lib.llama_sampler_init_temp(temperature)
-            )
+        self._lib.llama_sampler_chain_add(
+            chain, self._lib.llama_sampler_init_temp(temperature)
+        )
 
-        # Add distribution sampler
         if seed is None:
             import random
 

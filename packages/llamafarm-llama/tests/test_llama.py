@@ -265,3 +265,91 @@ class TestCreateCompletionBOS:
 
         source = inspect.getsource(Llama.create_completion)
         assert "add_special=True" in source
+
+
+class TestSamplerChain:
+    """Verify the sampler chain matches the requested sampling mode."""
+
+    def _mock_llama(self):
+        """Build a minimal Llama instance with just enough mocked state for
+        `_create_sampler` to run, and track which sampler inits got chained."""
+        from unittest.mock import MagicMock
+
+        from llamafarm_llama.llama import Llama
+
+        llama = Llama.__new__(Llama)  # bypass __init__ so we don't need a model
+        llama._sampler = None
+        llama._lib = MagicMock()
+        llama._vocab = object()
+        # Each init returns a unique sentinel so we can verify chain order.
+        sentinels = {}
+        def make(name):
+            def _init(*_args, **_kwargs):
+                sentinels[name] = object()
+                return sentinels[name]
+            return _init
+        llama._lib.llama_sampler_chain_default_params.return_value = object()
+        llama._lib.llama_sampler_chain_init.return_value = "chain"
+        llama._lib.llama_sampler_init_greedy.side_effect = make("greedy")
+        llama._lib.llama_sampler_init_dist.side_effect = make("dist")
+        llama._lib.llama_sampler_init_top_k.side_effect = make("top_k")
+        llama._lib.llama_sampler_init_top_p.side_effect = make("top_p")
+        llama._lib.llama_sampler_init_min_p.side_effect = make("min_p")
+        llama._lib.llama_sampler_init_temp.side_effect = make("temp")
+        llama._lib.llama_sampler_init_penalties.side_effect = make("penalties")
+        llama._lib.llama_vocab_n_tokens.return_value = 32000
+        llama._lib.llama_vocab_eos.return_value = 2
+        llama._lib.llama_vocab_nl.return_value = 13
+        # Capture what got added to the chain, in order.
+        added = []
+        def chain_add(_chain, sampler):
+            name = next(n for n, s in sentinels.items() if s is sampler)
+            added.append(name)
+        llama._lib.llama_sampler_chain_add.side_effect = chain_add
+        return llama, added
+
+    def test_temperature_zero_uses_greedy_only(self):
+        """At temperature=0, only the greedy sampler is added.
+
+        Regression for a bug where temperature=0 still chained a stochastic
+        `dist` sampler at the end, causing deterministic prompts to produce
+        random outputs from the top-k/top-p-filtered candidates."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(
+            temperature=0, top_k=40, top_p=0.95, min_p=0.05, repeat_penalty=1.0,
+        )
+        assert added == ["greedy"], f"expected greedy-only, got {added}"
+
+    def test_temperature_zero_with_repeat_penalty_applies_penalty_then_greedy(self):
+        """Greedy mode must still honor repeat_penalty.
+
+        The public API defaults to `repeat_penalty=1.1`; earlier the greedy
+        early-return skipped the penalty sampler, silently making the
+        documented default a no-op at temperature=0."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(temperature=0, repeat_penalty=1.1)
+        assert added == ["penalties", "greedy"], (
+            f"expected penalties→greedy, got {added}"
+        )
+
+    def test_positive_temperature_uses_stochastic_chain(self):
+        """At temperature>0, normal sampler chain ends with `dist`."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(
+            temperature=0.7, top_k=40, top_p=0.95, min_p=0.05, repeat_penalty=1.0,
+        )
+        assert "greedy" not in added
+        assert added[-1] == "dist"
+        assert "temp" in added
+
+    def test_repeat_penalty_wired_into_chain(self):
+        """repeat_penalty != 1.0 must actually add the penalties sampler."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(temperature=0.7, repeat_penalty=1.1)
+        assert "penalties" in added
+
+    def test_repeat_penalty_one_is_noop(self):
+        """repeat_penalty == 1.0 should not add a penalties sampler."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(temperature=0.7, repeat_penalty=1.0)
+        assert "penalties" not in added
