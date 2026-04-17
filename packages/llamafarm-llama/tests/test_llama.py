@@ -255,16 +255,37 @@ class TestChatTemplateUsesModelTemplate:
         assert apply_call[0][0] == sentinel
 
 
+def _assert_tokenize_uses_add_special_true(method):
+    """Parse method source via AST and verify every self.tokenize() call
+    passes add_special=True.  Immune to comment changes and whitespace."""
+    import ast
+    import inspect
+    import textwrap
+
+    source = textwrap.dedent(inspect.getsource(method))
+    tree = ast.parse(source)
+    tokenize_calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "tokenize"
+    ]
+    assert tokenize_calls, "no self.tokenize() call found"
+    for call in tokenize_calls:
+        kw = {k.arg: k.value for k in call.keywords}
+        assert "add_special" in kw, "tokenize() missing add_special kwarg"
+        assert isinstance(kw["add_special"], ast.Constant)
+        assert kw["add_special"].value is True, (
+            "tokenize() must use add_special=True for BOS"
+        )
+
+
 class TestCreateCompletionBOS:
     """Regression: create_completion must tokenize with add_special=True."""
 
     def test_tokenize_called_with_add_special_true(self):
-        import inspect
-
         from llamafarm_llama.llama import Llama
-
-        source = inspect.getsource(Llama.create_completion)
-        assert "add_special=True" in source
+        _assert_tokenize_uses_add_special_true(Llama.create_completion)
 
 
 class TestCreateChatCompletionBOS:
@@ -276,13 +297,8 @@ class TestCreateChatCompletionBOS:
     output. The chat path must apply the same BOS-always policy."""
 
     def test_tokenize_called_with_add_special_true(self):
-        import inspect
-
         from llamafarm_llama.llama import Llama
-
-        source = inspect.getsource(Llama.create_chat_completion)
-        assert "add_special=True" in source
-        assert "add_special=False" not in source
+        _assert_tokenize_uses_add_special_true(Llama.create_chat_completion)
 
 
 
