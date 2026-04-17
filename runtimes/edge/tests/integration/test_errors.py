@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 EDGE_URL = os.environ.get("EDGE_URL", "http://localhost:11540")
-MODEL = os.environ.get("EDGE_MODEL", "functiongemma")
+MODEL = os.environ.get("EDGE_MODEL", "mission-router-v3")
 
 # Requests must not return 500 or cause the server to become unresponsive.
 # Acceptable: 400, 404, 422 (validation error)

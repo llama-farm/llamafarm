@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 
 EDGE_URL = os.environ.get("EDGE_URL", "http://localhost:11540")
-MODEL = os.environ.get("EDGE_MODEL", "functiongemma")
+MODEL = os.environ.get("EDGE_MODEL", "mission-router-v3")
 LOG_DIR = Path(os.environ.get("LOG_DIR", "."))
 
 # Phase durations in seconds (total ~30 min)
