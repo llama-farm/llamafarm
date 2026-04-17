@@ -269,8 +269,22 @@ class TestSamplerChain:
         `dist` sampler at the end, causing deterministic prompts to produce
         random outputs from the top-k/top-p-filtered candidates."""
         llama, added = self._mock_llama()
-        llama._create_sampler(temperature=0, top_k=40, top_p=0.95, min_p=0.05)
+        llama._create_sampler(
+            temperature=0, top_k=40, top_p=0.95, min_p=0.05, repeat_penalty=1.0,
+        )
         assert added == ["greedy"], f"expected greedy-only, got {added}"
+
+    def test_temperature_zero_with_repeat_penalty_applies_penalty_then_greedy(self):
+        """Greedy mode must still honor repeat_penalty.
+
+        The public API defaults to `repeat_penalty=1.1`; earlier the greedy
+        early-return skipped the penalty sampler, silently making the
+        documented default a no-op at temperature=0."""
+        llama, added = self._mock_llama()
+        llama._create_sampler(temperature=0, repeat_penalty=1.1)
+        assert added == ["penalties", "greedy"], (
+            f"expected penalties→greedy, got {added}"
+        )
 
     def test_positive_temperature_uses_stochastic_chain(self):
         """At temperature>0, normal sampler chain ends with `dist`."""

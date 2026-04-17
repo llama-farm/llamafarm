@@ -1163,18 +1163,11 @@ class Llama:
         chain_params = self._lib.llama_sampler_chain_default_params()
         chain = self._lib.llama_sampler_chain_init(chain_params)
 
-        # Greedy (argmax) sampling for temperature <= 0. Skip probabilistic
-        # filters and the dist sampler entirely so callers who pass
-        # temperature=0 get deterministic argmax output.
-        if temperature <= 0:
-            self._lib.llama_sampler_chain_add(
-                chain, self._lib.llama_sampler_init_greedy()
-            )
-            self._sampler = chain
-            return
-
-        # Repetition penalty — applied before any filtering so penalized
-        # logits flow through top_k/top_p/min_p.
+        # Repetition penalty — applied before any filtering (or before the
+        # greedy pick) so penalized logits flow through top_k/top_p/min_p
+        # when sampling stochastically, and still bias the argmax in greedy
+        # mode. Kept above the temperature<=0 early-return so repeat_penalty
+        # is honored in both modes.
         if repeat_penalty != 1.0:
             self._lib.llama_sampler_chain_add(
                 chain,
@@ -1190,6 +1183,16 @@ class Llama:
                     False,  # ignore_eos
                 ),
             )
+
+        # Greedy (argmax) sampling for temperature <= 0. Skip probabilistic
+        # filters and the dist sampler entirely so callers who pass
+        # temperature=0 get deterministic argmax output.
+        if temperature <= 0:
+            self._lib.llama_sampler_chain_add(
+                chain, self._lib.llama_sampler_init_greedy()
+            )
+            self._sampler = chain
+            return
 
         # Probabilistic filters
         if top_k > 0:
