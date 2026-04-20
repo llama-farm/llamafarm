@@ -16,6 +16,7 @@ import logging
 
 from huggingface_hub import HfApi, scan_cache_dir
 from huggingface_hub.utils import HFCacheInfo
+
 from .model_dir import resolve_from_model_dir
 from .model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
@@ -154,9 +155,16 @@ def detect_model_format(
             _format_cache[base_model_id] = "transformers"
             return "transformers"
 
-    # Check LLAMAFARM_MODEL_DIR before hitting the network
+    # Check LLAMAFARM_MODEL_DIR before hitting the network.
+    # resolve_from_model_dir requires a path-safe alias (no "/"), so strip
+    # the org/ prefix that HuggingFace IDs like "Qwen/Qwen3-1.7B-GGUF"
+    # carry. This mirrors utils.alias.derive_alias_from_model_id in the
+    # edge runtime — foo/my-model and bar/my-model intentionally collide
+    # on the same alias directory; operators needing disambiguation should
+    # use distinct basenames.
+    alias_candidate = base_model_id.rsplit("/", 1)[-1]
     try:
-        result = resolve_from_model_dir(base_model_id)
+        result = resolve_from_model_dir(alias_candidate)
         if result is not None:
             logger.info(
                 "Detected GGUF format from LLAMAFARM_MODEL_DIR: %s",
@@ -164,8 +172,12 @@ def detect_model_format(
             )
             _format_cache[base_model_id] = "gguf"
             return "gguf"
-    except ValueError:
-        pass
+    except ValueError as e:
+        logger.debug(
+            "LLAMAFARM_MODEL_DIR lookup rejected alias %r: %s; falling back to network",
+            alias_candidate,
+            e,
+        )
 
     # Not in local cache or model dir - must query API
     try:
