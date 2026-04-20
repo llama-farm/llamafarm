@@ -285,7 +285,7 @@ def _run_standalone() -> int:
 
 
 if __name__ == "__main__":
-    print(f"Edge runtime error tests (ROW-79)")
+    print("Edge runtime error tests (ROW-79)")
     print(f"Target: {EDGE_URL}")
     print(f"Model: {MODEL}\n")
     sys.exit(_run_standalone())

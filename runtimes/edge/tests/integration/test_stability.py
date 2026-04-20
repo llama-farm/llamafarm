@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import csv
-import json
 import os
 import random
 import sys
@@ -21,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
+import pytest
 
 EDGE_URL = os.environ.get("EDGE_URL", "http://localhost:11540")
 MODEL = os.environ.get("EDGE_MODEL", "mission-router-v3")
@@ -93,7 +93,7 @@ class TestResults:
     def summary(self) -> str:
         if not self.logs:
             return "No requests recorded."
-        latencies = [l.latency_ms for l in self.logs if l.status == 200]
+        latencies = [log.latency_ms for log in self.logs if log.status == 200]
         elapsed = time.time() - self.start_time
         lines = [
             f"Duration: {elapsed:.0f}s",
@@ -149,7 +149,7 @@ async def phase_startup(client: httpx.AsyncClient, results: TestResults) -> bool
     """Phase 1: Verify model is loaded, send warmup requests."""
     phase = "startup"
     print(f"\n{'='*60}")
-    print(f"PHASE 1: Startup (0-5 min)")
+    print("PHASE 1: Startup (0-5 min)")
     print(f"{'='*60}")
 
     # Health check
@@ -183,7 +183,7 @@ async def phase_startup(client: httpx.AsyncClient, results: TestResults) -> bool
         await asyncio.sleep(2)
 
     # Remaining startup time: idle with periodic health checks
-    elapsed = sum(1 for l in results.logs if l.phase == phase) * 3  # rough estimate
+    elapsed = sum(1 for log in results.logs if log.phase == phase) * 3  # rough estimate
     remaining = max(0, PHASE_DURATIONS["startup"] - elapsed)
     check_interval = 30
     checks = int(remaining / check_interval)
@@ -198,7 +198,7 @@ async def phase_search_pattern(client: httpx.AsyncClient, results: TestResults) 
     """Phase 2: Steady search-pattern requests every 10-15s."""
     phase = "search_pattern"
     print(f"\n{'='*60}")
-    print(f"PHASE 2: Search Pattern (5-15 min)")
+    print("PHASE 2: Search Pattern (5-15 min)")
     print(f"{'='*60}")
 
     end_time = time.time() + PHASE_DURATIONS["search_pattern"]
@@ -219,7 +219,7 @@ async def phase_detection_burst(client: httpx.AsyncClient, results: TestResults)
     """Phase 3: Rapid requests every 2-3s with concurrent bursts."""
     phase = "detection_burst"
     print(f"\n{'='*60}")
-    print(f"PHASE 3: Detection Burst (15-20 min)")
+    print("PHASE 3: Detection Burst (15-20 min)")
     print(f"{'='*60}")
 
     end_time = time.time() + PHASE_DURATIONS["detection_burst"]
@@ -238,9 +238,9 @@ async def phase_detection_burst(client: httpx.AsyncClient, results: TestResults)
             count += 1
 
         if count % 10 == 0:
-            phase_logs = [l for l in results.logs if l.phase == phase]
+            phase_logs = [log for log in results.logs if log.phase == phase]
             recent = phase_logs[-5:] if len(phase_logs) >= 5 else phase_logs
-            avg = sum(l.latency_ms for l in recent) / len(recent)
+            avg = sum(log.latency_ms for log in recent) / len(recent)
             print(f"  Requests sent: {count}, recent avg latency: {avg:.0f}ms")
 
         await asyncio.sleep(random.uniform(2, 3))
@@ -252,12 +252,12 @@ async def phase_idle_resume(client: httpx.AsyncClient, results: TestResults) -> 
     """Phase 4: 5 min idle, then burst to verify no cold-start lag."""
     phase = "idle_resume"
     print(f"\n{'='*60}")
-    print(f"PHASE 4: Idle + Resume (20-25 min)")
+    print("PHASE 4: Idle + Resume (20-25 min)")
     print(f"{'='*60}")
 
     # Record pre-idle latency baseline
     if results.logs:
-        recent = [l.latency_ms for l in results.logs[-10:] if l.status == 200]
+        recent = [log.latency_ms for log in results.logs[-10:] if log.status == 200]
         baseline = sum(recent) / len(recent) if recent else 0
         print(f"  Pre-idle baseline latency: {baseline:.0f}ms")
 
@@ -282,9 +282,9 @@ async def phase_idle_resume(client: httpx.AsyncClient, results: TestResults) -> 
         await asyncio.sleep(1)
 
     # Check for cold-start lag
-    resume_logs = [l for l in results.logs if l.phase == phase and l.status == 200]
+    resume_logs = [log for log in results.logs if log.phase == phase and log.status == 200]
     if resume_logs and baseline > 0:
-        resume_avg = sum(l.latency_ms for l in resume_logs) / len(resume_logs)
+        resume_avg = sum(log.latency_ms for log in resume_logs) / len(resume_logs)
         ratio = resume_avg / baseline
         print(f"  Resume avg latency: {resume_avg:.0f}ms (ratio to baseline: {ratio:.2f}x)")
         if ratio > 3.0:
@@ -295,7 +295,7 @@ async def phase_mission_end(client: httpx.AsyncClient, results: TestResults) -> 
     """Phase 5: RTL commands, final checks."""
     phase = "mission_end"
     print(f"\n{'='*60}")
-    print(f"PHASE 5: Mission End (25-30 min)")
+    print("PHASE 5: Mission End (25-30 min)")
     print(f"{'='*60}")
 
     # Send mission-end prompts
@@ -335,7 +335,7 @@ async def run_load_test() -> TestResults:
     results = TestResults()
     csv_path = LOG_DIR / f"stability_{int(time.time())}.csv"
 
-    print(f"Edge runtime load test (ROW-79)")
+    print("Edge runtime load test (ROW-79)")
     print(f"Target: {EDGE_URL}")
     print(f"Model: {MODEL}")
     print(f"Log: {csv_path}")
@@ -363,8 +363,6 @@ async def run_load_test() -> TestResults:
 
 # -- pytest entry point --
 
-import pytest
-
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -373,7 +371,7 @@ async def test_stability():
     results = await run_load_test()
     assert results.errors == 0, f"{results.errors} requests returned errors"
     assert results.timeouts == 0, f"{results.timeouts} requests timed out"
-    ok_latencies = [l.latency_ms for l in results.logs if l.status == 200]
+    ok_latencies = [log.latency_ms for log in results.logs if log.status == 200]
     assert ok_latencies, "No successful requests"
     assert max(ok_latencies) < 5000, f"Max latency {max(ok_latencies):.0f}ms exceeds 5s threshold"
 
