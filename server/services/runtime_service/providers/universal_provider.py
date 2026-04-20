@@ -33,13 +33,23 @@ from api.errors import NotFoundError
 from core.logging import FastAPIStructLogger
 from core.settings import settings
 
-from .base import CachedModel, RuntimeProvider
+from .base import CachedModel, RuntimeModelStatus, RuntimeProvider, format_bytes
 from .health import HealthCheckResult
 
 logger = FastAPIStructLogger(__name__)
 
 # Chunk size for streaming downloads (1MB)
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _coerce_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return None
 
 
 def get_hf_token() -> str | None:
@@ -474,6 +484,87 @@ class UniversalProvider(RuntimeProvider):
                 message=f"Error: {str(e)}",
                 latency_ms=int(time.time() * 1000) - start,
                 details={"host": base, "error": str(e)},
+            )
+
+    def get_model_runtime_status(self) -> RuntimeModelStatus:
+        """Get runtime status for the configured Universal model."""
+        base = self._base_url.replace("/v1", "").rstrip("/")
+        model_name = self._model_config.model
+
+        try:
+            health_resp = requests.get(f"{base}/health", timeout=2.0)
+            if not 200 <= health_resp.status_code < 300:
+                return RuntimeModelStatus(
+                    status="unreachable",
+                    host=base,
+                    runtime_message=f"{base} returned HTTP {health_resp.status_code}",
+                )
+
+            health_data = health_resp.json()
+            loaded_models = health_data.get("loaded_models", [])
+            loaded = model_name in loaded_models
+
+            model_type = None
+            try:
+                models_resp = requests.get(f"{base}/v1/models", timeout=1.0)
+                if 200 <= models_resp.status_code < 300:
+                    for entry in models_resp.json().get("data", []):
+                        if entry.get("id") == model_name:
+                            model_type = entry.get("type")
+                            break
+            except Exception:
+                model_type = None
+
+            device_info = health_data.get("device", {})
+            if not isinstance(device_info, dict):
+                device_info = {"device": device_info}
+
+            device_type = (
+                device_info.get("type")
+                or device_info.get("device")
+                or "unknown"
+            )
+            gpu_name = device_info.get("gpu_name")
+            memory_bytes = None
+            if loaded and len(loaded_models) == 1:
+                memory_bytes = _coerce_int(device_info.get("gpu_memory_allocated"))
+
+            details = {}
+            if model_type:
+                details["type"] = model_type
+            if health_data.get("pid") is not None:
+                details["pid"] = health_data["pid"]
+
+            return RuntimeModelStatus(
+                status="loaded" if loaded else "idle",
+                host=base,
+                loaded=loaded,
+                running=False,
+                memory_usage_bytes=memory_bytes,
+                memory_usage_human=format_bytes(memory_bytes),
+                gpu_allocation=(
+                    str(gpu_name or device_type)
+                    if device_type in {"cuda", "mps"}
+                    else None
+                ),
+                runtime_message=(
+                    "Model is loaded in Universal Runtime"
+                    if loaded
+                    else "Model is configured but not currently loaded"
+                ),
+                details=details,
+            )
+        except requests.exceptions.Timeout:
+            return RuntimeModelStatus(
+                status="unreachable",
+                host=base,
+                runtime_message=f"Timeout connecting to {base}",
+            )
+        except Exception as e:
+            return RuntimeModelStatus(
+                status="unreachable",
+                host=base,
+                runtime_message=f"Error: {str(e)}",
             )
 
     @staticmethod

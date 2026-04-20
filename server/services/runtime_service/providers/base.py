@@ -1,7 +1,8 @@
 """Base class for runtime providers."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from config.datamodel import Model
 
@@ -49,6 +50,31 @@ class RuntimeProvider(ABC):
         """
         pass
 
+    def get_model_runtime_status(self) -> "RuntimeModelStatus":
+        """Describe the current runtime state for this configured model.
+
+        Providers with richer runtime APIs should override this method.
+        The default behavior preserves a useful status for providers that
+        do not expose per-model loading information.
+        """
+        health = self.check_health()
+        host = None
+        if health.details:
+            host = health.details.get("host") or health.details.get("base_url")
+
+        if health.status in {"healthy", "degraded"}:
+            status = "reachable"
+        elif health.status == "reachable":
+            status = "remote"
+        else:
+            status = "unreachable"
+
+        return RuntimeModelStatus(
+            status=status,
+            host=host,
+            runtime_message=health.message,
+        )
+
 
 @dataclass
 class CachedModel:
@@ -58,3 +84,61 @@ class CachedModel:
     name: str
     size: int
     path: str
+
+
+@dataclass
+class RuntimeModelStatus:
+    """Structured runtime status for a configured model."""
+
+    status: str
+    host: str | None = None
+    loaded: bool = False
+    running: bool = False
+    memory_usage_bytes: int | None = None
+    memory_usage_human: str | None = None
+    gpu_allocation: str | None = None
+    uptime_seconds: int | None = None
+    uptime_human: str | None = None
+    runtime_message: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert runtime status to JSON-serializable output."""
+        data: dict[str, Any] = {
+            "runtime_status": self.status,
+            "runtime_loaded": self.loaded,
+            "runtime_running": self.running,
+        }
+        optional_fields = {
+            "runtime_host": self.host,
+            "memory_usage_bytes": self.memory_usage_bytes,
+            "memory_usage_human": self.memory_usage_human,
+            "gpu_allocation": self.gpu_allocation,
+            "uptime_seconds": self.uptime_seconds,
+            "uptime_human": self.uptime_human,
+            "runtime_message": self.runtime_message,
+            "runtime_details": self.details or None,
+        }
+        for key, value in optional_fields.items():
+            if value is not None:
+                data[key] = value
+        return data
+
+
+def format_bytes(value: int | float | None) -> str | None:
+    """Format a byte count using binary units."""
+    if value is None:
+        return None
+    num = float(value)
+    if num < 0:
+        return None
+
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    unit_index = 0
+    while num >= 1024 and unit_index < len(units) - 1:
+        num /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(num)} {units[unit_index]}"
+    return f"{num:.1f} {units[unit_index]}"

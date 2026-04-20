@@ -19,7 +19,8 @@ If you omit `namespace/project`, the CLI resolves them from `llamafarm.yaml`.
 
 ### `lf models list`
 
-List all models configured in your project with their descriptions and providers.
+List all models configured in your project with their descriptions, providers,
+and current runtime state when the backing provider exposes it.
 
 ```bash
 lf models list                    # List models from current project
@@ -31,6 +32,9 @@ lf models list company/project    # List models from specific project
 - Description
 - Provider (ollama, lemonade, openai, etc.)
 - Default status
+- Runtime status (`running`, `loaded`, `idle`, `missing`, `unreachable`, etc.)
+- Memory / GPU allocation when the runtime reports it
+- Runtime host and provider-specific status notes
 
 ### `lf models path`
 

@@ -7,6 +7,7 @@ for working with multi-model configurations.
 from collections.abc import AsyncIterator
 
 from config.datamodel import LlamaFarmConfig, Model, Provider  # noqa: E402
+from server.services.runtime_service.runtime_service import runtime_service
 from server.services.runtime_service.providers.base import CachedModel
 from server.services.runtime_service.providers.universal_provider import (
     UniversalProvider,  # noqa: E402
@@ -80,6 +81,33 @@ class ModelService:
             model, is_default
         """
         return project_config.runtime.models or []
+
+    @staticmethod
+    def list_model_runtime_statuses(project_config: LlamaFarmConfig) -> dict[str, dict]:
+        """Collect runtime status for each configured model.
+
+        Returns a dict keyed by the configured model alias so API callers can
+        merge the status fields into their existing model payload.
+        """
+        statuses: dict[str, dict] = {}
+        for model in project_config.runtime.models or []:
+            try:
+                provider = runtime_service.get_provider(model)
+                statuses[model.name] = provider.get_model_runtime_status().to_dict()
+            except Exception as e:  # pragma: no cover - defensive fallback
+                logger.warning(
+                    "Failed to collect model runtime status",
+                    model_name=model.name,
+                    provider=getattr(model.provider, "value", str(model.provider)),
+                    error=str(e),
+                )
+                statuses[model.name] = {
+                    "runtime_status": "unknown",
+                    "runtime_loaded": False,
+                    "runtime_running": False,
+                    "runtime_message": f"Failed to inspect runtime state: {e}",
+                }
+        return statuses
 
     @staticmethod
     def list_cached_models(

@@ -89,6 +89,15 @@ Examples:
 				fmt.Printf("    %s\n", m.Description)
 			}
 			fmt.Printf("    Provider: %s | Model: %s\n", m.Provider, m.Model)
+			if runtimeSummary := formatModelRuntimeSummary(m); runtimeSummary != "" {
+				fmt.Printf("    Status: %s\n", runtimeSummary)
+			}
+			if runtimeMessage := formatModelRuntimeMessage(m); runtimeMessage != "" {
+				fmt.Printf("    Runtime: %s\n", runtimeMessage)
+			}
+			if m.RuntimeHost != "" {
+				fmt.Printf("    Host: %s\n", m.RuntimeHost)
+			}
 			fmt.Println()
 		}
 	},
@@ -136,4 +145,32 @@ func init() {
 	modelsCmd.AddCommand(modelsListCmd)
 	modelsCmd.AddCommand(modelsCachedCmd)
 	rootCmd.AddCommand(modelsCmd)
+}
+
+func formatModelRuntimeSummary(model ModelInfo) string {
+	if model.RuntimeStatus == "" {
+		return ""
+	}
+
+	parts := []string{model.RuntimeStatus}
+	if model.MemoryUsageHuman != "" {
+		parts = append(parts, "Memory: "+model.MemoryUsageHuman)
+	}
+	if model.GPUAllocation != "" {
+		parts = append(parts, "GPU: "+model.GPUAllocation)
+	}
+	if model.UptimeHuman != "" {
+		parts = append(parts, "Uptime: "+model.UptimeHuman)
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+func formatModelRuntimeMessage(model ModelInfo) string {
+	switch model.RuntimeStatus {
+	case "missing", "remote", "reachable", "unreachable", "unknown":
+		return model.RuntimeMessage
+	default:
+		return ""
+	}
 }

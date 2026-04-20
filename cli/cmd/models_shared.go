@@ -13,11 +13,22 @@ import (
 
 // ModelInfo represents a model configuration
 type ModelInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Provider    string `json:"provider"`
-	Model       string `json:"model"`
-	IsDefault   bool   `json:"default"`
+	Name             string                 `json:"name"`
+	Description      string                 `json:"description"`
+	Provider         string                 `json:"provider"`
+	Model            string                 `json:"model"`
+	IsDefault        bool                   `json:"default"`
+	RuntimeStatus    string                 `json:"runtime_status"`
+	RuntimeLoaded    bool                   `json:"runtime_loaded"`
+	RuntimeRunning   bool                   `json:"runtime_running"`
+	RuntimeHost      string                 `json:"runtime_host"`
+	MemoryUsageBytes int64                  `json:"memory_usage_bytes"`
+	MemoryUsageHuman string                 `json:"memory_usage_human"`
+	GPUAllocation    string                 `json:"gpu_allocation"`
+	UptimeSeconds    int64                  `json:"uptime_seconds"`
+	UptimeHuman      string                 `json:"uptime_human"`
+	RuntimeMessage   string                 `json:"runtime_message"`
+	RuntimeDetails   map[string]interface{} `json:"runtime_details"`
 }
 
 // fetchAvailableModels fetches the list of available models for a project

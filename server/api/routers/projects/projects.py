@@ -95,6 +95,50 @@ class ModelResponse(Model):
         False,
         description="Whether this model is the default model in the runtime config",
     )
+    runtime_status: str | None = Field(
+        None,
+        description="Current runtime state for this model (for example running, loaded, idle, or unreachable).",
+    )
+    runtime_loaded: bool | None = Field(
+        None,
+        description="Whether the model is currently loaded in the provider runtime.",
+    )
+    runtime_running: bool | None = Field(
+        None,
+        description="Whether the provider reports the model as actively running.",
+    )
+    runtime_host: str | None = Field(
+        None,
+        description="Runtime host that was queried for status information.",
+    )
+    memory_usage_bytes: int | None = Field(
+        None,
+        description="Approximate memory usage in bytes when the runtime exposes it.",
+    )
+    memory_usage_human: str | None = Field(
+        None,
+        description="Human-readable memory usage when available.",
+    )
+    gpu_allocation: str | None = Field(
+        None,
+        description="GPU allocation or device information when available.",
+    )
+    uptime_seconds: int | None = Field(
+        None,
+        description="Approximate uptime in seconds when the runtime exposes it.",
+    )
+    uptime_human: str | None = Field(
+        None,
+        description="Human-readable uptime when available.",
+    )
+    runtime_message: str | None = Field(
+        None,
+        description="Additional provider-specific runtime status information.",
+    )
+    runtime_details: dict[str, Any] | None = Field(
+        None,
+        description="Provider-specific runtime details.",
+    )
 
 
 class ListModelsResponse(BaseModel):
@@ -1676,6 +1720,7 @@ async def list_models(namespace: str, project_id: str):
 
     project_config = ProjectService.load_config(namespace, project_id)
     models = ModelService.list_models(project_config)
+    runtime_statuses = ModelService.list_model_runtime_statuses(project_config)
 
     default_model = project_config.runtime.default_model
 
@@ -1685,6 +1730,7 @@ async def list_models(namespace: str, project_id: str):
             ModelResponse(
                 **model.model_dump(mode="json", exclude_none=True),
                 default=model.name == default_model,
+                **runtime_statuses.get(model.name, {}),
             )
             for model in models
         ],

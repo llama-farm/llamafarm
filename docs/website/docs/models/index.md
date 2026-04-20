@@ -30,7 +30,7 @@ runtime:
 
 **Using multi-model:**
 - CLI: `lf chat --model powerful "your question"`
-- CLI: `lf models list` (shows all available models)
+- CLI: `lf models list` (shows configured models plus current runtime state)
 - API: `POST /v1/projects/{ns}/{id}/chat/completions` with `{"model": "powerful", ...}`
 
 **Legacy single-model configs are still supported** and automatically converted internally.
