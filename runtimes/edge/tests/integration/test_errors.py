@@ -31,12 +31,23 @@ def client():
 
 
 def _assert_clean_error(resp: httpx.Response, context: str) -> None:
-    """Assert the response is a clean error, not a server crash."""
+    """Assert the response is a clean 4xx validation error.
+
+    Callers only invoke this for malformed requests that must never
+    legitimately return 200 — accepting them silently would mask
+    regressions where the server starts happily processing invalid
+    payloads. Use bare ``status_code != 500`` assertions for cases
+    where 200 *is* a valid outcome (e.g. request-body clamping).
+
+    503 is intentionally allowed through: the runtime returns 503 when
+    an upstream model registry is unreachable, which is a legitimate
+    operational state, not a crash.
+    """
     assert resp.status_code != 500, f"{context}: got 500 Internal Server Error: {resp.text[:300]}"
     assert resp.status_code != 502, f"{context}: got 502 Bad Gateway (server may have crashed)"
-    assert resp.status_code != 503, f"{context}: got 503 Service Unavailable (server may be down)"
-    assert resp.status_code in ACCEPTABLE_ERROR_CODES or resp.status_code == 200, (
-        f"{context}: unexpected status {resp.status_code}: {resp.text[:300]}"
+    assert resp.status_code in ACCEPTABLE_ERROR_CODES, (
+        f"{context}: expected one of {sorted(ACCEPTABLE_ERROR_CODES)}, "
+        f"got {resp.status_code}: {resp.text[:300]}"
     )
 
 
