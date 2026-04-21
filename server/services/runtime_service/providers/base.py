@@ -145,7 +145,10 @@ def format_bytes(value: int | float | None) -> str | None:
 
 
 def format_duration(seconds: int | float | None) -> str | None:
-    """Render a duration in a short human-readable form (e.g. 45s, 12m, 2h 5m)."""
+    """Render a duration in a short human-readable form.
+
+    Examples: 45s, 12m, 2h 5m, 1d 3h.
+    """
     if seconds is None:
         return None
     total = int(seconds)

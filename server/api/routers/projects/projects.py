@@ -97,7 +97,10 @@ class ModelResponse(Model):
     )
     runtime_status: str | None = Field(
         None,
-        description="Current runtime state for this model (for example running, loaded, idle, or unreachable).",
+        description=(
+            "Current runtime state for this model"
+            " (for example running, loaded, idle, or unreachable)."
+        ),
     )
     runtime_loaded: bool | None = Field(
         None,

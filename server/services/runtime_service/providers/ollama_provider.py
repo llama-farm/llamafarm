@@ -100,7 +100,11 @@ class OllamaProvider(RuntimeProvider):
                 match = _find_named_model(running_models, model_name)
                 if match:
                     gpu_bytes = _coerce_int(match.get("size_vram"))
-                    memory_bytes = gpu_bytes or _coerce_int(match.get("size"))
+                    # size is total model memory; size_vram is the GPU portion.
+                    # Report total as memory_usage and VRAM separately as gpu_allocation.
+                    memory_bytes = (
+                        _coerce_int(match.get("size")) or gpu_bytes
+                    )
                     details = match.get("details", {})
                     status_details = {}
                     if isinstance(details, dict):
@@ -121,7 +125,9 @@ class OllamaProvider(RuntimeProvider):
                         memory_usage_bytes=memory_bytes,
                         memory_usage_human=format_bytes(memory_bytes),
                         gpu_allocation=(
-                            format_bytes(gpu_bytes) if gpu_bytes and gpu_bytes > 0 else None
+                            format_bytes(gpu_bytes)
+                            if gpu_bytes and gpu_bytes > 0
+                            else None
                         ),
                         runtime_message="Model is currently loaded in Ollama",
                         details=status_details,
