@@ -5,6 +5,7 @@ import pytest
 from utils.context_manager import (
     ContextBudget,
     ContextManager,
+    ContextTruncationFailed,
     ContextUsage,
     TruncationStrategy,
 )
@@ -255,6 +256,62 @@ class TestContextManager:
         # Should have truncated the content
         assert usage.truncated is True
         assert len(result[0]["content"]) < len(huge_content)
+
+    def test_keep_system_sliding_trims_oversized_system(self, manager):
+        """System messages alone exceeding budget must be trimmed.
+
+        Regression: previously `_keep_system_sliding` preserved all system
+        messages verbatim, so a 10k-token system prompt would exit the
+        strategy still over budget and blow past the content-truncation
+        fallback (which also skipped system messages).
+        """
+        huge_system = "s" * 50000  # ~12.5k raw tokens with MockLlama
+        messages = [
+            {"role": "system", "content": huge_system},
+            {"role": "user", "content": "hi"},
+        ]
+        result, usage = manager.truncate_if_needed(
+            messages, TruncationStrategy.KEEP_SYSTEM_SLIDING
+        )
+
+        assert usage.prompt_tokens <= manager.budget.max_prompt_tokens
+        system_msgs = [m for m in result if m.get("role") == "system"]
+        assert system_msgs, "expected at least one system message after trimming"
+        assert len(system_msgs[0]["content"]) < len(huge_system)
+
+    def test_content_truncation_respects_max_tokens(self, manager):
+        """After content truncation, estimate must be <= max_prompt_tokens.
+
+        Regression: the old `+100` overshoot in `_truncate_message_contents`
+        let the final estimate exceed the budget by up to ~100 tokens.
+        """
+        huge_content = "x" * 50000
+        messages = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": huge_content},
+        ]
+        result, usage = manager.truncate_if_needed(
+            messages, TruncationStrategy.KEEP_SYSTEM_SLIDING
+        )
+        assert usage.prompt_tokens <= manager.budget.max_prompt_tokens
+
+    def test_content_truncation_raises_when_unconvergable(self):
+        """When truncation can't converge, ContextTruncationFailed is raised.
+
+        Uses a tiny budget and many small messages so the emergency loop
+        can't cut below the per-message overhead floor.
+        """
+        counter = TokenCounter(MockLlama())
+        # Very tight budget — 20 tokens total, most of which is overhead.
+        budget = ContextBudget.from_context_size(20, max_completion_tokens=4)
+        tight_manager = ContextManager(counter, budget)
+
+        # 20 tiny messages — each contributes MESSAGE_OVERHEAD=4 tokens that
+        # the emergency loop cannot reduce further (no content to shrink).
+        messages = [{"role": "user", "content": "x"} for _ in range(20)]
+
+        with pytest.raises(ContextTruncationFailed):
+            tight_manager._truncate_message_contents(messages)
 
 
 class TestHistoryCompressor:

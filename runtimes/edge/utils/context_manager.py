@@ -18,6 +18,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class ContextTruncationFailed(RuntimeError):
+    """Raised when truncation cannot reduce messages below the budget.
+
+    Typical cause: a single message (or merged system block) that cannot be
+    shrunk further without losing the final few tokens needed to represent
+    the user's current turn. Callers should surface this as a 400-class
+    error to the client rather than letting it reach the inference engine.
+    """
+
+
 class TruncationStrategy(Enum):
     """Available truncation strategies for context overflow."""
 
@@ -295,9 +305,25 @@ class ContextManager:
         system_msgs = [m for m in messages if m.get("role") == "system"]
         other_msgs = [m for m in messages if m.get("role") != "system"]
 
-        # Calculate tokens for system messages
+        max_prompt = self._budget.max_prompt_tokens
         system_tokens = self._counter.estimate_prompt_tokens(system_msgs)
-        available_for_others = self._budget.max_prompt_tokens - system_tokens
+
+        # If system messages alone meet/exceed the prompt budget, trim them
+        # down so there is room for at least a small user turn. Without this,
+        # the loop below and the content-truncation fallback can both exit
+        # while still over budget (they never touch system messages).
+        if system_tokens >= max_prompt and system_msgs:
+            user_reserve = min(256, max(1, max_prompt // 4))
+            system_budget = max(1, max_prompt - user_reserve)
+            logger.warning(
+                f"System messages ({system_tokens} tokens) meet or exceed "
+                f"max_prompt_tokens ({max_prompt}); trimming system content to "
+                f"{system_budget} tokens to reserve room for the user turn."
+            )
+            system_msgs = self._trim_system_to_budget(system_msgs, system_budget)
+            system_tokens = self._counter.estimate_prompt_tokens(system_msgs)
+
+        available_for_others = max(0, max_prompt - system_tokens)
 
         # Remove oldest non-system messages until fits
         while (
@@ -309,14 +335,42 @@ class ContextManager:
         result = system_msgs + other_msgs
 
         # If still over budget, apply aggressive content truncation
-        if (
-            self._counter.estimate_prompt_tokens(result)
-            > self._budget.max_prompt_tokens
-        ):
+        if self._counter.estimate_prompt_tokens(result) > max_prompt:
             logger.warning("Message removal insufficient, applying content truncation")
             result = self._truncate_message_contents(result)
 
         return result
+
+    def _trim_system_to_budget(
+        self, system_msgs: list[dict], budget: int
+    ) -> list[dict]:
+        """Merge system messages and truncate them to fit within a token budget.
+
+        Preserves the opening (usually highest-priority instructions) and
+        drops from the tail. Returns a single merged system message.
+        """
+        if not system_msgs or budget <= 0:
+            return system_msgs
+
+        parts = [(m.get("content") or "") for m in system_msgs]
+        merged = "\n\n".join(p for p in parts if p)
+        if not merged:
+            return system_msgs
+
+        # Deflate the token budget by the template-overhead factor and the
+        # per-message overhead so the resulting estimate fits within `budget`.
+        overhead_factor = self._counter.TEMPLATE_OVERHEAD_FACTOR
+        msg_overhead = self._counter.MESSAGE_OVERHEAD
+        target_raw = max(1, int(budget / overhead_factor) - msg_overhead)
+        truncated = self._counter.truncate_to_tokens(merged, target_raw)
+
+        return [
+            {
+                "role": "system",
+                "content": truncated
+                + "\n\n[... system content truncated to fit context ...]",
+            }
+        ]
 
     def _middle_out(self, messages: list[dict]) -> list[dict]:
         """Keep system, first exchange, and recent messages; remove middle.
@@ -396,7 +450,7 @@ class ContextManager:
         if current_tokens <= max_tokens:
             return result
 
-        tokens_to_cut = current_tokens - max_tokens + 100  # Extra buffer
+        tokens_to_cut = current_tokens - max_tokens
 
         logger.info(
             f"Content truncation: need to cut ~{tokens_to_cut} tokens "
@@ -484,11 +538,13 @@ class ContextManager:
                         largest_idx = i
 
             if largest_idx < 0 or largest_tokens <= 50:
-                # No more content to truncate
-                logger.error(
-                    f"Cannot reduce context further. Remaining: {final_tokens} tokens"
+                # No more content to truncate — raise so the caller can
+                # surface a structured 400 instead of letting an over-budget
+                # prompt reach the inference engine.
+                raise ContextTruncationFailed(
+                    f"Cannot reduce context to fit within {max_tokens} tokens; "
+                    f"{final_tokens} tokens remain after exhausting truncation."
                 )
-                break
 
             # Truncate the largest message to 50 tokens
             content = result[largest_idx]["content"]
@@ -501,6 +557,13 @@ class ContextManager:
             logger.info(
                 f"Emergency truncated message {largest_idx}: "
                 f"{largest_tokens} -> ~50 tokens. New total: {final_tokens}"
+            )
+
+        if final_tokens > max_tokens:
+            raise ContextTruncationFailed(
+                f"Emergency truncation loop exhausted ({emergency_iterations} "
+                f"iterations) with {final_tokens} tokens still over the "
+                f"{max_tokens}-token budget."
             )
 
         return result

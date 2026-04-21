@@ -10,10 +10,21 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from llamafarm_common.offline_mode import is_offline
+
 if TYPE_CHECKING:
     from models.gguf_language_model import GGUFLanguageModel
 
 logger = logging.getLogger(__name__)
+
+
+class SummarizerUnavailable(RuntimeError):
+    """Raised when the summarizer model cannot be loaded.
+
+    Callers should catch this and fall back to a non-summarizing truncation
+    strategy (e.g. KEEP_SYSTEM_SLIDING). Typical causes: strict offline mode
+    without a locally staged summarizer model, or an underlying loader failure.
+    """
 
 
 # Prompt for summarizing conversation history
@@ -75,47 +86,72 @@ class ContextSummarizer:
         self._model: GGUFLanguageModel | None = None
 
     async def ensure_model_loaded(self) -> None:
-        """Load the summarization model using the server's caching mechanism."""
+        """Load the summarization model using the server's caching mechanism.
+
+        Raises:
+            SummarizerUnavailable: when strict offline mode is active (the
+                summarizer model is not pre-staged in any LlamaFarm install
+                layout) or the underlying loader fails for any reason.
+        """
         if self._model is not None:
             return
 
-        # Use the server's load_language function for proper caching
-        if self._load_language is not None:
-            logger.info(
-                f"Loading summarization model via server cache: {self._model_id}"
+        # In strict offline mode we short-circuit: the default summarizer model
+        # (Qwen/Qwen3-1.7B-GGUF) is not bundled in any LlamaFarm install
+        # layout, so attempting to load it would hit HuggingFace and fail with
+        # a long stack trace. Raising a dedicated exception lets callers route
+        # to a non-summarizing truncation strategy deterministically.
+        if is_offline():
+            raise SummarizerUnavailable(
+                f"Summarizer model {self._model_id!r} is not available in "
+                f"strict offline mode (LLAMAFARM_OFFLINE=1). Falling back to "
+                f"non-summarizing truncation."
             )
-            self._model = await self._load_language(
-                self._model_id,
-                n_ctx=4096,
-                preferred_quantization=self._quantization,
-            )
-            logger.info("Summarization model loaded (cached by server)")
-        else:
-            # Fallback: import server's loader directly
-            try:
-                from server import load_language
 
-                logger.info(f"Loading summarization model: {self._model_id}")
-                self._model = await load_language(
+        try:
+            # Use the server's load_language function for proper caching
+            if self._load_language is not None:
+                logger.info(
+                    f"Loading summarization model via server cache: {self._model_id}"
+                )
+                self._model = await self._load_language(
                     self._model_id,
                     n_ctx=4096,
                     preferred_quantization=self._quantization,
                 )
-                logger.info("Summarization model loaded successfully")
-            except ImportError:
-                # Last resort: create model directly (won't be cached)
-                from models.gguf_language_model import GGUFLanguageModel
+                logger.info("Summarization model loaded (cached by server)")
+            else:
+                # Fallback: import server's loader directly
+                try:
+                    from server import load_language
 
-                logger.warning(
-                    f"Loading summarization model directly (not cached): {self._model_id}"
-                )
-                self._model = GGUFLanguageModel(
-                    model_id=self._model_id,
-                    device="cpu",
-                    n_ctx=4096,
-                    preferred_quantization=self._quantization,
-                )
-                await self._model.load()
+                    logger.info(f"Loading summarization model: {self._model_id}")
+                    self._model = await load_language(
+                        self._model_id,
+                        n_ctx=4096,
+                        preferred_quantization=self._quantization,
+                    )
+                    logger.info("Summarization model loaded successfully")
+                except ImportError:
+                    # Last resort: create model directly (won't be cached)
+                    from models.gguf_language_model import GGUFLanguageModel
+
+                    logger.warning(
+                        f"Loading summarization model directly (not cached): {self._model_id}"
+                    )
+                    self._model = GGUFLanguageModel(
+                        model_id=self._model_id,
+                        device="cpu",
+                        n_ctx=4096,
+                        preferred_quantization=self._quantization,
+                    )
+                    await self._model.load()
+        except SummarizerUnavailable:
+            raise
+        except Exception as exc:
+            raise SummarizerUnavailable(
+                f"Failed to load summarizer model {self._model_id!r}: {exc}"
+            ) from exc
 
     async def summarize_messages(
         self,

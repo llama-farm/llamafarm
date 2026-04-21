@@ -23,10 +23,11 @@ from models import GGUFLanguageModel
 from utils.context_manager import (
     ContextBudget,
     ContextManager,
+    ContextTruncationFailed,
     ContextUsage,
     TruncationStrategy,
 )
-from utils.context_summarizer import ContextSummarizer
+from utils.context_summarizer import ContextSummarizer, SummarizerUnavailable
 from utils.history_compressor import HistoryCompressor
 from utils.thinking import inject_thinking_control, parse_thinking_response
 from utils.tool_calling import (
@@ -516,12 +517,26 @@ class ChatCompletionsService:
                                         f"Still over budget after summarization "
                                         f"({usage.prompt_tokens} tokens), applying fallback truncation"
                                     )
-                                    messages_for_context, usage = (
-                                        context_manager.truncate_if_needed(
-                                            messages_for_context,
-                                            TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                    try:
+                                        messages_for_context, usage = (
+                                            context_manager.truncate_if_needed(
+                                                messages_for_context,
+                                                TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                            )
                                         )
-                                    )
+                                    except ContextTruncationFailed as exc:
+                                        raise HTTPException(
+                                            status_code=400,
+                                            detail={
+                                                "error": "context_truncation_failed",
+                                                "message": str(exc),
+                                                "context_usage": {
+                                                    "total_context": context_manager.budget.total_context,
+                                                    "prompt_tokens": usage.prompt_tokens,
+                                                    "available_for_completion": usage.available_for_completion,
+                                                },
+                                            },
+                                        ) from exc
                                     usage = type(usage)(
                                         total_context=usage.total_context,
                                         prompt_tokens=usage.prompt_tokens,
@@ -542,21 +557,78 @@ class ChatCompletionsService:
                                 logger.info(
                                     f"Context summarized: {usage.prompt_tokens} tokens after summarization"
                                 )
+                            except SummarizerUnavailable as e:
+                                logger.info(
+                                    f"Summarizer unavailable ({e}); "
+                                    f"using keep_system_sliding truncation"
+                                )
+                                try:
+                                    messages_for_context, usage = (
+                                        context_manager.truncate_if_needed(
+                                            messages_for_context,
+                                            TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                        )
+                                    )
+                                except ContextTruncationFailed as exc:
+                                    raise HTTPException(
+                                        status_code=400,
+                                        detail={
+                                            "error": "context_truncation_failed",
+                                            "message": str(exc),
+                                            "context_usage": {
+                                                "total_context": context_manager.budget.total_context,
+                                                "prompt_tokens": usage.prompt_tokens,
+                                                "available_for_completion": usage.available_for_completion,
+                                            },
+                                        },
+                                    ) from exc
+                            except HTTPException:
+                                raise
+                            except ContextTruncationFailed:
+                                raise
                             except Exception as e:
                                 logger.warning(
                                     f"Summarization failed: {e}, falling back to keep_system"
                                 )
-                                messages_for_context, usage = (
-                                    context_manager.truncate_if_needed(
-                                        messages_for_context,
-                                        TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                try:
+                                    messages_for_context, usage = (
+                                        context_manager.truncate_if_needed(
+                                            messages_for_context,
+                                            TruncationStrategy.KEEP_SYSTEM_SLIDING,
+                                        )
                                     )
-                                )
+                                except ContextTruncationFailed as exc:
+                                    raise HTTPException(
+                                        status_code=400,
+                                        detail={
+                                            "error": "context_truncation_failed",
+                                            "message": str(exc),
+                                            "context_usage": {
+                                                "total_context": context_manager.budget.total_context,
+                                                "prompt_tokens": usage.prompt_tokens,
+                                                "available_for_completion": usage.available_for_completion,
+                                            },
+                                        },
+                                    ) from exc
                         else:
                             # Use regular truncation strategy
-                            messages_for_context, usage = context_manager.truncate_if_needed(
-                                messages_for_context, strategy
-                            )
+                            try:
+                                messages_for_context, usage = context_manager.truncate_if_needed(
+                                    messages_for_context, strategy
+                                )
+                            except ContextTruncationFailed as exc:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail={
+                                        "error": "context_truncation_failed",
+                                        "message": str(exc),
+                                        "context_usage": {
+                                            "total_context": context_manager.budget.total_context,
+                                            "prompt_tokens": usage.prompt_tokens,
+                                            "available_for_completion": usage.available_for_completion,
+                                        },
+                                    },
+                                ) from exc
                             logger.info(
                                 f"Context truncated: {usage.truncated_messages} messages removed, "
                                 f"strategy={usage.strategy_used}"
@@ -584,15 +656,39 @@ class ChatCompletionsService:
                         strategy_used=usage.strategy_used,
                     )
 
-                    # Final safety check: ensure we're actually under budget
-                    if (
-                        native_rendered_prompt is None
-                        and context_manager.needs_truncation(prepared_messages)
-                    ):
-                        final_usage = context_manager.validate_messages(prepared_messages)
+                    # Final safety check: ensure we're actually under budget.
+                    # Runs for both the message-based path (after truncation)
+                    # and the native-rendered path (defense in depth — the
+                    # initial check at line 426 should have caught it, but we
+                    # re-verify so nothing over budget reaches llama.cpp).
+                    final_over_budget = False
+                    final_prompt_tokens = 0
+                    if native_rendered_prompt is None:
+                        if context_manager.needs_truncation(prepared_messages):
+                            final_usage = context_manager.validate_messages(
+                                prepared_messages
+                            )
+                            final_over_budget = True
+                            final_prompt_tokens = final_usage.prompt_tokens
+                            final_available = final_usage.available_for_completion
+                    elif model.token_counter is not None:
+                        native_tokens = model.token_counter.count_tokens(
+                            native_rendered_prompt
+                        )
+                        if native_tokens > context_manager.budget.max_prompt_tokens:
+                            final_over_budget = True
+                            final_prompt_tokens = native_tokens
+                            final_available = max(
+                                0,
+                                context_manager.budget.total_context
+                                - native_tokens
+                                - context_manager.budget.safety_margin,
+                            )
+
+                    if final_over_budget:
                         logger.error(
                             f"CRITICAL: Still over context budget after all truncation: "
-                            f"{final_usage.prompt_tokens} tokens > "
+                            f"{final_prompt_tokens} tokens > "
                             f"{context_manager.budget.max_prompt_tokens} max"
                         )
                         raise HTTPException(
@@ -601,14 +697,14 @@ class ChatCompletionsService:
                                 "error": "context_truncation_failed",
                                 "message": (
                                     f"Failed to reduce context to fit within budget. "
-                                    f"Current: {final_usage.prompt_tokens} tokens, "
+                                    f"Current: {final_prompt_tokens} tokens, "
                                     f"Max: {context_manager.budget.max_prompt_tokens} tokens. "
                                     "Try sending fewer or shorter messages."
                                 ),
                                 "context_usage": {
-                                    "total_context": final_usage.total_context,
-                                    "prompt_tokens": final_usage.prompt_tokens,
-                                    "available_for_completion": final_usage.available_for_completion,
+                                    "total_context": context_manager.budget.total_context,
+                                    "prompt_tokens": final_prompt_tokens,
+                                    "available_for_completion": final_available,
                                 },
                             },
                         )

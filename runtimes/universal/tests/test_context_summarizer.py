@@ -2,7 +2,7 @@
 
 import pytest
 
-from utils.context_summarizer import ContextSummarizer
+from utils.context_summarizer import ContextSummarizer, SummarizerUnavailable
 
 
 class TestContextSummarizer:
@@ -166,3 +166,34 @@ class TestContextSummarizer:
         assert "World" in formatted
         # Should only have 2 parts (not 3)
         assert formatted.count("User:") == 2
+
+    @pytest.mark.asyncio
+    async def test_ensure_model_loaded_raises_in_offline_mode(
+        self, summarizer, monkeypatch
+    ):
+        """Offline mode short-circuits with SummarizerUnavailable.
+
+        The default summarizer model (Qwen/Qwen3-1.7B-GGUF) is not bundled
+        in any LlamaFarm install layout, so attempting to load it in strict
+        offline mode would hit HuggingFace and fail slowly. The guard must
+        raise deterministically so callers can route to a fallback strategy.
+        """
+        monkeypatch.setenv("LLAMAFARM_OFFLINE", "1")
+
+        with pytest.raises(SummarizerUnavailable):
+            await summarizer.ensure_model_loaded()
+
+    @pytest.mark.asyncio
+    async def test_ensure_model_loaded_wraps_loader_errors(
+        self, monkeypatch
+    ):
+        """Arbitrary loader failures surface as SummarizerUnavailable."""
+        monkeypatch.delenv("LLAMAFARM_OFFLINE", raising=False)
+
+        async def failing_loader(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        summarizer = ContextSummarizer(load_language=failing_loader)
+
+        with pytest.raises(SummarizerUnavailable):
+            await summarizer.ensure_model_loaded()
