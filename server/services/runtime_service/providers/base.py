@@ -142,3 +142,26 @@ def format_bytes(value: int | float | None) -> str | None:
     if unit_index == 0:
         return f"{int(num)} {units[unit_index]}"
     return f"{num:.1f} {units[unit_index]}"
+
+
+def format_duration(seconds: int | float | None) -> str | None:
+    """Render a duration in a short human-readable form (e.g. 45s, 12m, 2h 5m)."""
+    if seconds is None:
+        return None
+    total = int(seconds)
+    if total < 0:
+        return None
+    if total < 60:
+        return f"{total}s"
+    minutes, _ = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, rem_minutes = divmod(minutes, 60)
+    if hours < 24:
+        if rem_minutes == 0:
+            return f"{hours}h"
+        return f"{hours}h {rem_minutes}m"
+    days, rem_hours = divmod(hours, 24)
+    if rem_hours == 0:
+        return f"{days}d"
+    return f"{days}d {rem_hours}h"

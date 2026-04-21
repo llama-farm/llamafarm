@@ -4,11 +4,16 @@ This service handles model resolution and provides utilities
 for working with multi-model configurations.
 """
 
+import time
 from collections.abc import AsyncIterator
+from threading import Lock
 
 from config.datamodel import LlamaFarmConfig, Model, Provider  # noqa: E402
 from server.services.runtime_service.runtime_service import runtime_service
-from server.services.runtime_service.providers.base import CachedModel
+from server.services.runtime_service.providers.base import (
+    CachedModel,
+    format_duration,
+)
 from server.services.runtime_service.providers.universal_provider import (
     UniversalProvider,  # noqa: E402
 )
@@ -16,6 +21,32 @@ from server.services.runtime_service.providers.universal_provider import (
 from core.logging import FastAPIStructLogger
 
 logger = FastAPIStructLogger(__name__)
+
+
+# Tracks monotonic timestamps of when each (model_alias, provider, host) was
+# first observed as loaded/running, so we can report uptime for providers that
+# don't expose the value themselves (Ollama, Universal, Lemonade). The tracker
+# resets when the server restarts or when a model is no longer reported active,
+# which is the intended behavior and is documented in lf-models.md.
+_uptime_tracker: dict[tuple[str, str, str | None], float] = {}
+_uptime_lock = Lock()
+
+
+def _record_uptime(key: tuple[str, str, str | None], active: bool) -> int | None:
+    """Return uptime seconds for `key` if active, clearing it otherwise."""
+    now = time.monotonic()
+    with _uptime_lock:
+        if active:
+            first_seen = _uptime_tracker.setdefault(key, now)
+            return int(now - first_seen)
+        _uptime_tracker.pop(key, None)
+        return None
+
+
+def _reset_uptime_tracker() -> None:
+    """Test helper: clear the module-level uptime tracker."""
+    with _uptime_lock:
+        _uptime_tracker.clear()
 
 
 class ModelService:
@@ -91,22 +122,36 @@ class ModelService:
         """
         statuses: dict[str, dict] = {}
         for model in project_config.runtime.models or []:
+            provider_name = getattr(model.provider, "value", str(model.provider))
             try:
                 provider = runtime_service.get_provider(model)
-                statuses[model.name] = provider.get_model_runtime_status().to_dict()
+                status = provider.get_model_runtime_status()
             except Exception as e:  # pragma: no cover - defensive fallback
                 logger.warning(
                     "Failed to collect model runtime status",
                     model_name=model.name,
-                    provider=getattr(model.provider, "value", str(model.provider)),
+                    provider=provider_name,
                     error=str(e),
                 )
+                _record_uptime((model.name, provider_name, None), active=False)
                 statuses[model.name] = {
                     "runtime_status": "unknown",
                     "runtime_loaded": False,
                     "runtime_running": False,
                     "runtime_message": f"Failed to inspect runtime state: {e}",
                 }
+                continue
+
+            active = bool(status.loaded or status.running)
+            tracked_seconds = _record_uptime(
+                (model.name, provider_name, status.host), active=active
+            )
+            if active and status.uptime_seconds is None and tracked_seconds is not None:
+                status.uptime_seconds = tracked_seconds
+                if status.uptime_human is None:
+                    status.uptime_human = format_duration(tracked_seconds)
+
+            statuses[model.name] = status.to_dict()
         return statuses
 
     @staticmethod
