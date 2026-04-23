@@ -348,11 +348,19 @@ class ContextManager:
 
         Preserves the opening (usually highest-priority instructions) and
         drops from the tail. Returns a single merged system message.
+
+        OpenAI's ChatCompletionMessageParam allows multimodal `content` (a
+        list of parts like ``[{"type": "text", "text": "..."}]``). We
+        normalize each message's content to a string before merging so a
+        multimodal system message doesn't raise TypeError in the join.
+        Non-text parts become short placeholders (``[image]``, ``[audio]``)
+        so their presence is visible in the truncated output rather than
+        silently dropped.
         """
         if not system_msgs or budget <= 0:
             return system_msgs
 
-        parts = [(m.get("content") or "") for m in system_msgs]
+        parts = [self._stringify_content(m.get("content")) for m in system_msgs]
         merged = "\n\n".join(p for p in parts if p)
         if not merged:
             return system_msgs
@@ -371,6 +379,34 @@ class ContextManager:
                 + "\n\n[... system content truncated to fit context ...]",
             }
         ]
+
+    @staticmethod
+    def _stringify_content(content: object) -> str:
+        """Normalize an OpenAI-shape message content value to a string.
+
+        Accepts str, None, or a list of content parts; anything else falls
+        through ``str()``.
+        """
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            segments: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                ptype = part.get("type", "")
+                if ptype == "text":
+                    text = part.get("text", "")
+                    if text:
+                        segments.append(text)
+                elif ptype == "image_url":
+                    segments.append("[image]")
+                elif ptype == "input_audio":
+                    segments.append("[audio]")
+            return "\n".join(segments)
+        return str(content)
 
     def _middle_out(self, messages: list[dict]) -> list[dict]:
         """Keep system, first exchange, and recent messages; remove middle.

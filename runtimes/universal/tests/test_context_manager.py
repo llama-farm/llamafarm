@@ -290,7 +290,31 @@ class TestContextManager:
             {"role": "system", "content": "sys"},
             {"role": "user", "content": huge_content},
         ]
-        result, usage = manager.truncate_if_needed(
+        _, usage = manager.truncate_if_needed(
+            messages, TruncationStrategy.KEEP_SYSTEM_SLIDING
+        )
+        assert usage.prompt_tokens <= manager.budget.max_prompt_tokens
+
+    def test_keep_system_sliding_handles_multimodal_system_content(self, manager):
+        """Multimodal system content (list of parts) must not crash trimming.
+
+        OpenAI's ChatCompletionMessageParam allows `content` to be a list of
+        parts. Regression: the first pass of `_trim_system_to_budget` joined
+        raw `content` values with `"\\n\\n"`, which raised TypeError when a
+        system message used list-of-parts content.
+        """
+        big_text = "s" * 50000
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": big_text},
+                    {"type": "image_url", "image_url": {"url": "http://x/y.png"}},
+                ],
+            },
+            {"role": "user", "content": "hi"},
+        ]
+        _, usage = manager.truncate_if_needed(
             messages, TruncationStrategy.KEEP_SYSTEM_SLIDING
         )
         assert usage.prompt_tokens <= manager.budget.max_prompt_tokens
