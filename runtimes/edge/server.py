@@ -426,33 +426,56 @@ async def lifespan(app: FastAPI):
 
     # Emit the single-line offline-mode status so operators can verify
     # LLAMAFARM_OFFLINE / LLAMAFARM_MODEL_DIR are being honored.
+    logger.info("startup-step BEGIN: offline-mode-log")
     _offline_mode_bootstrap.log_startup_mode()
+    logger.info("startup-step END: offline-mode-log")
 
+    logger.info("startup-step BEGIN: model-cleanup-task-spawn")
     _cleanup_task = asyncio.create_task(_cleanup_idle_models())
+    logger.info("startup-step END: model-cleanup-task-spawn")
 
     # Start KV cache manager
+    logger.info("startup-step BEGIN: kv-cache-imports")
     from utils.kv_cache_manager import (
         KVCacheManager,
         start_kv_cache_gc,
         stop_kv_cache_gc,
     )
+    logger.info("startup-step END: kv-cache-imports")
+
     global _kv_cache_manager
+    logger.info("startup-step BEGIN: kv-cache-manager-init")
     _kv_cache_manager = KVCacheManager()
+    logger.info("startup-step END: kv-cache-manager-init")
+
+    logger.info("startup-step BEGIN: kv-cache-router-wiring")
     from routers.cache import set_cache_language_loader, set_cache_manager
     set_cache_manager(_kv_cache_manager)
     set_cache_language_loader(load_language)
     ChatCompletionsService.set_cache_manager(_kv_cache_manager)
-    start_kv_cache_gc(_kv_cache_manager)
+    logger.info("startup-step END: kv-cache-router-wiring")
 
+    logger.info("startup-step BEGIN: kv-cache-gc-start")
+    start_kv_cache_gc(_kv_cache_manager)
+    logger.info("startup-step END: kv-cache-gc-start")
+
+    logger.info("startup-step BEGIN: session-cleanup-start")
     start_session_cleanup()
+    logger.info("startup-step END: session-cleanup-start")
 
     # Start Zenoh IPC interface (non-blocking — falls back to HTTP-only on failure)
+    logger.info("startup-step BEGIN: zenoh-ipc-init")
     _zenoh_ipc = ZenohIPC(inference_fn=_zenoh_inference)
+    logger.info("startup-step END: zenoh-ipc-init")
+
+    logger.info("startup-step BEGIN: zenoh-ipc-start")
     await _zenoh_ipc.start()
+    logger.info("startup-step END: zenoh-ipc-start")
 
     # Preload and pin models if configured
     preload_csv = os.getenv("PRELOAD_MODELS", "").strip()
     if preload_csv:
+        logger.info("startup-step BEGIN: preload-models-loop")
         preload_n_ctx_str = os.getenv("PRELOAD_N_CTX", "").strip()
         preload_n_ctx = None
         if preload_n_ctx_str:
@@ -468,16 +491,21 @@ async def lifespan(app: FastAPI):
             if not model_id:
                 continue
             try:
+                logger.info(f"startup-step BEGIN: preload:{model_id}")
                 await load_language(model_id, n_ctx=preload_n_ctx, trusted=True)
+                logger.info(f"startup-step END: preload:{model_id}")
                 # Construct the same cache key load_language() uses
                 cache_key = (
                     f"language:{model_id}:ctx{preload_n_ctx or 'auto'}:"
                     f"gpuauto:quantdefault"
                 )
+                logger.info(f"startup-step BEGIN: pin:{model_id}")
                 _models.pin(cache_key)
                 logger.info(f"Preloaded and pinned model: {model_id} ({cache_key})")
+                logger.info(f"startup-step END: pin:{model_id}")
             except Exception as e:
                 logger.warning(f"Failed to preload model '{model_id}': {e}")
+        logger.info("startup-step END: preload-models-loop")
 
     yield
 

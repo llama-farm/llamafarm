@@ -59,6 +59,7 @@ class ZenohIPC:
             logger.info("Zenoh IPC disabled (ZENOH_ENABLED=false)")
             return False
 
+        logger.info("startup-step BEGIN: %s", "zenoh-import")
         try:
             import zenoh
         except ImportError:
@@ -66,17 +67,22 @@ class ZenohIPC:
                 "eclipse-zenoh package not installed, Zenoh IPC unavailable"
             )
             return False
+        logger.info("startup-step END: %s", "zenoh-import")
 
         try:
+            logger.info("startup-step BEGIN: %s", "zenoh-config")
             config = zenoh.Config()
             config.insert_json5(
                 "connect/endpoints",
                 json.dumps([ZENOH_ENDPOINT]),
             )
             config.insert_json5("scouting/multicast/enabled", "false")
+            logger.info("startup-step END: %s", "zenoh-config")
 
+            logger.info("startup-step BEGIN: %s", "zenoh-session-open")
             self._session = zenoh.open(config)
             logger.info("Zenoh session open (endpoint=%s)", ZENOH_ENDPOINT)
+            logger.info("startup-step END: %s", "zenoh-session-open")
         except Exception:
             logger.warning(
                 "Failed to connect to Zenoh at %s — continuing HTTP-only",
@@ -86,11 +92,16 @@ class ZenohIPC:
             return False
 
         self._loop = asyncio.get_event_loop()
+        logger.info("startup-step BEGIN: %s", "zenoh-subscriber-declare")
         self._subscriber = self._session.declare_subscriber(
             TOPIC_REQUEST, self._on_request
         )
         logger.info("Subscribed to %s", TOPIC_REQUEST)
+        logger.info("startup-step END: %s", "zenoh-subscriber-declare")
+
+        logger.info("startup-step BEGIN: %s", "zenoh-heartbeat-spawn")
         self._tasks.append(asyncio.create_task(self._heartbeat_loop()))
+        logger.info("startup-step END: %s", "zenoh-heartbeat-spawn")
         return True
 
     async def stop(self):
