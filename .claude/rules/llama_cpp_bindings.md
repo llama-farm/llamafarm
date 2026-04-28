@@ -39,6 +39,23 @@ rg 'b\d{4,5}' --type go --type py llama-cpp-version.txt
 
 The CI workflow `.github/workflows/build-llama.yml` reads from `llama-cpp-version.txt` directly and does not need a manual update.
 
+## Bundled binaries
+
+Release packaging now stages the pinned `llama.cpp` binary into two deterministic bundle layouts:
+
+- CLI archives: `llama-cpp/<os>-<arch>/<binary-name>`
+- Python/PyApp bundles: `packages/llamafarm-llama/src/llamafarm_llama/_bundled/<os>-<arch>/<binary-name>`
+
+When the pin changes, verify the staging workflows still fetch the matching upstream artifacts for:
+
+- `darwin-arm64`
+- `darwin-x86_64`
+- `linux-x86_64`
+- `linux-arm64` via LlamaFarm's own `build-llama.yml` release asset
+- `windows-x86_64`
+
+CPU-only bundles ship first. GPU-specific bundled variants remain a follow-up.
+
 ## How to bump
 
 ### 1. Pick a target tag

@@ -6,17 +6,19 @@
   "targets": {
     "build": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        "generate-types"
+      ],
       "options": {
         "cwd": "{workspaceRoot}",
         "commands": [
           "cd cli && go generate ./cmd/config",
           "cp -f addons/registry/*.yaml cli/cmd/registry/",
-          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/internal/llamabinary.Version=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf ."
+          "cd cli && go build -ldflags=\"-X 'github.com/llamafarm/cli/internal/llamabinary.Version=$(cat ../llama-cpp-version.txt | tr -d '\\n')'\" -o ../dist/lf .",
+          "python3 scripts/stage_llama_bundle.py --platform host --destination-root dist/llama-cpp",
+          "python3 scripts/package_cli_bundle.py --binary dist/lf --platform host --llama-root dist/llama-cpp --output-dir dist"
         ],
-        "parallel": false,
-        "dependsOn": [
-          "generate-types"
-        ]
+        "parallel": false
       }
     },
     "generate-types": {

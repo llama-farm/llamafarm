@@ -65,9 +65,9 @@ var ValidAccelerators = []string{"cpu", "cuda", "metal", "vulkan", "rocm"}
 
 // acceptArchAliases maps user-friendly arch names to canonical Go arch names.
 var acceptArchAliases = map[string]string{
-	"x86_64": "amd64",
-	"amd64":  "amd64",
-	"arm64":  "arm64",
+	"x86_64":  "amd64",
+	"amd64":   "amd64",
+	"arm64":   "arm64",
 	"aarch64": "arm64",
 }
 
@@ -322,6 +322,56 @@ func logf(format string, args ...any) {
 	}
 }
 
+var executablePath = os.Executable
+var evaluateSymlinks = filepath.EvalSymlinks
+
+func bundleArchName(arch string) string {
+	switch arch {
+	case "amd64":
+		return "x86_64"
+	default:
+		return arch
+	}
+}
+
+// TODO: extend the bundle path layout if we ever ship accelerator-specific
+// llama.cpp artifacts alongside the CPU-first bundles.
+func bundlePlatformDir(t Target) string {
+	return fmt.Sprintf("%s-%s", t.OS, bundleArchName(t.Arch))
+}
+
+// BundledBinaryPath returns the executable-adjacent bundled llama.cpp path for a
+// target if it exists. Bundles are staged as:
+//
+//	<exe-dir>/llama-cpp/<os>-<arch>/<binary-name>
+func BundledBinaryPath(t Target) (string, bool) {
+	exePath, err := executablePath()
+	if err != nil {
+		logf("warning: determine executable path: %v", err)
+		return "", false
+	}
+	if resolved, err := evaluateSymlinks(exePath); err == nil {
+		exePath = resolved
+	}
+	exePath, err = filepath.Abs(exePath)
+	if err != nil {
+		logf("warning: resolve executable path: %v", err)
+		return "", false
+	}
+
+	bundledPath := filepath.Join(
+		filepath.Dir(exePath),
+		"llama-cpp",
+		bundlePlatformDir(t),
+		LibNameFor(t.OS),
+	)
+	st, err := os.Stat(bundledPath)
+	if err != nil || st.IsDir() || st.Size() == 0 {
+		return "", false
+	}
+	return bundledPath, true
+}
+
 // Download ensures the llama.cpp binary for (target, version) is installed in its
 // platform-scoped cache directory. If the binary is already present, Download is a
 // no-op and returns Cached=true.
@@ -342,6 +392,14 @@ func Download(ctx context.Context, t Target, version string) (Result, error) {
 	if IsCached(t, version) {
 		logf("llama.cpp already cached at %s", libPath)
 		return Result{LibPath: libPath, DestDir: destDir, Cached: true}, nil
+	}
+	if bundledPath, ok := BundledBinaryPath(t); ok {
+		logf("using bundled llama.cpp binary at %s", bundledPath)
+		return Result{
+			LibPath: bundledPath,
+			DestDir: filepath.Dir(bundledPath),
+			Cached:  true,
+		}, nil
 	}
 
 	spec, err := SpecFor(t, version)

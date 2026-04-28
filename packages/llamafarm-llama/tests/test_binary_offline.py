@@ -10,7 +10,6 @@ These tests verify that:
   - Online-mode behavior is preserved when the env var is absent.
 """
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,11 +29,6 @@ def isolated_cache(tmp_path, monkeypatch):
     """Point the cache dir at a tmp directory and make bundled absent."""
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("LLAMAFARM_CACHE_DIR", str(cache_root))
-
-    # Make sure the "bundled" path does not accidentally exist. The module
-    # computes it as <module_dir>/lib/<libname>, which is real on a dev
-    # install. We mock `get_lib_path`'s view of that file by patching
-    # Path.exists on the specific path.
     return cache_root
 
 
@@ -129,20 +123,10 @@ class TestGetLibPathOffline:
         cached_path = version_dir / lib_name
         cached_path.write_bytes(b"stub")
 
-        # Make bundled appear absent but let the real cache path resolve.
-        # Use os.sep so the check works on Windows (backslash) as well as
-        # POSIX (forward slash).
-        original_exists = Path.exists
-        bundled_marker = os.sep + "lib" + os.sep + lib_name
+        missing_bundled = tmp_path / "_bundled" / "linux-x86_64" / lib_name
+        monkeypatch.setattr(_binary, "_bundled_binary_path", lambda: missing_bundled)
 
-        def fake_exists(self):
-            if bundled_marker in str(self):
-                return False  # bundled absent
-            return original_exists(self)
-
-        with patch.object(Path, "exists", fake_exists), patch.object(
-            _binary, "download_binary"
-        ) as mock_dl:
+        with patch.object(_binary, "download_binary") as mock_dl:
             result = _binary.get_lib_path()
             mock_dl.assert_not_called()
 

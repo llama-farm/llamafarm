@@ -52,10 +52,11 @@ jobs:
         shell: bash
         run: |
           ALL_PLATFORMS='[
-            {"os":"linux-x86_64","runner":"ubuntu-latest"},
-            {"os":"linux-arm64","runner":"ubuntu-24.04-arm"},
-            {"os":"macos-arm64","runner":"macos-latest"},
-            {"os":"windows-x86_64","runner":"windows-latest"}
+            {"os":"linux-x86_64","runner":"ubuntu-latest","bundle_platform":"linux-x86_64"},
+            {"os":"linux-arm64","runner":"ubuntu-24.04-arm","bundle_platform":"linux-arm64"},
+            {"os":"macos-arm64","runner":"macos-latest","bundle_platform":"darwin-arm64"},
+            {"os":"macos-x86_64","runner":"macos-13","bundle_platform":"darwin-x86_64"},
+            {"os":"windows-x86_64","runner":"windows-latest","bundle_platform":"windows-x86_64"}
           ]'
 
           COMPONENT="${{ github.event.inputs.component }}"
@@ -77,7 +78,7 @@ jobs:
             --argjson components "$COMPONENTS" \
             '{include: [
               $platforms[] as $p | $components[] as $c |
-              {os: $p.os, runner: $p.runner, component: $c}
+              {os: $p.os, runner: $p.runner, component: $c, bundle_platform: $p.bundle_platform}
             ]}')
 
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
@@ -138,6 +139,13 @@ jobs:
             exit 1
           fi
           echo "✓ Designer built successfully"
+
+      - name: Stage bundled llama.cpp binary
+        shell: bash
+        run: |
+          python scripts/stage_llama_bundle.py \
+            --platform ${{ matrix.bundle_platform }} \
+            --destination-root packages/llamafarm-llama/src/llamafarm_llama/_bundled
 
       - name: Build with PyApp
         run: |
@@ -217,9 +225,15 @@ jobs:
             component: runtime
           - os: macos-arm64
             component: server
+          - os: macos-x86_64
+            component: server
           - os: macos-arm64
             component: rag
+          - os: macos-x86_64
+            component: rag
           - os: macos-arm64
+            component: runtime
+          - os: macos-x86_64
             component: runtime
           - os: windows-x86_64
             component: server

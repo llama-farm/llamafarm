@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Stage a bundled llama.cpp binary for a target platform."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import platform
+import re
+import shutil
+import sys
+import tempfile
+import time
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+LLAMA_BINARY_PATH = (
+    PROJECT_ROOT / "packages" / "llamafarm-llama" / "src" / "llamafarm_llama" / "_binary.py"
+)
+MODULE_SPEC = importlib.util.spec_from_file_location("llamafarm_llama_binary", LLAMA_BINARY_PATH)
+if MODULE_SPEC is None or MODULE_SPEC.loader is None:
+    raise RuntimeError(f"failed to load module spec from {LLAMA_BINARY_PATH}")
+LLAMA_BINARY = importlib.util.module_from_spec(MODULE_SPEC)
+MODULE_SPEC.loader.exec_module(LLAMA_BINARY)
+
+BINARY_MANIFEST = LLAMA_BINARY.BINARY_MANIFEST
+LLAMA_CPP_REPO = LLAMA_BINARY.LLAMA_CPP_REPO
+LLAMA_CPP_VERSION = LLAMA_BINARY.LLAMA_CPP_VERSION
+_extract_with_symlinks = LLAMA_BINARY._extract_with_symlinks
+_get_llamafarm_release_version = LLAMA_BINARY._get_llamafarm_release_version
+_safe_extract_tarball = LLAMA_BINARY._safe_extract_tarball
+_safe_extract_zip = LLAMA_BINARY._safe_extract_zip
+
+PLATFORM_KEYS: dict[str, tuple[str, str, str]] = {
+    "linux-x86_64": ("linux", "x86_64", "cpu"),
+    "linux-arm64": ("linux", "arm64", "cpu"),
+    "darwin-arm64": ("darwin", "arm64", "metal"),
+    "darwin-x86_64": ("darwin", "x86_64", "cpu"),
+    "windows-x86_64": ("win32", "amd64", "cpu"),
+}
+
+
+def detect_host_platform() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == "windows":
+        system = "windows"
+    elif system not in ("linux", "darwin"):
+        raise ValueError(f"unsupported host OS for llama bundle staging: {system}")
+
+    if machine in ("x86_64", "amd64"):
+        machine = "x86_64"
+    elif machine in ("arm64", "aarch64"):
+        machine = "arm64"
+    else:
+        raise ValueError(f"unsupported host architecture for llama bundle staging: {machine}")
+
+    platform_slug = f"{system}-{machine}"
+    if platform_slug not in PLATFORM_KEYS:
+        raise ValueError(f"unsupported host platform for llama bundle staging: {platform_slug}")
+    return platform_slug
+
+
+def normalize_platform(value: str) -> str:
+    if value == "host":
+        return detect_host_platform()
+    if value not in PLATFORM_KEYS:
+        raise ValueError(f"unsupported platform: {value}")
+    return value
+
+
+def lib_name_for_system(system: str) -> str:
+    if system == "darwin":
+        return "libllama.dylib"
+    if system in ("windows", "win32"):
+        return "llama.dll"
+    return "libllama.so"
+
+
+def create_version_symlinks(dest_dir: Path, system: str) -> None:
+    if system == "windows":
+        return
+
+    if system == "darwin":
+        for lib_file in dest_dir.glob("*.dylib"):
+            match = re.match(r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", lib_file.name)
+            if not match:
+                continue
+            base_name = match.group(1)
+            major = match.group(2)
+            major_symlink = dest_dir / f"{base_name}.{major}.dylib"
+            if not major_symlink.exists():
+                major_symlink.symlink_to(lib_file.name)
+            base_symlink = dest_dir / f"{base_name}.dylib"
+            if not base_symlink.exists():
+                base_symlink.symlink_to(major_symlink.name)
+        return
+
+    for lib_file in dest_dir.iterdir():
+        if not lib_file.is_file():
+            continue
+        match = re.match(r"^(lib[\w-]+)\.so\.(\d+)\.(\d+)\.(\d+)$", lib_file.name)
+        if not match:
+            continue
+        base_name = match.group(1)
+        major = match.group(2)
+        major_symlink = dest_dir / f"{base_name}.so.{major}"
+        if not major_symlink.exists():
+            major_symlink.symlink_to(lib_file.name)
+        base_symlink = dest_dir / f"{base_name}.so"
+        if not base_symlink.exists():
+            base_symlink.symlink_to(major_symlink.name)
+
+
+def copy_dependencies_for_system(
+    src_dir: Path,
+    dest_dir: Path,
+    system: str,
+    main_lib: str,
+) -> None:
+    patterns = [
+        "*.dll",
+        "*.metal",
+    ]
+
+    if system == "darwin":
+        patterns.extend([
+            "libggml*.*.*.*dylib",
+            "libmtmd*.*.*.*dylib",
+        ])
+    else:
+        patterns.extend([
+            "libggml*.so.*",
+            "libggml*.so",
+            "ggml-*.so",
+            "libmtmd*.so.*",
+            "libmtmd*.so",
+            "libcublas*.so.*",
+            "libcudart*.so.*",
+            "libcublasLt*.so.*",
+        ])
+
+    for pattern in patterns:
+        for candidate in src_dir.rglob(pattern):
+            if not candidate.is_file() or candidate.name == main_lib or candidate.stat().st_size <= 100:
+                continue
+            dest = dest_dir / candidate.name
+            if not dest.exists():
+                shutil.copy2(candidate, dest)
+
+    create_version_symlinks(dest_dir, system)
+
+
+def build_download_spec(platform_slug: str) -> tuple[str, str, dict]:
+    platform_key = PLATFORM_KEYS[platform_slug]
+    manifest = BINARY_MANIFEST[platform_key]
+    if platform_key == ("linux", "arm64", "cpu"):
+        llamafarm_version = _get_llamafarm_release_version()
+        url = manifest["artifact"].format(
+            version=LLAMA_CPP_VERSION,
+            llamafarm_version=llamafarm_version,
+        )
+        artifact = url.split("/")[-1]
+    else:
+        artifact = manifest["artifact"].format(version=LLAMA_CPP_VERSION)
+        url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{LLAMA_CPP_VERSION}/{artifact}"
+    return artifact, url, manifest
+
+
+def download_archive(url: str, archive_path: Path) -> None:
+    req = Request(url, headers={"User-Agent": "llamafarm-bundle-stager"})
+    with urlopen(req, timeout=300) as response:  # noqa: S310 - trusted GitHub release URL.
+        archive_path.write_bytes(response.read())
+
+
+def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
+    dest_dir = destination_root / platform_slug
+    destination_root.mkdir(parents=True, exist_ok=True)
+    system = PLATFORM_KEYS[platform_slug][0]
+    main_lib = lib_name_for_system(system)
+    artifact, url, manifest = build_download_spec(platform_slug)
+
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        if dest_dir.exists():
+            shutil.rmtree(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir_path = Path(tmpdir)
+                archive_path = tmpdir_path / artifact
+                extract_dir = tmpdir_path / "extracted"
+                extract_dir.mkdir(parents=True, exist_ok=True)
+
+                download_archive(url, archive_path)
+
+                if artifact.endswith(".zip"):
+                    _safe_extract_zip(archive_path, extract_dir)
+                elif artifact.endswith(".tar.gz") or artifact.endswith(".tgz"):
+                    _safe_extract_tarball(archive_path, extract_dir)
+                else:
+                    raise RuntimeError(f"unsupported archive format: {artifact}")
+
+                lib_src = extract_dir / manifest["lib"]
+                if not lib_src.exists():
+                    candidates = list(extract_dir.rglob(main_lib))
+                    if not candidates:
+                        raise RuntimeError(
+                            f"could not find {main_lib} in extracted archive for {platform_slug}"
+                        )
+                    lib_src = candidates[0]
+
+                _extract_with_symlinks(lib_src, dest_dir / main_lib)
+                copy_dependencies_for_system(extract_dir, dest_dir, system, main_lib)
+            return dest_dir
+        except (HTTPError, URLError, OSError, RuntimeError) as exc:
+            last_error = exc
+            if attempt == 3:
+                break
+            delay_seconds = 2 ** (attempt - 1)
+            print(
+                f"Attempt {attempt} failed staging {platform_slug}: {exc}. "
+                f"Retrying in {delay_seconds}s...",
+                file=sys.stderr,
+            )
+            time.sleep(delay_seconds)
+
+    assert last_error is not None
+    raise RuntimeError(f"failed to stage {platform_slug} after 3 attempts") from last_error
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Stage bundled llama.cpp binaries")
+    parser.add_argument(
+        "--platform",
+        default="host",
+        help="Target platform slug or 'host'",
+    )
+    parser.add_argument(
+        "--destination-root",
+        required=True,
+        type=Path,
+        help="Root directory that will receive <platform>/ files",
+    )
+    args = parser.parse_args()
+
+    platform_slug = normalize_platform(args.platform)
+    dest_dir = stage_bundle(platform_slug, args.destination_root.resolve())
+    print(dest_dir)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,6 +1,9 @@
 package llamabinary
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,6 +231,71 @@ func TestLibPath_ReturnsExpectedFile(t *testing.T) {
 	}
 	if !strings.HasSuffix(p, "libllama.dylib") {
 		t.Errorf("got %s", p)
+	}
+}
+
+func TestBundledBinaryPath_PrefersBundledOverDownload(t *testing.T) {
+	tmp := t.TempDir()
+	exePath := filepath.Join(tmp, "lf")
+	if err := os.WriteFile(exePath, []byte("stub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	target := Target{OS: "linux", Arch: "amd64", Accelerator: "cpu"}
+	bundledPath := filepath.Join(
+		tmp,
+		"llama-cpp",
+		"linux-x86_64",
+		LibNameFor(target.OS),
+	)
+	if err := os.MkdirAll(filepath.Dir(bundledPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bundledPath, []byte("bundled"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldExecutablePath := executablePath
+	oldEvaluateSymlinks := evaluateSymlinks
+	executablePath = func() (string, error) { return exePath, nil }
+	evaluateSymlinks = func(path string) (string, error) { return path, nil }
+	t.Cleanup(func() {
+		executablePath = oldExecutablePath
+		evaluateSymlinks = oldEvaluateSymlinks
+	})
+
+	t.Setenv("LLAMAFARM_CACHE_DIR", filepath.Join(tmp, "cache"))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected HTTP request to %s", r.URL.String())
+	}))
+	defer srv.Close()
+
+	testVersion := "bTESTBUNDLE"
+	SetTestSpecForOverride(func(tt Target, v string) (Spec, error) {
+		if tt == target && v == testVersion {
+			return Spec{
+				URL:     srv.URL + "/llama.tar.gz",
+				LibPath: LibNameFor(target.OS),
+				LibName: LibNameFor(target.OS),
+			}, nil
+		}
+		return Spec{}, ErrSpecNotAvailable
+	})
+	defer SetTestSpecForOverride(nil)
+
+	res, err := Download(context.Background(), target, testVersion)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	if !res.Cached {
+		t.Error("expected bundled hit to report Cached=true")
+	}
+	if res.LibPath != bundledPath {
+		t.Errorf("LibPath = %q, want %q", res.LibPath, bundledPath)
+	}
+	if res.DestDir != filepath.Dir(bundledPath) {
+		t.Errorf("DestDir = %q, want %q", res.DestDir, filepath.Dir(bundledPath))
 	}
 }
 

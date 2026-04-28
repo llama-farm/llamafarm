@@ -46,7 +46,7 @@ Repository = "https://github.com/llama-farm/llamafarm"
 where = ["src"]
 
 [tool.setuptools.package-data]
-llamafarm_llama = ["lib/*", "py.typed"]
+llamafarm_llama = ["_bundled/*/*", "lib/*", "py.typed"]
 
 [tool.ruff]
 line-length = 88

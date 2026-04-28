@@ -18,15 +18,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 PLATFORM_MAP = {
-    "linux-x64-cpu": ("linux", "x86_64", "cpu"),
-    "linux-x64-cuda11": ("linux", "x86_64", "cuda11"),
-    "linux-x64-cuda12": ("linux", "x86_64", "cuda12"),
-    "linux-x64-vulkan": ("linux", "x86_64", "vulkan"),
-    "macos-arm64-metal": ("darwin", "arm64", "metal"),
-    "macos-x64-cpu": ("darwin", "x86_64", "cpu"),
-    "win-x64-cpu": ("win32", "amd64", "cpu"),
-    "win-x64-cuda12": ("win32", "amd64", "cuda12"),
-    "win-x64-vulkan": ("win32", "amd64", "vulkan"),
+    "linux-x64-cpu": (("linux", "x86_64", "cpu"), "linux-x86_64"),
+    "linux-x64-cuda11": (("linux", "x86_64", "cuda11"), "linux-x86_64"),
+    "linux-x64-cuda12": (("linux", "x86_64", "cuda12"), "linux-x86_64"),
+    "linux-x64-vulkan": (("linux", "x86_64", "vulkan"), "linux-x86_64"),
+    "macos-arm64-metal": (("darwin", "arm64", "metal"), "darwin-arm64"),
+    "macos-x64-cpu": (("darwin", "x86_64", "cpu"), "darwin-x86_64"),
+    "win-x64-cpu": (("win32", "amd64", "cpu"), "windows-x86_64"),
+    "win-x64-cuda12": (("win32", "amd64", "cuda12"), "windows-x86_64"),
+    "win-x64-vulkan": (("win32", "amd64", "vulkan"), "windows-x86_64"),
 }
 
 
@@ -39,20 +39,21 @@ def build_wheel(platform_str: str, output_dir: Path):
         print(f"Available: {', '.join(PLATFORM_MAP.keys())}")
         sys.exit(1)
 
-    platform_key = PLATFORM_MAP[platform_str]
+    platform_key, bundle_slug = PLATFORM_MAP[platform_str]
     print(f"Building wheel for {platform_key}")
 
-    # Get the lib directory
-    lib_dir = Path(__file__).parent.parent / "src" / "llamafarm_llama" / "lib"
-    lib_dir.mkdir(exist_ok=True)
+    bundled_root = Path(__file__).parent.parent / "src" / "llamafarm_llama" / "_bundled"
+    lib_dir = bundled_root / bundle_slug
+    lib_dir.mkdir(parents=True, exist_ok=True)
 
     # Clear any existing binaries
-    for f in lib_dir.glob("*"):
-        if f.name != ".gitkeep":
+    if bundled_root.exists():
+        for f in bundled_root.iterdir():
             if f.is_dir():
                 shutil.rmtree(f)
             else:
                 f.unlink()
+    lib_dir.mkdir(parents=True, exist_ok=True)
 
     # Download for target platform
     print(f"Downloading binary for {platform_str}...")
@@ -76,13 +77,9 @@ def build_wheel(platform_str: str, output_dir: Path):
     wheel_path = wheels[0]
     print(f"Built: {wheel_path}")
 
-    # Clean up lib directory
-    for f in lib_dir.glob("*"):
-        if f.name != ".gitkeep":
-            if f.is_dir():
-                shutil.rmtree(f)
-            else:
-                f.unlink()
+    # Clean up bundled directory
+    if bundled_root.exists():
+        shutil.rmtree(bundled_root)
 
     return wheel_path
 

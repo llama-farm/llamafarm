@@ -24,11 +24,22 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
+        include:
+          - goos: linux
+            goarch: amd64
+            bundle_platform: linux-x86_64
+          - goos: linux
+            goarch: arm64
+            bundle_platform: linux-arm64
+          - goos: darwin
+            goarch: arm64
+            bundle_platform: darwin-arm64
           - goos: darwin
             goarch: amd64
+            bundle_platform: darwin-x86_64
+          - goos: windows
+            goarch: amd64
+            bundle_platform: windows-x86_64
 
     steps:
       - name: Checkout code
@@ -119,16 +130,24 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
+            bundle_platform: linux-x86_64
           - goos: linux
             goarch: arm64
+            bundle_platform: linux-arm64
           - goos: darwin
             goarch: arm64
+            bundle_platform: darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            bundle_platform: darwin-x86_64
           - goos: windows
             goarch: amd64
-          - goos: windows
-            goarch: arm64
+            bundle_platform: windows-x86_64
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Get version
         id: version
         run: |
@@ -167,6 +186,20 @@ jobs:
           sha256sum "cli/${{ steps.set-binary-name.outputs.binary_name }}" > "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256"
           echo "SHA256: $(cat "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256")"
 
+      - name: Stage bundled llama.cpp binary
+        run: |
+          python3 scripts/stage_llama_bundle.py \
+            --platform ${{ matrix.bundle_platform }} \
+            --destination-root cli/llama-cpp
+
+      - name: Package CLI release archive
+        run: |
+          python3 scripts/package_cli_bundle.py \
+            --binary cli/${{ steps.set-binary-name.outputs.binary_name }} \
+            --platform ${{ matrix.bundle_platform }} \
+            --llama-root cli/llama-cpp \
+            --output-dir cli
+
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2
         with:
@@ -174,6 +207,7 @@ jobs:
           files: |
             cli/${{ steps.set-binary-name.outputs.binary_name }}
             cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256
+            cli/lf-${{ matrix.bundle_platform }}*
           fail_on_unmatched_files: true
           append_body: true
 

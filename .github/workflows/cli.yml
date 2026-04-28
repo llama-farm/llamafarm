@@ -29,18 +29,23 @@ jobs:
           - goos: linux
             goarch: amd64
             output: llamafarm-linux-amd64
+            bundle_platform: linux-x86_64
           - goos: linux
             goarch: arm64
             output: llamafarm-linux-arm64
+            bundle_platform: linux-arm64
           - goos: darwin
             goarch: arm64
             output: llamafarm-darwin-arm64
+            bundle_platform: darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            output: llamafarm-darwin-amd64
+            bundle_platform: darwin-x86_64
           - goos: windows
             goarch: amd64
             output: llamafarm-windows-amd64.exe
-          - goos: windows
-            goarch: arm64
-            output: llamafarm-windows-arm64.exe
+            bundle_platform: windows-x86_64
 
     steps:
       - name: Checkout code
@@ -120,11 +125,33 @@ jobs:
           # Build with version info (schema compilation and type generation already done by generate-types)
           go build -ldflags "-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .
 
+      - name: Stage bundled llama.cpp binary
+        run: |
+          python3 scripts/stage_llama_bundle.py \
+            --platform ${{ matrix.bundle_platform }} \
+            --destination-root dist/llama-cpp
+
+      - name: Package CLI release archive
+        run: |
+          python3 scripts/package_cli_bundle.py \
+            --binary dist/${{ matrix.output }} \
+            --platform ${{ matrix.bundle_platform }} \
+            --llama-root dist/llama-cpp \
+            --output-dir dist
+
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.output }}
           path: dist/${{ matrix.output }}
+          retention-days: 1
+
+      - name: Upload CLI archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lf-${{ matrix.bundle_platform }}-archive
+          path: |
+            dist/lf-${{ matrix.bundle_platform }}*
           retention-days: 1
 
       # Upload PR metadata for e2e.yml to reference (only once, on first matrix entry)
@@ -166,7 +193,7 @@ jobs:
       - name: Create checksums
         run: |
           cd dist/
-          find . -maxdepth 1 -type f ! -name checksums.txt -exec sha256sum {} \; > checksums.txt
+          find . -maxdepth 1 -type f ! -name checksums.txt ! -name '*.sha256' -exec sha256sum {} \; > checksums.txt
           cat checksums.txt
 
       - name: Upload checksums
