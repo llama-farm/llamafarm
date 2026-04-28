@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/llama-farm-llamafarm-badge.png)](https://mseep.ai/app/llama-farm-llamafarm)
+
 # LlamaFarm - Edge AI for Everyone
 
 > Enterprise AI capabilities on your own hardware. No cloud required.
