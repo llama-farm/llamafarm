@@ -8,7 +8,26 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 
 <details open>
 <summary><strong>v0.0.32</strong> — 2026-04-28</summary>
-I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
+
+**Reliability and Observability**
+
+This release improves runtime resilience and gives you better visibility into your models.
+
+### New Features
+
+**Runtime Status in Models List**
+The `lf models` command now shows whether each model's runtime is online, offline, or degraded. This makes it easy to check the health of your inference stack at a glance, without needing to query individual services.
+
+### Bug Fixes
+
+**Hardened Edge Runtime Error Handling**
+The edge runtime's chat completions endpoint is now significantly more resilient. Malformed requests, context overflow, and unexpected model errors are caught and reported cleanly instead of crashing the service — critical for unattended deployments on Pi and Jetson devices.
+
+**Correct BOS Token Handling in llama.cpp**
+Fixed an issue where the beginning-of-sequence token was missing from chat completions in our native llama.cpp bindings. This resolves subtle quality regressions with certain GGUF models that depend on the BOS token for proper generation.
+
+**Robust Context Summarization in Offline Mode**
+The context summarizer and truncation logic in both the universal and edge runtimes now handle edge cases gracefully when running without network access, preventing crashes during long multi-turn conversations.
 
 **[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.32)**
 
@@ -16,28 +35,38 @@ I notice my previous response wasn't very helpful. Let me try to provide a bette
 
 <details>
 <summary><strong>v0.0.31</strong> — 2026-04-17</summary>
-I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
-🚀 A new LlamaFarm CLI release (v0.0.30) is available. Run 'lf version upgrade' for details.
+
+**Infrastructure Hardening and Inference Fixes**
+
+This release focuses on CI/CD reliability, Docker image consistency, and critical inference quality fixes in the llama.cpp bindings.
+
+### Bug Fixes
+
+**Consistent Docker Image Tags**
+Fixed a mismatch where Docker images were tagged with the workflow trigger SHA instead of the actual checked-out commit SHA. Multi-arch manifests are now preserved correctly when retagging release images, ensuring `docker pull` always gets the right build.
+
+**Recursive GGUF Model Scanning**
+The CLI now correctly discovers GGUF models in subdirectories of the HuggingFace cache, fixing cases where downloaded models weren't showing up in `lf models`.
+
+**Edge Runtime Model Format Detection**
+The edge runtime now resolves model formats from the local model directory before falling back to the HuggingFace API, enabling proper offline operation.
+
+**Chat Template and BOS Token Fixes**
+The llama.cpp bindings now correctly fetch and apply the model's chat template, and prepend the BOS token in raw completions. Temperature=0 now correctly uses greedy decoding, and repeat_penalty is properly wired through the sampler chain.
+
+### Infrastructure
+
+**Simplified CLI Architecture**
+Removed the source-based service execution path (~2,000 lines), consolidating on PyApp binaries as the sole deployment mechanism. This simplifies the orchestrator and eliminates an entire class of environment-related bugs.
 
 **[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.31)**
 
 </details>
 
 <details>
-<summary><strong>v0.1.0</strong> — 2026-04-17</summary>
-I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
-
-**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.1.0)**
-
-</details>
-
-<details>
 <summary><strong>v0.0.30</strong> — 2026-04-09</summary>
-<think>
 
-</think>
-
-**Release Highlights: 0.0.30**  
+**Release Highlights: 0.0.30**
 This release focuses on improving the user experience by adding new command-line tools and streamlining the release process, making it easier than ever to work with LlamaFarm.
 
 ### New Features
@@ -58,9 +87,6 @@ We’re excited to share this update and look forward to your feedback as you ex
 
 <details>
 <summary><strong>v0.0.29</strong> — 2026-04-08</summary>
-<think>
-
-</think>
 
 **Release Highlights: 0.0.29**  
 This release focuses on improving performance and usability for edge deployments, while also enhancing reliability and clarity in model management.
@@ -97,8 +123,7 @@ The release process has been refined to ensure that version 0.0.29 is properly a
 
 ---
 
-With 0.0.29, we're making it easier than ever to run LlamaFarm on edge devices and in offline environments. Whether you're working with low-powered hardware or need to keep your models private, this release has something for you. Let us know how you're using LlamaFarm — we're excited to hear your stories!
-🚀 A new LlamaFarm CLI release (v0.0.28) is available. Run 'lf version upgrade' for details.
+With 0.0.29, we're making it easier than ever to run LlamaFarm on edge devices and in offline environments. Whether you're working with low-powered hardware or need to keep your models private, this release has something for you.
 
 **[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.29)**
 
@@ -106,9 +131,6 @@ With 0.0.29, we're making it easier than ever to run LlamaFarm on edge devices a
 
 <details>
 <summary><strong>v0.0.28</strong> — 2026-03-05</summary>
-<think>
-
-</think>
 
 ## LlamaFarm 0.0.28: Building Blocks for Smarter AI Workflows
 
