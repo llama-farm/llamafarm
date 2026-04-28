@@ -7,6 +7,14 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.32</strong> — 2026-04-28</summary>
+I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.32)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.31</strong> — 2026-04-17</summary>
 I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
 🚀 A new LlamaFarm CLI release (v0.0.30) is available. Run 'lf version upgrade' for details.
