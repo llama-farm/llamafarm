@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.0.32](https://github.com/llama-farm/llamafarm/compare/v0.0.31...v0.0.32) (2026-04-28)
+
+
+### Features
+
+* **cli/server:** show runtime status in models list ([#798](https://github.com/llama-farm/llamafarm/issues/798)) ([#826](https://github.com/llama-farm/llamafarm/issues/826)) ([ed5d97f](https://github.com/llama-farm/llamafarm/commit/ed5d97f9f7c73270c11adf92e0b54fdb1322d914))
+
+
+### Bug Fixes
+
+* **edge:** harden chat completions error handling (ROW-79) ([#823](https://github.com/llama-farm/llamafarm/issues/823)) ([f4634c6](https://github.com/llama-farm/llamafarm/commit/f4634c6e41eb398a69a5bdf452ffc5a4c2eadf4e))
+* **llamafarm-llama:** prepend BOS in create_chat_completion ([#821](https://github.com/llama-farm/llamafarm/issues/821)) ([0ab0d4a](https://github.com/llama-farm/llamafarm/commit/0ab0d4a28ff9418d5bf7f06b8456ce124f294131))
+* **runtime:** harden context summarizer and truncation in offline mode ([#825](https://github.com/llama-farm/llamafarm/issues/825)) ([2d22d36](https://github.com/llama-farm/llamafarm/commit/2d22d368ab1019c40445bdea951266ca61a13589))
+
+
+### Miscellaneous Chores
+
+* release 0.0.32 ([0a1ce19](https://github.com/llama-farm/llamafarm/commit/0a1ce19cd469f2361825f515bec3f67c6cb8159a))
+
 ## [0.0.31](https://github.com/llama-farm/llamafarm/compare/v0.0.30...v0.0.31) (2026-04-17)
 
 
