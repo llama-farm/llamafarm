@@ -40,7 +40,9 @@ def detect_host_platform() -> str:
 
     platform_slug = f"{system}-{machine}"
     if platform_slug not in SUPPORTED_PLATFORMS:
-        raise ValueError(f"unsupported host platform for CLI packaging: {platform_slug}")
+        raise ValueError(
+            f"unsupported host platform for CLI packaging: {platform_slug}"
+        )
     return platform_slug
 
 
@@ -135,15 +137,34 @@ def package_bundle(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Package an lf release bundle")
-    parser.add_argument("--binary", required=True, type=Path, help="Path to the built CLI binary")
-    parser.add_argument("--platform", default="host", help="Target platform slug or 'host'")
+    parser.add_argument(
+        "--binary",
+        required=True,
+        type=Path,
+        help="Path to the built CLI binary",
+    )
+    parser.add_argument(
+        "--platform",
+        default="host",
+        help="Target platform slug or 'host'",
+    )
     parser.add_argument(
         "--llama-root",
         required=True,
         type=Path,
-        help="Root directory containing llama-cpp/<platform>/ staging",
+        help=(
+            "Directory containing one <platform>/ subdir per target. The "
+            "bundle for --platform foo is read from <llama-root>/foo/. "
+            "Typically the same value passed to "
+            "stage_llama_bundle.py --destination-root."
+        ),
     )
-    parser.add_argument("--output-dir", required=True, type=Path, help="Archive output directory")
+    parser.add_argument(
+        "--output-dir",
+        required=True,
+        type=Path,
+        help="Archive output directory",
+    )
     args = parser.parse_args()
 
     platform_slug = normalize_platform(args.platform)

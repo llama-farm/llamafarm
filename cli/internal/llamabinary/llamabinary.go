@@ -344,7 +344,15 @@ func bundlePlatformDir(t Target) string {
 // target if it exists. Bundles are staged as:
 //
 //	<exe-dir>/llama-cpp/<os>-<arch>/<binary-name>
+//
+// Bundles ship the platform-default accelerator only (metal on darwin/arm64,
+// CPU elsewhere). Requests for non-default accelerators (e.g. cuda) skip the
+// bundle and go through the download path so the caller gets the right
+// runtime, never a silent CPU fallback.
 func BundledBinaryPath(t Target) (string, bool) {
+	if t.Accelerator != BestAcceleratorFor(t.OS, t.Arch) {
+		return "", false
+	}
 	exePath, err := executablePath()
 	if err != nil {
 		logf("warning: determine executable path: %v", err)
@@ -394,12 +402,17 @@ func Download(ctx context.Context, t Target, version string) (Result, error) {
 		return Result{LibPath: libPath, DestDir: destDir, Cached: true}, nil
 	}
 	if bundledPath, ok := BundledBinaryPath(t); ok {
-		logf("using bundled llama.cpp binary at %s", bundledPath)
-		return Result{
-			LibPath: bundledPath,
-			DestDir: filepath.Dir(bundledPath),
-			Cached:  true,
-		}, nil
+		// Seed the cache from the bundle so downstream tooling that depends on
+		// the cache layout (Export, lf runtime binary pull --export, etc.)
+		// keeps working without special-casing the bundled scenario.
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
+			return Result{}, fmt.Errorf("create dest dir: %w", err)
+		}
+		if err := copyDirContents(filepath.Dir(bundledPath), destDir); err != nil {
+			return Result{}, fmt.Errorf("seed cache from bundle: %w", err)
+		}
+		logf("seeded cache from bundled llama.cpp at %s", bundledPath)
+		return Result{LibPath: libPath, DestDir: destDir, Cached: true}, nil
 	}
 
 	spec, err := SpecFor(t, version)
@@ -503,14 +516,21 @@ func Export(t Target, version string, destDir string) error {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("create export dir: %w", err)
 	}
+	return copyDirContents(srcDir, destDir)
+}
+
+// copyDirContents copies every regular file and symlink from srcDir into
+// dstDir, preserving symlink targets. It does not recurse into subdirectories,
+// matching the flat layout used for both cache and export directories.
+func copyDirContents(srcDir, dstDir string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
-		return fmt.Errorf("read cache dir: %w", err)
+		return fmt.Errorf("read source dir: %w", err)
 	}
 	for _, entry := range entries {
 		name := entry.Name()
 		srcPath := filepath.Join(srcDir, name)
-		dstPath := filepath.Join(destDir, name)
+		dstPath := filepath.Join(dstDir, name)
 		info, err := os.Lstat(srcPath)
 		if err != nil {
 			return fmt.Errorf("lstat %s: %w", srcPath, err)
@@ -521,7 +541,6 @@ func Export(t Target, version string, destDir string) error {
 			if err != nil {
 				return fmt.Errorf("readlink %s: %w", srcPath, err)
 			}
-			// Remove any existing file at dstPath first.
 			os.Remove(dstPath)
 			if err := os.Symlink(target, dstPath); err != nil {
 				return fmt.Errorf("symlink %s: %w", dstPath, err)

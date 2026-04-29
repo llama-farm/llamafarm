@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import platform
 import re
@@ -17,9 +18,16 @@ from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LLAMA_BINARY_PATH = (
-    PROJECT_ROOT / "packages" / "llamafarm-llama" / "src" / "llamafarm_llama" / "_binary.py"
+    PROJECT_ROOT
+    / "packages"
+    / "llamafarm-llama"
+    / "src"
+    / "llamafarm_llama"
+    / "_binary.py"
 )
-MODULE_SPEC = importlib.util.spec_from_file_location("llamafarm_llama_binary", LLAMA_BINARY_PATH)
+MODULE_SPEC = importlib.util.spec_from_file_location(
+    "llamafarm_llama_binary", LLAMA_BINARY_PATH
+)
 if MODULE_SPEC is None or MODULE_SPEC.loader is None:
     raise RuntimeError(f"failed to load module spec from {LLAMA_BINARY_PATH}")
 LLAMA_BINARY = importlib.util.module_from_spec(MODULE_SPEC)
@@ -56,11 +64,15 @@ def detect_host_platform() -> str:
     elif machine in ("arm64", "aarch64"):
         machine = "arm64"
     else:
-        raise ValueError(f"unsupported host architecture for llama bundle staging: {machine}")
+        raise ValueError(
+            f"unsupported host architecture for llama bundle staging: {machine}"
+        )
 
     platform_slug = f"{system}-{machine}"
     if platform_slug not in PLATFORM_KEYS:
-        raise ValueError(f"unsupported host platform for llama bundle staging: {platform_slug}")
+        raise ValueError(
+            f"unsupported host platform for llama bundle staging: {platform_slug}"
+        )
     return platform_slug
 
 
@@ -86,7 +98,9 @@ def create_version_symlinks(dest_dir: Path, system: str) -> None:
 
     if system == "darwin":
         for lib_file in dest_dir.glob("*.dylib"):
-            match = re.match(r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", lib_file.name)
+            match = re.match(
+                r"^(lib[\w-]+)\.(\d+)\.(\d+)\.(\d+)\.dylib$", lib_file.name
+            )
             if not match:
                 continue
             base_name = match.group(1)
@@ -145,7 +159,11 @@ def copy_dependencies_for_system(
 
     for pattern in patterns:
         for candidate in src_dir.rglob(pattern):
-            if not candidate.is_file() or candidate.name == main_lib or candidate.stat().st_size <= 100:
+            if (
+                not candidate.is_file()
+                or candidate.name == main_lib
+                or candidate.stat().st_size <= 100
+            ):
                 continue
             dest = dest_dir / candidate.name
             if not dest.exists():
@@ -166,14 +184,71 @@ def build_download_spec(platform_slug: str) -> tuple[str, str, dict]:
         artifact = url.split("/")[-1]
     else:
         artifact = manifest["artifact"].format(version=LLAMA_CPP_VERSION)
-        url = f"https://github.com/{LLAMA_CPP_REPO}/releases/download/{LLAMA_CPP_VERSION}/{artifact}"
+        url = (
+            f"https://github.com/{LLAMA_CPP_REPO}/releases/download/"
+            f"{LLAMA_CPP_VERSION}/{artifact}"
+        )
     return artifact, url, manifest
 
 
 def download_archive(url: str, archive_path: Path) -> None:
     req = Request(url, headers={"User-Agent": "llamafarm-bundle-stager"})
-    with urlopen(req, timeout=300) as response:  # noqa: S310 - trusted GitHub release URL.
+    # Trusted GitHub release URL; HTTPS-only.
+    with urlopen(req, timeout=300) as response:  # noqa: S310
         archive_path.write_bytes(response.read())
+
+
+def _try_fetch_remote_sha256(url: str) -> str | None:
+    """Best-effort fetch of a sidecar SHA256.
+
+    GitHub release artifacts sometimes ship `<artifact>.sha256` next to the
+    archive. When present, we verify against it to harden the supply chain.
+    Missing sidecars (the common case for upstream llama.cpp) just return None
+    so the caller logs the locally-computed hash and proceeds — TLS + GitHub's
+    cert chain remain the underlying integrity guarantee for those.
+    """
+    sha_url = url + ".sha256"
+    req = Request(sha_url, headers={"User-Agent": "llamafarm-bundle-stager"})
+    try:
+        # Trusted GitHub release URL; HTTPS-only.
+        with urlopen(req, timeout=30) as response:  # noqa: S310
+            text = response.read().decode("utf-8", errors="replace").strip()
+    except (HTTPError, URLError, OSError):
+        return None
+    if not text:
+        return None
+    # Format is typically "<hex>  <filename>" — take the first hex chunk.
+    candidate = text.split()[0].strip()
+    if len(candidate) == 64 and all(c in "0123456789abcdefABCDEF" for c in candidate):
+        return candidate.lower()
+    return None
+
+
+def verify_archive_checksum(url: str, archive_path: Path) -> str:
+    """Compute the archive's SHA256 and (when available) verify a remote one.
+
+    Returns the locally-computed digest. Raises RuntimeError if a remote
+    sidecar checksum is fetched and disagrees with the local one.
+    """
+    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    remote = _try_fetch_remote_sha256(url)
+    if remote is None:
+        print(
+            f"sha256({archive_path.name}) = {digest} "
+            "(no upstream sidecar; relying on TLS for integrity)",
+            file=sys.stderr,
+        )
+        return digest
+    if remote != digest:
+        raise RuntimeError(
+            f"checksum mismatch for {archive_path.name}: "
+            f"expected {remote}, got {digest}"
+        )
+    print(
+        f"sha256({archive_path.name}) = {digest} (verified against upstream sidecar)",
+        file=sys.stderr,
+    )
+    return digest
 
 
 def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
@@ -197,6 +272,7 @@ def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
                 extract_dir.mkdir(parents=True, exist_ok=True)
 
                 download_archive(url, archive_path)
+                verify_archive_checksum(url, archive_path)
 
                 if artifact.endswith(".zip"):
                     _safe_extract_zip(archive_path, extract_dir)
@@ -210,7 +286,8 @@ def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
                     candidates = list(extract_dir.rglob(main_lib))
                     if not candidates:
                         raise RuntimeError(
-                            f"could not find {main_lib} in extracted archive for {platform_slug}"
+                            f"could not find {main_lib} in extracted archive "
+                            f"for {platform_slug}"
                         )
                     lib_src = candidates[0]
 
@@ -230,7 +307,9 @@ def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
             time.sleep(delay_seconds)
 
     assert last_error is not None
-    raise RuntimeError(f"failed to stage {platform_slug} after 3 attempts") from last_error
+    raise RuntimeError(
+        f"failed to stage {platform_slug} after 3 attempts"
+    ) from last_error
 
 
 def main() -> int:
