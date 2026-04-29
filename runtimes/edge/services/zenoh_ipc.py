@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import time
+from typing import Callable
 
 logger = logging.getLogger("edge-runtime.zenoh")
 
@@ -37,13 +38,30 @@ STATUS_INTERVAL_S = 5.0
 class ZenohIPC:
     """Manages a Zenoh session for LLM inference over IPC."""
 
-    def __init__(self, inference_fn):
+    def __init__(
+        self,
+        inference_fn,
+        state_provider: Callable[[], dict] | None = None,
+        state_setter: Callable[..., None] | None = None,
+    ):
         """
         Args:
             inference_fn: async callable(request_dict) -> response content string.
                           Called for each incoming inference request.
+            state_provider: optional callable returning a backend-state snapshot
+                            dict with at least {"readiness": str, "reason": str}.
+                            When provided, the heartbeat publishes the snapshot
+                            and the request handler refuses non-ready traffic.
+                            When None, legacy "always ready" behavior is kept.
+            state_setter: optional callable(Readiness, reason) used to mark the
+                          backend as DEGRADED when the request path discovers
+                          a runtime backend failure (e.g. HF probe in offline
+                          mode). When None, runtime failures still log and
+                          publish an error response but do not mutate state.
         """
         self._inference_fn = inference_fn
+        self._state_provider = state_provider
+        self._state_setter = state_setter
         self._session = None
         self._subscriber = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -157,11 +175,41 @@ class ZenohIPC:
             logger.error("Error dispatching Zenoh request", exc_info=True)
 
     async def _handle_request(self, request: dict):
-        """Process a single inference request and publish the response."""
+        """Process a single inference request and publish the response.
+
+        If a state_provider is configured and the backend is not READY,
+        refuse immediately with an explicit error response instead of
+        passing the request to the inference layer (which would either
+        silently drop it or raise after a long timeout).
+        """
         request_id = request.get("request_id", "unknown")
         model = request.get("model", "unknown")
-        t0 = time.monotonic()
 
+        # Admission control: refuse requests when backend isn't READY.
+        if self._state_provider is not None:
+            state = self._state_provider()
+            if state.get("readiness") != "ready":
+                response = {
+                    "request_id": request_id,
+                    "model": model,
+                    "content": "",
+                    "error": "backend_unavailable",
+                    "reason": state.get("reason", ""),
+                    "readiness": state.get("readiness"),
+                    "timestamp_ms": int(time.time() * 1000),
+                }
+                self._session.put(
+                    TOPIC_RESPONSE, json.dumps(response).encode()
+                )
+                logger.warning(
+                    "Refused request %s: backend readiness=%s reason=%s",
+                    request_id,
+                    state.get("readiness"),
+                    state.get("reason"),
+                )
+                return
+
+        t0 = time.monotonic()
         try:
             content = await self._inference_fn(request)
             inference_ms = int((time.monotonic() - t0) * 1000)
@@ -184,17 +232,55 @@ class ZenohIPC:
                 "timestamp_ms": int(time.time() * 1000),
             }
             logger.error("Inference failed for request %s: %s", request_id, exc)
+            self._maybe_mark_backend_degraded(exc, model)
 
         self._session.put(
             TOPIC_RESPONSE, json.dumps(response).encode()
         )
+
+    def _maybe_mark_backend_degraded(self, exc: BaseException, model: str) -> None:
+        """If exc indicates the backend itself is unhealthy, flip state to
+        DEGRADED so the next heartbeat reflects it.
+
+        Narrowly scoped to errors that mean "the runtime cannot serve any
+        request" — not generic inference failures (bad prompt, decode error)
+        which should not poison the whole backend's status.
+        """
+        if self._state_setter is None:
+            return
+        # Lazy imports — huggingface_hub may not be installed in minimal
+        # builds, and we want this module importable without it.
+        try:
+            from huggingface_hub.errors import (  # type: ignore[import-not-found]
+                LocalEntryNotFoundError,
+                OfflineModeIsEnabled,
+            )
+        except ImportError:
+            return
+
+        if isinstance(exc, (OfflineModeIsEnabled, LocalEntryNotFoundError)):
+            # Import here to avoid a circular-import risk at module load.
+            from core.backend_state import Readiness
+
+            self._state_setter(
+                Readiness.DEGRADED,
+                f"network probe failed in offline mode for {model}: {exc}",
+            )
 
     # ------------------------------------------------------------------
     # Status heartbeat
     # ------------------------------------------------------------------
 
     async def _heartbeat_loop(self):
-        """Publish periodic status to local/llm/status."""
+        """Publish periodic status to local/llm/status.
+
+        When a state_provider is wired in, the heartbeat reflects real
+        backend readiness ("ready" | "degraded" | "unavailable" | "initializing")
+        so flight-control can refuse LLM-dependent commands instead of
+        issuing them and seeing them silently dropped at the inference
+        layer. The legacy `status` field is preserved (mirrors readiness)
+        for clients that haven't migrated to `readiness`.
+        """
         logger.info(
             "Status heartbeat started (interval=%.1fs, topic=%s)",
             STATUS_INTERVAL_S,
@@ -202,11 +288,20 @@ class ZenohIPC:
         )
         try:
             while True:
-                status = {
-                    "service": "edge-runtime",
-                    "status": "ready",
-                    "timestamp_ms": int(time.time() * 1000),
-                }
+                if self._state_provider is not None:
+                    snapshot = self._state_provider()
+                    status = {
+                        "service": "edge-runtime",
+                        "status": snapshot.get("readiness", "unknown"),
+                        "timestamp_ms": int(time.time() * 1000),
+                        **snapshot,
+                    }
+                else:
+                    status = {
+                        "service": "edge-runtime",
+                        "status": "ready",
+                        "timestamp_ms": int(time.time() * 1000),
+                    }
                 self._session.put(
                     TOPIC_STATUS, json.dumps(status).encode()
                 )

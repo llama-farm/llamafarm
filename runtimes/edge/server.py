@@ -58,6 +58,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from llamafarm_common import offline_mode as _offline_mode_bootstrap  # noqa: F401
 
+from core.backend_state import BACKEND_STATE, Readiness
 from core.logging import UniversalRuntimeLogger, setup_logging
 from models import (
     BaseModel,
@@ -110,15 +111,22 @@ logger = UniversalRuntimeLogger("edge-runtime")
 def _init_llama_backend():
     """Initialize llama.cpp backend in the main thread.
     Critical for Jetson/Tegra CUDA stability on unified memory architectures.
+
+    Records outcome on BACKEND_STATE so the Zenoh heartbeat and request
+    handler can refuse traffic when the backend is dead, instead of
+    silently dropping requests at the inference layer.
     """
     try:
         from llamafarm_llama._bindings import ensure_backend
         logger.info("Initializing llama.cpp backend in main thread...")
         ensure_backend()
+        BACKEND_STATE.mark_backend_initialized()
         logger.info("llama.cpp backend initialized successfully")
     except ImportError:
-        logger.debug("llamafarm_llama not installed, skipping backend init")
+        BACKEND_STATE.set(Readiness.UNAVAILABLE, "llamafarm_llama not installed")
+        logger.warning("llamafarm_llama not installed — LLM inference unavailable")
     except Exception as e:
+        BACKEND_STATE.set(Readiness.UNAVAILABLE, f"backend init failed: {e}")
         logger.warning(f"Failed to initialize llama.cpp backend: {e}")
 
 
@@ -465,7 +473,11 @@ async def lifespan(app: FastAPI):
 
     # Start Zenoh IPC interface (non-blocking — falls back to HTTP-only on failure)
     logger.info("startup-step BEGIN: zenoh-ipc-init")
-    _zenoh_ipc = ZenohIPC(inference_fn=_zenoh_inference)
+    _zenoh_ipc = ZenohIPC(
+        inference_fn=_zenoh_inference,
+        state_provider=BACKEND_STATE.snapshot,
+        state_setter=BACKEND_STATE.set,
+    )
     logger.info("startup-step END: zenoh-ipc-init")
 
     logger.info("startup-step BEGIN: zenoh-ipc-start")
@@ -474,6 +486,8 @@ async def lifespan(app: FastAPI):
 
     # Preload and pin models if configured
     preload_csv = os.getenv("PRELOAD_MODELS", "").strip()
+    preload_succeeded: list[str] = []
+    preload_failed: list[str] = []
     if preload_csv:
         logger.info("startup-step BEGIN: preload-models-loop")
         preload_n_ctx_str = os.getenv("PRELOAD_N_CTX", "").strip()
@@ -503,9 +517,30 @@ async def lifespan(app: FastAPI):
                 _models.pin(cache_key)
                 logger.info(f"Preloaded and pinned model: {model_id} ({cache_key})")
                 logger.info(f"startup-step END: pin:{model_id}")
+                preload_succeeded.append(model_id)
             except Exception as e:
                 logger.warning(f"Failed to preload model '{model_id}': {e}")
+                preload_failed.append(model_id)
         logger.info("startup-step END: preload-models-loop")
+
+    # Finalize backend readiness: backend init may have already set
+    # UNAVAILABLE. If so, leave it alone. Otherwise compute readiness
+    # from preload outcomes so the Zenoh heartbeat publishes honest state.
+    if BACKEND_STATE.backend_initialized:
+        if not preload_csv:
+            BACKEND_STATE.set(Readiness.READY)
+        elif preload_failed and not preload_succeeded:
+            BACKEND_STATE.set(
+                Readiness.UNAVAILABLE,
+                f"all preloads failed: {', '.join(preload_failed)}",
+            )
+        elif preload_failed:
+            BACKEND_STATE.set(
+                Readiness.DEGRADED,
+                f"preload failed: {', '.join(preload_failed)}",
+            )
+        else:
+            BACKEND_STATE.set(Readiness.READY)
 
     yield
 
