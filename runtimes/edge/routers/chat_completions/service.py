@@ -1571,6 +1571,23 @@ class ChatCompletionsService:
                         ),
                     },
                 ) from e
+            # llamafarm_common short-circuits offline-mode HF probes with a
+            # FileNotFoundError carrying "LLAMAFARM_OFFLINE=1" in its message.
+            # Map that to the same 404 the OfflineModeIsEnabled branch produces,
+            # so API consumers see a stable contract whether the offline guard
+            # fires in our code or inside huggingface_hub.
+            if isinstance(e, FileNotFoundError) and "LLAMAFARM_OFFLINE" in str(e):
+                logger.warning(f"Model not cached locally (offline mode): {e}")
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": "model_not_cached",
+                        "message": (
+                            f"Model '{chat_request.model}' is not cached locally "
+                            "and offline mode is enabled"
+                        ),
+                    },
+                ) from e
             if isinstance(e, GatedRepoError):
                 raise HTTPException(
                     status_code=403,

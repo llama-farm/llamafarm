@@ -17,6 +17,7 @@ import logging
 from huggingface_hub import HfApi, scan_cache_dir
 from huggingface_hub.utils import HFCacheInfo
 
+from . import offline_mode
 from .model_dir import resolve_from_model_dir
 from .model_utils import (
     GGUF_QUANTIZATION_PREFERENCE_ORDER,
@@ -177,6 +178,17 @@ def detect_model_format(
             "LLAMAFARM_MODEL_DIR lookup rejected alias %r: %s; falling back to network",
             alias_candidate,
             e,
+        )
+
+    # Strict offline mode: never call the HF API. Mirrors the guard in
+    # list_gguf_files() (see model_utils.py) so callers get a structured
+    # FileNotFoundError instead of an OfflineModeIsEnabled traceback from
+    # deep inside huggingface_hub.
+    if offline_mode.is_offline():
+        raise FileNotFoundError(
+            f"detect_model_format({base_model_id!r}) refused in offline mode "
+            f"(LLAMAFARM_OFFLINE=1). Place the model under $LLAMAFARM_MODEL_DIR "
+            f"or pre-populate the HuggingFace cache."
         )
 
     # Not in local cache or model dir - must query API
