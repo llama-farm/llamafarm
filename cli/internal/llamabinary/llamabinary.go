@@ -404,11 +404,17 @@ func Download(ctx context.Context, t Target, version string) (Result, error) {
 	if bundledPath, ok := BundledBinaryPath(t); ok {
 		// Seed the cache from the bundle so downstream tooling that depends on
 		// the cache layout (Export, lf runtime binary pull --export, etc.)
-		// keeps working without special-casing the bundled scenario.
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
-			return Result{}, fmt.Errorf("create dest dir: %w", err)
-		}
-		if err := copyDirContents(filepath.Dir(bundledPath), destDir); err != nil {
+		// keeps working without special-casing the bundled scenario. The seed
+		// happens via a sibling staging dir + atomic rename so a mid-copy
+		// failure can never leave a half-populated destDir for IsCached to
+		// observe as valid.
+		if err := seedCacheFromBundle(filepath.Dir(bundledPath), destDir); err != nil {
+			// Re-check IsCached: a concurrent invocation may have won the race
+			// and left a fully-populated cache while ours was still staging.
+			if IsCached(t, version) {
+				logf("cache populated by concurrent seed at %s", libPath)
+				return Result{LibPath: libPath, DestDir: destDir, Cached: true}, nil
+			}
 			return Result{}, fmt.Errorf("seed cache from bundle: %w", err)
 		}
 		logf("seeded cache from bundled llama.cpp at %s", bundledPath)
@@ -517,6 +523,52 @@ func Export(t Target, version string, destDir string) error {
 		return fmt.Errorf("create export dir: %w", err)
 	}
 	return copyDirContents(srcDir, destDir)
+}
+
+// seedCacheFromBundle atomically copies the contents of bundleDir into
+// destDir. The copy goes through a sibling staging directory and is renamed
+// into place only after every file lands successfully, so a partially-copied
+// state can never be observed by IsCached. Stale staging directories from
+// previous killed runs are cleaned up on entry.
+func seedCacheFromBundle(bundleDir, destDir string) error {
+	parentDir := filepath.Dir(destDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return fmt.Errorf("create parent dir: %w", err)
+	}
+
+	// Sweep stale staging dirs from prior crashed runs.
+	if entries, err := os.ReadDir(parentDir); err == nil {
+		basePrefix := filepath.Base(destDir) + ".seed-"
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), basePrefix) {
+				_ = os.RemoveAll(filepath.Join(parentDir, entry.Name()))
+			}
+		}
+	}
+
+	stagingDir, err := os.MkdirTemp(parentDir, filepath.Base(destDir)+".seed-*")
+	if err != nil {
+		return fmt.Errorf("create staging dir: %w", err)
+	}
+	// Best-effort cleanup of the staging dir if we exit before rename succeeds.
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.RemoveAll(stagingDir)
+		}
+	}()
+
+	if err := copyDirContents(bundleDir, stagingDir); err != nil {
+		return err
+	}
+
+	if err := os.Rename(stagingDir, destDir); err != nil {
+		// destDir may already exist (rare race with a concurrent seed). Leave
+		// the cleanup deferred to remove our staging dir; caller decides.
+		return fmt.Errorf("publish cache dir: %w", err)
+	}
+	cleanup = false
+	return nil
 }
 
 // copyDirContents copies every regular file and symlink from srcDir into
