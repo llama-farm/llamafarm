@@ -130,6 +130,35 @@ def _init_llama_backend():
         logger.warning(f"Failed to initialize llama.cpp backend: {e}")
 
 
+def _finalize_backend_readiness(
+    preload_csv: str,
+    preload_succeeded: list[str],
+    preload_failed: list[str],
+) -> None:
+    """Compute final backend readiness from preload outcomes.
+
+    Backend init may have already set UNAVAILABLE; if so, leave it alone
+    so the original failure reason survives. Otherwise project preload
+    outcomes onto readiness so the Zenoh heartbeat publishes honest state.
+    """
+    if not BACKEND_STATE.backend_initialized:
+        return
+    if not preload_csv:
+        BACKEND_STATE.set(Readiness.READY)
+    elif preload_failed and not preload_succeeded:
+        BACKEND_STATE.set(
+            Readiness.UNAVAILABLE,
+            f"all preloads failed: {', '.join(preload_failed)}",
+        )
+    elif preload_failed:
+        BACKEND_STATE.set(
+            Readiness.DEGRADED,
+            f"preload failed: {', '.join(preload_failed)}",
+        )
+    else:
+        BACKEND_STATE.set(Readiness.READY)
+
+
 _init_llama_backend()
 
 
@@ -523,24 +552,7 @@ async def lifespan(app: FastAPI):
                 preload_failed.append(model_id)
         logger.info("startup-step END: preload-models-loop")
 
-    # Finalize backend readiness: backend init may have already set
-    # UNAVAILABLE. If so, leave it alone. Otherwise compute readiness
-    # from preload outcomes so the Zenoh heartbeat publishes honest state.
-    if BACKEND_STATE.backend_initialized:
-        if not preload_csv:
-            BACKEND_STATE.set(Readiness.READY)
-        elif preload_failed and not preload_succeeded:
-            BACKEND_STATE.set(
-                Readiness.UNAVAILABLE,
-                f"all preloads failed: {', '.join(preload_failed)}",
-            )
-        elif preload_failed:
-            BACKEND_STATE.set(
-                Readiness.DEGRADED,
-                f"preload failed: {', '.join(preload_failed)}",
-            )
-        else:
-            BACKEND_STATE.set(Readiness.READY)
+    _finalize_backend_readiness(preload_csv, preload_succeeded, preload_failed)
 
     yield
 
