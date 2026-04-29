@@ -45,6 +45,11 @@ class BackendState:
     def mark_backend_initialized(self) -> None:
         with self._lock:
             self.backend_initialized = True
+            # Bump last_transition_ms so heartbeat consumers diffing on the
+            # timestamp can detect this transition. Without this, the
+            # backend_initialized flip is invisible in the published snapshot
+            # to anyone watching last_transition_ms as a change marker.
+            self.last_transition_ms = int(time.time() * 1000)
 
     def snapshot(self) -> dict:
         with self._lock:

@@ -505,7 +505,6 @@ async def lifespan(app: FastAPI):
     _zenoh_ipc = ZenohIPC(
         inference_fn=_zenoh_inference,
         state_provider=BACKEND_STATE.snapshot,
-        state_setter=BACKEND_STATE.set,
     )
     logger.info("startup-step END: zenoh-ipc-init")
 

@@ -48,7 +48,6 @@ def ipc(fake_session, state, inference_calls):
     ipc = ZenohIPC(
         inference_fn=fake_inference,
         state_provider=state.snapshot,
-        state_setter=state.set,
     )
     ipc._session = fake_session
     return ipc
@@ -96,9 +95,21 @@ class TestRequestAdmissionControl:
         assert "error" not in payload
 
 
-class TestRuntimeFailureMarksDegraded:
+class TestRuntimeFailuresStayRequestScoped:
+    """Per-request inference failures must NOT mutate global readiness.
+
+    Scoping rule: a model-resolution miss (HF offline, missing local entry)
+    or a decode/prompt error is a problem with *that* request, not with the
+    backend as a whole. Flipping global state would mean a single un-cached
+    model permanently blocks every other model on the bus until restart —
+    the HTTP path treats the same exceptions as request-scoped 404s and
+    Zenoh follows the same scope.
+    """
+
     @pytest.mark.asyncio
-    async def test_offline_mode_error_flips_to_degraded(self, fake_session, state):
+    async def test_offline_mode_error_does_not_mutate_state(
+        self, fake_session, state
+    ):
         # Skip if huggingface_hub isn't installed in this environment.
         pytest.importorskip("huggingface_hub")
         from huggingface_hub.errors import OfflineModeIsEnabled
@@ -106,51 +117,40 @@ class TestRuntimeFailureMarksDegraded:
         async def boom(request):
             raise OfflineModeIsEnabled("offline")
 
-        ipc = ZenohIPC(
-            inference_fn=boom,
-            state_provider=state.snapshot,
-            state_setter=state.set,
-        )
+        ipc = ZenohIPC(inference_fn=boom, state_provider=state.snapshot)
         ipc._session = fake_session
         state.mark_backend_initialized()
         state.set(Readiness.READY)
 
         await ipc._handle_request({"request_id": "r5", "model": "m1"})
 
-        assert state.snapshot()["readiness"] == "degraded"
-        assert "m1" in state.snapshot()["reason"]
-        # And the response was published as a generic inference failure.
+        # Backend stays READY — the next request to a *different* (cached)
+        # model would still be admitted.
+        assert state.snapshot()["readiness"] == "ready"
         topic, payload = fake_session.puts[0]
         assert payload["error"] == "inference failed"
 
     @pytest.mark.asyncio
-    async def test_generic_exception_does_not_flip_state(self, fake_session, state):
+    async def test_generic_exception_does_not_mutate_state(
+        self, fake_session, state
+    ):
         async def boom(request):
             raise RuntimeError("decode error")
 
-        ipc = ZenohIPC(
-            inference_fn=boom,
-            state_provider=state.snapshot,
-            state_setter=state.set,
-        )
+        ipc = ZenohIPC(inference_fn=boom, state_provider=state.snapshot)
         ipc._session = fake_session
         state.mark_backend_initialized()
         state.set(Readiness.READY)
 
         await ipc._handle_request({"request_id": "r6", "model": "m1"})
 
-        # Generic inference errors do NOT poison the backend's status.
         assert state.snapshot()["readiness"] == "ready"
 
 
 class TestHeartbeatPublishesSnapshot:
     @pytest.mark.asyncio
     async def test_heartbeat_publishes_current_state(self, fake_session, state):
-        ipc = ZenohIPC(
-            inference_fn=None,
-            state_provider=state.snapshot,
-            state_setter=state.set,
-        )
+        ipc = ZenohIPC(inference_fn=None, state_provider=state.snapshot)
         ipc._session = fake_session
         state.set(Readiness.UNAVAILABLE, "backend init failed: foo")
 

@@ -43,6 +43,20 @@ class TestBackendStateTransitions:
         state.mark_backend_initialized()
         assert state.snapshot()["backend_initialized"] is True
 
+    def test_mark_backend_initialized_advances_transition_ms(self):
+        """Heartbeat consumers diff on last_transition_ms to detect changes;
+        without bumping it, the backend_initialized flip is invisible."""
+        import time
+
+        state = BackendState()
+        first = state.snapshot()["last_transition_ms"]
+        # 5 ms is enough that int(time.time()*1000) reliably advances even
+        # on jittery CI runners.
+        time.sleep(0.005)
+        state.mark_backend_initialized()
+        second = state.snapshot()["last_transition_ms"]
+        assert second > first
+
     def test_last_transition_ms_advances(self):
         import time
 

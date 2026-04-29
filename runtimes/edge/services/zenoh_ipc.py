@@ -42,7 +42,6 @@ class ZenohIPC:
         self,
         inference_fn,
         state_provider: Callable[[], dict] | None = None,
-        state_setter: Callable[..., None] | None = None,
     ):
         """
         Args:
@@ -53,15 +52,14 @@ class ZenohIPC:
                             When provided, the heartbeat publishes the snapshot
                             and the request handler refuses non-ready traffic.
                             When None, legacy "always ready" behavior is kept.
-            state_setter: optional callable(Readiness, reason) used to mark the
-                          backend as DEGRADED when the request path discovers
-                          a runtime backend failure (e.g. HF probe in offline
-                          mode). When None, runtime failures still log and
-                          publish an error response but do not mutate state.
+
+        Per-request inference failures are intentionally request-scoped: they
+        log and publish an error response but never mutate global readiness.
+        Otherwise a single un-cached model would permanently block inference
+        for every other model on the bus until process restart.
         """
         self._inference_fn = inference_fn
         self._state_provider = state_provider
-        self._state_setter = state_setter
         self._session = None
         self._subscriber = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -232,40 +230,10 @@ class ZenohIPC:
                 "timestamp_ms": int(time.time() * 1000),
             }
             logger.error("Inference failed for request %s: %s", request_id, exc)
-            self._maybe_mark_backend_degraded(exc, model)
 
         self._session.put(
             TOPIC_RESPONSE, json.dumps(response).encode()
         )
-
-    def _maybe_mark_backend_degraded(self, exc: BaseException, model: str) -> None:
-        """If exc indicates the backend itself is unhealthy, flip state to
-        DEGRADED so the next heartbeat reflects it.
-
-        Narrowly scoped to errors that mean "the runtime cannot serve any
-        request" — not generic inference failures (bad prompt, decode error)
-        which should not poison the whole backend's status.
-        """
-        if self._state_setter is None:
-            return
-        # Lazy imports — huggingface_hub may not be installed in minimal
-        # builds, and we want this module importable without it.
-        try:
-            from huggingface_hub.errors import (  # type: ignore[import-not-found]
-                LocalEntryNotFoundError,
-                OfflineModeIsEnabled,
-            )
-        except ImportError:
-            return
-
-        if isinstance(exc, (OfflineModeIsEnabled, LocalEntryNotFoundError)):
-            # Import here to avoid a circular-import risk at module load.
-            from core.backend_state import Readiness
-
-            self._state_setter(
-                Readiness.DEGRADED,
-                f"network probe failed in offline mode for {model}: {exc}",
-            )
 
     # ------------------------------------------------------------------
     # Status heartbeat
