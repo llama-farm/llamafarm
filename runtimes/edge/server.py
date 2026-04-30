@@ -500,17 +500,22 @@ async def lifespan(app: FastAPI):
     start_session_cleanup()
     logger.info("startup-step END: session-cleanup-start")
 
-    # Start Zenoh IPC interface (non-blocking — falls back to HTTP-only on failure)
-    logger.info("startup-step BEGIN: zenoh-ipc-init")
-    _zenoh_ipc = ZenohIPC(
-        inference_fn=_zenoh_inference,
-        state_provider=BACKEND_STATE.snapshot,
-    )
-    logger.info("startup-step END: zenoh-ipc-init")
+    # Start Zenoh IPC interface (opt-in via LLAMAFARM_ZENOH_ENABLED).
+    # Off by default: most edge-runtime adopters don't need a pub/sub bus.
+    # Drone/flight-control deployments (e.g. Arc) set the flag in their compose/env.
+    if os.getenv("LLAMAFARM_ZENOH_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+        logger.info("startup-step BEGIN: zenoh-ipc-init")
+        _zenoh_ipc = ZenohIPC(
+            inference_fn=_zenoh_inference,
+            state_provider=BACKEND_STATE.snapshot,
+        )
+        logger.info("startup-step END: zenoh-ipc-init")
 
-    logger.info("startup-step BEGIN: zenoh-ipc-start")
-    await _zenoh_ipc.start()
-    logger.info("startup-step END: zenoh-ipc-start")
+        logger.info("startup-step BEGIN: zenoh-ipc-start")
+        await _zenoh_ipc.start()
+        logger.info("startup-step END: zenoh-ipc-start")
+    else:
+        logger.info("Zenoh IPC disabled (set LLAMAFARM_ZENOH_ENABLED=1 to enable)")
 
     # Preload and pin models if configured
     preload_csv = os.getenv("PRELOAD_MODELS", "").strip()

@@ -26,7 +26,6 @@ logger = logging.getLogger("edge-runtime.zenoh")
 ZENOH_ENDPOINT = os.getenv(
     "ZENOH_ENDPOINT", "unixsock-stream//run/arc/zenoh.sock"
 )
-ZENOH_ENABLED = os.getenv("ZENOH_ENABLED", "true").lower() in ("true", "1", "yes")
 
 TOPIC_REQUEST = "local/llm/request"
 TOPIC_RESPONSE = "local/llm/response"
@@ -70,11 +69,9 @@ class ZenohIPC:
         """Open Zenoh session and start subscriber + heartbeat tasks.
 
         Returns True if started successfully, False on failure (graceful degradation).
+        Callers gate construction with LLAMAFARM_ZENOH_ENABLED upstream; this
+        method assumes Zenoh is wanted by the time it is invoked.
         """
-        if not ZENOH_ENABLED:
-            logger.info("Zenoh IPC disabled (ZENOH_ENABLED=false)")
-            return False
-
         logger.info("startup-step BEGIN: %s", "zenoh-import")
         try:
             import zenoh
