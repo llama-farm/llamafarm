@@ -88,6 +88,11 @@ class ZenohIPC:
         try:
             logger.info("startup-step BEGIN: %s", "zenoh-config")
             config = zenoh.Config()
+            # Connect as a client to the comms router. Without explicit
+            # client mode, zenoh.open() returns a peer-mode session that
+            # silently fails to attach to the router — every put() becomes
+            # a no-op and the heartbeat never reaches the bus.
+            config.insert_json5("mode", '"client"')
             config.insert_json5(
                 "connect/endpoints",
                 json.dumps([ZENOH_ENDPOINT]),
