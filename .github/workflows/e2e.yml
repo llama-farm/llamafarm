@@ -852,16 +852,52 @@ jobs:
           LLAMA_VERSION=$(cat llama-cpp-version.txt | tr -d '\r\n')
           LIB_PATH="$LLAMA_CACHE/$LLAMA_VERSION/$LIB_NAME"
 
-          echo "Expected binary location: $LIB_PATH"
+          echo "Expected cache location: $LIB_PATH"
           echo ""
           echo "Cache directory contents:"
           ls -la "$LLAMA_CACHE/$LLAMA_VERSION/" 2>/dev/null || echo "Cache directory does not exist"
           echo ""
 
-          # Check if binary exists (could be a file or symlink)
+          # Resolution policy after the bundled-binaries change: the runtime
+          # may resolve llama.cpp from a bundled location packaged inside
+          # PyApp (llamafarm_llama/_bundled/<platform>/<lib>) instead of the
+          # download cache. We accept either: cache hit first (legacy),
+          # otherwise search bundled locations under common roots.
           if [ ! -e "$LIB_PATH" ]; then
-            echo "❌ llama.cpp binary not found at $LIB_PATH"
-            exit 1
+            echo "Cache miss, searching bundled locations..."
+            SEARCH_ROOTS=()
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              SEARCH_ROOTS+=("$(cygpath -u "$LOCALAPPDATA")")
+              SEARCH_ROOTS+=("$(cygpath -u "${APPDATA:-$HOME}")")
+            fi
+            SEARCH_ROOTS+=("$HOME/.cache" "$HOME/.local")
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              SEARCH_ROOTS+=("$HOME/Library/Application Support" "$HOME/Library/Caches")
+            fi
+            SEARCH_ROOTS+=("$HOME/.llamafarm")
+
+            BUNDLED_PATH=""
+            for root in "${SEARCH_ROOTS[@]}"; do
+              [ -d "$root" ] || continue
+              found=$(find "$root" -path "*llamafarm_llama/_bundled/*/$LIB_NAME" -type f 2>/dev/null | head -n 1)
+              if [ -n "$found" ]; then
+                BUNDLED_PATH="$found"
+                break
+              fi
+            done
+
+            if [ -z "$BUNDLED_PATH" ]; then
+              echo "❌ llama.cpp binary not found in cache or bundled locations"
+              echo "Searched roots:"
+              printf '  %s\n' "${SEARCH_ROOTS[@]}"
+              exit 1
+            fi
+
+            echo "✓ Found bundled binary: $BUNDLED_PATH"
+            LIB_PATH="$BUNDLED_PATH"
+            # Re-target the per-OS dependency checks at the bundled directory.
+            LLAMA_CACHE="$(dirname "$(dirname "$BUNDLED_PATH")")"
+            LLAMA_VERSION="$(basename "$(dirname "$BUNDLED_PATH")")"
           fi
 
           # Check if it's a symlink and follow it

@@ -25,21 +25,32 @@ LLAMA_BINARY_PATH = (
     / "llamafarm_llama"
     / "_binary.py"
 )
-MODULE_SPEC = importlib.util.spec_from_file_location(
-    "llamafarm_llama_binary", LLAMA_BINARY_PATH
-)
-if MODULE_SPEC is None or MODULE_SPEC.loader is None:
-    raise RuntimeError(f"failed to load module spec from {LLAMA_BINARY_PATH}")
-LLAMA_BINARY = importlib.util.module_from_spec(MODULE_SPEC)
-MODULE_SPEC.loader.exec_module(LLAMA_BINARY)
 
-BINARY_MANIFEST = LLAMA_BINARY.BINARY_MANIFEST
-LLAMA_CPP_REPO = LLAMA_BINARY.LLAMA_CPP_REPO
-LLAMA_CPP_VERSION = LLAMA_BINARY.LLAMA_CPP_VERSION
-_extract_with_symlinks = LLAMA_BINARY._extract_with_symlinks
-_get_llamafarm_release_version = LLAMA_BINARY._get_llamafarm_release_version
-_safe_extract_tarball = LLAMA_BINARY._safe_extract_tarball
-_safe_extract_zip = LLAMA_BINARY._safe_extract_zip
+
+_LLAMA_BINARY_MODULE = None
+
+
+def _load_llama_binary_module():
+    """Lazily import _binary.py from the llamafarm-llama package.
+
+    The module is loaded on first call so any future top-level side effect
+    in _binary.py only runs when the staging script actually needs it,
+    not at import time of this script. Subsequent calls reuse the cached
+    module.
+    """
+    global _LLAMA_BINARY_MODULE
+    if _LLAMA_BINARY_MODULE is not None:
+        return _LLAMA_BINARY_MODULE
+    spec = importlib.util.spec_from_file_location(
+        "llamafarm_llama_binary", LLAMA_BINARY_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load module spec from {LLAMA_BINARY_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _LLAMA_BINARY_MODULE = module
+    return module
+
 
 PLATFORM_KEYS: dict[str, tuple[str, str, str]] = {
     "linux-x86_64": ("linux", "x86_64", "cpu"),
@@ -172,20 +183,22 @@ def copy_dependencies_for_system(
 
 
 def build_download_spec(platform_slug: str) -> tuple[str, str, dict]:
+    llama_binary = _load_llama_binary_module()
     platform_key = PLATFORM_KEYS[platform_slug]
-    manifest = BINARY_MANIFEST[platform_key]
+    manifest = llama_binary.BINARY_MANIFEST[platform_key]
+    version = llama_binary.LLAMA_CPP_VERSION
     if platform_key == ("linux", "arm64", "cpu"):
-        llamafarm_version = _get_llamafarm_release_version()
+        llamafarm_version = llama_binary._get_llamafarm_release_version()
         url = manifest["artifact"].format(
-            version=LLAMA_CPP_VERSION,
+            version=version,
             llamafarm_version=llamafarm_version,
         )
         artifact = url.split("/")[-1]
     else:
-        artifact = manifest["artifact"].format(version=LLAMA_CPP_VERSION)
+        artifact = manifest["artifact"].format(version=version)
         url = (
-            f"https://github.com/{LLAMA_CPP_REPO}/releases/download/"
-            f"{LLAMA_CPP_VERSION}/{artifact}"
+            f"https://github.com/{llama_binary.LLAMA_CPP_REPO}"
+            f"/releases/download/{version}/{artifact}"
         )
     return artifact, url, manifest
 
@@ -251,6 +264,7 @@ def verify_archive_checksum(url: str, archive_path: Path) -> str:
 
 
 def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
+    llama_binary = _load_llama_binary_module()
     dest_dir = destination_root / platform_slug
     destination_root.mkdir(parents=True, exist_ok=True)
     system = PLATFORM_KEYS[platform_slug][0]
@@ -274,9 +288,9 @@ def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
                 verify_archive_checksum(url, archive_path)
 
                 if artifact.endswith(".zip"):
-                    _safe_extract_zip(archive_path, extract_dir)
+                    llama_binary._safe_extract_zip(archive_path, extract_dir)
                 elif artifact.endswith(".tar.gz") or artifact.endswith(".tgz"):
-                    _safe_extract_tarball(archive_path, extract_dir)
+                    llama_binary._safe_extract_tarball(archive_path, extract_dir)
                 else:
                     raise RuntimeError(f"unsupported archive format: {artifact}")
 
@@ -290,7 +304,7 @@ def stage_bundle(platform_slug: str, destination_root: Path) -> Path:
                         )
                     lib_src = candidates[0]
 
-                _extract_with_symlinks(lib_src, dest_dir / main_lib)
+                llama_binary._extract_with_symlinks(lib_src, dest_dir / main_lib)
                 copy_dependencies_for_system(extract_dir, dest_dir, system, main_lib)
             return dest_dir
         except (HTTPError, URLError, OSError, RuntimeError) as exc:
