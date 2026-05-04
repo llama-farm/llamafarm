@@ -55,7 +55,6 @@ jobs:
             {"os":"linux-x86_64","runner":"ubuntu-latest","bundle_platform":"linux-x86_64"},
             {"os":"linux-arm64","runner":"ubuntu-24.04-arm","bundle_platform":"linux-arm64"},
             {"os":"macos-arm64","runner":"macos-latest","bundle_platform":"darwin-arm64"},
-            {"os":"macos-x86_64","runner":"macos-13","bundle_platform":"darwin-x86_64"},
             {"os":"windows-x86_64","runner":"windows-latest","bundle_platform":"windows-x86_64"}
           ]'
 
@@ -225,15 +224,9 @@ jobs:
             component: runtime
           - os: macos-arm64
             component: server
-          - os: macos-x86_64
-            component: server
           - os: macos-arm64
             component: rag
-          - os: macos-x86_64
-            component: rag
           - os: macos-arm64
-            component: runtime
-          - os: macos-x86_64
             component: runtime
           - os: windows-x86_64
             component: server

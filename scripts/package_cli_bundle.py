@@ -17,7 +17,6 @@ SUPPORTED_PLATFORMS = {
     "linux-x86_64",
     "linux-arm64",
     "darwin-arm64",
-    "darwin-x86_64",
     "windows-x86_64",
 }
 

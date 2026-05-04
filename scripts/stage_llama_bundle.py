@@ -45,7 +45,6 @@ PLATFORM_KEYS: dict[str, tuple[str, str, str]] = {
     "linux-x86_64": ("linux", "x86_64", "cpu"),
     "linux-arm64": ("linux", "arm64", "cpu"),
     "darwin-arm64": ("darwin", "arm64", "metal"),
-    "darwin-x86_64": ("darwin", "x86_64", "cpu"),
     "windows-x86_64": ("win32", "amd64", "cpu"),
 }
 

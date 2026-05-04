@@ -369,19 +369,26 @@ def get_lib_path() -> Path:
     it raises FileNotFoundError with a structured message pointing at
     `lf runtime binary pull`.
     """
+    # Resolution order: bundled -> cached -> download.
+    #
+    # The bundled path is preferred over the cache so that a wheel upgrade
+    # which ships a rebuilt binary at the *same* LLAMA_CPP_VERSION (e.g. a
+    # build-flag fix) wins over a stale cached download from a previous
+    # session. A version bump would miss the cache anyway, so this only
+    # affects the same-pin rebuild case.
+    bundled = _bundled_binary_path()
+    if bundled.exists():
+        logger.debug(f"Using bundled binary: {bundled}")
+        return bundled
     cache_dir = _get_cache_dir()
     cached = cache_dir / LLAMA_CPP_VERSION / _get_lib_name()
     if cached.exists():
         logger.debug(f"Using cached binary: {cached}")
         return cached
-    bundled = _bundled_binary_path()
-    if bundled.exists():
-        logger.debug(f"Using bundled binary: {bundled}")
-        return bundled
 
     # Strict offline mode: never attempt a download.
     if _is_offline():
-        _raise_offline_binary_error(tried=[cached, bundled])
+        _raise_offline_binary_error(tried=[bundled, cached])
 
     # Download
     logger.info(f"Downloading llama.cpp {LLAMA_CPP_VERSION}...")
@@ -405,28 +412,21 @@ def _get_lib_name() -> str:
 def _bundled_platform_slug() -> str:
     """Return the deterministic bundle directory slug for the current host."""
     system = platform.system().lower()
-    if system == "windows":
-        system = "windows"
-
     machine = platform.machine().lower()
     if machine in ("x86_64", "amd64"):
         machine = "x86_64"
     elif machine in ("arm64", "aarch64"):
         machine = "arm64"
-
     return f"{system}-{machine}"
 
 
 def _bundled_binary_path() -> Path:
     """Return the packaged bundled binary path for the current host."""
-    system = platform.system().lower()
-    if system == "windows":
-        system = "windows"
     return (
         Path(__file__).parent
         / "_bundled"
         / _bundled_platform_slug()
-        / _get_lib_name_for_system(system)
+        / _get_lib_name_for_system(platform.system().lower())
     )
 
 
@@ -877,12 +877,13 @@ def get_binary_info() -> dict:
     cached = cache_dir / LLAMA_CPP_VERSION / _get_lib_name()
     bundled = _bundled_binary_path()
 
-    if cached.exists():
-        lib_path = cached
-        source = "cached"
-    elif bundled.exists():
+    # Match the resolution order in get_lib_path: bundled wins over cache.
+    if bundled.exists():
         lib_path = bundled
         source = "bundled"
+    elif cached.exists():
+        lib_path = cached
+        source = "cached"
     else:
         source = "not_downloaded"
 

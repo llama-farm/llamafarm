@@ -34,9 +34,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             bundle_platform: darwin-arm64
-          - goos: darwin
-            goarch: amd64
-            bundle_platform: darwin-x86_64
           - goos: windows
             goarch: amd64
             bundle_platform: windows-x86_64
@@ -111,6 +108,35 @@ jobs:
           echo "SHA256: $(cat ${BINARY_NAME}.sha256)"
           echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Sign and Notarize macOS binary
+        if: matrix.goos == 'darwin'
+        run: |
+          curl -sSfL https://get.anchore.io/quill | sudo sh -s -- -b /usr/local/bin
+          QUILL_SIGN_PASSWORD=${{ secrets.APPLE_CERT_PASSWORD }} quill sign-and-notarize cli/${{ steps.build.outputs.binary_name }} \
+            --p12 ${{ secrets.APPLE_CERT_DATA }} \
+            --notary-key-id ${{ secrets.APPLE_NOTARY_KEY_ID }} \
+            --notary-key ${{ secrets.APPLE_NOTARY_KEY }} \
+            --notary-issuer ${{ secrets.APPLE_NOTARY_ISSUER }} \
+            --verbose
+
+          # Re-SHA the binary since it was signed
+          sha256sum "cli/${{ steps.build.outputs.binary_name }}" > "cli/${{ steps.build.outputs.binary_name }}.sha256"
+          echo "SHA256: $(cat "cli/${{ steps.build.outputs.binary_name }}.sha256")"
+
+      - name: Stage bundled llama.cpp binary
+        run: |
+          python3 scripts/stage_llama_bundle.py \
+            --platform ${{ matrix.bundle_platform }} \
+            --destination-root cli/llama-cpp
+
+      - name: Package CLI release archive
+        run: |
+          python3 scripts/package_cli_bundle.py \
+            --binary cli/${{ steps.build.outputs.binary_name }} \
+            --platform ${{ matrix.bundle_platform }} \
+            --llama-root cli/llama-cpp \
+            --output-dir cli
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -118,6 +144,7 @@ jobs:
           path: |
             cli/${{ steps.build.outputs.binary_name }}
             cli/${{ steps.build.outputs.binary_name }}.sha256
+            cli/lf-${{ matrix.bundle_platform }}*
 
   # For each build, run the release upload as a separate job, pulling the built artifact from the previous job.
 
@@ -137,17 +164,11 @@ jobs:
           - goos: darwin
             goarch: arm64
             bundle_platform: darwin-arm64
-          - goos: darwin
-            goarch: amd64
-            bundle_platform: darwin-x86_64
           - goos: windows
             goarch: amd64
             bundle_platform: windows-x86_64
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: Get version
         id: version
         run: |
@@ -165,40 +186,11 @@ jobs:
           fi
           echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
 
-      - name: Download built binary artifact
+      - name: Download built artifacts
         uses: actions/download-artifact@v4
         with:
           name: "${{ steps.set-binary-name.outputs.binary_name }}"
           path: cli/
-
-      - name: Sign and Notarize macOS binary
-        if: matrix.goos == 'darwin'
-        run: |
-          curl -sSfL https://get.anchore.io/quill | sudo sh -s -- -b /usr/local/bin
-          QUILL_SIGN_PASSWORD=${{ secrets.APPLE_CERT_PASSWORD }} quill sign-and-notarize cli/${{ steps.set-binary-name.outputs.binary_name }} \
-            --p12 ${{ secrets.APPLE_CERT_DATA }} \
-            --notary-key-id ${{ secrets.APPLE_NOTARY_KEY_ID }} \
-            --notary-key ${{ secrets.APPLE_NOTARY_KEY }} \
-            --notary-issuer ${{ secrets.APPLE_NOTARY_ISSUER }} \
-            --verbose
-
-          # Re-SHA the binary since it was signed
-          sha256sum "cli/${{ steps.set-binary-name.outputs.binary_name }}" > "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256"
-          echo "SHA256: $(cat "cli/${{ steps.set-binary-name.outputs.binary_name }}.sha256")"
-
-      - name: Stage bundled llama.cpp binary
-        run: |
-          python3 scripts/stage_llama_bundle.py \
-            --platform ${{ matrix.bundle_platform }} \
-            --destination-root cli/llama-cpp
-
-      - name: Package CLI release archive
-        run: |
-          python3 scripts/package_cli_bundle.py \
-            --binary cli/${{ steps.set-binary-name.outputs.binary_name }} \
-            --platform ${{ matrix.bundle_platform }} \
-            --llama-root cli/llama-cpp \
-            --output-dir cli
 
       - name: Upload assets to the Release
         uses: softprops/action-gh-release@v2

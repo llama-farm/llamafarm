@@ -38,14 +38,17 @@ jobs:
             goarch: arm64
             output: llamafarm-darwin-arm64
             bundle_platform: darwin-arm64
-          - goos: darwin
-            goarch: amd64
-            output: llamafarm-darwin-amd64
-            bundle_platform: darwin-x86_64
           - goos: windows
             goarch: amd64
             output: llamafarm-windows-amd64.exe
             bundle_platform: windows-x86_64
+          # windows-arm64: no upstream llama.cpp prebuilt for this combo, so we
+          # ship the CLI without a bundled runtime. First-run falls through to
+          # the existing download path.
+          - goos: windows
+            goarch: arm64
+            output: llamafarm-windows-arm64.exe
+            bundle_platform: ""
 
     steps:
       - name: Checkout code
@@ -126,12 +129,14 @@ jobs:
           go build -ldflags "-s -w -X 'github.com/llamafarm/cli/internal/buildinfo.CurrentVersion=${VERSION}'" -o ../dist/${{ matrix.output }} .
 
       - name: Stage bundled llama.cpp binary
+        if: matrix.bundle_platform != ''
         run: |
           python3 scripts/stage_llama_bundle.py \
             --platform ${{ matrix.bundle_platform }} \
             --destination-root dist/llama-cpp
 
       - name: Package CLI release archive
+        if: matrix.bundle_platform != ''
         run: |
           python3 scripts/package_cli_bundle.py \
             --binary dist/${{ matrix.output }} \
@@ -147,6 +152,7 @@ jobs:
           retention-days: 1
 
       - name: Upload CLI archive artifact
+        if: matrix.bundle_platform != ''
         uses: actions/upload-artifact@v4
         with:
           name: lf-${{ matrix.bundle_platform }}-archive
