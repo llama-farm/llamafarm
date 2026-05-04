@@ -1550,6 +1550,8 @@ class ChatCompletionsService:
                 HfHubHTTPError = RepositoryNotFoundError = GatedRepoError = ()  # type: ignore[assignment,misc]
                 LocalEntryNotFoundError = EntryNotFoundError = OfflineModeIsEnabled = ()  # type: ignore[assignment,misc]
 
+            from llamafarm_common.model_format import OfflineModelNotCachedError
+
             if isinstance(e, (RepositoryNotFoundError, LocalEntryNotFoundError, EntryNotFoundError)):
                 logger.warning(f"Model repository not found: {e}")
                 raise HTTPException(
@@ -1572,11 +1574,11 @@ class ChatCompletionsService:
                     },
                 ) from e
             # llamafarm_common short-circuits offline-mode HF probes with a
-            # FileNotFoundError carrying "LLAMAFARM_OFFLINE=1" in its message.
-            # Map that to the same 404 the OfflineModeIsEnabled branch produces,
-            # so API consumers see a stable contract whether the offline guard
-            # fires in our code or inside huggingface_hub.
-            if isinstance(e, FileNotFoundError) and "LLAMAFARM_OFFLINE" in str(e):
+            # dedicated OfflineModelNotCachedError. Map it to the same 404 the
+            # OfflineModeIsEnabled branch produces so API consumers see a
+            # stable contract whether the offline guard fires in our code or
+            # inside huggingface_hub.
+            if isinstance(e, OfflineModelNotCachedError):
                 logger.warning(f"Model not cached locally (offline mode): {e}")
                 raise HTTPException(
                     status_code=404,

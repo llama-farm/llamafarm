@@ -1,9 +1,10 @@
 """Tests for /v1/completions offline-mode error mapping.
 
 When LLAMAFARM_OFFLINE=1 and the requested model is not cached locally,
-``load_language()`` raises ``FileNotFoundError`` from llamafarm_common.
-The endpoint must translate that into a 404 ``model_not_cached`` response
-matching /v1/chat/completions, not a generic 500.
+``load_language()`` raises ``OfflineModelNotCachedError`` from
+llamafarm_common. The endpoint must translate that into a 404
+``model_not_cached`` response matching /v1/chat/completions, not a
+generic 500.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from llamafarm_common.model_format import OfflineModelNotCachedError
 
 from routers import completions as completions_router
 
@@ -18,7 +20,7 @@ from routers import completions as completions_router
 @pytest.fixture
 def client(monkeypatch):
     async def _raise_offline(model, n_ctx=None, n_gpu_layers=None):
-        raise FileNotFoundError(
+        raise OfflineModelNotCachedError(
             f"detect_model_format({model!r}) refused in offline mode "
             "(LLAMAFARM_OFFLINE=1). Place the model under $LLAMAFARM_MODEL_DIR "
             "or pre-populate the HuggingFace cache."

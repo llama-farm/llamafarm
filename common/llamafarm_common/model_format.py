@@ -40,6 +40,7 @@ _local_cache_info: HFCacheInfo | None = None
 # Re-export commonly used functions for backward compatibility
 __all__ = [
     "GGUF_QUANTIZATION_PREFERENCE_ORDER",
+    "OfflineModelNotCachedError",
     "parse_model_with_quantization",
     "parse_quantization_from_filename",
     "select_gguf_file",
@@ -49,6 +50,15 @@ __all__ = [
     "get_gguf_file_path",
     "clear_format_cache",
 ]
+
+
+class OfflineModelNotCachedError(FileNotFoundError):
+    """Raised when a model lookup is refused because strict offline mode is on
+    and the model is not present in any local source (LLAMAFARM_MODEL_DIR or
+    HuggingFace cache). Subclasses FileNotFoundError so existing callers that
+    only catch FileNotFoundError still work, while new callers can match on
+    the dedicated type instead of substring-matching the error message.
+    """
 
 
 def _check_local_cache_for_model(model_id: str) -> list[str] | None:
@@ -185,7 +195,7 @@ def detect_model_format(
     # FileNotFoundError instead of an OfflineModeIsEnabled traceback from
     # deep inside huggingface_hub.
     if offline_mode.is_offline():
-        raise FileNotFoundError(
+        raise OfflineModelNotCachedError(
             f"detect_model_format({base_model_id!r}) refused in offline mode "
             f"(LLAMAFARM_OFFLINE=1). Place the model under $LLAMAFARM_MODEL_DIR "
             f"or pre-populate the HuggingFace cache."

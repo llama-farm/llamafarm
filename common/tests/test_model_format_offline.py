@@ -51,7 +51,7 @@ class TestDetectModelFormatOffline:
 
         monkeypatch.setattr(model_format, "HfApi", _fail)
 
-        with pytest.raises(FileNotFoundError, match="LLAMAFARM_OFFLINE"):
+        with pytest.raises(model_format.OfflineModelNotCachedError, match="LLAMAFARM_OFFLINE"):
             model_format.detect_model_format("org/some-model")
 
     def test_offline_message_points_at_model_dir_fix(self, monkeypatch):
