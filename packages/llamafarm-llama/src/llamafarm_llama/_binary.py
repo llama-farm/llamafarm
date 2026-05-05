@@ -421,13 +421,41 @@ def _bundled_platform_slug() -> str:
 
 
 def _bundled_binary_path() -> Path:
-    """Return the packaged bundled binary path for the current host."""
-    return (
-        Path(__file__).parent
-        / "_bundled"
-        / _bundled_platform_slug()
-        / _get_lib_name_for_system(platform.system().lower())
-    )
+    """Return the packaged bundled binary path for the current host.
+
+    Returns a path that .exists() only when both the main library AND the
+    runtime-essential ggml dependencies (libggml-base, libggml-cpu, libggml)
+    are co-located. An incomplete bundle would cause libllama to load but
+    its dependencies to fail at backend registration time, leaving the
+    runtime in a broken state that's expensive to debug. By treating
+    incomplete bundles as absent, get_lib_path falls through to the cache
+    and download path — preserving pre-PR behavior whenever the shipped
+    bundle is missing a required dep.
+    """
+    bundled_dir = Path(__file__).parent / "_bundled" / _bundled_platform_slug()
+    system = platform.system().lower()
+    main_lib = bundled_dir / _get_lib_name_for_system(system)
+
+    if not main_lib.exists():
+        return main_lib
+
+    # macOS dylibs and Windows DLLs typically don't need a separate dep check
+    # at this layer (Mach-O has install_name + rpath; Windows DLL search is
+    # handled in _bindings.py). Linux is where missing ggml deps silently
+    # break backend registration, so gate strictly there.
+    if system == "linux":
+        required_globs = (
+            "libggml-base.so*",
+            "libggml-cpu.so*",
+            "libggml.so*",
+        )
+        for pattern in required_globs:
+            if not list(bundled_dir.glob(pattern)):
+                # Return a path inside the bundled dir that will not exist,
+                # so callers see .exists() == False and fall through.
+                return bundled_dir / "__incomplete_bundle__"
+
+    return main_lib
 
 
 def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
