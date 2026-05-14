@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.33](https://github.com/llama-farm/llamafarm/compare/v0.0.32...v0.0.33) (2026-05-14)
+
+
+### Features
+
+* **cli,runtime:** bundle llama.cpp binaries in release artifacts ([#829](https://github.com/llama-farm/llamafarm/issues/829)) ([17c4a26](https://github.com/llama-farm/llamafarm/commit/17c4a2632b5e79f9dcc87b6457b8e26701f72811))
+* **cli:** wire Linux x86_64 CUDA artifacts in llamabinary resolver ([c5fe799](https://github.com/llama-farm/llamafarm/commit/c5fe79932812572af85d50b3cc533cfcbc260604))
+* **runtime:** build and host Linux x86_64 CUDA llama.cpp binaries ([091c637](https://github.com/llama-farm/llamafarm/commit/091c637e03b3820e31465dd26bba34eb1a7c78ec))
+* **runtime:** build and host Linux x86_64 CUDA llama.cpp binaries ([#834](https://github.com/llama-farm/llamafarm/issues/834)) ([c4d0d56](https://github.com/llama-farm/llamafarm/commit/c4d0d5604341bbb263ba00affdd733f4da12dbaf))
+
+
+### Bug Fixes
+
+* **ci:** use pinned CUDA 13.0.2 devel image tag ([ee5e9ae](https://github.com/llama-farm/llamafarm/commit/ee5e9ae70eaa8a78c8ef6ae1ed75d0a918778177))
+* **common:** guard detect_model_format HF fallback in offline mode ([#831](https://github.com/llama-farm/llamafarm/issues/831)) ([aa39031](https://github.com/llama-farm/llamafarm/commit/aa39031728a2b7ad05ce8c6e54fe494b20f38ccb))
+* **edge:** surface backend-init state on local/llm/status ([#830](https://github.com/llama-farm/llamafarm/issues/830)) ([c697ff8](https://github.com/llama-farm/llamafarm/commit/c697ff85887d3c72ef214e8820b2c6eee3fbbfd9))
+* **rag:** filter empty chunks before embedding to prevent ingestion f… ([#835](https://github.com/llama-farm/llamafarm/issues/835)) ([cb72dd4](https://github.com/llama-farm/llamafarm/commit/cb72dd4d0bfd4ea8914fcca495106bd6e9aab78a))
+* **runtime,cli:** forward-fall-back cuda13 to cuda12 when no cuda13 artifact ([09b0835](https://github.com/llama-farm/llamafarm/commit/09b0835fd764c7b7b76705a47d6fe4cdc76d3c87))
+* **runtime:** address PR review feedback for CUDA binary support ([98304f0](https://github.com/llama-farm/llamafarm/commit/98304f00b8e39d787b6bd3fb03d14f4bddad35b3))
+* **runtime:** pick a LlamaFarm release that actually ships the wanted asset ([ef05083](https://github.com/llama-farm/llamafarm/commit/ef050839ae1186e56bc80b3c521eabd638e03ea1))
+
+
+### Miscellaneous Chores
+
+* release 0.0.33 ([943d803](https://github.com/llama-farm/llamafarm/commit/943d8036855a211d4ef0bf16971e6d0e4978d0cc))
+
 ## [0.0.32](https://github.com/llama-farm/llamafarm/compare/v0.0.31...v0.0.32) (2026-04-28)
 
 
