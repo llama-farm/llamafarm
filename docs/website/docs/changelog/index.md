@@ -7,6 +7,63 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.33</strong> — 2026-05-14</summary>
+<think>
+
+</think>
+
+**Release 0.0.33: Smarter, Faster, and More Reliable LlamaFarm**
+
+This release brings a suite of improvements designed to make LlamaFarm more intuitive, efficient, and dependable for users. Whether you're running local models or managing complex workflows, you'll find new features and better support for your needs.
+
+---
+
+### **New Features & Improvements**
+
+We've made significant strides in making LlamaFarm more user-friendly and robust, especially when it comes to handling GPU-accelerated workloads.
+
+#### **Easier Access to CUDA Binaries**
+Users can now easily access pre-built Linux x86_64 CUDA binaries through the `llamabinary` resolver. This means that if you're working with CUDA-enabled hardware, you’ll have direct access to optimized binaries without having to build them from source. This is particularly helpful for users who need high-performance inference on NVIDIA GPUs.
+
+Additionally, we've bundled llama.cpp binaries into our release artifacts, so you don't have to worry about downloading or managing them separately. This makes setup faster and less error-prone—perfect for both developers and administrators.
+
+---
+
+### **Better Support for GPU Workflows**
+
+For those using CUDA, we’ve made some important changes to ensure compatibility and performance:
+
+- We now use a pinned version of CUDA 13.0.2 in our CI pipelines, ensuring consistent behavior across builds.
+- The system will automatically fall back to CUDA 12 if no CUDA 13 artifacts are available, reducing potential compatibility issues.
+- Our internal tools have been updated to handle CUDA binary support more gracefully, improving reliability during model loading and inference.
+
+These updates mean you can focus more on your work and less on troubleshooting.
+
+---
+
+### **More Stable and Predictable Behavior**
+
+We've also improved the stability and predictability of LlamaFarm's operations, which is especially valuable for long-running workflows or automated systems.
+
+- A critical bug has been fixed where the model format detection would fail in offline mode. This ensures that your models load correctly even when the network is unavailable.
+- We've added visibility into the state of backend initialization, giving you clearer feedback when starting up your LLM services.
+- Empty chunks are now filtered out before embedding, preventing unnecessary data ingestion and improving efficiency in document processing workflows like RAG (Retrieval-Augmented Generation).
+
+---
+
+### **Simpler Release Management**
+
+Finally, this release includes a streamlined release process, making it easier for users to manage versions and dependencies. We've also improved how LlamaFarm selects the right release version for your specific needs, ensuring that you always get the correct assets for your environment.
+
+---
+
+Whether you're building applications, managing infrastructure, or just experimenting with large language models, this release has something to offer. We’re excited to see what you'll do with these improvements, and we’d love to hear your feedback as we continue to evolve LlamaFarm.
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.33)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.32</strong> — 2026-04-28</summary>
 
 **Reliability and Observability**
