@@ -209,3 +209,107 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: llama.cpp/${{ steps.artifact.outputs.name }}
+
+  build-llama-cpp-cuda-arm64:
+    name: Build llama.cpp (arm64-${{ matrix.cuda.backend }})
+    runs-on: ubuntu-24.04-arm
+    container: ${{ matrix.cuda.image }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda:
+          - backend: cuda12
+            image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+          - backend: cuda13
+            image: nvidia/cuda:13.1.2-devel-ubuntu24.04
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake git ca-certificates curl zip
+          # GitHub runners have no NVIDIA driver, so libcuda.so.1 (the runtime
+          # driver lib) is absent. NVIDIA's CUDA devel image ships a stub at
+          # /usr/local/cuda/lib64/stubs/libcuda.so for build-time linking, but
+          # the file is unversioned while libggml-cuda.so declares a SONAME of
+          # libcuda.so.1 — so ld -rpath-link can't satisfy the NEEDED entry by
+          # filename. Symlink the versioned name to the stub so the executables
+          # can link cleanly.
+          ln -sf /usr/local/cuda/lib64/stubs/libcuda.so \
+                 /usr/local/cuda/lib64/stubs/libcuda.so.1
+
+      - name: Checkout LlamaFarm (for version file)
+        uses: actions/checkout@v6
+        with:
+          path: llamafarm
+          sparse-checkout: |
+            llama-cpp-version.txt
+
+      - name: Determine llama.cpp version
+        id: version
+        run: |
+          if [ -n "${{ inputs.llama_version }}" ]; then
+            echo "version=${{ inputs.llama_version }}" >> $GITHUB_OUTPUT
+            echo "Using input version: ${{ inputs.llama_version }}"
+          else
+            VERSION=$(cat llamafarm/llama-cpp-version.txt | tr -d '\n')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from llama-cpp-version.txt: $VERSION"
+          fi
+
+      - name: Checkout llama.cpp
+        uses: actions/checkout@v6
+        with:
+          repository: ggml-org/llama.cpp
+          ref: ${{ steps.version.outputs.version }}
+          path: llama.cpp
+
+      - name: Configure CMake
+        run: |
+          cd llama.cpp
+          STUB_LDFLAGS="-Wl,-rpath-link,/usr/local/cuda/lib64/stubs -L/usr/local/cuda/lib64/stubs"
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_CURL=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_CUDA=ON \
+            -DCMAKE_EXE_LINKER_FLAGS="$STUB_LDFLAGS" \
+            -DCMAKE_SHARED_LINKER_FLAGS="$STUB_LDFLAGS"
+
+      - name: Build
+        run: |
+          cd llama.cpp
+          cmake --build build --config Release -j $(nproc)
+
+      - name: Prepare Artifact
+        id: artifact
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT_NAME="llama-${VERSION}-bin-linux-${{ matrix.cuda.backend }}-arm64.zip"
+          echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
+          cd llama.cpp
+          mkdir -p dist/bin
+          cp build/bin/libllama.so dist/bin/
+          # Copy dependencies (libggml.so, libggml-cuda.so, etc.) if they exist
+          find build/bin -name "*.so*" -not -name "libllama.so" -exec cp {} dist/bin/ \;
+
+          cd dist
+          zip -r ../$ARTIFACT_NAME .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: llama.cpp/${{ steps.artifact.outputs.name }}
+
+      - name: Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: llama.cpp/${{ steps.artifact.outputs.name }}

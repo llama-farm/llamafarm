@@ -171,6 +171,24 @@ class TestBinaryManifest:
         assert "cuda13-x86_64.zip" in entry["artifact"]
         assert entry["lib"] == "libllama.so"
 
+    def test_manifest_has_linux_arm64_cuda12(self):
+        """Manifest should have Linux ARM64 CUDA 12 build (LlamaFarm provided)."""
+        from llamafarm_llama._binary import BINARY_MANIFEST
+
+        entry = BINARY_MANIFEST[("linux", "arm64", "cuda12")]
+        assert "{llamafarm_version}" in entry["artifact"]
+        assert "cuda12-arm64.zip" in entry["artifact"]
+        assert entry["lib"] == "libllama.so"
+
+    def test_manifest_has_linux_arm64_cuda13(self):
+        """Manifest should have Linux ARM64 CUDA 13 build (LlamaFarm provided)."""
+        from llamafarm_llama._binary import BINARY_MANIFEST
+
+        entry = BINARY_MANIFEST[("linux", "arm64", "cuda13")]
+        assert "{llamafarm_version}" in entry["artifact"]
+        assert "cuda13-arm64.zip" in entry["artifact"]
+        assert entry["lib"] == "libllama.so"
+
 
 class TestLlamafarmReleaseVersionSelection:
     """`_get_llamafarm_release_version()` must skip releases that lack the

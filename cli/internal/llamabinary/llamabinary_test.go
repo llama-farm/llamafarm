@@ -131,6 +131,45 @@ func TestSpecFor_LinuxAmd64Cuda13UsesLlamaFarmHost(t *testing.T) {
 	}
 }
 
+func TestSpecFor_LinuxArm64Cuda12UsesLlamaFarmHost(t *testing.T) {
+	spec, err := SpecFor(Target{OS: "linux", Arch: "arm64", Accelerator: "cuda12"}, "b8816")
+	if err != nil {
+		t.Fatalf("SpecFor: %v", err)
+	}
+	if !strings.Contains(spec.URL, "llama-farm/llamafarm") {
+		t.Errorf("expected llama-farm host, got %s", spec.URL)
+	}
+	if !strings.Contains(spec.URL, "bin-linux-cuda12-arm64.zip") {
+		t.Errorf("unexpected artifact in URL: %s", spec.URL)
+	}
+	if spec.LibName != "libllama.so" {
+		t.Errorf("expected libllama.so, got %s", spec.LibName)
+	}
+}
+
+func TestSpecFor_LinuxArm64Cuda13UsesLlamaFarmHost(t *testing.T) {
+	spec, err := SpecFor(Target{OS: "linux", Arch: "arm64", Accelerator: "cuda13"}, "b8816")
+	if err != nil {
+		t.Fatalf("SpecFor: %v", err)
+	}
+	if !strings.Contains(spec.URL, "llama-farm/llamafarm") {
+		t.Errorf("expected llama-farm host, got %s", spec.URL)
+	}
+	if !strings.Contains(spec.URL, "bin-linux-cuda13-arm64.zip") {
+		t.Errorf("unexpected artifact in URL: %s", spec.URL)
+	}
+}
+
+func TestSpecFor_LinuxArm64BareCudaDefaultsToCuda12(t *testing.T) {
+	spec, err := SpecFor(Target{OS: "linux", Arch: "arm64", Accelerator: "cuda"}, "b8816")
+	if err != nil {
+		t.Fatalf("SpecFor: %v", err)
+	}
+	if !strings.Contains(spec.URL, "bin-linux-cuda12-arm64.zip") {
+		t.Errorf("expected bare cuda to default to cuda12 artifact, got %s", spec.URL)
+	}
+}
+
 func TestSpecFor_LinuxAmd64BareCudaDefaultsToCuda12(t *testing.T) {
 	// Bare "cuda" must NOT silently fall back to Vulkan now that LlamaFarm
 	// publishes Linux x86_64 CUDA binaries. It defaults to cuda12 because that

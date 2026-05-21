@@ -225,6 +225,22 @@ func SpecFor(t Target, version string) (Spec, error) {
 			LibPath: libName,
 			LibName: libName,
 		}, nil
+	case t.OS == "linux" && t.Arch == "arm64" && (t.Accelerator == "cuda" || t.Accelerator == "cuda12" || t.Accelerator == "cuda13"):
+		// LlamaFarm hosts Linux ARM64 CUDA builds via build-llama.yml.
+		// Bare "cuda" defaults to cuda12 for broader driver compatibility.
+		major := "cuda12"
+		if t.Accelerator == "cuda13" {
+			major = "cuda13"
+		}
+		lfVersion := llamafarmReleaseVersion()
+		return Spec{
+			URL: fmt.Sprintf(
+				"https://github.com/llama-farm/llamafarm/releases/download/%s/llama-%s-bin-linux-%s-arm64.zip",
+				lfVersion, version, major,
+			),
+			LibPath: libName,
+			LibName: libName,
+		}, nil
 	case t.OS == "windows" && t.Arch == "amd64" && t.Accelerator == "cpu":
 		return Spec{
 			URL:     urlBase(fmt.Sprintf("llama-%s-bin-win-cpu-x64.zip", version)),

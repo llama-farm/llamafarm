@@ -137,6 +137,23 @@ BINARY_MANIFEST: dict[tuple[str, str, str], dict] = {
         "lib": "libllama.so",
         "sha256": None,
     },
+    # Linux ARM64 CUDA (LlamaFarm provided)
+    ("linux", "arm64", "cuda12"): {
+        "artifact": (
+            "https://github.com/llama-farm/llamafarm/releases/download/"
+            "{llamafarm_version}/llama-{version}-bin-linux-cuda12-arm64.zip"
+        ),
+        "lib": "libllama.so",
+        "sha256": None,
+    },
+    ("linux", "arm64", "cuda13"): {
+        "artifact": (
+            "https://github.com/llama-farm/llamafarm/releases/download/"
+            "{llamafarm_version}/llama-{version}-bin-linux-cuda13-arm64.zip"
+        ),
+        "lib": "libllama.so",
+        "sha256": None,
+    },
     # Linux x86_64 CUDA (LlamaFarm provided - upstream stopped shipping these
     # for Linux as of b7694; CUDA is split by major version because llama.cpp
     # binaries are linked against a specific CUDA major).
