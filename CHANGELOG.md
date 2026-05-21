@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.34](https://github.com/llama-farm/llamafarm/compare/v0.0.33...v0.0.34) (2026-05-21)
+
+
+### Features
+
+* **ci:** add Linux ARM64 CUDA build profiles ([#837](https://github.com/llama-farm/llamafarm/issues/837)) ([571c4ef](https://github.com/llama-farm/llamafarm/commit/571c4ef960a2ac32f8096a05bdd9d622e70bf2e5))
+
+
+### Miscellaneous Chores
+
+* release 0.0.34 ([35a27c6](https://github.com/llama-farm/llamafarm/commit/35a27c6445e9700ff47c59d37f600f0dd9ffe508))
+
 ## [0.0.33](https://github.com/llama-farm/llamafarm/compare/v0.0.32...v0.0.33) (2026-05-14)
 
 
