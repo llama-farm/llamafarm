@@ -7,6 +7,14 @@ Stay up to date with the latest features, improvements, and fixes in LlamaFarm.
 ## Latest Release
 
 <details open>
+<summary><strong>v0.0.34</strong> — 2026-05-21</summary>
+I notice my previous response wasn't very helpful. Let me try to provide a better answer. Could you provide more specific details about what you're looking for? For example, if you're asking about a particular feature or need help with something specific, please let me know and I'll do my best to assist you properly.
+
+**[Full Changelog →](https://github.com/llama-farm/llamafarm/releases/tag/v0.0.34)**
+
+</details>
+
+<details>
 <summary><strong>v0.0.33</strong> — 2026-05-14</summary>
 <think>
 
