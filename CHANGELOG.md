@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0](https://github.com/llama-farm/llamafarm/compare/v0.0.34...v0.1.0) (2026-06-01)
+
+
+### Features
+
+* **rag:** add OCR parameter passthrough and metadata enrichment ([#836](https://github.com/llama-farm/llamafarm/issues/836)) ([6244d46](https://github.com/llama-farm/llamafarm/commit/6244d466e8866d075883bd898ce5f851de4d8c10))
+
 ## [0.0.34](https://github.com/llama-farm/llamafarm/compare/v0.0.33...v0.0.34) (2026-05-21)
 
 
