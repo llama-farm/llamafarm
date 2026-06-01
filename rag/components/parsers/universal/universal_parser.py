@@ -62,9 +62,7 @@ class UniversalParser(BaseParser):
     - Graceful degradation when dependencies unavailable
     """
 
-    def __init__(
-        self, name: str | None = None, config: dict[str, Any] | None = None
-    ):
+    def __init__(self, name: str | None = None, config: dict[str, Any] | None = None):
         """Initialize the UniversalParser.
 
         Args:
@@ -92,6 +90,9 @@ class UniversalParser(BaseParser):
         self.ocr_endpoint = self.config.get(
             "ocr_endpoint", "http://127.0.0.1:14345/v1/vision/ocr"
         )
+        self.ocr_model = self.config.get("ocr_model")
+        self.ocr_languages = self.config.get("ocr_languages")
+        self.return_boxes = self.config.get("return_boxes", False)
         self.extract_metadata = self.config.get("extract_metadata", True)
         self.min_chunk_size = self.config.get("min_chunk_size", 50)
         self.max_chunk_size = self.config.get("max_chunk_size", 8000)
@@ -205,10 +206,17 @@ class UniversalParser(BaseParser):
             and self.use_ocr
             and self._needs_ocr(file_path, text)
         ):
-            ocr_text = self._run_remote_ocr(str(file_path))
-            if ocr_text and len(ocr_text) > len(text or ""):
-                text = ocr_text
+            ocr_result = self._run_remote_ocr(str(file_path))
+            if ocr_result and len(ocr_result["text"]) > len(text or ""):
+                text = ocr_result["text"]
                 doc_metadata["ocr_applied"] = True
+                doc_metadata["source_type"] = "image"
+                if ocr_result.get("ocr_model"):
+                    doc_metadata["ocr_model"] = ocr_result["ocr_model"]
+                if ocr_result.get("ocr_languages"):
+                    doc_metadata["ocr_languages"] = ocr_result["ocr_languages"]
+                if ocr_result.get("ocr_confidence") is not None:
+                    doc_metadata["ocr_confidence"] = ocr_result["ocr_confidence"]
                 self.logger.info("OCR applied", file_path=str(file_path))
 
         if not text or len(text.strip()) < self.min_chunk_size:
@@ -297,9 +305,7 @@ class UniversalParser(BaseParser):
                 with open(file_path, encoding=encoding, errors="ignore") as f:
                     return f.read(), metadata
             except Exception as e:
-                self.logger.error(
-                    f"Failed to read file: {e}", file_path=str(file_path)
-                )
+                self.logger.error(f"Failed to read file: {e}", file_path=str(file_path))
                 return "", metadata
 
         try:
@@ -444,10 +450,7 @@ class UniversalParser(BaseParser):
                 continue
 
             # Check if adding this paragraph exceeds chunk size
-            if (
-                len(current_chunk) + len(para) + 2 > self.chunk_size
-                and current_chunk
-            ):
+            if len(current_chunk) + len(para) + 2 > self.chunk_size and current_chunk:
                 if len(current_chunk) >= self.min_chunk_size:
                     chunks.append(current_chunk)
                 current_chunk = para
@@ -615,36 +618,44 @@ class UniversalParser(BaseParser):
         text_len = len((text or "").strip())
         return text_len < 50
 
-    def _run_remote_ocr(self, file_path: str) -> str | None:
+    def _run_remote_ocr(self, file_path: str) -> dict | None:
         """Run OCR via Universal Runtime endpoint.
 
         Args:
             file_path: Path to the file
 
         Returns:
-            OCR text or None if failed
+            Dict with OCR results or None if failed
         """
         try:
-            import base64
-
             import requests
 
-            # Read file and encode as base64
-            with open(file_path, "rb") as f:
-                file_data = base64.b64encode(f.read()).decode("utf-8")
+            with open(file_path, "rb") as fh:
+                files = {"file": (Path(file_path).name, fh)}
+                data = {}
+                if self.ocr_model:
+                    data["model"] = self.ocr_model
+                if self.ocr_languages:
+                    data["languages"] = ",".join(self.ocr_languages)
+                if self.return_boxes:
+                    data["return_boxes"] = "true"
 
-            response = requests.post(
-                self.ocr_endpoint,
-                json={
-                    "image": file_data,
-                    "filename": Path(file_path).name,
-                },
-                timeout=60,
-            )
+                response = requests.post(
+                    self.ocr_endpoint,
+                    files=files,
+                    data=data,
+                    timeout=60,
+                )
 
             if response.ok:
-                result = response.json()
-                return result.get("text", "")
+                payload = response.json()
+                item = (payload.get("data") or [{}])[0]
+                return {
+                    "text": item.get("text", ""),
+                    "ocr_model": payload.get("model"),
+                    "ocr_languages": self.ocr_languages,
+                    "ocr_confidence": item.get("confidence"),
+                }
 
         except Exception as e:
             self.logger.warning(f"OCR request failed: {e}")

@@ -90,6 +90,9 @@ parsers:
       chunk_strategy: semantic  # semantic, sections, paragraphs, sentences, characters
       use_ocr: true
       ocr_endpoint: "http://127.0.0.1:14345/v1/vision/ocr"
+      ocr_model: null
+      ocr_languages: null
+      return_boxes: false
       extract_metadata: true
       min_chunk_size: 50
       max_chunk_size: 8000

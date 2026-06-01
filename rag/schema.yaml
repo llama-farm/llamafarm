@@ -776,6 +776,22 @@ definitions:
           type: string
           default: "http://127.0.0.1:14345/v1/vision/ocr"
           description: LlamaFarm API OCR endpoint URL
+        ocr_model:
+          type: string
+          description: OCR model to use at the endpoint (e.g. "mistral-ocr-latest")
+        ocr_languages:
+          type: array
+          items:
+            type: string
+          description: >
+            List of language codes to hint to the OCR engine
+            (e.g. ["en", "fr"]). Leave unset to use endpoint defaults.
+        return_boxes:
+          type: boolean
+          default: false
+          description: >
+            Whether to request bounding box data alongside extracted text.
+            Stored in chunk metadata when available.
         extract_metadata:
           type: boolean
           default: true
