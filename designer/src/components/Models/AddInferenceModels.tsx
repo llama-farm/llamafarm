@@ -115,9 +115,32 @@ function AddInferenceModels() {
         const runtimeModels = currentConfig.runtime?.models || []
 
         const modelId = m.modelIdentifier || m.name
-        const provider = modelId.includes('/') ? 'universal' : 'ollama'
-        const baseUrl =
-          provider === 'universal' ? undefined : 'http://localhost:11434'
+
+        // Determine provider: cloud models carry a provider string from CloudModelsForm
+        const cloudProviderMap: Record<string, string> = {
+          MiniMax: 'minimax',
+          OpenAI: 'openai',
+          Anthropic: 'openai',
+          Google: 'openai',
+          Cohere: 'openai',
+          Mistral: 'openai',
+          'Azure OpenAI': 'openai',
+          Groq: 'openai',
+          Together: 'openai',
+          'AWS Bedrock': 'openai',
+          'Ollama (remote)': 'ollama',
+        }
+        const isCloudModel = m.provider && m.provider in cloudProviderMap
+        const provider = isCloudModel
+          ? cloudProviderMap[m.provider!]
+          : modelId.includes('/')
+            ? 'universal'
+            : 'ollama'
+        const baseUrl = isCloudModel
+          ? m.baseUrl || undefined
+          : provider === 'universal'
+            ? undefined
+            : 'http://localhost:11434'
 
         const newModel = {
           name: m.name,
@@ -125,6 +148,7 @@ function AddInferenceModels() {
           provider,
           model: modelId,
           ...(baseUrl && { base_url: baseUrl }),
+          ...(isCloudModel && m.apiKey && { api_key: m.apiKey }),
           prompt_format: 'unstructured',
           provider_config: {},
           prompts: promptSets && promptSets.length > 0 ? promptSets : ['default'],

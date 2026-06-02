@@ -119,7 +119,7 @@ properties:
               description: Human-readable description of this model configuration
             provider:
               type: string
-              enum: [openai, ollama, lemonade, universal]
+              enum: [openai, ollama, lemonade, universal, minimax]
               description: Runtime provider for this model
             model:
               type: string

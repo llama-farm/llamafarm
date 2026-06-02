@@ -2,6 +2,7 @@ from config.datamodel import Model, Provider
 
 from .providers.base import RuntimeProvider
 from .providers.lemonade_provider import LemonadeProvider
+from .providers.minimax_provider import MiniMaxProvider
 from .providers.ollama_provider import OllamaProvider
 from .providers.openai_provider import OpenAIProvider
 from .providers.universal_provider import UniversalProvider
@@ -35,6 +36,8 @@ class RuntimeService:
                 return LemonadeProvider(model_config=model_config)
             case Provider.universal:
                 return UniversalProvider(model_config=model_config)
+            case Provider.minimax:
+                return MiniMaxProvider(model_config=model_config)
 
 
 runtime_service = RuntimeService()
