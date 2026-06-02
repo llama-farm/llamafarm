@@ -1,6 +1,6 @@
 ---
 name: react-skills
-description: React 18 patterns for LlamaFarm Designer. Covers components, hooks, TanStack Query, and testing.
+description: Creates React 18 components, implements TanStack Query hooks, and applies testing patterns for LlamaFarm Designer. Use when building UI components, adding data fetching, or writing component tests in designer/.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---

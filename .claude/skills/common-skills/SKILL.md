@@ -1,6 +1,6 @@
 ---
 name: common-skills
-description: Best practices for the Common utilities package in LlamaFarm. Covers HuggingFace Hub integration, GGUF model management, and shared utilities.
+description: Guides downloading HuggingFace models, selecting GGUF quantizations, and managing shared Python utilities in LlamaFarm common/. Use when working on model file utilities, Hub integration, or PID file management.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---
@@ -18,12 +18,29 @@ Best practices and code review checklists for the `common/` package - shared Pyt
 | Python | 3.10+ |
 | Key Dependencies | huggingface_hub, hf-transfer |
 
-## Purpose
+## Key Usage Patterns
 
-The `common/` package provides shared functionality that needs to be consistent across multiple Python services:
-- Model file utilities (GGUF selection, quantization parsing)
-- HuggingFace Hub integration (listing, downloading)
-- Process management (PID files)
+### Download and Select a GGUF Model
+
+```python
+from llamafarm_common import get_gguf_file_path, select_gguf_file
+
+# Download best available quantization
+path = get_gguf_file_path("TheBloke/Llama-2-7B-GGUF", preferred_quant="Q4_K_M")
+
+# Select from a list of available files
+files = list_gguf_files("TheBloke/Llama-2-7B-GGUF")
+best = select_gguf_file(files, preferred_quant="Q4_K_M")
+```
+
+### Parse Model Identifiers
+
+```python
+from llamafarm_common import parse_model_with_quantization
+
+model_id, quant = parse_model_with_quantization("TheBloke/Llama-2-7B-GGUF:Q4_K_M")
+# model_id = "TheBloke/Llama-2-7B-GGUF", quant = "Q4_K_M"
+```
 
 ## Shared Python Skills
 

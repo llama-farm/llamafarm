@@ -1,6 +1,6 @@
 ---
 name: generate-subsystem-skills
-description: Generate specialized skills for each subsystem in the monorepo. Creates shared language skills and subsystem-specific checklists for high-quality AI code generation.
+description: Generates SKILL.md files and checklists for each LlamaFarm monorepo subsystem. Use when bootstrapping skills for new subsystems, regenerating skills after architecture changes, or creating language-specific coding guidelines.
 allowed-tools: Read, Grep, Glob, Write, Edit, Task, Bash
 ---
 
@@ -65,12 +65,19 @@ For each subsystem, the agent should:
 4. Generate framework-specific checklist files
 5. Write all files to `.claude/skills/{subsystem}-skills/`
 
-### Step 4: Report Summary
+### Step 4: Validate Generated Skills
 
-After all agents complete, report:
+After all agents complete, verify:
+- Each `.claude/skills/{name}/SKILL.md` has valid YAML frontmatter with `name` and `description`
+- All referenced files (e.g., `patterns.md`, `testing.md`) exist in the skill directory
+- No duplicate skills were created
+
+### Step 5: Report Summary
+
+Report:
 - Number of skills generated
 - Total files created
-- Any errors encountered
+- Any validation errors or missing references
 
 ---
 

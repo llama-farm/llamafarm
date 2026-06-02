@@ -1,6 +1,6 @@
 ---
 name: electron-skills
-description: Electron patterns for LlamaFarm Desktop. Covers main/renderer processes, IPC, security, and packaging.
+description: Implements secure IPC handlers, configures context isolation, and manages main/renderer communication for LlamaFarm Desktop. Use when building desktop features, debugging IPC, or packaging the Electron app.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---

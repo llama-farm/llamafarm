@@ -1,6 +1,6 @@
 ---
 name: rag-skills
-description: RAG-specific best practices for LlamaIndex, ChromaDB, and Celery workers. Covers ingestion, retrieval, embeddings, and performance.
+description: Configures LlamaIndex document parsing, manages ChromaDB vector stores, and implements Celery ingestion workers for LlamaFarm RAG. Use when building retrieval pipelines, tuning embeddings, or working on rag/ code.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---

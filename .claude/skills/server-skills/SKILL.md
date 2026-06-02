@@ -1,6 +1,6 @@
 ---
 name: server-skills
-description: Server-specific best practices for FastAPI, Celery, and Pydantic. Extends python-skills with framework-specific patterns.
+description: Creates FastAPI endpoints, configures Celery tasks, and validates with Pydantic v2 for LlamaFarm Server. Use when building API routes, adding background tasks, or reviewing server/ code.
 allowed-tools: Read, Grep, Glob, Bash
 user-invocable: false
 ---

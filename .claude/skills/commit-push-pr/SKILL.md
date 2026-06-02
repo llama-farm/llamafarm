@@ -1,6 +1,6 @@
 ---
 name: commit-push-pr
-description: Commit changes, push to GitHub, and open a PR. Includes quality checks (security, patterns, simplification). Use --quick to skip checks.
+description: Commits staged changes, pushes to GitHub, and opens a pull request with quality checks for security and patterns. Use when ready to submit code, create a PR, or push changes. Use --quick to skip checks.
 allowed-tools: Bash, Read, Write, Edit, Grep, Glob, AskUserQuestion
 ---
 

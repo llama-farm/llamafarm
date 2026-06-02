@@ -1,6 +1,6 @@
 ---
 name: fix-ci
-description: Fetch GitHub CI failure information, analyze root causes, reproduce locally, and propose a fix plan. Use `/fix-ci` for current branch or `/fix-ci <run-id>` for a specific run.
+description: Fetch GitHub CI failure logs, analyze root causes, reproduce locally, and propose a fix plan. Use when CI fails on the current branch or a specific run needs debugging. Invoke with /fix-ci or /fix-ci [run-id].
 allowed-tools: Bash, Read, Grep, Glob, Task, AskUserQuestion, EnterPlanMode
 ---
 

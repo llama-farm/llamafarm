@@ -1,6 +1,6 @@
 ---
 name: go-skills
-description: Shared Go best practices for LlamaFarm CLI. Covers idiomatic patterns, error handling, and testing.
+description: Enforces idiomatic Go patterns, structured error handling, and table-driven testing for LlamaFarm CLI. Use when writing or reviewing Go code in cli/, implementing Cobra commands, or debugging concurrency issues.
 allowed-tools: Read, Grep, Glob
 user-invocable: false
 ---
