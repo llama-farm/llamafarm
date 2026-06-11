@@ -3,6 +3,7 @@ from config.datamodel import Model, Provider
 from .providers.base import RuntimeProvider
 from .providers.lemonade_provider import LemonadeProvider
 from .providers.ollama_provider import OllamaProvider
+from .providers.litellm_provider import LiteLLMProvider
 from .providers.openai_provider import OpenAIProvider
 from .providers.universal_provider import UniversalProvider
 
@@ -35,6 +36,8 @@ class RuntimeService:
                 return LemonadeProvider(model_config=model_config)
             case Provider.universal:
                 return UniversalProvider(model_config=model_config)
+            case Provider.litellm:
+                return LiteLLMProvider(model_config=model_config)
 
 
 runtime_service = RuntimeService()
