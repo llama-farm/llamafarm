@@ -1192,7 +1192,7 @@ class PromptTokensDetails(BaseModel):
 
 
 # Enum: Provider
-Provider = Literal['openai', 'ollama', 'lemonade', 'universal']
+Provider = Literal['openai', 'ollama', 'lemonade', 'universal', 'litellm']
 
 class QueryResponse(BaseModel):
     """RAG query response model."""
