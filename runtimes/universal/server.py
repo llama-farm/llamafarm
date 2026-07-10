@@ -117,7 +117,6 @@ from routers.health import (
 )
 from routers.nlp import router as nlp_router
 from routers.nlp import set_encoder_loader
-from routers.polars import router as polars_router
 from routers.vision import (
     router as vision_router,
 )
@@ -146,6 +145,12 @@ from utils.model_cache import ModelCache
 from utils.model_format import detect_model_format
 from utils.safe_home import get_data_dir
 from vision_training.trainer import set_trainer_model_loader
+
+# Conditional import for polars addon (requires polars package)
+# polars_buffer imports polars at module level, so the router import fails without it.
+_HAS_POLARS = importlib.util.find_spec("polars") is not None
+if _HAS_POLARS:
+    from routers.polars import router as polars_router
 
 # Conditional import for timeseries addon (requires darts package)
 _HAS_TIMESERIES = importlib.util.find_spec("darts") is not None
@@ -327,6 +332,26 @@ async def lifespan(app: FastAPI):
     _offline_mode_bootstrap.log_startup_mode()
 
     # Log addon availability
+    if _HAS_POLARS:
+        logger.info("Anomaly streaming addon available (polars installed)")
+    else:
+        logger.info("Anomaly streaming addon unavailable (polars not installed) — install with: lf addons install anomaly")
+
+    if importlib.util.find_spec("pyod") is not None:
+        logger.info("Anomaly detection addon available (pyod installed)")
+    else:
+        logger.info("Anomaly detection addon unavailable (pyod not installed) — install with: lf addons install anomaly")
+
+    if importlib.util.find_spec("setfit") is not None:
+        logger.info("Classification addon available (setfit installed)")
+    else:
+        logger.info("Classification addon unavailable (setfit not installed) — install with: lf addons install classification")
+
+    if importlib.util.find_spec("surya") is not None or importlib.util.find_spec("easyocr") is not None:
+        logger.info("OCR addon available")
+    else:
+        logger.info("OCR addon unavailable (surya/easyocr not installed) — install with: lf addons install ocr")
+
     if _HAS_TIMESERIES:
         logger.info("Timeseries addon available (darts installed)")
     else:
@@ -451,7 +476,8 @@ app.include_router(classifier_router)
 app.include_router(files_router)
 app.include_router(health_router)
 app.include_router(nlp_router)
-app.include_router(polars_router)
+if _HAS_POLARS:
+    app.include_router(polars_router)
 app.include_router(vision_router)
 
 # Conditional addon routers

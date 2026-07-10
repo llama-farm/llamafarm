@@ -1,0 +1,20 @@
+# Text Classification Addon
+#
+# Provides few-shot text classification using SetFit (Sentence Transformer Fine-tuning).
+# Enables training high-quality classifiers from as few as 8 labeled examples per class.
+# Also powers the /v1/classify and /v1/rerank NLP endpoints.
+
+name: classification
+display_name: Text Classification
+description: Few-shot text classification with SetFit and sentence-transformers
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - setfit>=1.1.0
+  - sentence-transformers>=3.0.0
+
+hardware_notes:
+  cuda: Sentence-transformer encoding is significantly faster with GPU
+  metal: MPS acceleration available via PyTorch on Apple Silicon
+  cpu: CPU works but encoding is slower for large batch classification

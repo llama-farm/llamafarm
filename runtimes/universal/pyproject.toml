@@ -23,31 +23,16 @@ dependencies = [
   "gguf>=0.17.1",
   # hf-transfer is now provided by llamafarm-common
   "pymupdf>=1.26.6", # Required for PDF file uploads
-  # Note: easyocr moved to optional [ocr-easyocr] extra to avoid forcing torch install
-  # Note: scikit-learn is in optional [anomaly] extra (installed via nx sync)
   "protobuf>=6.33.5,<7",
   "sentencepiece>=0.2.1",
   "cachetools>=6.0.0",    # TTL-based model caching
   "jinja2>=3.0.0",        # For tool-aware chat template rendering
-  # Anomaly detection
-  "scikit-learn>=1.3.0",
-  "pyod>=1.1.0",  # PyOD: 15+ outlier detection algorithms (ECOD, HBOS, KNN, etc.)
-  "numba>=0.60.0",  # Explicit pin for Python 3.12 compatibility (pyod -> numba -> llvmlite)
-  # High-performance data processing for streaming ML
-  "polars>=1.0.0",  # Fast DataFrame library for rolling windows and feature engineering
-  # Text classification (few-shot learning with SetFit)
-  "setfit>=1.1.0",
-  "sentence-transformers>=3.0.0",
-  # OCR backends
-  "surya-ocr>=0.6.0",
-  "easyocr>=1.7.0",
-  "opencv-python-headless>=4.8.0",
-  "pytesseract>=0.3.10",
-  "ultralytics>=8.4.14",
-  "lapx>=0.5.0",
-  "onnx>=1.12.0,<2.0.0",
-  "onnxslim>=0.1.85",
-  "onnxruntime>=1.23.2",
+  # Large optional ML features are installed via `lf addons install <name>`:
+  #   lf addons install anomaly      -> scikit-learn, pyod, numba, polars
+  #   lf addons install classification -> setfit, sentence-transformers
+  #   lf addons install ocr          -> surya-ocr, easyocr, opencv, pytesseract
+  #   lf addons install vision       -> ultralytics, onnx, onnxslim
+  #   lf addons install onnxruntime  -> onnxruntime
 ]
 
 [dependency-groups]
@@ -72,9 +57,22 @@ gpu = ["torch>=2.6.0"]
 #   uv pip install xformers
 # (Removed from extras to avoid lockfile conflicts with CPU-only PyTorch index)
 
-# DEPRECATED: OCR, anomaly, and classification dependencies are now in main dependencies.
-# These extras are kept for backwards compatibility but are no longer needed.
-# All ML features are available by default without installing extras.
+# Large optional ML features - install via `lf addons install <name>` or manually:
+#   uv pip install "universal-runtime[anomaly]"       # PyOD anomaly detection + streaming
+#   uv pip install "universal-runtime[classification]" # SetFit few-shot classification
+#   uv pip install "universal-runtime[ocr]"            # Surya + EasyOCR + Tesseract
+#   uv pip install "universal-runtime[vision]"         # YOLO object detection (ONNX)
+
+# Anomaly detection with PyOD (15+ algorithms) and Polars streaming windows
+anomaly = [
+  "scikit-learn>=1.3.0",
+  "pyod>=1.1.0",
+  "numba>=0.60.0",  # Required for Python 3.12+ compatibility (pyod -> numba -> llvmlite)
+  "polars>=1.0.0",  # Fast rolling windows for streaming anomaly detection
+]
+
+# Text classification with SetFit (few-shot learning, 8+ examples per class)
+classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 
 # OCR backends - install the one(s) you need
 # Usage: uv pip install "universal-runtime[ocr-surya]"
@@ -90,14 +88,16 @@ ocr = [
   "pytesseract>=0.3.10",
 ]
 
+# Vision / object detection (YOLO via Ultralytics, ONNX export)
+vision = [
+  "ultralytics>=8.4.14",
+  "lapx>=0.5.0",
+  "onnx>=1.12.0,<2.0.0",
+  "onnxslim>=0.1.85",
+]
+
 # Document understanding models
 document = ["transformers>=4.35.0", "sentencepiece>=0.1.99"]
-
-# Anomaly detection (now in main deps, kept for backwards compatibility)
-anomaly = ["scikit-learn>=1.3.0"]
-
-# Text classification (now in main deps, kept for backwards compatibility)
-classification = ["setfit>=1.1.0", "sentence-transformers>=3.0.0"]
 
 # Speech-to-text with faster-whisper
 # Usage: uv pip install "universal-runtime[speech]"

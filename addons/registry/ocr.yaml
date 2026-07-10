@@ -1,0 +1,26 @@
+# OCR Backends Addon
+#
+# Provides optical character recognition via three complementary backends:
+#   - surya: Layout-aware transformer model, best accuracy for documents
+#   - easyocr: Wide language support (80+ languages), good general-purpose OCR
+#   - tesseract: Lightweight, fast, good for clean printed text (requires system tesseract binary)
+#
+# Each backend is invoked by passing `model: "surya" | "easyocr" | "tesseract"` to the
+# /v1/ocr endpoint. Multiple backends can be active simultaneously.
+
+name: ocr
+display_name: OCR Backends
+description: Optical character recognition with Surya, EasyOCR, and Tesseract
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - surya-ocr>=0.6.0
+  - easyocr>=1.7.0
+  - opencv-python-headless>=4.8.0  # Required by EasyOCR
+  - pytesseract>=0.3.10            # Python wrapper; requires system tesseract binary
+
+hardware_notes:
+  cuda: Surya and EasyOCR benefit significantly from GPU acceleration for large documents
+  metal: Apple GPU (MPS) acceleration available for Surya inference
+  cpu: All backends work on CPU; Surya and EasyOCR are slower on large page counts
