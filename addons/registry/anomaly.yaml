@@ -1,0 +1,23 @@
+# Anomaly Detection Addon
+#
+# Provides statistical and ML-based anomaly detection via PyOD.
+# Supports 12+ backends: isolation_forest, ECOD, HBOS, KNN, local_outlier_factor,
+# one_class_svm, autoencoder, and more. Includes streaming detection with Polars
+# rolling windows.
+
+name: anomaly
+display_name: Anomaly Detection
+description: Statistical anomaly detection with PyOD (isolation forest, ECOD, HBOS, KNN, and more)
+component: universal-runtime
+version: "1.0.0"
+
+packages:
+  - scikit-learn>=1.3.0
+  - pyod>=1.1.0
+  - numba>=0.60.0  # Required by pyod for Python 3.12+ compatibility (pyod -> numba -> llvmlite)
+  - polars>=1.0.0  # High-performance rolling windows for streaming detection
+
+hardware_notes:
+  cuda: GPU-accelerated autoencoder backend available via PyOD
+  metal: CPU fallback; PyOD classical detectors (ECOD, HBOS, KNN) are CPU-only
+  cpu: All classical detectors (isolation_forest, ECOD, HBOS, KNN) run efficiently on CPU
