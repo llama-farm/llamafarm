@@ -9,7 +9,13 @@ from typing import Any
 import pytest
 
 # Import the functions we want to test
-from config import ConfigError, load_config_dict, save_config, update_config
+from config import (
+    ConfigError,
+    load_config,
+    load_config_dict,
+    save_config,
+    update_config,
+)
 from config.datamodel import LlamaFarmConfig, Version
 
 
@@ -211,6 +217,52 @@ class TestConfigWriter:
             # Verify no backup was created
             backup_files = list(Path(temp_dir).glob("llamafarm.*.yaml"))
             assert len(backup_files) == 0
+
+    def test_save_config_yaml_drops_cleared_field(self, sample_config):
+        """A field cleared to None is removed from an existing YAML file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "llamafarm.yaml"
+
+            sample_config.rag.default_database = "test_db"
+            save_config(sample_config, config_path)
+            assert load_config_dict(config_path)["rag"]["default_database"] == (
+                "test_db"
+            )
+
+            # e.g. DatabaseService.delete_database clears the default like this
+            sample_config.rag.default_database = None
+            save_config(sample_config, config_path)
+
+            assert "default_database" not in load_config_dict(config_path)["rag"]
+            assert load_config(config_path).rag.default_database is None
+
+    def test_save_config_yaml_keeps_unmodeled_keys(self, sample_config):
+        """YAML keys the model does not define are left in an existing file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "llamafarm.yaml"
+            save_config(sample_config, config_path)
+            config_path.write_text(
+                config_path.read_text() + "x-notes: keep me\n", encoding="utf-8"
+            )
+
+            save_config(sample_config, config_path)
+
+            assert load_config_dict(config_path)["x-notes"] == "keep me"
+
+    def test_save_config_yaml_keeps_aliased_schema_field(self, sample_config):
+        """`schema_` is written under its YAML name `schema` and survives a resave."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "llamafarm.yaml"
+            sample_config.schema_ = "schemas/person.py::Person"
+
+            save_config(sample_config, config_path)
+            _, saved = save_config(sample_config, config_path)
+
+            raw = load_config_dict(config_path)
+            assert raw["schema"] == "schemas/person.py::Person"
+            assert "schema_" not in raw
+            assert saved.schema_ == "schemas/person.py::Person"
+            assert load_config(config_path).schema_ == "schemas/person.py::Person"
 
     def test_update_config(self, sample_config):
         """Test updating an existing configuration."""

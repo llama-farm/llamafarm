@@ -536,7 +536,9 @@ class ProjectService:
         _ = cls.get_project(namespace, project_id)
 
         # Enforce immutable name: align to path project_id regardless of payload
-        config_dict = updated_config.model_dump(mode="json", exclude_none=True)
+        config_dict = updated_config.model_dump(
+            mode="json", exclude_none=True, by_alias=True
+        )
         config_dict["name"] = project_id
 
         # Validate by reconstructing model

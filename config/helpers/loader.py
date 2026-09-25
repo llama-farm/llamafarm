@@ -464,6 +464,7 @@ def _preserve_string_style(existing: Any, new_value: str) -> str | LiteralScalar
 def _deep_merge_preserved(
     target: CommentedMap | CommentedSeq,
     source: dict | list,
+    known: dict | None = None,
 ) -> CommentedMap | CommentedSeq:
     """
     Deep merge source dict/list into target CommentedMap/CommentedSeq,
@@ -472,17 +473,28 @@ def _deep_merge_preserved(
     Args:
         target: ruamel.yaml CommentedMap or CommentedSeq to merge into
         source: Plain dict or list with new values
+        known: Optional dump of the same config that keeps None values. A key
+            that is in ``known`` but missing from ``source`` is a config field
+            that was cleared, so it is removed from ``target``. Keys that are
+            not in ``known`` (fields the model does not define) are kept.
 
     Returns:
         The modified target with merged values
     """
     if isinstance(target, CommentedMap) and isinstance(source, dict):
+        if isinstance(known, dict):
+            for key in [k for k in target if k not in source and k in known]:
+                del target[key]
         for key, value in source.items():
             if key in target:
                 existing = target[key]
                 if isinstance(existing, CommentedMap) and isinstance(value, dict):
                     # Recursively merge nested dicts
-                    _deep_merge_preserved(existing, value)
+                    _deep_merge_preserved(
+                        existing,
+                        value,
+                        known.get(key) if isinstance(known, dict) else None,
+                    )
                 elif isinstance(existing, CommentedSeq) and isinstance(value, list):
                     # For lists, we need to handle more carefully
                     # Replace the list but try to preserve structure for matching items
@@ -551,6 +563,7 @@ def _save_yaml(
     config_file: Path,
     template_path: Path | None = None,
     force_sync: bool = False,
+    known_dict: dict | None = None,
 ) -> None:
     """
     Save YAML config using ruamel.yaml, preserving comments and formatting when possible.
@@ -565,12 +578,15 @@ def _save_yaml(
         config_file: Destination path for the YAML file
         template_path: Optional template file to use for formatting new files
         force_sync: If True, forces immediate write to disk
+        known_dict: Dump of the config that keeps None values. When updating an
+            existing file, fields that are None here are removed from the file.
     """
     # Determine which file to use as the formatting source
     if config_file.exists():
-        # Updating existing file - preserve its formatting
+        # Updating existing file - preserve its formatting, and drop fields
+        # that were cleared so the file matches the saved config
         doc = _load_yaml_preserved(config_file)
-        _deep_merge_preserved(doc, config_dict)
+        _deep_merge_preserved(doc, config_dict, known_dict)
     elif template_path and template_path.exists():
         # Creating from template - preserve template formatting
         doc = _load_yaml_preserved(template_path)
@@ -685,8 +701,12 @@ def save_config(
             else:
                 config_file = config_path / "llamafarm.yaml"
 
-    # Validate configuration before saving
-    config_dict = config.model_dump(mode="json", exclude_none=True)
+    # Validate configuration before saving. Dump by alias so fields such as
+    # `schema_` are written under their YAML name (`schema`).
+    config_dict = config.model_dump(mode="json", exclude_none=True, by_alias=True)
+    # Same dump keeping None values: tells cleared fields apart from YAML keys
+    # the model does not define, which are left untouched in the file.
+    known_dict = config.model_dump(mode="json", by_alias=True)
 
     # Run custom validators for constraints beyond JSON Schema
     from config.validators import validate_llamafarm_config
@@ -728,6 +748,7 @@ def save_config(
                 config_file,
                 template_path=Path(template_path) if template_path else None,
                 force_sync=force_sync,
+                known_dict=known_dict,
             )
         elif format.lower() == "toml":
             _save_toml_file(config_dict, config_file)
@@ -797,7 +818,7 @@ def update_config(
     config = load_config(config_file, validate=False)
 
     # Apply updates using deep merge
-    config_dict = config.model_dump(mode="json", exclude_none=True)
+    config_dict = config.model_dump(mode="json", exclude_none=True, by_alias=True)
     _deep_merge(config_dict, updates)
 
     # Save updated configuration (preserves original format)
