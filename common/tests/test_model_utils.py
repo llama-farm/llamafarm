@@ -164,6 +164,51 @@ class TestSelectGGUFFile:
         result = select_gguf_file(files)
         assert result == "model.Q8_0.gguf"
 
+    def test_select_skips_mmproj_for_preferred_quantization(self):
+        """A projector sharing the requested quant is not picked as the model."""
+        # File list of ggml-org/pixtral-12b-GGUF
+        files = [
+            "mmproj-pixtral-12b-Q8_0.gguf",
+            "mmproj-pixtral-12b-f16.gguf",
+            "pixtral-12b-Q2_K.gguf",
+            "pixtral-12b-Q4_K_M.gguf",
+            "pixtral-12b-Q8_0.gguf",
+            "pixtral-12b-f16.gguf",
+        ]
+        assert select_gguf_file(files, "Q8_0") == "pixtral-12b-Q8_0.gguf"
+        assert select_gguf_file(files, "F16") == "pixtral-12b-f16.gguf"
+
+    def test_select_skips_mmproj_in_default_order(self):
+        """Default selection never returns the multimodal projector."""
+        # File list of ggml-org/moondream2-20250414-GGUF
+        files = [
+            "moondream2-mmproj-f16-20250414.gguf",
+            "moondream2-text-model-f16_ct-vicuna.gguf",
+        ]
+        result = select_gguf_file(files)
+        assert result == "moondream2-text-model-f16_ct-vicuna.gguf"
+
+    def test_select_skips_mmproj_when_quant_only_on_projector(self):
+        """Requesting a quant only the projector has falls back to the model."""
+        # File list of ggml-org/Voxtral-Mini-3B-2507-GGUF
+        files = [
+            "Voxtral-Mini-3B-2507-Q4_K_M.gguf",
+            "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf",
+        ]
+        result = select_gguf_file(files, "Q8_0")
+        assert result == "Voxtral-Mini-3B-2507-Q4_K_M.gguf"
+
+    def test_select_returns_none_for_projectors_only(self):
+        """A list holding only mmproj projectors has no model to select."""
+        files = ["mmproj-BF16.gguf", "mmproj-F16.gguf", "mmproj-F32.gguf"]
+        assert select_gguf_file(files) is None
+        assert select_gguf_file(["mmproj-F16.gguf"], "F16") is None
+
+    def test_select_checks_only_the_filename_for_mmproj(self):
+        """A directory named like a projector does not hide real weights."""
+        files = ["model-Q4_K_M.gguf", "vision-mmproj/model-Q8_0.gguf"]
+        assert select_gguf_file(files, "Q8_0") == "vision-mmproj/model-Q8_0.gguf"
+
     def test_select_first_when_no_quantization_found(self):
         """Test that first file is selected when no quantization recognized."""
         files = ["model_a.gguf", "model_b.gguf"]
@@ -448,6 +493,20 @@ class TestGetGGUFFilePath:
 
         # Test
         with pytest.raises(FileNotFoundError, match="No GGUF files found"):
+            get_gguf_file_path("test/model")
+
+    @patch("llamafarm_common.model_utils._get_cached_gguf_files")
+    @patch("llamafarm_common.model_utils.HfApi")
+    def test_get_gguf_file_path_only_projectors_raises(
+        self, mock_hf_api_class, mock_get_cached
+    ):
+        """A repo holding only mmproj projectors has no weights to return."""
+        mock_get_cached.return_value = []
+        mock_api = Mock()
+        mock_api.list_repo_files.return_value = ["mmproj-F16.gguf", "README.md"]
+        mock_hf_api_class.return_value = mock_api
+
+        with pytest.raises(FileNotFoundError, match="No GGUF model weights"):
             get_gguf_file_path("test/model")
 
     @patch("llamafarm_common.model_utils._get_cached_gguf_path")

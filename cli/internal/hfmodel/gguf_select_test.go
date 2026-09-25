@@ -139,6 +139,64 @@ func TestSelectGGUFFile(t *testing.T) {
 			want:  "model.Q8_0.gguf",
 		},
 		{
+			// File list of ggml-org/pixtral-12b-GGUF
+			name: "skips_mmproj_for_preferred_q8_0",
+			files: []string{
+				"mmproj-pixtral-12b-Q8_0.gguf",
+				"mmproj-pixtral-12b-f16.gguf",
+				"pixtral-12b-Q2_K.gguf",
+				"pixtral-12b-Q4_K_M.gguf",
+				"pixtral-12b-Q8_0.gguf",
+				"pixtral-12b-f16.gguf",
+			},
+			preferred: "Q8_0",
+			want:      "pixtral-12b-Q8_0.gguf",
+		},
+		{
+			// File list of ggml-org/pixtral-12b-GGUF
+			name: "skips_mmproj_for_preferred_f16",
+			files: []string{
+				"mmproj-pixtral-12b-Q8_0.gguf",
+				"mmproj-pixtral-12b-f16.gguf",
+				"pixtral-12b-Q2_K.gguf",
+				"pixtral-12b-Q4_K_M.gguf",
+				"pixtral-12b-Q8_0.gguf",
+				"pixtral-12b-f16.gguf",
+			},
+			preferred: "F16",
+			want:      "pixtral-12b-f16.gguf",
+		},
+		{
+			// File list of ggml-org/moondream2-20250414-GGUF
+			name:  "skips_mmproj_in_default_order",
+			files: []string{"moondream2-mmproj-f16-20250414.gguf", "moondream2-text-model-f16_ct-vicuna.gguf"},
+			want:  "moondream2-text-model-f16_ct-vicuna.gguf",
+		},
+		{
+			// File list of ggml-org/Voxtral-Mini-3B-2507-GGUF
+			name:      "skips_mmproj_when_quant_only_on_projector",
+			files:     []string{"Voxtral-Mini-3B-2507-Q4_K_M.gguf", "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf"},
+			preferred: "Q8_0",
+			want:      "Voxtral-Mini-3B-2507-Q4_K_M.gguf",
+		},
+		{
+			name:  "projectors_only_returns_empty",
+			files: []string{"mmproj-BF16.gguf", "mmproj-F16.gguf", "mmproj-F32.gguf"},
+			want:  "",
+		},
+		{
+			name:      "single_projector_returns_empty",
+			files:     []string{"mmproj-F16.gguf"},
+			preferred: "F16",
+			want:      "",
+		},
+		{
+			name:      "mmproj_checked_on_filename_only",
+			files:     []string{"model-Q4_K_M.gguf", "vision-mmproj/model-Q8_0.gguf"},
+			preferred: "Q8_0",
+			want:      "vision-mmproj/model-Q8_0.gguf",
+		},
+		{
 			name:  "first_when_no_quantization",
 			files: []string{"model_a.gguf", "model_b.gguf"},
 			want:  "model_a.gguf",
