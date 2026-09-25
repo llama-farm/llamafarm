@@ -64,6 +64,23 @@ class TestParseQuantizationFromFilename:
         result = parse_quantization_from_filename(filename)
         assert result == "Q4_K_M"
 
+    @pytest.mark.parametrize(
+        ("filename", "expected"),
+        [
+            ("model.Q6_K.gguf", "Q6_K"),
+            ("model.Q2_K.gguf", "Q2_K"),
+            ("model.q4_k.gguf", "Q4_K"),
+            ("Qwen3-1.7B-Q6_K.gguf", "Q6_K"),
+            ("Qwen3-1.7B-Q2_K.gguf", "Q2_K"),
+            # Suffixed variants must keep their own label
+            ("Qwen3-1.7B-Q2_K_L.gguf", "Q2_K_L"),
+            ("Qwen3-1.7B-UD-Q6_K_XL.gguf", None),
+        ],
+    )
+    def test_parse_bare_k_quant_before_extension(self, filename, expected):
+        """Q2_K/Q4_K/Q5_K/Q6_K directly before `.gguf` are recognized."""
+        assert parse_quantization_from_filename(filename) == expected
+
 
 class TestParseModelWithQuantization:
     """Test parsing model names with quantization suffix."""
@@ -163,6 +180,22 @@ class TestSelectGGUFFile:
         files = ["model.Q8_0.gguf", "model.F16.gguf", "model.Q2_K.gguf"]
         result = select_gguf_file(files)
         assert result == "model.Q8_0.gguf"
+
+    def test_select_preferred_bare_k_quant(self):
+        """Requesting `:Q6_K` returns the Q6_K file, not the Q4_K_M default."""
+        files = [
+            "Qwen3-1.7B-Q4_K_M.gguf",
+            "Qwen3-1.7B-Q6_K.gguf",
+            "Qwen3-1.7B-Q8_0.gguf",
+        ]
+        result = select_gguf_file(files, preferred_quantization="Q6_K")
+        assert result == "Qwen3-1.7B-Q6_K.gguf"
+
+    def test_select_default_order_reaches_q6_k(self):
+        """Q6_K ranks above Q2_K and F16 in the default preference order."""
+        files = ["model.F16.gguf", "model.Q2_K.gguf", "model.Q6_K.gguf"]
+        result = select_gguf_file(files)
+        assert result == "model.Q6_K.gguf"
 
     def test_select_first_when_no_quantization_found(self):
         """Test that first file is selected when no quantization recognized."""

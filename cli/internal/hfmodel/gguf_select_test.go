@@ -26,12 +26,15 @@ func TestParseQuantizationFromFilename(t *testing.T) {
 		{"fp16_normalized", "model.FP16.gguf", "F16"},
 		{"fp32_normalized", "model.FP32.gguf", "F32"},
 		{"imatrix_iq4_xs", "model.IQ4_XS.gguf", "IQ4_XS"},
-		// Q2_K/Q6_K/Q3_K return None in Python (verified):
-		// the negative lookahead `(?![_.])` rejects the trailing `.gguf`
-		// extension. This is a Python quirk we must mirror to keep the
-		// drift contract.
-		{"q6_k_returns_empty", "model.Q6_K.gguf", ""},
-		{"q2_k_returns_empty", "model.Q2_K.gguf", ""},
+		// Bare K-quants directly before `.gguf` must be recognized
+		// (mirrors test_parse_bare_k_quant_before_extension in Python).
+		{"q6_k", "model.Q6_K.gguf", "Q6_K"},
+		{"q2_k", "model.Q2_K.gguf", "Q2_K"},
+		{"q4_k_lowercase", "model.q4_k.gguf", "Q4_K"},
+		{"q6_k_dash", "Qwen3-1.7B-Q6_K.gguf", "Q6_K"},
+		{"q2_k_dash", "Qwen3-1.7B-Q2_K.gguf", "Q2_K"},
+		{"q2_k_l_keeps_suffix", "Qwen3-1.7B-Q2_K_L.gguf", "Q2_K_L"},
+		{"ud_q6_k_xl_unrecognized", "Qwen3-1.7B-UD-Q6_K_XL.gguf", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,6 +140,17 @@ func TestSelectGGUFFile(t *testing.T) {
 			name:  "priority_q8_0_when_no_q4_q5",
 			files: []string{"model.Q8_0.gguf", "model.F16.gguf", "model.Q2_K.gguf"},
 			want:  "model.Q8_0.gguf",
+		},
+		{
+			name:      "preferred_bare_k_quant",
+			files:     []string{"Qwen3-1.7B-Q4_K_M.gguf", "Qwen3-1.7B-Q6_K.gguf", "Qwen3-1.7B-Q8_0.gguf"},
+			preferred: "Q6_K",
+			want:      "Qwen3-1.7B-Q6_K.gguf",
+		},
+		{
+			name:  "default_order_reaches_q6_k",
+			files: []string{"model.F16.gguf", "model.Q2_K.gguf", "model.Q6_K.gguf"},
+			want:  "model.Q6_K.gguf",
 		},
 		{
 			name:  "first_when_no_quantization",

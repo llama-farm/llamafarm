@@ -52,14 +52,14 @@ var quantPatterns = []*regexp.Regexp{
 	// Patterns with separators (most common)
 	regexp.MustCompile(`(?i)[._-](I?Q[2-8]_K_[SML])`),    // Q3_K_S, Q4_K_M, IQ2_K_S, etc.
 	regexp.MustCompile(`(?i)[._-](I?Q[2-8]_[01])`),       // Q4_0, Q4_1, Q5_0, Q5_1, Q8_0
-	regexp.MustCompile(`(?i)[._-](I?Q[2-8]_K)(?:[^_.]|$)`), // Q2_K, Q3_K, Q6_K (not followed by _ or .)
+	regexp.MustCompile(`(?i)[._-](I?Q[2-8]_K)(?:[^_]|$)`), // Q2_K, Q3_K, Q6_K (not followed by _, so Q4_K_M is not cut short)
 	regexp.MustCompile(`(?i)[._-](I?Q[2-8]_XS)`),         // IQ4_XS, IQ3_XS, etc.
 	regexp.MustCompile(`(?i)[._-](F16|F32|FP16|FP32)`),
 
 	// Patterns without separators (less common but possible)
 	regexp.MustCompile(`(?i)(I?Q[2-8]_K_[SML])`),
 	regexp.MustCompile(`(?i)(I?Q[2-8]_[01])`),
-	regexp.MustCompile(`(?i)(I?Q[2-8]_K)(?:[^_.]|$)`),
+	regexp.MustCompile(`(?i)(I?Q[2-8]_K)(?:[^_]|$)`),
 	regexp.MustCompile(`(?i)(I?Q[2-8]_XS)`),
 	regexp.MustCompile(`(?i)(F16|F32|FP16|FP32)`),
 }

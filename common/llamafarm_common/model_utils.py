@@ -274,17 +274,20 @@ def parse_quantization_from_filename(filename: str) -> str | None:
         # Patterns with separators (most common)
         r"[\._-](I?Q[2-8]_K_[SML])",  # Q3_K_S, Q3_K_M, Q3_K_L, Q4_K_S, Q4_K_M, Q5_K_S, Q5_K_M, IQ2_K, IQ3_K, etc.
         r"[\._-](I?Q[2-8]_[01])",  # Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_0, etc.
-        r"[\._-](I?Q[2-8]_K)(?![_\.])",  # Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, IQ2_K, IQ3_K, etc. (not followed by _ or .)
+        # Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, IQ2_K, IQ3_K, etc. Only a following "_"
+        # is rejected, so Q4_K_M is not cut short but "Q6_K.gguf" still matches.
+        r"[\._-](I?Q[2-8]_K)(?!_)",
         r"[\._-](I?Q[2-8]_XS)",  # IQ4_XS, IQ3_XS, etc. (imatrix extra small variants)
         r"[\._-](F16|F32|FP16|FP32)",  # F16, F32, FP16, FP32
         # Patterns without separators (less common but possible)
         r"(I?Q[2-8]_K_[SML])",  # Without separator prefix
         r"(I?Q[2-8]_[01])",  # Without separator prefix
-        r"(I?Q[2-8]_K)(?![_\.])",  # Without separator prefix
+        r"(I?Q[2-8]_K)(?!_)",  # Without separator prefix
         r"(I?Q[2-8]_XS)",  # Without separator prefix
         r"(F16|F32|FP16|FP32)",  # Without separator prefix
         # Handle edge cases with stricter boundary checks
-        r"(I?Q[2-8]_K)(?![_\.A-Za-z0-9])",  # Q2_K, Q3_K, etc. not followed by alphanumeric (stricter than above)
+        # Q2_K, Q3_K, etc. not followed by "_" or alphanumeric (stricter)
+        r"(I?Q[2-8]_K)(?![_A-Za-z0-9])",
     ]
 
     for pattern in patterns:
