@@ -202,6 +202,7 @@ install_cli() {
     local bin_dir="$LF_DATA_DIR/bin"
     mkdir -p "$bin_dir"
 
+    local failed_components=()
     for component in server rag runtime; do
         local pyapp_name="llamafarm-${component}-${pyapp_suffix}"
         if [[ "$pyapp_os" == "windows" ]]; then
@@ -216,8 +217,13 @@ install_cli() {
             chmod +x "$pyapp_dest"
         else
             warning "  Failed to download $component (may not be available for this platform)"
+            failed_components+=("$component")
         fi
     done
+
+    if [[ ${#failed_components[@]} -gt 0 ]]; then
+        error "Installation incomplete: failed to download required services (${failed_components[*]}) for $version on $platform. Check that the release provides service binaries for this platform, then retry."
+    fi
 
     # Bootstrap PyApp binaries
     bootstrap_services

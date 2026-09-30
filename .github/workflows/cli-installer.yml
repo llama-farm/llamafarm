@@ -194,11 +194,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
+      - name: Test service download failures
+        run: bash cli/hack/test-install-service-downloads.sh
+
       - name: Run security tests
         run: |
           # Test script with shellcheck
           echo "Running shellcheck on install.sh..."
-          shellcheck install.sh
+          shellcheck install.sh cli/hack/test-install-service-downloads.sh
 
           # Test script permissions
           if [[ -x install.sh ]]; then
